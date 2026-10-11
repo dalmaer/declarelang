@@ -89,11 +89,13 @@ export declare function fireInitTree(v: View): void;
 export type MaterializeReason = "shown" | "settled" | "needed-below" | "stencil" | "travel";
 /** How many views attached on a stand-in, how many came in (by reason), and
  *  how many of those came in while still hidden — brought in by a reader
- *  that needs the surface, the cost the deferral exists to avoid. */
+ *  that needs the surface, the cost the deferral exists to avoid — and how
+ *  many held a surface detached under a waiting ancestor instead. */
 export declare function deferralStats(): {
     deferred: number;
     came: Record<MaterializeReason, number>;
     hiddenCame: number;
+    detached: number;
 };
 /** The deferral invariant, over a tree: no view the user can see waits on a
  *  stand-in, and every shown view's element sits inside its parent's (a
@@ -603,6 +605,11 @@ export declare class View extends Node {
     /** Does this view need its real surface even while hidden? A view the
      *  renderer measures or that holds live state in its element says yes. */
     protected $eagerSurface(): boolean;
+    /** Is that need only to measure through the surface? Such a view (rich text)
+     *  can hold it detached under a waiting ancestor instead of bringing the
+     *  ancestor in. A view with live state in its element (media, an editor, an
+     *  island) answers no. */
+    protected $measuresDetached(): boolean;
     /** Bring this view in if it waits on a stand-in (deferred-surface.ts): the
      *  ONE way a waiting view takes its real surface. "shown" and "settled"
      *  bring it in only when it and every waiting ancestor are shown; the others
@@ -616,6 +623,8 @@ export declare class View extends Node {
      *  has one, then its shown children, then what the stand-in kept. Each step
      *  reads the tree as it is now — nothing here is held across a call. */
     private $comeIn;
+    /** A view held detached takes its place, its parent having come in. */
+    private $placeDetached;
     /** Push this view's full visual state across the seam. Subclasses extend
      *  it with their capabilities (Text, Image); it runs before the children
      *  attach, so a backend that keeps content in arrival order (the DOM) gets

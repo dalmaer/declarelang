@@ -220,12 +220,13 @@ const EXTENT = new WeakMap();
 /** The handler names the pointer family answers to, made once (inputSink asks every view). */
 const POINTER_HANDLERS = POINTER_TYPES.map(handlerName);
 const AXIS_OF = { width: "x", height: "y" };
-const STATS = { deferred: 0, came: { shown: 0, settled: 0, "needed-below": 0, stencil: 0, travel: 0 }, hiddenCame: 0 };
+const STATS = { deferred: 0, came: { shown: 0, settled: 0, "needed-below": 0, stencil: 0, travel: 0 }, hiddenCame: 0, detached: 0 };
 /** How many views attached on a stand-in, how many came in (by reason), and
  *  how many of those came in while still hidden — brought in by a reader
- *  that needs the surface, the cost the deferral exists to avoid. */
+ *  that needs the surface, the cost the deferral exists to avoid — and how
+ *  many held a surface detached under a waiting ancestor instead. */
 export function deferralStats() {
-    return { deferred: STATS.deferred, came: { ...STATS.came }, hiddenCame: STATS.hiddenCame };
+    return { deferred: STATS.deferred, came: { ...STATS.came }, hiddenCame: STATS.hiddenCame, detached: STATS.detached };
 }
 /** A development build checks the invariant after any settle in which views
  *  waited or came in — for those views only, each against its parent, which
@@ -287,6 +288,14 @@ function pathOfView(v) {
 }
 if (typeof __DECLARE_PRODUCTION__ === "undefined" || !__DECLARE_PRODUCTION__)
     globalThis.__declareDeferral = { stats: () => deferralStats(), problems: (r) => deferralProblems(r) };
+/** Views that measure through their own element (rich text: `$measuresDetached`)
+ *  hold a real surface under an ancestor still waiting — made but not inserted,
+ *  measured in the renderer's offscreen room — so their ancestors need not come
+ *  in for them. The ancestor's own coming in puts each one in place. Kept by
+ *  view and by surface: a detached surface is never a place to insert before. */
+const DETACHED = new WeakSet();
+const DETACHED_SURFACES = new WeakSet();
+const isPlaced = (s) => s != null && !isDeferred(s) && !DETACHED_SURFACES.has(s);
 /** Waiting views held back by a real ancestor that is hidden (shown once,
  *  hidden since), filed under that ancestor: its next show brings them in. */
 const WAITING_UNDER = new WeakMap();
@@ -350,7 +359,7 @@ function realSurfaceAfter(v) {
     const sibs = p.children;
     for (let i = sibs.indexOf(v) + 1; i < sibs.length; i++) {
         const s = sibs[i].$surface;
-        if (s !== null && s !== undefined && !isDeferred(s))
+        if (isPlaced(s))
             return s;
     }
     return null;
@@ -426,19 +435,25 @@ export class View extends Node {
         this.$bindExtent();
         // HIDDEN AT ATTACH, on a renderer that defers (deferred-surface.ts): a
         // stand-in until first shown, and everything under a stand-in waits with
-        // it. A view that needs its real surface while hidden (rich text measures
-        // through it) brings its waiting ancestors in first.
+        // it. A view that needs its real surface while hidden brings its waiting
+        // ancestors in first — unless all it needs the surface for is to measure
+        // through it (rich text): then it holds one detached (DETACHED, above).
+        let detached = false;
         if (parentSurface !== null && isDeferred(parentSurface) && this.$eagerSurface()) {
-            this.parent.$ensureReal("needed-below");
-            parentSurface = this.parent.$surface;
-            before = null;
+            if (this.$measuresDetached())
+                detached = true;
+            else {
+                this.parent.$ensureReal("needed-below");
+                parentSurface = this.parent.$surface;
+                before = null;
+            }
         }
         // INSIDE A SETTLE, whether this view is shown is not settled yet (a row's
         // own bindings — its `visible` among them — install after it attaches): it
         // waits with a stand-in, and the settle's close brings it in if it is shown
         // then, with the values the settle arrived at.
         const later = backend.defersHidden === true && parentSurface !== null && !isDeferred(parentSurface) && isSettling() && !this.$eagerSurface();
-        const defer = parentSurface !== null && (isDeferred(parentSurface) || later || (backend.defersHidden === true && !this.visible && !this.$eagerSurface()));
+        const defer = parentSurface !== null && !detached && (isDeferred(parentSurface) || later || (backend.defersHidden === true && !this.visible && !this.$eagerSurface()));
         if (later)
             decideAtClose(this);
         if (defer) {
@@ -446,9 +461,14 @@ export class View extends Node {
             noteDeferral(this);
         }
         const s = (this.$surface = defer ? new DeferredSurface() : backend.createSurface());
+        if (detached) {
+            DETACHED.add(this);
+            DETACHED_SURFACES.add(s);
+            STATS.detached++;
+        }
         this.$flush(s);
-        if (!defer)
-            parentSurface?.insertChild(s, before !== null && isDeferred(before) ? realSurfaceAfter(this) : before);
+        if (!defer && !detached)
+            parentSurface?.insertChild(s, before !== null && !isPlaced(before) ? realSurfaceAfter(this) : before);
         // Each child joins the surface this view has NOW: the flush, or a child
         // that needs a real surface while hidden, may have brought this view in.
         for (const child of this.children) {
@@ -973,6 +993,11 @@ export class View extends Node {
     /** Does this view need its real surface even while hidden? A view the
      *  renderer measures or that holds live state in its element says yes. */
     $eagerSurface() { return false; }
+    /** Is that need only to measure through the surface? Such a view (rich text)
+     *  can hold it detached under a waiting ancestor instead of bringing the
+     *  ancestor in. A view with live state in its element (media, an editor, an
+     *  island) answers no. */
+    $measuresDetached() { return false; }
     /** Bring this view in if it waits on a stand-in (deferred-surface.ts): the
      *  ONE way a waiting view takes its real surface. "shown" and "settled"
      *  bring it in only when it and every waiting ancestor are shown; the others
@@ -981,6 +1006,9 @@ export class View extends Node {
     $ensureReal(why) {
         if (this.$surface === null)
             return false;
+        // held detached: in place when the waiting parent comes in, which puts it there
+        if (DETACHED.has(this))
+            return this.parent.$ensureReal(why) && !DETACHED.has(this);
         if (!isDeferred(this.$surface))
             return true;
         const chain = [];
@@ -1036,13 +1064,27 @@ export class View extends Node {
         const s = (this.$surface = this.$backend.createSurface());
         this.$flush(s);
         p.$surface.insertChild(s, realSurfaceAfter(this));
-        for (const c of this.children)
-            if (c instanceof View && c.visible)
+        for (const c of this.children) {
+            if (!(c instanceof View))
+                continue;
+            if (DETACHED.has(c))
+                c.$placeDetached(); // shown or not: it has its surface
+            else if (c.visible)
                 c.$comeIn(why);
+        }
         // what reached the stand-in outside the flush (a row's place, a scroll
         // request), in its latest form
         stand.replayInto(s);
         this.$applyTravel();
+    }
+    /** A view held detached takes its place, its parent having come in. */
+    $placeDetached() {
+        const s = this.$surface, p = this.parent instanceof View ? this.parent : null;
+        if (s === null || p === null || p.$surface === null || isDeferred(p.$surface))
+            return;
+        DETACHED.delete(this);
+        DETACHED_SURFACES.delete(s);
+        p.$surface.insertChild(s, realSurfaceAfter(this));
     }
     /** Push this view's full visual state across the seam. Subclasses extend
      *  it with their capabilities (Text, Image); it runs before the children

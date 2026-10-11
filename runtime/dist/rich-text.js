@@ -642,8 +642,10 @@ export function richRunsOf(inline, style, family) {
  *  runs) and `flowWidth` are set by its owner before attach; it renders natively
  *  (DOM) or manually (canvas) and auto-sizes its height to the flowed content. */
 export class TextFlow extends View {
-    /** The renderer flows and measures this text: it keeps a real surface while hidden. */
+    /** The renderer flows and measures this text: it keeps a real surface while
+     *  hidden — detached, under an ancestor still waiting for its own. */
     $eagerSurface() { return true; }
+    $measuresDetached() { return true; }
     content = [];
     /** True when `content` is a whole document (structural nodes among its
      *  blocks) — handed only to a backend that lays documents out (`richBlocks`). */
@@ -1205,6 +1207,7 @@ export function tableCells(b, cells, weight, color, ctx) {
 // live on the base, so both formats inherit them.
 export class RichText extends View {
     $eagerSurface() { return true; }
+    $measuresDetached() { return true; }
     built = [];
     /** What a refused piece of content does: `strip` (drop it, keep going, say so
      *  once) or `error` (throw). HTMLText declares it; Markdown has no such

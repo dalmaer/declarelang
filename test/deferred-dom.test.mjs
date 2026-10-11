@@ -172,6 +172,26 @@ await test("a hidden parent brought in by a child that needs its surface takes e
   assert.equal(out.blue, true, "the child after the field is drawn");
 });
 
+await test("rich text under a hidden parent measures without bringing the parent in; shown, it lands in its place", async () => {
+  const out = await inPage(`App [ width = 400, height = 400,
+    twin: Markdown [ width = 300, text = "# Title\\n\\nSome paragraph text that wraps onto more than one line at this width." ],
+    panel: View [ visible = false, y = 150, width = 400, height = 200, layout: SimpleLayout [ axis = y ],
+      View [ width = 20, height = 10, fill = #FF0000 ],
+      md: Markdown [ width = 300, text = "# Title\\n\\nSome paragraph text that wraps onto more than one line at this width." ],
+      View [ width = 20, height = 10, fill = #0000FF ] ] ]`, `
+    await frame(); settle();
+    const fills = () => [...host.querySelectorAll("*")].map((e) => getComputedStyle(e).backgroundColor);
+    const hidden = { red: fills().includes("rgb(255, 0, 0)"), h: app.panel.md.height, twin: app.twin.height };
+    app.panel.visible = true; settle(); await frame();
+    const order = [...host.querySelectorAll("*")].map((e) => getComputedStyle(e).backgroundColor === "rgb(255, 0, 0)" ? "red"
+      : getComputedStyle(e).backgroundColor === "rgb(0, 0, 255)" ? "blue" : e.children.length === 0 && /wraps onto/.test(e.textContent) && !app.twin.$surface.element.contains(e) ? "md" : null).filter(Boolean);
+    return { hidden, order, came: rt.deferralStats().came["needed-below"] };`);
+  assert.equal(out.hidden.red, false, "the hidden panel's other children made no elements");
+  assert.equal(out.hidden.h, out.hidden.twin, "the hidden Markdown measured its content");
+  assert.equal(out.came, 0, "nothing came in for the rich text's sake");
+  assert.deepEqual(out.order, ["red", "md", "blue"], "shown, the rich text sits between its siblings");
+});
+
 await test("a field brings in a hidden parent whose own parent is hidden too: every element lands once, in its place", async () => {
   const out = await inPage(`App [ width = 300, height = 300,
     outer: View [ visible = false, width = 300, height = 200,

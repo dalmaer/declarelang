@@ -65,7 +65,9 @@ function whileRendered<T>(h: RichHost, read: () => T): T {
   const home = host.parentNode, next = host.nextSibling;
   const room = measuringRoom(host.ownerDocument);
   room.appendChild(host);
-  try { return read(); } finally { home?.insertBefore(host, next); }
+  // back where it was — or out of the room, for a flow held detached while
+  // its hidden ancestors wait (view.ts, DETACHED)
+  try { return read(); } finally { if (home !== null) home.insertBefore(host, next); else host.remove(); }
 }
 const ROOMS = new WeakMap<Document, HTMLDivElement>();
 function measuringRoom(doc: Document): HTMLDivElement {

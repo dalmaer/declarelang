@@ -636,8 +636,10 @@ export function richRunsOf(inline: Inline[], style: Style, family: string): Rich
  *  runs) and `flowWidth` are set by its owner before attach; it renders natively
  *  (DOM) or manually (canvas) and auto-sizes its height to the flowed content. */
 export class TextFlow extends View {
-  /** The renderer flows and measures this text: it keeps a real surface while hidden. */
+  /** The renderer flows and measures this text: it keeps a real surface while
+   *  hidden — detached, under an ancestor still waiting for its own. */
   protected override $eagerSurface(): boolean { return true; }
+  protected override $measuresDetached(): boolean { return true; }
   content: RichNode[] = [];
   /** True when `content` is a whole document (structural nodes among its
    *  blocks) — handed only to a backend that lays documents out (`richBlocks`). */
@@ -1172,6 +1174,7 @@ export function tableCells(b: Extract<Block, { t: "table" }>, cells: Inline[][],
 // live on the base, so both formats inherit them.
 export abstract class RichText extends View {
   protected override $eagerSurface(): boolean { return true; }
+  protected override $measuresDetached(): boolean { return true; }
   // FACE + rich-text STRUCTURE slots (off View — docs/system-design/style.md):
   // each defaults to the nearest provided value, so prose inherits its region's
   // style; `selectable` defaults TRUE (a flowing document selects by nature).

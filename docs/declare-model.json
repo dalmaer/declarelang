@@ -1,7 +1,7 @@
 {
  "meta": {
   "version": 1,
-  "buildId": "210e9b2b2d07",
+  "buildId": "8ea6282e92f5",
   "note": "THE single documentation model — one walkable data structure for every documented element. Read by the docs app, the desktop's embedded docs, the link registry, the eval harness, and any agent. extract.mjs writes the doc tree (reference/roots/tree/guide/tenets) here; this tool augments the SAME file in place with spine/links/meta. One file, no intermediate.",
   "pipeline": {
    "assembledFrom": [
@@ -4441,15 +4441,15 @@
    },
    "EFA66F3": {
     "message": "[Declare] deferred DOM: …",
-    "at": "view.ts:317"
+    "at": "view.ts:318"
    },
    "E4F1929": {
     "message": "createView: the instantiation module is not loaded",
-    "at": "view.ts:1577"
+    "at": "view.ts:1614"
    },
    "EE2D5FF": {
     "message": "[Declare] app.post(\"…\"): this app is not linked to a host island — message dropped",
-    "at": "view.ts:2327"
+    "at": "view.ts:2364"
    }
   },
   "library": {
@@ -12719,7 +12719,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1820
+    "line": 1857
    },
    "parent": "View",
    "seeAlso": [],
@@ -12743,7 +12743,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1821
+    "line": 1858
    },
    "parent": "View",
    "seeAlso": [],
@@ -12767,7 +12767,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1822
+    "line": 1859
    },
    "parent": "View",
    "seeAlso": [],
@@ -12791,7 +12791,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1823
+    "line": 1860
    },
    "parent": "View",
    "seeAlso": [],
@@ -12826,7 +12826,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1856
+    "line": 1893
    },
    "parent": "View",
    "seeAlso": [],
@@ -12861,7 +12861,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1830
+    "line": 1867
    },
    "parent": "View",
    "seeAlso": [],
@@ -12885,7 +12885,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1857
+    "line": 1894
    },
    "parent": "View",
    "seeAlso": [],
@@ -12957,7 +12957,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1877
+    "line": 1914
    },
    "parent": "View",
    "seeAlso": [],
@@ -12981,7 +12981,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1878
+    "line": 1915
    },
    "parent": "View",
    "seeAlso": [],
@@ -13005,7 +13005,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1879
+    "line": 1916
    },
    "parent": "View",
    "seeAlso": [],
@@ -13040,7 +13040,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1858
+    "line": 1895
    },
    "parent": "View",
    "seeAlso": [],
@@ -13064,7 +13064,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1859
+    "line": 1896
    },
    "parent": "View",
    "seeAlso": [],
@@ -13088,7 +13088,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1860
+    "line": 1897
    },
    "parent": "View",
    "seeAlso": [],
@@ -13112,7 +13112,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1880
+    "line": 1917
    },
    "parent": "View",
    "seeAlso": [],
@@ -13136,7 +13136,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1881
+    "line": 1918
    },
    "parent": "View",
    "seeAlso": [],
@@ -13160,7 +13160,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1882
+    "line": 1919
    },
    "parent": "View",
    "seeAlso": [],
@@ -13184,7 +13184,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1883
+    "line": 1920
    },
    "parent": "View",
    "seeAlso": [],
@@ -13208,7 +13208,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1884
+    "line": 1921
    },
    "parent": "View",
    "seeAlso": [],
@@ -13232,7 +13232,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1891
+    "line": 1928
    },
    "parent": "View",
    "seeAlso": [],
@@ -13256,7 +13256,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1892
+    "line": 1929
    },
    "parent": "View",
    "seeAlso": [],
@@ -13280,7 +13280,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1893
+    "line": 1930
    },
    "parent": "View",
    "seeAlso": [],
@@ -13304,7 +13304,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1894
+    "line": 1931
    },
    "parent": "View",
    "seeAlso": [],
@@ -13328,7 +13328,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1901
+    "line": 1938
    },
    "parent": "View",
    "seeAlso": [],
@@ -13352,7 +13352,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1902
+    "line": 1939
    },
    "parent": "View",
    "seeAlso": [],
@@ -13376,7 +13376,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1903
+    "line": 1940
    },
    "parent": "View",
    "seeAlso": [],
@@ -13400,7 +13400,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1904
+    "line": 1941
    },
    "parent": "View",
    "seeAlso": [],
@@ -13424,7 +13424,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1895
+    "line": 1932
    },
    "parent": "View",
    "seeAlso": [],
@@ -13448,7 +13448,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1896
+    "line": 1933
    },
    "parent": "View",
    "seeAlso": [],
@@ -13472,7 +13472,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1897
+    "line": 1934
    },
    "parent": "View",
    "seeAlso": [],
@@ -13496,7 +13496,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1900
+    "line": 1937
    },
    "parent": "View",
    "seeAlso": [],
@@ -13520,7 +13520,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1898
+    "line": 1935
    },
    "parent": "View",
    "seeAlso": [],
@@ -13544,7 +13544,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1907
+    "line": 1944
    },
    "parent": "View",
    "seeAlso": [],
@@ -13579,7 +13579,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1908
+    "line": 1945
    },
    "parent": "View",
    "seeAlso": [],
@@ -13603,7 +13603,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1909
+    "line": 1946
    },
    "parent": "View",
    "seeAlso": [],
@@ -13627,7 +13627,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1910
+    "line": 1947
    },
    "parent": "View",
    "seeAlso": [],
@@ -13651,7 +13651,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1935
+    "line": 1972
    },
    "parent": "View",
    "seeAlso": [],
@@ -13675,7 +13675,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1940
+    "line": 1977
    },
    "parent": "View",
    "seeAlso": [],
@@ -13699,7 +13699,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1953
+    "line": 1990
    },
    "parent": "View",
    "seeAlso": [],
@@ -13723,7 +13723,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1941
+    "line": 1978
    },
    "parent": "View",
    "seeAlso": [],
@@ -13747,7 +13747,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1942
+    "line": 1979
    },
    "parent": "View",
    "seeAlso": [],
@@ -13771,7 +13771,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1952
+    "line": 1989
    },
    "parent": "View",
    "seeAlso": [],
@@ -13795,7 +13795,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1954
+    "line": 1991
    },
    "parent": "View",
    "seeAlso": [],
@@ -13819,7 +13819,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1957
+    "line": 1994
    },
    "parent": "View",
    "seeAlso": [],
@@ -13843,7 +13843,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1958
+    "line": 1995
    },
    "parent": "View",
    "seeAlso": [],
@@ -13867,7 +13867,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1959
+    "line": 1996
    },
    "parent": "View",
    "seeAlso": [],
@@ -13891,7 +13891,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1960
+    "line": 1997
    },
    "parent": "View",
    "seeAlso": [],
@@ -13915,7 +13915,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1885
+    "line": 1922
    },
    "parent": "View",
    "seeAlso": [],
@@ -13939,7 +13939,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1886
+    "line": 1923
    },
    "parent": "View",
    "seeAlso": [],
@@ -13963,7 +13963,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1965
+    "line": 2002
    },
    "parent": "View",
    "seeAlso": [],
@@ -13987,7 +13987,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1911
+    "line": 1948
    },
    "parent": "View",
    "seeAlso": [],
@@ -14011,7 +14011,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1912
+    "line": 1949
    },
    "parent": "View",
    "seeAlso": [],
@@ -14035,7 +14035,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1916
+    "line": 1953
    },
    "parent": "View",
    "seeAlso": [],
@@ -14059,7 +14059,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1922
+    "line": 1959
    },
    "parent": "View",
    "seeAlso": [],
@@ -14083,7 +14083,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1929
+    "line": 1966
    },
    "parent": "View",
    "seeAlso": [],
@@ -14107,7 +14107,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1934
+    "line": 1971
    },
    "parent": "View",
    "seeAlso": [],
@@ -14385,7 +14385,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 521
+    "line": 531
    },
    "parent": "View",
    "seeAlso": [],
@@ -14401,7 +14401,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 525
+    "line": 535
    },
    "parent": "View",
    "seeAlso": [],
@@ -14417,7 +14417,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 560
+    "line": 570
    },
    "parent": "View",
    "seeAlso": [],
@@ -14433,7 +14433,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 666
+    "line": 676
    },
    "parent": "View",
    "seeAlso": [],
@@ -14454,7 +14454,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 720
+    "line": 736
    },
    "parent": "View",
    "seeAlso": [],
@@ -14470,7 +14470,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 741
+    "line": 757
    },
    "parent": "View",
    "seeAlso": [],
@@ -14490,7 +14490,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 835
+    "line": 851
    },
    "parent": "View",
    "seeAlso": [],
@@ -14506,7 +14506,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 841
+    "line": 857
    },
    "parent": "View",
    "seeAlso": [],
@@ -14522,7 +14522,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 957
+    "line": 973
    },
    "parent": "View",
    "seeAlso": [],
@@ -14543,7 +14543,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 969
+    "line": 985
    },
    "parent": "View",
    "seeAlso": [],
@@ -14559,7 +14559,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 993
+    "line": 1009
    },
    "parent": "View",
    "seeAlso": [],
@@ -14575,7 +14575,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1010
+    "line": 1026
    },
    "parent": "View",
    "seeAlso": [],
@@ -14593,7 +14593,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1011
+    "line": 1027
    },
    "parent": "View",
    "seeAlso": [],
@@ -14616,7 +14616,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1024
+    "line": 1040
    },
    "parent": "View",
    "seeAlso": [],
@@ -14637,7 +14637,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1038
+    "line": 1054
    },
    "parent": "View",
    "seeAlso": [],
@@ -14653,7 +14653,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1058
+    "line": 1074
    },
    "parent": "View",
    "seeAlso": [],
@@ -14671,7 +14671,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1080
+    "line": 1096
    },
    "parent": "View",
    "seeAlso": [],
@@ -14689,7 +14689,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1086
+    "line": 1102
    },
    "parent": "View",
    "seeAlso": [],
@@ -14707,7 +14707,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1103
+    "line": 1119
    },
    "parent": "View",
    "seeAlso": [],
@@ -14725,7 +14725,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1104
+    "line": 1120
    },
    "parent": "View",
    "seeAlso": [],
@@ -14748,7 +14748,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1148
+    "line": 1164
    },
    "parent": "View",
    "seeAlso": [],
@@ -14764,7 +14764,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1159
+    "line": 1175
    },
    "parent": "View",
    "seeAlso": [],
@@ -14780,7 +14780,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1166
+    "line": 1182
    },
    "parent": "View",
    "seeAlso": [],
@@ -14801,7 +14801,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1177
+    "line": 1193
    },
    "parent": "View",
    "seeAlso": [],
@@ -14821,7 +14821,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1194
+    "line": 1210
    },
    "parent": "View",
    "seeAlso": [],
@@ -14841,7 +14841,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1235
+    "line": 1257
    },
    "parent": "View",
    "seeAlso": [],
@@ -14862,7 +14862,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1374
+    "line": 1411
    },
    "parent": "View",
    "seeAlso": [],
@@ -14883,7 +14883,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1382
+    "line": 1419
    },
    "parent": "View",
    "seeAlso": [],
@@ -14904,7 +14904,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1401
+    "line": 1438
    },
    "parent": "View",
    "seeAlso": [],
@@ -14920,7 +14920,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1409
+    "line": 1446
    },
    "parent": "View",
    "seeAlso": [],
@@ -14941,7 +14941,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1417
+    "line": 1454
    },
    "parent": "View",
    "seeAlso": [],
@@ -14962,7 +14962,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1423
+    "line": 1460
    },
    "parent": "View",
    "seeAlso": [],
@@ -14983,7 +14983,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1450
+    "line": 1487
    },
    "parent": "View",
    "seeAlso": [],
@@ -14999,7 +14999,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1489
+    "line": 1526
    },
    "parent": "View",
    "seeAlso": [],
@@ -15020,7 +15020,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1502
+    "line": 1539
    },
    "parent": "View",
    "seeAlso": [],
@@ -15036,7 +15036,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1514
+    "line": 1551
    },
    "parent": "View",
    "seeAlso": [],
@@ -15057,7 +15057,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1532
+    "line": 1569
    },
    "parent": "View",
    "seeAlso": [],
@@ -15078,7 +15078,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1541
+    "line": 1578
    },
    "parent": "View",
    "seeAlso": [],
@@ -15099,7 +15099,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1550
+    "line": 1587
    },
    "parent": "View",
    "seeAlso": [],
@@ -15120,7 +15120,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1576
+    "line": 1613
    },
    "parent": "View",
    "seeAlso": [],
@@ -15141,7 +15141,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1581
+    "line": 1618
    },
    "parent": "View",
    "seeAlso": [],
@@ -15157,7 +15157,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1667
+    "line": 1704
    },
    "parent": "View",
    "seeAlso": [],
@@ -15173,7 +15173,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1723
+    "line": 1760
    },
    "parent": "View",
    "seeAlso": [],
@@ -15189,7 +15189,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 1741
+    "line": 1778
    },
    "parent": "View",
    "seeAlso": [],
@@ -15919,7 +15919,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2755
+    "line": 2792
    },
    "parent": "App",
    "seeAlso": [],
@@ -15943,7 +15943,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2756
+    "line": 2793
    },
    "parent": "App",
    "seeAlso": [],
@@ -15967,7 +15967,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2757
+    "line": 2794
    },
    "parent": "App",
    "seeAlso": [],
@@ -15995,7 +15995,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2758
+    "line": 2795
    },
    "parent": "App",
    "seeAlso": [],
@@ -16019,7 +16019,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2760
+    "line": 2797
    },
    "parent": "App",
    "seeAlso": [],
@@ -16043,7 +16043,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2759
+    "line": 2796
    },
    "parent": "App",
    "seeAlso": [],
@@ -16067,7 +16067,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2761
+    "line": 2798
    },
    "parent": "App",
    "seeAlso": [],
@@ -16091,7 +16091,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2762
+    "line": 2799
    },
    "parent": "App",
    "seeAlso": [],
@@ -16115,7 +16115,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2763
+    "line": 2800
    },
    "parent": "App",
    "seeAlso": [],
@@ -16139,7 +16139,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2766
+    "line": 2803
    },
    "parent": "App",
    "seeAlso": [],
@@ -16163,7 +16163,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2767
+    "line": 2804
    },
    "parent": "App",
    "seeAlso": [],
@@ -16187,7 +16187,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2768
+    "line": 2805
    },
    "parent": "App",
    "seeAlso": [],
@@ -16211,7 +16211,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2769
+    "line": 2806
    },
    "parent": "App",
    "seeAlso": [],
@@ -16235,7 +16235,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2770
+    "line": 2807
    },
    "parent": "App",
    "seeAlso": [],
@@ -16259,7 +16259,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2780
+    "line": 2817
    },
    "parent": "App",
    "seeAlso": [],
@@ -16283,7 +16283,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2785
+    "line": 2822
    },
    "parent": "App",
    "seeAlso": [],
@@ -16307,7 +16307,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2789
+    "line": 2826
    },
    "parent": "App",
    "seeAlso": [],
@@ -16331,7 +16331,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2804
+    "line": 2841
    },
    "parent": "App",
    "seeAlso": [],
@@ -16355,7 +16355,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2805
+    "line": 2842
    },
    "parent": "App",
    "seeAlso": [],
@@ -16379,7 +16379,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2799
+    "line": 2836
    },
    "parent": "App",
    "seeAlso": [],
@@ -16427,7 +16427,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2815
+    "line": 2852
    },
    "parent": "App",
    "seeAlso": [],
@@ -16451,7 +16451,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2820
+    "line": 2857
    },
    "parent": "App",
    "seeAlso": [],
@@ -16475,7 +16475,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2824
+    "line": 2861
    },
    "parent": "App",
    "seeAlso": [],
@@ -16499,7 +16499,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2825
+    "line": 2862
    },
    "parent": "App",
    "seeAlso": [],
@@ -16523,7 +16523,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2827
+    "line": 2864
    },
    "parent": "App",
    "seeAlso": [],
@@ -16547,7 +16547,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2746
+    "line": 2783
    },
    "parent": "App",
    "seeAlso": [],
@@ -16571,7 +16571,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2750
+    "line": 2787
    },
    "parent": "App",
    "seeAlso": [],
@@ -16589,7 +16589,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2180
+    "line": 2217
    },
    "parent": "App",
    "seeAlso": [],
@@ -16614,7 +16614,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2326
+    "line": 2363
    },
    "parent": "App",
    "seeAlso": [],
@@ -16635,7 +16635,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2336
+    "line": 2373
    },
    "parent": "App",
    "seeAlso": [],
@@ -16651,7 +16651,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2346
+    "line": 2383
    },
    "parent": "App",
    "seeAlso": [],
@@ -16672,7 +16672,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2351
+    "line": 2388
    },
    "parent": "App",
    "seeAlso": [],
@@ -16693,7 +16693,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2372
+    "line": 2409
    },
    "parent": "App",
    "seeAlso": [],
@@ -16714,7 +16714,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2448
+    "line": 2485
    },
    "parent": "App",
    "seeAlso": [],
@@ -16735,7 +16735,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2458
+    "line": 2495
    },
    "parent": "App",
    "seeAlso": [],
@@ -16751,7 +16751,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2477
+    "line": 2514
    },
    "parent": "App",
    "seeAlso": [],
@@ -16772,7 +16772,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2550
+    "line": 2587
    },
    "parent": "App",
    "seeAlso": [],
@@ -16793,7 +16793,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2558
+    "line": 2595
    },
    "parent": "App",
    "seeAlso": [],
@@ -16814,7 +16814,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2567
+    "line": 2604
    },
    "parent": "App",
    "seeAlso": [],
@@ -16835,7 +16835,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2577
+    "line": 2614
    },
    "parent": "App",
    "seeAlso": [],
@@ -16851,7 +16851,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2585
+    "line": 2622
    },
    "parent": "App",
    "seeAlso": [],
@@ -16867,7 +16867,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2627
+    "line": 2664
    },
    "parent": "App",
    "seeAlso": [],
@@ -16883,7 +16883,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2644
+    "line": 2681
    },
    "parent": "App",
    "seeAlso": [],
@@ -16899,7 +16899,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2694
+    "line": 2731
    },
    "parent": "App",
    "seeAlso": [],
@@ -16919,7 +16919,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/view.ts",
-    "line": 2722
+    "line": 2759
    },
    "parent": "App",
    "seeAlso": [],
@@ -20052,7 +20052,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/rich-text.ts",
-    "line": 1237
+    "line": 1240
    },
    "parent": "RichText",
    "seeAlso": [],
@@ -40190,7 +40190,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1820
+      "line": 1857
      },
      "parent": "View",
      "seeAlso": [],
@@ -40214,7 +40214,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1821
+      "line": 1858
      },
      "parent": "View",
      "seeAlso": [],
@@ -40238,7 +40238,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1822
+      "line": 1859
      },
      "parent": "View",
      "seeAlso": [],
@@ -40262,7 +40262,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1823
+      "line": 1860
      },
      "parent": "View",
      "seeAlso": [],
@@ -40297,7 +40297,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1856
+      "line": 1893
      },
      "parent": "View",
      "seeAlso": [],
@@ -40332,7 +40332,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1830
+      "line": 1867
      },
      "parent": "View",
      "seeAlso": [],
@@ -40356,7 +40356,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1857
+      "line": 1894
      },
      "parent": "View",
      "seeAlso": [],
@@ -40428,7 +40428,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1877
+      "line": 1914
      },
      "parent": "View",
      "seeAlso": [],
@@ -40452,7 +40452,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1878
+      "line": 1915
      },
      "parent": "View",
      "seeAlso": [],
@@ -40476,7 +40476,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1879
+      "line": 1916
      },
      "parent": "View",
      "seeAlso": [],
@@ -40511,7 +40511,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1858
+      "line": 1895
      },
      "parent": "View",
      "seeAlso": [],
@@ -40535,7 +40535,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1859
+      "line": 1896
      },
      "parent": "View",
      "seeAlso": [],
@@ -40559,7 +40559,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1860
+      "line": 1897
      },
      "parent": "View",
      "seeAlso": [],
@@ -40583,7 +40583,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1880
+      "line": 1917
      },
      "parent": "View",
      "seeAlso": [],
@@ -40607,7 +40607,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1881
+      "line": 1918
      },
      "parent": "View",
      "seeAlso": [],
@@ -40631,7 +40631,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1882
+      "line": 1919
      },
      "parent": "View",
      "seeAlso": [],
@@ -40655,7 +40655,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1883
+      "line": 1920
      },
      "parent": "View",
      "seeAlso": [],
@@ -40679,7 +40679,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1884
+      "line": 1921
      },
      "parent": "View",
      "seeAlso": [],
@@ -40703,7 +40703,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1891
+      "line": 1928
      },
      "parent": "View",
      "seeAlso": [],
@@ -40727,7 +40727,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1892
+      "line": 1929
      },
      "parent": "View",
      "seeAlso": [],
@@ -40751,7 +40751,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1893
+      "line": 1930
      },
      "parent": "View",
      "seeAlso": [],
@@ -40775,7 +40775,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1894
+      "line": 1931
      },
      "parent": "View",
      "seeAlso": [],
@@ -40799,7 +40799,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1901
+      "line": 1938
      },
      "parent": "View",
      "seeAlso": [],
@@ -40823,7 +40823,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1902
+      "line": 1939
      },
      "parent": "View",
      "seeAlso": [],
@@ -40847,7 +40847,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1903
+      "line": 1940
      },
      "parent": "View",
      "seeAlso": [],
@@ -40871,7 +40871,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1904
+      "line": 1941
      },
      "parent": "View",
      "seeAlso": [],
@@ -40895,7 +40895,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1895
+      "line": 1932
      },
      "parent": "View",
      "seeAlso": [],
@@ -40919,7 +40919,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1896
+      "line": 1933
      },
      "parent": "View",
      "seeAlso": [],
@@ -40943,7 +40943,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1897
+      "line": 1934
      },
      "parent": "View",
      "seeAlso": [],
@@ -40967,7 +40967,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1900
+      "line": 1937
      },
      "parent": "View",
      "seeAlso": [],
@@ -40991,7 +40991,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1898
+      "line": 1935
      },
      "parent": "View",
      "seeAlso": [],
@@ -41015,7 +41015,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1907
+      "line": 1944
      },
      "parent": "View",
      "seeAlso": [],
@@ -41050,7 +41050,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1908
+      "line": 1945
      },
      "parent": "View",
      "seeAlso": [],
@@ -41074,7 +41074,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1909
+      "line": 1946
      },
      "parent": "View",
      "seeAlso": [],
@@ -41098,7 +41098,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1910
+      "line": 1947
      },
      "parent": "View",
      "seeAlso": [],
@@ -41122,7 +41122,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1935
+      "line": 1972
      },
      "parent": "View",
      "seeAlso": [],
@@ -41146,7 +41146,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1940
+      "line": 1977
      },
      "parent": "View",
      "seeAlso": [],
@@ -41170,7 +41170,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1953
+      "line": 1990
      },
      "parent": "View",
      "seeAlso": [],
@@ -41194,7 +41194,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1941
+      "line": 1978
      },
      "parent": "View",
      "seeAlso": [],
@@ -41218,7 +41218,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1942
+      "line": 1979
      },
      "parent": "View",
      "seeAlso": [],
@@ -41242,7 +41242,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1952
+      "line": 1989
      },
      "parent": "View",
      "seeAlso": [],
@@ -41266,7 +41266,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1954
+      "line": 1991
      },
      "parent": "View",
      "seeAlso": [],
@@ -41290,7 +41290,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1957
+      "line": 1994
      },
      "parent": "View",
      "seeAlso": [],
@@ -41314,7 +41314,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1958
+      "line": 1995
      },
      "parent": "View",
      "seeAlso": [],
@@ -41338,7 +41338,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1959
+      "line": 1996
      },
      "parent": "View",
      "seeAlso": [],
@@ -41362,7 +41362,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1960
+      "line": 1997
      },
      "parent": "View",
      "seeAlso": [],
@@ -41386,7 +41386,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1885
+      "line": 1922
      },
      "parent": "View",
      "seeAlso": [],
@@ -41410,7 +41410,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1886
+      "line": 1923
      },
      "parent": "View",
      "seeAlso": [],
@@ -41434,7 +41434,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1965
+      "line": 2002
      },
      "parent": "View",
      "seeAlso": [],
@@ -41458,7 +41458,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1911
+      "line": 1948
      },
      "parent": "View",
      "seeAlso": [],
@@ -41482,7 +41482,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1912
+      "line": 1949
      },
      "parent": "View",
      "seeAlso": [],
@@ -41506,7 +41506,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1916
+      "line": 1953
      },
      "parent": "View",
      "seeAlso": [],
@@ -41530,7 +41530,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1922
+      "line": 1959
      },
      "parent": "View",
      "seeAlso": [],
@@ -41554,7 +41554,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1929
+      "line": 1966
      },
      "parent": "View",
      "seeAlso": [],
@@ -41578,7 +41578,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1934
+      "line": 1971
      },
      "parent": "View",
      "seeAlso": [],
@@ -42336,7 +42336,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 720
+      "line": 736
      },
      "parent": "View",
      "seeAlso": [],
@@ -42357,7 +42357,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 969
+      "line": 985
      },
      "parent": "View",
      "seeAlso": [],
@@ -42378,7 +42378,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1024
+      "line": 1040
      },
      "parent": "View",
      "seeAlso": [],
@@ -42399,7 +42399,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1038
+      "line": 1054
      },
      "parent": "View",
      "seeAlso": [],
@@ -42420,7 +42420,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1148
+      "line": 1164
      },
      "parent": "View",
      "seeAlso": [],
@@ -42441,7 +42441,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1177
+      "line": 1193
      },
      "parent": "View",
      "seeAlso": [],
@@ -42466,7 +42466,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1374
+      "line": 1411
      },
      "parent": "View",
      "seeAlso": [],
@@ -42487,7 +42487,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1382
+      "line": 1419
      },
      "parent": "View",
      "seeAlso": [],
@@ -42508,7 +42508,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1401
+      "line": 1438
      },
      "parent": "View",
      "seeAlso": [],
@@ -42529,7 +42529,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1417
+      "line": 1454
      },
      "parent": "View",
      "seeAlso": [],
@@ -42550,7 +42550,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1423
+      "line": 1460
      },
      "parent": "View",
      "seeAlso": [],
@@ -42571,7 +42571,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1450
+      "line": 1487
      },
      "parent": "View",
      "seeAlso": [],
@@ -42592,7 +42592,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1502
+      "line": 1539
      },
      "parent": "View",
      "seeAlso": [],
@@ -42613,7 +42613,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1532
+      "line": 1569
      },
      "parent": "View",
      "seeAlso": [],
@@ -42634,7 +42634,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1541
+      "line": 1578
      },
      "parent": "View",
      "seeAlso": [],
@@ -42655,7 +42655,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1550
+      "line": 1587
      },
      "parent": "View",
      "seeAlso": [],
@@ -42676,7 +42676,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1576
+      "line": 1613
      },
      "parent": "View",
      "seeAlso": [],
@@ -42697,7 +42697,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 1581
+      "line": 1618
      },
      "parent": "View",
      "seeAlso": [],
@@ -42787,7 +42787,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2755
+      "line": 2792
      },
      "parent": "App",
      "seeAlso": [],
@@ -42811,7 +42811,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2756
+      "line": 2793
      },
      "parent": "App",
      "seeAlso": [],
@@ -42835,7 +42835,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2757
+      "line": 2794
      },
      "parent": "App",
      "seeAlso": [],
@@ -42863,7 +42863,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2758
+      "line": 2795
      },
      "parent": "App",
      "seeAlso": [],
@@ -42887,7 +42887,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2760
+      "line": 2797
      },
      "parent": "App",
      "seeAlso": [],
@@ -42911,7 +42911,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2759
+      "line": 2796
      },
      "parent": "App",
      "seeAlso": [],
@@ -42935,7 +42935,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2761
+      "line": 2798
      },
      "parent": "App",
      "seeAlso": [],
@@ -42959,7 +42959,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2762
+      "line": 2799
      },
      "parent": "App",
      "seeAlso": [],
@@ -42983,7 +42983,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2763
+      "line": 2800
      },
      "parent": "App",
      "seeAlso": [],
@@ -43007,7 +43007,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2766
+      "line": 2803
      },
      "parent": "App",
      "seeAlso": [],
@@ -43031,7 +43031,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2767
+      "line": 2804
      },
      "parent": "App",
      "seeAlso": [],
@@ -43055,7 +43055,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2768
+      "line": 2805
      },
      "parent": "App",
      "seeAlso": [],
@@ -43079,7 +43079,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2769
+      "line": 2806
      },
      "parent": "App",
      "seeAlso": [],
@@ -43103,7 +43103,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2770
+      "line": 2807
      },
      "parent": "App",
      "seeAlso": [],
@@ -43127,7 +43127,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2780
+      "line": 2817
      },
      "parent": "App",
      "seeAlso": [],
@@ -43151,7 +43151,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2785
+      "line": 2822
      },
      "parent": "App",
      "seeAlso": [],
@@ -43175,7 +43175,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2789
+      "line": 2826
      },
      "parent": "App",
      "seeAlso": [],
@@ -43199,7 +43199,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2804
+      "line": 2841
      },
      "parent": "App",
      "seeAlso": [],
@@ -43223,7 +43223,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2805
+      "line": 2842
      },
      "parent": "App",
      "seeAlso": [],
@@ -43247,7 +43247,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2799
+      "line": 2836
      },
      "parent": "App",
      "seeAlso": [],
@@ -43295,7 +43295,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2815
+      "line": 2852
      },
      "parent": "App",
      "seeAlso": [],
@@ -43319,7 +43319,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2820
+      "line": 2857
      },
      "parent": "App",
      "seeAlso": [],
@@ -43343,7 +43343,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2824
+      "line": 2861
      },
      "parent": "App",
      "seeAlso": [],
@@ -43367,7 +43367,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2825
+      "line": 2862
      },
      "parent": "App",
      "seeAlso": [],
@@ -43391,7 +43391,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2827
+      "line": 2864
      },
      "parent": "App",
      "seeAlso": [],
@@ -43415,7 +43415,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2746
+      "line": 2783
      },
      "parent": "App",
      "seeAlso": [],
@@ -43439,7 +43439,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2750
+      "line": 2787
      },
      "parent": "App",
      "seeAlso": [],
@@ -43546,7 +43546,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2326
+      "line": 2363
      },
      "parent": "App",
      "seeAlso": [],
@@ -43567,7 +43567,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2336
+      "line": 2373
      },
      "parent": "App",
      "seeAlso": [],
@@ -43588,7 +43588,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2351
+      "line": 2388
      },
      "parent": "App",
      "seeAlso": [],
@@ -43609,7 +43609,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2372
+      "line": 2409
      },
      "parent": "App",
      "seeAlso": [],
@@ -43630,7 +43630,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2448
+      "line": 2485
      },
      "parent": "App",
      "seeAlso": [],
@@ -43651,7 +43651,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2458
+      "line": 2495
      },
      "parent": "App",
      "seeAlso": [],
@@ -43672,7 +43672,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2550
+      "line": 2587
      },
      "parent": "App",
      "seeAlso": [],
@@ -43693,7 +43693,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2558
+      "line": 2595
      },
      "parent": "App",
      "seeAlso": [],
@@ -43714,7 +43714,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2567
+      "line": 2604
      },
      "parent": "App",
      "seeAlso": [],
@@ -43735,7 +43735,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/view.ts",
-      "line": 2577
+      "line": 2614
      },
      "parent": "App",
      "seeAlso": [],
@@ -64461,7 +64461,7 @@
    "name": "1 SATOR",
    "segs": [
     {
-     "md": "# How it ships\n\nDelivery, hosting, and the honest posture — the promises about running and\nshipping a Declare program.\n\n### SATOR-1 — Programs are data\nA compiled program is data the toolchain can read, so one compiler powers the\ndocumentation system, static extraction for crawlers, and live editing alike —\nnot three separate pipelines.\n*Held in:* FAQ (\"programs are data — the same compiler powers the documentation system, static extraction for crawlers, and live editing\").\n\n### SATOR-2 — What a visitor sees and what a crawler sees can never drift\nStatic extraction is built into the compiler: it runs the program headlessly to\nits settled state and serializes the actual content as semantic HTML — real\nheadings, paragraphs, links — baked into the page at build time. A crawler (or an\nAI reading the web) reads that; a person gets the live app that replaces it at\nboot. No server-side rendering, no hydration — it works on a plain static host.\n*Held in:* FAQ (\"How do Declare-written sites handle crawlers and SEO\"); the \"why\" essay (\"what a visitor sees and what a crawler sees can never drift\").\n\n### SATOR-3 — In-browser compilation, and no build step to develop\nBecause the compiler runs in the page, a page can edit and re-run itself: every\nsample is live-editable, and view-source culture is restored. Development needs no\nbuild step — the dev server and the browser use the *same* compiler with\nbyte-identical output.\n*Held in:* FAQ (\"What benefits does in-browser compilation bring\"); getstarted (\"no build step\").\n\n### SATOR-4 — You don't ship the compiler\nFor production, `declarec` precompiles everything into a small, self-contained\nartifact — a set of static files you can host anywhere, with no trace of the\ntoolchain and no compiler aboard.\n*Held in:* FAQ (\"For production you don't ship the compiler\").\n\n### SATOR-5 — The program's URL is the app's address\nA program is addressed by its own URL: on the dev server, browse to a `.declare`\nfile's URL and get the running app. The address is the program, not a route\nregistered elsewhere.\n*Held in:* getstarted (\"the program URL is the app's address\"); FAQ.\n\n### SATOR-6 — Small, and fast where it counts\nA full application ships small — the flagship calendar, application *and* runtime,\nat roughly 118 KB gzipped (machine-stamped from\nthe measured artifact): a compact runtime, practical on a phone over a slow network.\nInput latency is low — there is no virtual-DOM pass between gesture and pixels — and\nanimation runs at the display's full rate. The homepage reports the live size figures,\nmeasured from the deployed artifacts and regenerated with them on every publication.\n*Held in:* FAQ (\"What should I expect in terms of performance\").\n\n### SATOR-7 — Honest about the trades and the gaps\nThe promises come with their limits stated plainly: a framework with no in-browser\ncompiler wins the very first cold load (the production path closes the gap by\nprecompiling); Declare is young and the repository *is* the distribution and the\nsource of truth; and accessibility depth, an npm package, and a dedicated editor\nextension are named, unhidden gaps.\n*Held in:* FAQ (\"Startup\" trade; \"How mature is Declare?\"; \"Is Declare accessible?\"; \"Is there editor support?\").\n\n### SATOR-8 — Open, MIT, entirely public\nThe complete source — compiler, runtime, standard library, documentation, and the\nsite itself — is public under the MIT license.\n*Held in:* FAQ (\"What license is Declare offered under?\").",
+     "md": "# How it ships\n\nDelivery, hosting, and the honest posture — the promises about running and\nshipping a Declare program.\n\n### SATOR-1 — Programs are data\nA compiled program is data the toolchain can read, so one compiler powers the\ndocumentation system, static extraction for crawlers, and live editing alike —\nnot three separate pipelines.\n*Held in:* FAQ (\"programs are data — the same compiler powers the documentation system, static extraction for crawlers, and live editing\").\n\n### SATOR-2 — What a visitor sees and what a crawler sees can never drift\nStatic extraction is built into the compiler: it runs the program headlessly to\nits settled state and serializes the actual content as semantic HTML — real\nheadings, paragraphs, links — baked into the page at build time. A crawler (or an\nAI reading the web) reads that; a person gets the live app that replaces it at\nboot. No server-side rendering, no hydration — it works on a plain static host.\n*Held in:* FAQ (\"How do Declare-written sites handle crawlers and SEO\"); the \"why\" essay (\"what a visitor sees and what a crawler sees can never drift\").\n\n### SATOR-3 — In-browser compilation, and no build step to develop\nBecause the compiler runs in the page, a page can edit and re-run itself: every\nsample is live-editable, and view-source culture is restored. Development needs no\nbuild step — the dev server and the browser use the *same* compiler with\nbyte-identical output.\n*Held in:* FAQ (\"What benefits does in-browser compilation bring\"); getstarted (\"no build step\").\n\n### SATOR-4 — You don't ship the compiler\nFor production, `declarec` precompiles everything into a small, self-contained\nartifact — a set of static files you can host anywhere, with no trace of the\ntoolchain and no compiler aboard.\n*Held in:* FAQ (\"For production you don't ship the compiler\").\n\n### SATOR-5 — The program's URL is the app's address\nA program is addressed by its own URL: on the dev server, browse to a `.declare`\nfile's URL and get the running app. The address is the program, not a route\nregistered elsewhere.\n*Held in:* getstarted (\"the program URL is the app's address\"); FAQ.\n\n### SATOR-6 — Small, and fast where it counts\nA full application ships small — the flagship calendar, application *and* runtime,\nat roughly 119 KB gzipped (machine-stamped from\nthe measured artifact): a compact runtime, practical on a phone over a slow network.\nInput latency is low — there is no virtual-DOM pass between gesture and pixels — and\nanimation runs at the display's full rate. The homepage reports the live size figures,\nmeasured from the deployed artifacts and regenerated with them on every publication.\n*Held in:* FAQ (\"What should I expect in terms of performance\").\n\n### SATOR-7 — Honest about the trades and the gaps\nThe promises come with their limits stated plainly: a framework with no in-browser\ncompiler wins the very first cold load (the production path closes the gap by\nprecompiling); Declare is young and the repository *is* the distribution and the\nsource of truth; and accessibility depth, an npm package, and a dedicated editor\nextension are named, unhidden gaps.\n*Held in:* FAQ (\"Startup\" trade; \"How mature is Declare?\"; \"Is Declare accessible?\"; \"Is there editor support?\").\n\n### SATOR-8 — Open, MIT, entirely public\nThe complete source — compiler, runtime, standard library, documentation, and the\nsite itself — is public under the MIT license.\n*Held in:* FAQ (\"What license is Declare offered under?\").",
      "code": []
     }
    ]
@@ -72219,7 +72219,7 @@
        "subtitle": "",
        "kind": "tenet",
        "label": "Tenet",
-       "doc": "# How it ships\n\nDelivery, hosting, and the honest posture — the promises about running and\nshipping a Declare program.\n\n### SATOR-1 — Programs are data\nA compiled program is data the toolchain can read, so one compiler powers the\ndocumentation system, static extraction for crawlers, and live editing alike —\nnot three separate pipelines.\n*Held in:* FAQ (\"programs are data — the same compiler powers the documentation system, static extraction for crawlers, and live editing\").\n\n### SATOR-2 — What a visitor sees and what a crawler sees can never drift\nStatic extraction is built into the compiler: it runs the program headlessly to\nits settled state and serializes the actual content as semantic HTML — real\nheadings, paragraphs, links — baked into the page at build time. A crawler (or an\nAI reading the web) reads that; a person gets the live app that replaces it at\nboot. No server-side rendering, no hydration — it works on a plain static host.\n*Held in:* FAQ (\"How do Declare-written sites handle crawlers and SEO\"); the \"why\" essay (\"what a visitor sees and what a crawler sees can never drift\").\n\n### SATOR-3 — In-browser compilation, and no build step to develop\nBecause the compiler runs in the page, a page can edit and re-run itself: every\nsample is live-editable, and view-source culture is restored. Development needs no\nbuild step — the dev server and the browser use the *same* compiler with\nbyte-identical output.\n*Held in:* FAQ (\"What benefits does in-browser compilation bring\"); getstarted (\"no build step\").\n\n### SATOR-4 — You don't ship the compiler\nFor production, `declarec` precompiles everything into a small, self-contained\nartifact — a set of static files you can host anywhere, with no trace of the\ntoolchain and no compiler aboard.\n*Held in:* FAQ (\"For production you don't ship the compiler\").\n\n### SATOR-5 — The program's URL is the app's address\nA program is addressed by its own URL: on the dev server, browse to a `.declare`\nfile's URL and get the running app. The address is the program, not a route\nregistered elsewhere.\n*Held in:* getstarted (\"the program URL is the app's address\"); FAQ.\n\n### SATOR-6 — Small, and fast where it counts\nA full application ships small — the flagship calendar, application *and* runtime,\nat roughly 118 KB gzipped (machine-stamped from\nthe measured artifact): a compact runtime, practical on a phone over a slow network.\nInput latency is low — there is no virtual-DOM pass between gesture and pixels — and\nanimation runs at the display's full rate. The homepage reports the live size figures,\nmeasured from the deployed artifacts and regenerated with them on every publication.\n*Held in:* FAQ (\"What should I expect in terms of performance\").\n\n### SATOR-7 — Honest about the trades and the gaps\nThe promises come with their limits stated plainly: a framework with no in-browser\ncompiler wins the very first cold load (the production path closes the gap by\nprecompiling); Declare is young and the repository *is* the distribution and the\nsource of truth; and accessibility depth, an npm package, and a dedicated editor\nextension are named, unhidden gaps.\n*Held in:* FAQ (\"Startup\" trade; \"How mature is Declare?\"; \"Is Declare accessible?\"; \"Is there editor support?\").\n\n### SATOR-8 — Open, MIT, entirely public\nThe complete source — compiler, runtime, standard library, documentation, and the\nsite itself — is public under the MIT license.\n*Held in:* FAQ (\"What license is Declare offered under?\").",
+       "doc": "# How it ships\n\nDelivery, hosting, and the honest posture — the promises about running and\nshipping a Declare program.\n\n### SATOR-1 — Programs are data\nA compiled program is data the toolchain can read, so one compiler powers the\ndocumentation system, static extraction for crawlers, and live editing alike —\nnot three separate pipelines.\n*Held in:* FAQ (\"programs are data — the same compiler powers the documentation system, static extraction for crawlers, and live editing\").\n\n### SATOR-2 — What a visitor sees and what a crawler sees can never drift\nStatic extraction is built into the compiler: it runs the program headlessly to\nits settled state and serializes the actual content as semantic HTML — real\nheadings, paragraphs, links — baked into the page at build time. A crawler (or an\nAI reading the web) reads that; a person gets the live app that replaces it at\nboot. No server-side rendering, no hydration — it works on a plain static host.\n*Held in:* FAQ (\"How do Declare-written sites handle crawlers and SEO\"); the \"why\" essay (\"what a visitor sees and what a crawler sees can never drift\").\n\n### SATOR-3 — In-browser compilation, and no build step to develop\nBecause the compiler runs in the page, a page can edit and re-run itself: every\nsample is live-editable, and view-source culture is restored. Development needs no\nbuild step — the dev server and the browser use the *same* compiler with\nbyte-identical output.\n*Held in:* FAQ (\"What benefits does in-browser compilation bring\"); getstarted (\"no build step\").\n\n### SATOR-4 — You don't ship the compiler\nFor production, `declarec` precompiles everything into a small, self-contained\nartifact — a set of static files you can host anywhere, with no trace of the\ntoolchain and no compiler aboard.\n*Held in:* FAQ (\"For production you don't ship the compiler\").\n\n### SATOR-5 — The program's URL is the app's address\nA program is addressed by its own URL: on the dev server, browse to a `.declare`\nfile's URL and get the running app. The address is the program, not a route\nregistered elsewhere.\n*Held in:* getstarted (\"the program URL is the app's address\"); FAQ.\n\n### SATOR-6 — Small, and fast where it counts\nA full application ships small — the flagship calendar, application *and* runtime,\nat roughly 119 KB gzipped (machine-stamped from\nthe measured artifact): a compact runtime, practical on a phone over a slow network.\nInput latency is low — there is no virtual-DOM pass between gesture and pixels — and\nanimation runs at the display's full rate. The homepage reports the live size figures,\nmeasured from the deployed artifacts and regenerated with them on every publication.\n*Held in:* FAQ (\"What should I expect in terms of performance\").\n\n### SATOR-7 — Honest about the trades and the gaps\nThe promises come with their limits stated plainly: a framework with no in-browser\ncompiler wins the very first cold load (the production path closes the gap by\nprecompiling); Declare is young and the repository *is* the distribution and the\nsource of truth; and accessibility depth, an npm package, and a dedicated editor\nextension are named, unhidden gaps.\n*Held in:* FAQ (\"Startup\" trade; \"How mature is Declare?\"; \"Is Declare accessible?\"; \"Is there editor support?\").\n\n### SATOR-8 — Open, MIT, entirely public\nThe complete source — compiler, runtime, standard library, documentation, and the\nsite itself — is public under the MIT license.\n*Held in:* FAQ (\"What license is Declare offered under?\").",
        "preview": "Delivery, hosting, and the honest posture — the promises about running and shipping a Declare program. SATOR-1 — Programs are data A compiled program is data the toolchain can read, so one compiler powers the documentation system, static ex…"
       },
       {

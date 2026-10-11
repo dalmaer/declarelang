@@ -51,11 +51,16 @@ function whileRendered(h, read) {
     const home = host.parentNode, next = host.nextSibling;
     const room = measuringRoom(host.ownerDocument);
     room.appendChild(host);
+    // back where it was — or out of the room, for a flow held detached while
+    // its hidden ancestors wait (view.ts, DETACHED)
     try {
         return read();
     }
     finally {
-        home?.insertBefore(host, next);
+        if (home !== null)
+            home.insertBefore(host, next);
+        else
+            host.remove();
     }
 }
 const ROOMS = new WeakMap();
