@@ -1,17 +1,25 @@
-// run-tests.mjs — run the test files IN SEQUENCE, run ALL of them, and report
-// every failure at the end. This replaced a package.json `&&` chain, which
-// stopped at the first failing file: a formatting failure in the middle of the
-// list silently skipped the seventeen suites after it, and "the suite passed"
-// could mean "the suite ran until it didn't". A test run's job is to deliver
-// the WHOLE verdict, once.
+// run-tests.mjs — run ALL the test files and report every failure at the end.
+// This replaced a package.json `&&` chain, which stopped at the first failing
+// file: a formatting failure in the middle of the list silently skipped the
+// seventeen suites after it, and "the suite passed" could mean "the suite ran
+// until it didn't". A test run's job is to deliver the WHOLE verdict, once.
 //
 //   node tools/internal/run-tests.mjs             # the full suite (list below)
 //   node tools/internal/run-tests.mjs test/a.test.mjs test/b.test.mjs
+//   node tools/internal/run-tests.mjs -j 3        # at most 3 files at once
+//   node tools/internal/run-tests.mjs --serial    # one at a time, output live
 //
-// Sequential on purpose: the files bind ports, launch browsers, and share a
-// build — they are written as sole tenants of the machine.
+// SEVERAL FILES AT ONCE. Each file is its own process; every server binds
+// port 0 and every browser is its own Chrome, so files share nothing but the
+// machine. Up to half the cores' worth run together (at most 6; TEST_JOBS or
+// -j sets it), the longest first — the last run's times are kept in
+// node_modules/.cache — so the run ends when its longest file does. A file's
+// output is printed whole when it finishes, never interleaved.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { availableParallelism } from "node:os";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 
 const SUITE = [
   "test/unit.test.mjs",
@@ -112,16 +120,61 @@ const SUITE = [
   "test/eval-references.test.mjs",
 ];
 
-const files = process.argv.slice(2).length ? process.argv.slice(2) : SUITE;
+const argv = process.argv.slice(2);
+let jobs = Number(process.env.TEST_JOBS) || Math.max(1, Math.min(6, Math.floor(availableParallelism() / 2)));
+const files = [];
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--serial") jobs = 1;
+  else if (argv[i] === "-j") jobs = Math.max(1, Number(argv[++i]) || 1);
+  else files.push(argv[i]);
+}
+if (files.length === 0) files.push(...SUITE);
+
+const TIMES = "node_modules/.cache/declare-test-times.json";
+let last = {};
+try { last = JSON.parse(readFileSync(TIMES, "utf8")); } catch { /* first run: list order */ }
+
 const failed = [];
 const times = [];
 const t0 = Date.now();
-for (const f of files) {
-  const t = Date.now();
-  const r = spawnSync(process.execPath, [f], { stdio: "inherit" });
-  times.push({ f, s: (Date.now() - t) / 1000 });
-  if (r.status !== 0) failed.push({ f, code: r.status ?? `signal ${r.signal}` });
+const note = (f, s, code) => {
+  times.push({ f, s });
+  if (code !== 0) failed.push({ f, code });
+};
+
+if (jobs === 1) {
+  for (const f of files) {
+    const t = Date.now();
+    const r = spawnSync(process.execPath, [f], { stdio: "inherit" });
+    note(f, (Date.now() - t) / 1000, r.status ?? `signal ${r.signal}`);
+  }
+} else {
+  const queue = [...files].sort((a, b) => (last[b] ?? 0) - (last[a] ?? 0));
+  const run = (f) => new Promise((done) => {
+    const t = Date.now();
+    const p = spawn(process.execPath, [f], { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    p.stdout.on("data", (d) => (out += d));
+    p.stderr.on("data", (d) => (out += d));
+    p.on("close", (code, signal) => {
+      const s = (Date.now() - t) / 1000;
+      process.stdout.write(`\n── ${f} (${s.toFixed(1)} s)${code === 0 ? "" : "  FAILED"}\n${out}`);
+      note(f, s, code ?? `signal ${signal}`);
+      done();
+    });
+  });
+  const worker = async () => { while (queue.length) await run(queue.shift()); };
+  console.log(`run-tests: ${files.length} file(s), ${jobs} at a time`);
+  await Promise.all(Array.from({ length: Math.min(jobs, files.length) }, worker));
 }
+
+// this run's times order the next run
+try {
+  for (const { f, s } of times) last[f] = s;
+  mkdirSync(dirname(TIMES), { recursive: true });
+  writeFileSync(TIMES, JSON.stringify(last, null, 1));
+} catch { /* ordering is a convenience */ }
+
 const mins = ((Date.now() - t0) / 60000).toFixed(1);
 // where the time went: the slowest files, so the run's cost has names
 if (files.length > 1) {

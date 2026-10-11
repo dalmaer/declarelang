@@ -16,6 +16,11 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
     let window: NSWindow
     let view: DeclareView
     let bridge: Bridge
+    /// This window's own control channel, when a rig opened it as a lane
+    /// (Control.swift, LANES); nil for a window the main channel addresses.
+    var lane: ControlChannel?
+    /// The automation session this window answers to: its lane's, else the host's.
+    var automation: Automation { lane?.automation ?? Automation.shared }
     private(set) var currentURL = ""
     /// The titlebar's two toggles, kept in step with this window's state.
     private var chrome: WindowChrome!
@@ -30,7 +35,7 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
     private var inspectorIsOpen = false
     /// Show (or clear) the automation label for this window's current state.
     func refreshAutomation() {
-        nav?.setAutomation(Automation.shared.label(for: self))
+        nav?.setAutomation(automation.label(for: self))
     }
 
     /// The label was pressed: ask, and stop the session on Stop. The run fails
@@ -42,7 +47,7 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
         alert.addButton(withTitle: "Stop")
         alert.addButton(withTitle: "Cancel")
         alert.beginSheetModal(for: window) { response in
-            if response == .alertFirstButtonReturn { Automation.shared.stopByUser() }
+            if response == .alertFirstButtonReturn { self.automation.stopByUser() }
         }
     }
 
@@ -70,6 +75,7 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
         view = DeclareView(frame: NSRect(origin: .zero, size: frame.size))
         bridge = Bridge(view: view)
         super.init()
+        bridge.program = self
         window.title = "Declare"
         // ⚠ AppKit releases a programmatically-created NSWindow when it closes,
         // which under ARC is one release too many — `window` above is already a
@@ -156,7 +162,7 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
         refreshChrome()                 // back/forward start out with nowhere to go
         // While the control channel drives this window its content refuses a
         // person's input, and a refused event points at the label (Automation.swift).
-        pw.blocksInput = { [weak self] in self.map { Automation.shared.blocksInput($0) } ?? false }
+        pw.blocksInput = { [weak self] in self.map { $0.automation.blocksInput($0) } ?? false }
         pw.refused = { [weak self] in self?.nav?.flashAutomation() }
         Automation.shared.register(self)
         refreshAutomation()
@@ -206,7 +212,7 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
         // attempt rather than on success because the only success signal a
         // caller could use is a commit, and the error page commits too.
         if !url.hasPrefix(Bridge.platformBase() + "library/platform-apps/error/") {
-            ControlChannel.clearLoadFailure()
+            ControlChannel.reporting(for: self)?.clearLoadFailure()
         }
         currentURL = url
         loaded = true

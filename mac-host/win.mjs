@@ -40,10 +40,13 @@ export function hostWindows() {
   });
 }
 
-/** The frontmost host window. Throws the message every rig already printed,
- *  so the failure reads the same as it always did. */
-export function hostWindow() {
-  const win = hostWindows()[0];
-  if (win === undefined) throw new Error("the native app is not running");
+/** The frontmost host window — or, given an id (DECLARE_WINDOW: a lane's
+ *  window, which `lane` names), that window wherever it is in the stack.
+ *  Throws the message every rig already printed, so the failure reads the same
+ *  as it always did. */
+export function hostWindow(id = process.env.DECLARE_WINDOW) {
+  const wins = hostWindows();
+  const win = id === undefined ? wins[0] : wins.find((w) => w.id === Number(id));
+  if (win === undefined) throw new Error(id === undefined ? "the native app is not running" : `no host window #${id}`);
   return win;
 }

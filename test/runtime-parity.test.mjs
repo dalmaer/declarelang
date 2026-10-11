@@ -36,6 +36,7 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
 import { test, summarize } from "./harness.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const THIS_TREE = path.resolve(HERE, "..");
@@ -146,6 +147,9 @@ const SCENARIOS = [
   },
 ];
 
+/** Desktop's double-click window (440 ms) plus the start of the reveal it defers. */
+const REVEAL_MS = 600;
+
 async function runScenario(browser, base, sc) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1400, height: 950 });
@@ -155,7 +159,7 @@ async function runScenario(browser, base, sc) {
   await page.waitForFunction("window.__app != null", { timeout: 60000 });
   // the app is mounted; wait until its first windows exist rather than guessing
   await page.waitForFunction("(globalThis.__app.wm?.windows?.() ?? []).length > 0", { timeout: 60000 }).catch(() => {});
-  await new Promise((r) => setTimeout(r, 1200));
+  await settled(page);
   // WAIT FOR CONDITIONS, never a fixed sleep: a static host compiles the program
   // IN THE BROWSER, so the same page is ready in well under a second when a
   // pre-warmed build answers and several seconds when the compiler has to run.
@@ -177,7 +181,7 @@ async function runScenario(browser, base, sc) {
       // rows are actually there, or the scenario tests an emptier tree than the
       // one a person would click on (this cost a false PASS)
       await page.waitForFunction(() => document.querySelectorAll("p, span, div").length > 200, { timeout: 25000 }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 2500));
+      await settled(page);
       continue;
     }
     const label = step.click ?? step.doubleClick;
@@ -185,7 +189,11 @@ async function runScenario(browser, base, sc) {
     if (at === null) { await page.close(); return { error: `no "${label}" on screen` }; }
     await page.mouse.click(at.x, at.y);
     if (step.doubleClick) { await new Promise((r) => setTimeout(r, 90)); await page.mouse.click(at.x, at.y); }
-    await new Promise((r) => setTimeout(r, 2200));
+    // A click's column reveal waits out the double-click window (440 ms, a
+    // timer nothing marks as in flight) before it scrolls; the next step reads
+    // label positions, so let the reveal start, then wait for rest.
+    await new Promise((r) => setTimeout(r, REVEAL_MS));
+    await settled(page);
   }
   const probe = await page.evaluate(sc.probe);
   await page.close();
@@ -207,8 +215,8 @@ if (CHROME === null) {
   const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
   for (const sc of SCENARIOS) {
     await test(sc.name, async () => {
-      const a = await runScenario(browser, main.url, sc);
-      const b = await runScenario(browser, mine.url, sc);
+      // the two trees in two tabs at once: nothing is shared between them
+      const [a, b] = await Promise.all([runScenario(browser, main.url, sc), runScenario(browser, mine.url, sc)]);
       if (process.env.PARITY_DEBUG) console.log(`      main: ${JSON.stringify(a.probe)}\n      here: ${JSON.stringify(b.probe)}${b.errors?.length ? "\n      errors here: " + b.errors.slice(0, 2).join(" | ") : ""}`);
       assert.equal(a.error ?? null, null, "main: " + a.error);
       assert.equal(b.error ?? null, null, "this tree: " + b.error);

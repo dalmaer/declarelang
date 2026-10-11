@@ -114,6 +114,10 @@ export declare function stats(root: Node): {
 };
 export declare const clock: {
     readonly mode: "auto" | "manual";
+    /** Finite motion in flight (a spring short of rest, an animator not done);
+     *  perpetual motion — a Time, a looping animator — doesn't count. What a
+     *  harness waits out in real time where settleMotion would drive it. */
+    readonly settling: boolean;
     /** Take the shared clock off rAF; time advances only through step(). */
     manual(): void;
     /** Hand the clock back to the real frame source. */

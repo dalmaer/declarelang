@@ -325,6 +325,10 @@ let clockMode = "auto";
 const stepped = [];
 export const clock = {
     get mode() { return clockMode; },
+    /** Finite motion in flight (a spring short of rest, an animator not done);
+     *  perpetual motion — a Time, a looping animator — doesn't count. What a
+     *  harness waits out in real time where settleMotion would drive it. */
+    get settling() { return sharedClock.settling; },
     /** Take the shared clock off rAF; time advances only through step(). */
     manual() {
         if (clockMode === "manual")
@@ -497,7 +501,7 @@ const BRIDGE_HELP = {
     stats: "stats() — node/constraint counts for the whole tree",
     evaluate: "evaluate(path, src) — run Declare in the node's scope: read ('width'), compute ('1+2'), set ('width = 40'), bind ('width = { parent.width/2 }'). Returns {ok, text, value} synchronously once primed",
     trace: "trace — the wake trace: start(n) records the last n settles; read() → [{ n, at, ms, origin, runs, triggers, changes }] with every changed slot named and the rule that wrote it; text() the same as lines; stop()/clear(). THE 'why did this settle happen, and what did it change' call — explain()'s other half",
-    clock: "clock — the driven clock: manual()/auto()/step(ms)/settleMotion() for deterministic motion in tests",
+    clock: "clock — the driven clock: manual()/auto()/step(ms)/settleMotion() for deterministic motion in tests; settling — finite motion in flight now",
     build: "build — what this page runs: compiled-at, the main file, every included file, and the dev server (pid, root) that built it. Null on a static host. Check this FIRST when an edit seems not to show",
     help: "help() — this table",
 };

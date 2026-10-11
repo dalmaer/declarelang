@@ -20,6 +20,8 @@ final class Bridge {
     lazy var media = MediaEngine(bridge: self)
     lazy var clips = ClipEngine(bridge: self)
     private weak var view: DeclareView?
+    /// The window this runtime renders into — whose control channel hears its loads.
+    weak var program: ProgramWindow?
     private var timers: [Int: Timer] = [:]
     /// The frame request, readable at the tick from ANY thread: the runtime
     /// asks for its next animation frame from its own thread, and a request
@@ -312,7 +314,7 @@ final class Bridge {
             self.lastCommitAt = CFAbsoluteTimeGetCurrent()
             if self.firstCommitAt == 0 { self.firstCommitAt = CFAbsoluteTimeGetCurrent(); self.mark("FIRST COMMIT") }
             self.settleBoot()                      // something is on screen now
-            ControlChannel.noteCommitted()         // a rig waiting on this load hears `ok`
+            ControlChannel.reporting(for: self.program)?.noteCommitted()   // a rig waiting on this load hears `ok`
             }
         } as @convention(block) (String) -> Void, forKeyedSubscript: "commit")
 
@@ -439,9 +441,9 @@ final class Bridge {
         // previous verdict. Every in-process navigation comes through here,
         // including a rig's own `eval __declareBoot(…)`, which is why the
         // announcement lives in the JS rather than in whichever Swift called it.
-        host.setObject({ (url: String) in
+        host.setObject({ [weak self] (url: String) in
             DispatchQueue.main.async {
-                if !url.contains("library/platform-apps/error/") { ControlChannel.clearLoadFailure() }
+                if !url.contains("library/platform-apps/error/") { ControlChannel.reporting(for: self?.program)?.clearLoadFailure() }
             }
         } as @convention(block) (String) -> Void, forKeyedSubscript: "loadStarting")
 
@@ -451,7 +453,7 @@ final class Bridge {
                 // Publish it where a harness sees it without having to ask
                 // (Control.swift's sidecar): an automated caller is shown
                 // nothing, so this is the only signal it gets.
-                ControlChannel.noteLoadFailure(msg)
+                ControlChannel.reporting(for: self?.program)?.noteLoadFailure(msg)
                 // settleBoot FIRST: it is what puts the window on screen, and
                 // `onBootFailed` runs a modal for a person — which would otherwise
                 // sit over an invisible window and block the run loop before it

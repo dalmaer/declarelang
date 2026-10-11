@@ -8,6 +8,7 @@ import { existsSync } from "node:fs";
 import { buildProduction } from "../tools/declarec.mjs";
 import { inlineAppPage } from "./harness.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -36,16 +37,37 @@ An intro paragraph of several words.
 """ ],
     ]`;
 
+// One Chrome for the file, a fresh page per bundle: a page shares nothing with
+// the next, and a launch per render cost more than the render.
+let chrome = null;
+const browser = () => (chrome ??= launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] }));
+
+/** Load a built bundle in a fresh page; return once it has rendered, its
+ *  fonts have arrived and the text has re-measured, and it is at rest. */
+async function mount(b, before = null) {
+  const page = await (await browser()).newPage();
+  if (before !== null) await before(page);
+  // Errors while the page is under test. Closing a page fires pagehide, whose
+  // scroll stamp (history.replaceState) an origin-less about:blank refuses —
+  // after the case has read its errors; that one is the harness's, not the app's.
+  const errs = [];
+  let open = true;
+  page.on("pageerror", (e) => { if (open) errs.push(e.message); });
+  page.once("close", () => { open = false; });
+  const close = page.close.bind(page);
+  page.close = () => { open = false; return close(); };
+  await page.setContent(inlineAppPage(b), { waitUntil: "load" });
+  await page.waitForFunction(() => (document.getElementById("host")?.querySelectorAll("*").length ?? 0) > 1, { timeout: 15000 }).catch(() => {});
+  await page.evaluate(() => document.fonts.ready);
+  await settled(page);
+  return { page, errs };
+}
+
 async function render(mode) {
   const b = await buildProduction(DOC, { render: mode });
   assert.ok(b.ok, "build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-  const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+  const { page, errs } = await mount(b);
   try {
-    const page = await browser.newPage();
-    const errs = [];
-    page.on("pageerror", (e) => errs.push(e.message));
-    await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-    await new Promise((r) => setTimeout(r, 400));
     const probe = await page.evaluate(() => {
       const texts = (sel) => Array.from(document.querySelectorAll(sel)).map((e) => e.textContent);
       // Every text block: a paragraph, a tight list item's text (`<li>` holds
@@ -61,7 +83,7 @@ async function render(mode) {
       };
     });
     return { errs, probe };
-  } finally { await browser.close(); }
+  } finally { await page.close(); }
 }
 
 if (!CHROME) {
@@ -99,12 +121,8 @@ if (!CHROME) {
   const pre = await (async () => {
     const b = await buildProduction(preDoc, {});
     assert.ok(b.ok, "pre build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-    const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+    const { page, errs } = await mount(b);
     try {
-      const page = await browser.newPage();
-      const errs = []; page.on("pageerror", (e) => errs.push(e.message));
-      await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-      await new Promise((r) => setTimeout(r, 350));
       return { errs, probe: await page.evaluate(() => {
         const el = document.querySelector("pre");
         if (!el) return { pre: false };
@@ -113,7 +131,7 @@ if (!CHROME) {
           mono: /mono|Menlo|SFMono|Courier/i.test(getComputedStyle(spans[0] || el).fontFamily),
           indent: /\n    /.test(el.textContent), colors: new Set(spans.map((s) => getComputedStyle(s).color)).size };
       }) };
-    } finally { await browser.close(); }
+    } finally { await page.close(); }
   })();
   await test("a <pre> renders as one monospace element, whitespace preserved", () => {
     assert.equal(pre.errs.length, 0, pre.errs.slice(0, 2).join(" | "));
@@ -142,13 +160,13 @@ if (!CHROME) {
   const hid = await (async () => {
     const b = await buildProduction(hiddenDoc, {});
     assert.ok(b.ok, "hidden build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-    const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+    const { page } = await mount(b);
     try {
-      const page = await browser.newPage();
-      await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-      await new Promise((r) => setTimeout(r, 900));
+      // the program's own afterDelay(150) hides the second pane: wait for it
+      await page.waitForFunction(() => Array.from(document.querySelectorAll("#host *")).some((e) => /later=false/.test(e.textContent ?? "")), { timeout: 15000 });
+      await settled(page);
       return await page.evaluate(() => Array.from(document.querySelectorAll("#host *")).map((e) => e.textContent).find((t) => /^twin=/.test(t ?? "")) ?? "");
-    } finally { await browser.close(); }
+    } finally { await page.close(); }
   })();
   await test("a hidden Markdown measures its content, hidden from the start or hidden later", () => {
     const m = /twin=(\d+) never=(\d+) once=(\d+) later=(\w+)/.exec(hid);
@@ -177,12 +195,8 @@ Body with \`inline code\` here.
   const tok = await (async () => {
     const b = await buildProduction(tokensDoc, {});
     assert.ok(b.ok, "tokens build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-    const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+    const { page, errs } = await mount(b);
     try {
-      const page = await browser.newPage();
-      const errs = []; page.on("pageerror", (e) => errs.push(e.message));
-      await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-      await new Promise((r) => setTimeout(r, 350));
       return { errs, probe: await page.evaluate(() => {
         const leaf = (needle) => Array.from(document.querySelectorAll("#host *"))
           .filter((e) => e.childElementCount === 0 && e.textContent.trim() === needle).pop();
@@ -193,7 +207,7 @@ Body with \`inline code\` here.
         return { found: true, hColor: hs.color, hWeight: hs.fontWeight,
           cColor: cs.color, cFamily: cs.fontFamily };
       }) };
-    } finally { await browser.close(); }
+    } finally { await page.close(); }
   })();
   await test("the prevailing typography tokens render: headingColor + headingWeight", () => {
     assert.equal(tok.errs.length, 0, tok.errs.slice(0, 2).join(" | "));
@@ -220,19 +234,15 @@ Body with \`inline code\` here.
   const pal = await (async () => {
     const b = await buildProduction(palDoc, {});
     assert.ok(b.ok, "palette build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-    const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+    const { page, errs } = await mount(b);
     try {
-      const page = await browser.newPage();
-      const errs = []; page.on("pageerror", (e) => errs.push(e.message));
-      await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-      await new Promise((r) => setTimeout(r, 350));
       return { errs, probe: await page.evaluate(() => {
         const leaf = (needle) => Array.from(document.querySelectorAll("#host *"))
           .filter((e) => e.childElementCount === 0 && e.textContent.trim() === needle).pop();
         const color = (needle) => { const e = leaf(needle); return e ? getComputedStyle(e).color : null; };
         return { heading: color("Themed"), alink: color("alink"), inked: color("inked"), blink: color("blink") };
       }) };
-    } finally { await browser.close(); }
+    } finally { await page.close(); }
   })();
   await test("rich text inks from the theme's text and links from its accent", () => {
     assert.equal(pal.errs.length, 0, pal.errs.slice(0, 2).join(" | "));
@@ -267,15 +277,10 @@ Body with \`inline code\` here.
   const vb = await (async () => {
     const b = await buildProduction(varDoc, { render: "canvas" });
     assert.ok(b.ok, "var build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-    const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+    // The probe reads near-black body ink: the default theme's `text`. The
+    // scheme is pinned so nothing the machine's appearance decides reaches it.
+    const { page, errs } = await mount(b, (pg) => pg.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]));
     try {
-      const page = await browser.newPage();
-      // The probe reads near-black body ink: the default theme's `text`. The
-      // scheme is pinned so nothing the machine's appearance decides reaches it.
-      await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "light" }]);
-      const errs = []; page.on("pageerror", (e) => errs.push(e.message));
-      await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-      await new Promise((r) => setTimeout(r, 450));
       return { errs, probe: await page.evaluate(() => {
         const cv = document.querySelector("canvas"); if (!cv) return { ok: false };
         const cx = cv.getContext("2d"); const { width: W, height: H } = cv;
@@ -289,7 +294,7 @@ Body with \`inline code\` here.
         }
         return { ok: true, blkT, blkB, bluT, bluB };
       }) };
-    } finally { await browser.close(); }
+    } finally { await page.close(); }
   })();
   await test("a textStyles fontSize grows the line and stays on the baseline (canvas)", () => {
     assert.equal(vb.errs.length, 0, vb.errs.slice(0, 2).join(" | "));
@@ -313,18 +318,15 @@ Body with \`inline code\` here.
     for (const render of ["dom", "canvas"]) {
       const b = await buildProduction(featDoc, render === "canvas" ? { render: "canvas" } : {});
       assert.ok(b.ok, "feature build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-      const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
       let probe;
+      const { page } = await mount(b);
       try {
-        const page = await browser.newPage();
-        await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-        await new Promise((r) => setTimeout(r, 600));   // the derived face lands, and the text re-measures
         probe = await page.evaluate(() => {
           const app = window.__app;
           const dom = [...document.querySelectorAll("#host *")].filter((e) => e.childElementCount === 0 && e.textContent === "1111 0000").map((e) => e.getBoundingClientRect().width);
           return { a: app.a.width, b: app.b.width, dom };
         });
-      } finally { await browser.close(); }
+      } finally { await page.close(); }
       await test(`tabular figures on the Apple system face widen the run (${render})`, () => {
         assert.ok(probe.a > probe.b + 4, `tabular ${probe.a} is not wider than proportional ${probe.b}`);
         if (render === "dom") assert.ok(probe.dom.length === 2 && probe.dom[0] > probe.dom[1] + 4, "painted widths: " + JSON.stringify(probe.dom));
@@ -333,5 +335,6 @@ Body with \`inline code\` here.
   }
 }
 
+if (chrome !== null) await (await chrome).close();
 console.log(`\nrichtext: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

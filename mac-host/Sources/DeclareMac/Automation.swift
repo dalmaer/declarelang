@@ -94,7 +94,7 @@ final class Automation {
         }
         session!.lastSeen = Date()
         if acting { session!.acted = true }
-        if appLevel { for w in all.allObjects { driven.add(w) } }
+        if appLevel { for w in all.allObjects where w.lane == nil { driven.add(w) } }   // a lane's window answers to its own session
         else if let target { driven.add(target) }
         changed()
         return nil

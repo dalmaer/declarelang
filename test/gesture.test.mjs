@@ -31,6 +31,7 @@ import puppeteer from "puppeteer-core";
 import { test, summarize } from "./harness.mjs";
 import { compile } from "../compiler/dist/compile-node.js";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.dirname(here);
@@ -353,7 +354,7 @@ const browser = await launchChrome({
 const page = await browser.newPage();
 
 async function open(route) {
-  await page.goto(`${B}${route}`, { waitUntil: "networkidle2", timeout: 30000 });
+  await page.goto(`${B}${route}`, { waitUntil: "load", timeout: 30000 });
   await page.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
 }
 
@@ -414,7 +415,7 @@ await test("dom: a coarse pointer gets the same amended realization — none bas
   // never writes `none` and `selectable` writes no explicit `text`.
   const tp = await browser.newPage();
   await tp.setViewport({ width: 800, height: 600, hasTouch: true, isMobile: true });
-  await tp.goto(`${B}/dom-coarse`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-coarse`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const r = await tp.evaluate(() => ({
     coarse: matchMedia("(pointer: coarse)").matches,
@@ -436,7 +437,7 @@ await test("dom: a coarse pointer gets the same amended realization — none bas
 
 await test("dom: the subtractive selection realization, amended — <html> none baseline, explicit `text` on exactly the stamped leaves", async () => {
   const tp = await browser.newPage();
-  await tp.goto(`${B}/dom-selection`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-selection`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const r = await tp.evaluate(() => {
     const root = document.querySelector("[data-declare-app]");
@@ -474,7 +475,7 @@ await test("dom: the subtractive selection realization, amended — <html> none 
 
 await test("dom: selection phase 2 — a selectable CONTAINER is a selection surface (gaps anchor like a page)", async () => {
   const tp = await browser.newPage();
-  await tp.goto(`${B}/dom-selection`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-selection`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   // settle past the region-flip's two frames
   await tp.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
@@ -493,7 +494,7 @@ await test("dom: selection phase 2 — a selectable CONTAINER is a selection sur
 
 await test("dom: hovered/pressed hit where things PAINT — page scroll, pane scroll, ignoreScroll chrome", async () => {
   const tp = await browser.newPage();
-  await tp.goto(`${B}/dom-walk`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-walk`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const flags = () => tp.evaluate(() => ({
     hd: window.__app.hd, pd: window.__app.pd, hbar: window.__app.hbar, hi: window.__app.hi,
@@ -546,7 +547,7 @@ const rotAt = (lx, ly) => {
 
 await test("dom: a ROTATED view hears view-local coordinates, not AABB arithmetic", async () => {
   const tp = await browser.newPage();
-  await tp.goto(`${B}/dom-rot`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-rot`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const p = rotAt(30, 20);
   await tp.mouse.move(p.x, p.y);
@@ -568,7 +569,7 @@ await test("dom: a ROTATED view hears view-local coordinates, not AABB arithmeti
 
 await test("dom: the wheel over a ROTATED claimant localizes the same way", async () => {
   const tp = await browser.newPage();
-  await tp.goto(`${B}/dom-rot`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-rot`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const p = rotAt(200, 40);
   await tp.mouse.move(p.x, p.y);
@@ -582,7 +583,7 @@ await test("dom: the wheel over a ROTATED claimant localizes the same way", asyn
 
 await test("canvas: the rotated walk answers the same local point — parity", async () => {
   const tp = await browser.newPage();
-  await tp.goto(`${B}/canvas-rot`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/canvas-rot`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const p = rotAt(30, 20);
   await tp.mouse.move(p.x, p.y);
@@ -1019,7 +1020,7 @@ await test("dom: a DECLARED initial scroll offset actually lands", async () => {
   // ever reconcile them. Found 2026-07-31 writing a native probe that needed a
   // scrolled pane to mean anything and silently got an unscrolled one.
   const tp = await browser.newPage();
-  await tp.goto(`${B}/dom-walk`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-walk`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const r = await tp.evaluate(() => {
     const pane = window.__app.column.pane;
@@ -1119,7 +1120,7 @@ await test("canvas: scrolling the page moves the content but not the ignoreScrol
 
 await test("dom: hovered/pressed hit where things PAINT — page scroll, pane scroll, ignoreScroll chrome", async () => {
   const tp = await browser.newPage();
-  await tp.goto(`${B}/dom-walk`, { waitUntil: "networkidle2", timeout: 30000 });
+  await tp.goto(`${B}/dom-walk`, { waitUntil: "load", timeout: 30000 });
   await tp.waitForFunction(() => window.__rendered === true, { timeout: 15000 });
   const flags = () => tp.evaluate(() => ({
     hd: window.__app.hd, pd: window.__app.pd, hbar: window.__app.hbar, hi: window.__app.hi,
@@ -1318,6 +1319,7 @@ await test("scrollIntoView in a scrolls=y pane with overrun width moves y only; 
 // ── DOM: the `scrolling` fact holds through a momentum wheel stream ─────────
 
 await open("/dom-wheel");
+await settled(page);   // the page at rest before timing a wheel stream against its frames
 
 await test("a momentum-shaped wheel stream keeps `scrolling` true until 160 ms of quiet, then false", async () => {
   const cdp = await page.createCDPSession();
@@ -1331,7 +1333,7 @@ await test("a momentum-shaped wheel stream keeps `scrolling` true until 160 ms o
   }
   const moved = await page.evaluate(() => window.__app.pane.scrollY);
   assert.ok(moved < geo.y0 - 100, `the wheel moved the pane (${geo.y0} → ${moved})`);
-  assert.equal(during.filter(Boolean).length, during.length, `scrolling stayed true between every pair of wheel events (${during.filter(Boolean).length}/${during.length})`);
+  assert.equal(during.filter(Boolean).length, during.length, `scrolling stayed true between every pair of wheel events (${during.filter(Boolean).length}/${during.length}: ${during.map(Number).join("")})`);
   await new Promise((r) => setTimeout(r, 400));
   assert.equal(await page.evaluate(() => window.__app.pane.scrolling), false, "and fell false once the stream went quiet");
   await cdp.detach();

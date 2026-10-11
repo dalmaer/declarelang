@@ -24,6 +24,7 @@ import puppeteer from "puppeteer-core";
 import { test, summarize } from "./harness.mjs";
 import { createDeclareServer } from "../server/create.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -65,8 +66,18 @@ async function shot(url) {
   await page.goto(url, { waitUntil: "networkidle0", timeout: 90000 });
   // settle: fonts + first paints + any load-driven relayout have landed
   await page.evaluate(() => document.fonts.ready);
-  await new Promise((r) => setTimeout(r, 1800));
-  return Buffer.from(await page.screenshot({ type: "png" }));
+  await settled(page);
+  // A production page has no dev bridge, so settled() cannot see its motion
+  // (lzx-calendar animates at boot): the picture is the condition — shoot
+  // until two shots 100 ms apart agree.
+  let prev = Buffer.from(await page.screenshot({ type: "png" }));
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 100));
+    const next = Buffer.from(await page.screenshot({ type: "png" }));
+    if (next.equals(prev)) return next;
+    prev = next;
+  }
+  throw new Error(`${url} never stopped changing`);
 }
 
 try {
@@ -74,14 +85,16 @@ try {
     const devUrl = `${B}/${dir}/${main}`;
     const buildUrl = `${B}/build/${dir}/`;
 
+    let dev = null;
     await test(`${app}: renders deterministically (two dev loads, identical bytes)`, async () => {
       const a = await shot(devUrl);
       const b = await shot(devUrl);
+      dev = a;
       assert.ok(a.equals(b), "two loads of the same dev page must not differ — unstable app, parity unprovable");
     });
 
     await test(`${app}: production build renders byte-identically to the dev compile`, async () => {
-      const dev = await shot(devUrl);
+      dev ??= await shot(devUrl);
       const built = await shot(buildUrl);
       assert.ok(dev.equals(built),
         `dev and /build first paints differ (${dev.length} vs ${built.length} bytes) — the production pipeline changed the program`);

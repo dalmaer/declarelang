@@ -18,6 +18,7 @@ import { buildProduction } from "../tools/declarec.mjs";
 import { parseFlags, parseArgvFlags, DEFAULT_FLAGS } from "../compiler/dist/flags.js";
 import { inlineAppPage } from "./harness.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 let pass = 0, fail = 0;
 function test(name, fn) {
@@ -177,21 +178,32 @@ await test("registry exclusion holds through the entry (no barrel import)", asyn
 
 // ── a slimmed bundle renders ─────────────────────────────────────────────────
 const CHROME = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/google-chrome"].find((p) => existsSync(p));
+// One Chrome for the file, a fresh page per bundle: a page shares nothing with
+// the next, and a launch per render cost more than the render.
+let chrome = null;
+const browser = () => (chrome ??= launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] }));
+
+/** Load a built bundle in a fresh page and let it render and come to rest. */
+async function mount(b) {
+  const page = await (await browser()).newPage();
+  const errs = [];
+  page.on("pageerror", (e) => errs.push(e.message));
+  await page.setContent(inlineAppPage(b), { waitUntil: "load" });
+  await page.waitForFunction(() => (document.getElementById("host")?.querySelectorAll("*").length ?? 0) > 1, { timeout: 15000 }).catch(() => {});
+  await settled(page);
+  return { page, errs };
+}
+
 async function renders(src) {
   const b = await buildProduction(src, {});
   assert.ok(b.ok, "build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-  const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+  const { page, errs } = await mount(b);
   try {
-    const page = await browser.newPage();
-    const errs = [];
-    page.on("pageerror", (e) => errs.push(e.message));
-    await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-    await new Promise((r) => setTimeout(r, 350));
     const n = await page.evaluate(() => document.getElementById("host")?.querySelectorAll("*").length ?? -1);
     assert.equal(errs.length, 0, "page errors: " + errs.slice(0, 2).join(" | "));
     assert.ok(n > 1, "host has no rendered content");
     return { used: b.usedClasses, gz: b.sizes.appGzip };
-  } finally { await browser.close(); }
+  } finally { await page.close(); }
 }
 
 if (!CHROME) {
@@ -501,20 +513,16 @@ App [ width = 200, fill = white, Deep [ html = "<p>prose</p>" ] ]`;
       t: Text [ x = 4, y = 4, text = { app.safe } ] ]`;
     const b = await buildProduction(src, {});
     assert.ok(b.ok, "build failed: " + (b.errors || []).map((e) => e.message).join("; "));
-    const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+    const { page, errs } = await mount(b);
     try {
-      const page = await browser.newPage();
-      const errs = [];
-      page.on("pageerror", (e) => errs.push(e.message));
-      await page.setContent(inlineAppPage(b), { waitUntil: "networkidle0" });
-      await new Promise((r) => setTimeout(r, 350));
       assert.equal(errs.length, 0, "page errors: " + errs.slice(0, 2).join(" | "));
       const text = await page.evaluate(() => document.getElementById("host")?.textContent ?? "");
       assert.ok(text.includes("Ada &lt;&#39;&amp;&quot;&gt;"),
         `the slimmed bundle should have escaped &, <, >, " and ' — got ${JSON.stringify(text)}`);
-    } finally { await browser.close(); }
+    } finally { await page.close(); }
   });
 }
 
+if (chrome !== null) await (await chrome).close();
 console.log(`\nslim: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

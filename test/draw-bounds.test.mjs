@@ -20,6 +20,7 @@ import { test, summarize } from "./harness.mjs";
 import { createDeclareServer } from "../server/create.mjs";
 import { Draw, replayArea } from "../runtime/dist/draw.js";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function findChrome() {
@@ -102,9 +103,9 @@ async function open(url, pre) {
   const pg = await browser.newPage();
   await pg.setViewport({ width: 600, height: 400, deviceScaleFactor: 2 });
   if (pre) await pg.evaluateOnNewDocument(pre);
-  await pg.goto(`${B}/${url}`, { waitUntil: "networkidle0", timeout: 60000 });
+  await pg.goto(`${B}/${url}`, { waitUntil: "load", timeout: 60000 });
   await pg.waitForFunction("window.__app != null", { timeout: 30000 });
-  await sleep(500);
+  await settled(pg);
   return pg;
 }
 

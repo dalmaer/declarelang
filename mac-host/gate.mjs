@@ -11,6 +11,8 @@
 //   node gate.mjs                 # check against baseline
 //   node gate.mjs --bless         # record current numbers as the baseline
 //   node gate.mjs --only arc,blur # a subset
+//   node gate.mjs --lanes 1       # one program at a time (default: 6 lanes —
+//                                 # windows of their own, measured side by side)
 //
 // The app is navigated IN PROCESS (`__declareBoot`) rather than relaunched, so
 // a whole corpus costs one launch — its own, when no controllable host is
@@ -19,7 +21,9 @@
 
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { CTL_IN, CTL_OUT, APP_NAME, ORIGIN, hostBinary } from "./app.mjs";
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
+import { promisify } from "node:util";
+import { channel, openLane } from "./channel.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -81,6 +85,14 @@ const args = process.argv.slice(2);
 const bless = args.includes("--bless");
 const onlyArg = args.indexOf("--only");
 const only = onlyArg >= 0 ? args[onlyArg + 1].split(",") : null;
+// SEVERAL PROGRAMS AT ONCE. Each lane (Control.swift, LANES) is a window with
+// its own channel and its own runtime thread, so the corpus is spread over a
+// few of them and each program is measured in its own window — captured by
+// that window's id, never "the frontmost Declare window", which another
+// host's window (a variant app from a second tree) can be. `--lanes 1`
+// measures one program at a time in the host's main window.
+const lanesArg = args.indexOf("--lanes");
+const LANES = Math.max(1, lanesArg >= 0 ? Number(args[lanesArg + 1]) || 1 : 6);
 
 async function ctl(cmd) {
   if (existsSync(OUT)) unlinkSync(OUT);
@@ -96,8 +108,8 @@ async function ctl(cmd) {
 
 /** The layer count, which is this host's cheapest per-program fingerprint
  *  (`geom` → "content WxH layers=N subviews=M"). NaN if it cannot be read. */
-async function layerCount() {
-  const m = (await ctl("geom")).match(/layers=(\d+)/);
+async function layerCount(send = ctl) {
+  const m = (await send("geom")).match(/layers=(\d+)/);
   return m ? +m[1] : NaN;
 }
 
@@ -119,12 +131,12 @@ async function layerCount() {
  *  programs can coincidentally have the same count, so there is a floor and a
  *  ceiling — and if the ceiling is hit, the row says so rather than quietly
  *  reporting whatever was on screen. */
-async function awaitProgram(before) {
+async function awaitProgram(before, send = ctl) {
   const t0 = Date.now();
   let changed = Number.isNaN(before), stable = 0, last = NaN;
   while (Date.now() - t0 < 20000) {
     await sleep(0.25);
-    const n = await layerCount();
+    const n = await layerCount(send);
     if (!changed && n !== before) changed = true;
     stable = n === last ? stable + 1 : 0;
     last = n;
@@ -170,25 +182,80 @@ const rows = [];
  *  numbers. See the note under the table. */
 let theme = "light";
 
-for (const prog of CORPUS) {
+const execFileP = promisify(execFile);
+/** One program, in the window `send` addresses (id `windowId`): navigate there
+ *  in process, wait for it to be the program on screen, then compare that
+ *  window with Chrome's DOM rendering. */
+async function measure(prog, send, windowId, outDir, booted = false) {
   const name = path.basename(prog, ".declare");
-  if (only && !only.includes(name)) continue;
   const url = `${ORIGIN}/${prog}`;
   // navigate the running app, in process — then wait for the program itself,
   // not for a guess at how long it takes (awaitProgram: the cold-run race)
-  const before = await layerCount();
-  await ctl(`eval __declareBoot(${JSON.stringify(url + "?render=mac")}); 'ok'`);
-  let differing = NaN, structural = NaN, err = await awaitProgram(before);
+  let before = NaN, loaded = "ok";
+  if (!booted) {
+    before = await layerCount(send);
+    await send(`eval __declareBoot(${JSON.stringify(url + "?render=mac")}); 'ok'`);
+    // the host's own verdict: `ok` at the new program's first frame, or its error
+    // (__declareBoot announces the load before eval returns, so this is this load's)
+    loaded = await send("waitload 30", 35000);
+  }
+  let differing = NaN, structural = NaN, scheme = null;
+  let err = loaded === "ok" ? await awaitProgram(before, send) : `load: ${loaded}`.slice(0, 60);
   try {
     if (err) throw new Error(err);
-    const out = execFileSync("node", [path.join(HERE, "fidelity.mjs"), url],
-                             { encoding: "utf8", timeout: 180000 });
+    const { stdout: out } = await execFileP("node", [path.join(HERE, "fidelity.mjs"), url, "--out", outDir],
+      { encoding: "utf8", timeout: 180000, env: { ...process.env, DECLARE_WINDOW: String(windowId) } });
     const m = out.match(/differing\s+([\d.]+)%\s+structural\s+([\d.]+)%/);
     if (m) { differing = +m[1]; structural = +m[2]; } else err = "no number";
-    theme = out.match(/\b(dark|light)\b/)?.[1] ?? theme;
+    scheme = out.match(/\b(dark|light)\b/)?.[1] ?? null;
   } catch (e) { err = (e.message || String(e)).slice(0, 60); }
-  now[name] = { differing, structural, theme };
-  rows.push({ name, differing, structural, err });
+  return { name, differing, structural, err, scheme };
+}
+
+// Each run captures into directories of its own: /tmp/fidelity is shared by
+// every fidelity run on the machine, and a second tree's gate running at the
+// same time overwrote this run's pictures between capture and compare (a
+// calendar shot scored against an arc page, 99.9% differing).
+const OUT_BASE = `/tmp/fidelity-gate-${process.pid}`;
+const todo = CORPUS.filter((prog) => !only || only.includes(path.basename(prog, ".declare")));
+const results = new Array(todo.length);
+// a run that throws still leaves no host of its own behind, nor lanes open
+const cleanup = async (lanes) => {
+  for (const lane of lanes) { try { await lane.send("detach"); await lane.send("closewindow"); } catch { /* gone */ } }
+};
+try {
+  if (LANES === 1) {
+    // the main window: its id is the `*` row of `windows`
+    const id = Number((await ctl("windows")).match(/^\* #(\d+)/m)?.[1]);
+    for (let i = 0; i < todo.length; i++) results[i] = await measure(todo[i], ctl, id, `${OUT_BASE}-main`);
+  } else {
+    // each lane opens on its first program and then takes the next unmeasured one
+    let next = 0;
+    const lanes = [];
+    const main = channel();          // one client for the main channel: the lanes are opened through it in turn
+    try {
+      await Promise.all(Array.from({ length: Math.min(LANES, todo.length) }, async (_, k) => {
+        let i = next++;
+        // named for this run, so a lane a crashed run left open never blocks the next
+        const lane = await openLane(`gate${process.pid}-${k + 1}`, `${ORIGIN}/${todo[i]}?render=mac`, main);
+        lanes.push(lane);
+        await lane.send("attach gate");
+        const v = await lane.send("waitload 30", 35000);
+        const out = `${OUT_BASE}-${k + 1}`;
+        results[i] = v === "ok" ? await measure(todo[i], lane.send, lane.window, out, true)
+          : { name: path.basename(todo[i], ".declare"), differing: NaN, structural: NaN, err: `load: ${v}`.slice(0, 60), scheme: null };
+        while (next < todo.length) { i = next++; results[i] = await measure(todo[i], lane.send, lane.window, out); }
+      }));
+    } finally { await cleanup(lanes); }
+  }
+} catch (e) {
+  if (ownHost !== null) { try { process.kill(ownHost.pid); } catch { /* gone */ } }
+  throw e;
+}
+for (const r of results) {
+  now[r.name] = { differing: r.differing, structural: r.structural, theme: r.scheme ?? theme };
+  if (r.scheme) theme = r.scheme;
+  rows.push(r);
 }
 
 // ── report ──────────────────────────────────────────────────────────────────

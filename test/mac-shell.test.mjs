@@ -30,6 +30,7 @@ import { tmpdir } from "node:os";
 import { test, summarize } from "./harness.mjs";
 import { createDeclareServer } from "../server/create.mjs";
 import { hostBinary, NO_HOST, stopStrayHosts } from "../mac-host/app.mjs";
+import { channel, openLane } from "../mac-host/channel.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // THE INSTALLED APP, not a bare binary reading the tree — see mac-host/app.mjs.
@@ -176,6 +177,33 @@ try {
     await ctl("waitload 20", 1100);
     for (let i = 0; i < 10; i++) await sleep(0.1);
     assert.equal(alive(), true, "the host process exited");
+    assert.equal(await ctl("ping"), "ok");
+  });
+
+  // LANES: a window with a channel of its own (Control.swift). Two at once, each
+  // answering about its own program, its own session and its own close — what
+  // lets a rig measure several programs side by side without crossing replies.
+  await test("two lanes run two programs, each driven through its own channel", async () => {
+    const main = channel();
+    const [a, b] = await Promise.all([
+      openLane(`shell${process.pid}a`, `${B}/test/probe/arc.declare`, main),
+      openLane(`shell${process.pid}b`, `${B}/test/probe/blur.declare`, main),
+    ]);
+    assert.equal(await a.send("waitload 20", 25000), "ok");
+    assert.equal(await b.send("waitload 20", 25000), "ok");
+    const rows = (await ctl("windows")).split("\n");
+    const row = (lane) => rows.find((r) => r.includes(`#${lane.window} `)) ?? "";
+    assert.match(row(a), new RegExp(`arc\\.declare lane=${a.name}$`), `lane a runs its own program: ${row(a)}`);
+    assert.match(row(b), new RegExp(`blur\\.declare lane=${b.name}$`), `lane b runs its own program: ${row(b)}`);
+    assert.match(await a.send("geom"), /^content \d+x\d+ layers=\d+/, "a lane answers program verbs");
+    assert.match(await a.send("attach lane-a"), /name=lane-a/);
+    assert.match(await b.send("automation"), /^none|name=-/, "a's session is not b's");
+    assert.match(await a.send("newwindow"), /^error/, "a lane drives only its own window");
+    const before = await countWindows();
+    assert.match(await a.send("closewindow"), /^ok/);
+    assert.match(await b.send("closewindow"), /^ok/);
+    for (let i = 0; i < 40 && (await countWindows()) !== before - 2; i++) await sleep(0.1);
+    assert.equal(await countWindows(), before - 2, "closing a lane's window closes only that window");
     assert.equal(await ctl("ping"), "ok");
   });
 

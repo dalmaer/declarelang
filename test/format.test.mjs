@@ -148,6 +148,10 @@ for (const file of corpus) {
   await test(`compiles to the same program: ${rel}`, async () => {
     const src = readFileSync(file, "utf8");
     const out = formattedOf.get(file) ?? formatSource(src);
+    // The same text compiles to the same program: there is nothing to compare
+    // until formatting changed something (the canon test below holds the corpus
+    // to that, so this pair runs only on a file that has drifted).
+    if (out === src) return;
     if (isLibrary) {
       const a = JSON.stringify(stripAst(parseLibrary(src)));
       const b = JSON.stringify(stripAst(parseLibrary(out)));
@@ -356,7 +360,7 @@ await test("the whole corpus is canon (docs/system-design excluded)", () => {
     .split("\n").filter((f) => f && !f.startsWith("docs/system-design/") && existsSync(f));
   const bad = files.filter((f) => {
     const before = readFileSync(f, "utf8");
-    let after; try { after = execFileSync("node", ["tools/format.mjs", f], { encoding: "utf8", maxBuffer: 1 << 28 }); }
+    let after; try { after = formatSource(before); }
     catch { return true; }
     return after !== before;
   });

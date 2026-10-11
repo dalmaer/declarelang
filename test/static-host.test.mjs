@@ -31,6 +31,7 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
 import { test, summarize } from "./harness.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -88,9 +89,11 @@ async function boot(app) {
   // what the program SAYS — a runtime warning is a defect; the browser's own
   // resource reports ("Failed to load resource") are network events, not this
   page.on("console", (m) => { if ((m.type() === "warning" || m.type() === "error") && !m.text().startsWith("Failed to load resource")) errors.push(m.type().toUpperCase() + " " + m.text().slice(0, 200)); });
-  await page.goto(`${BASE}/apps/${app}/`, { waitUntil: "networkidle2" });
-  // the in-browser path is fetch + compile + instantiate; give it room
-  await new Promise((r) => setTimeout(r, 4000));
+  await page.goto(`${BASE}/apps/${app}/`, { waitUntil: "load" });
+  // the in-browser path is fetch + compile + instantiate: wait until it has
+  // mounted the app or put up the compile-error panel, then for rest
+  await page.waitForFunction(() => globalThis.__app != null || document.querySelector('[role="alert"]') !== null, { timeout: 30000 });
+  await settled(page);
   const out = await page.evaluate(() => {
     const panel = document.querySelector('[role="alert"]');
     return {

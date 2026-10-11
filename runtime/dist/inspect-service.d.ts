@@ -144,6 +144,7 @@ export declare const Inspect: {
     evaluate: (path: string, src: string) => EvalResult;
     clock: {
         readonly mode: "auto" | "manual";
+        readonly settling: boolean;
         manual(): void;
         auto(): void;
         step(ms?: number): void;

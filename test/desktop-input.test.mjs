@@ -17,6 +17,7 @@ import puppeteer from "puppeteer-core";
 import { test, summarize } from "./harness.mjs";
 import { createDeclareServer } from "../server/create.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled, still } from "./settle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -42,11 +43,17 @@ const browser = await launchChrome({
 });
 const page = await browser.newPage();
 
+/** Desktop's double-click window (440 ms) and a margin: a click's column reveal waits it out. */
+const DOUBLE_CLICK_MS = 460;
+/** The Files window's column strip offset — its reveal is a scroll glide, which the clock does not carry. */
+const STRIP_X = `(() => { const w = globalThis.__declare.find("app.wins").childViews.find((c) => c.constructor.name === "FilesWindow");
+  const walk = (v) => v.scrolls === "x" ? v : (v.childViews ?? v.children ?? []).map(walk).find(Boolean); return w ? walk(w)?.scrollX : null; })()`;
+
 /** Boot the desktop and open the Markdown reader (its window carries the halo). */
 async function openReader(url) {
   await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
   await page.waitForFunction(() => globalThis.__declare?.find?.("app.wins") != null, { timeout: 30000 });
-  await new Promise((r) => setTimeout(r, 1200)); // boot animations settle
+  await settled(page); // boot animations settle
   const icon = await page.evaluate(() => {
     let found = null;
     // records era named icons by `name`; the instances era by `appId`
@@ -61,7 +68,7 @@ async function openReader(url) {
   await page.waitForFunction(
     () => globalThis.__declare.find("app.wins").childViews.some((c) => c.constructor.name === "ViewerWindow"),
     { timeout: 15000 });
-  await new Promise((r) => setTimeout(r, 1500)); // open animation + content fetch
+  await settled(page); // open animation + content fetch
 }
 
 /** The reader window's geometry in viewport coordinates (model-driven; the
@@ -96,7 +103,7 @@ const drag = async (x1, y1, x2, y2) => {
 async function filesReveal(url) {
   await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
   await page.waitForFunction(() => globalThis.__declare?.find?.("app.wins") != null, { timeout: 30000 });
-  await new Promise((r) => setTimeout(r, 1500));
+  await settled(page);
   // The window's columns as SCREEN geometry — every row's center walked up the
   // tree with each scrolling ancestor's offset subtracted, so a click aimed at a
   // revealed column lands only if paint and hit really shifted with scrollX.
@@ -115,12 +122,15 @@ async function filesReveal(url) {
     const r = g.cols[col].rows.find((x) => x.name === name) ?? g.cols[col].rows[0];
     assert.ok(r, `column ${col} has a row ${name}`);
     await page.mouse.click(r.x, r.y);
-    await new Promise((res) => setTimeout(res, 700));
+    // the reveal waits out the double-click window (a timer nothing marks as
+    // in flight), then glides: wait past the first, then for rest
+    await new Promise((res) => setTimeout(res, DOUBLE_CLICK_MS));
+    await settled(page);
+    await still(page, STRIP_X);
   };
   await clickRow(0, "Guide");
   if ((await probe()).depth < 1) await clickRow(0, "Guide");        // a background window's first click only activates it
   await clickRow(1, "The idea");                                    // a folder inside a folder: the third column is a list
-  await new Promise((r) => setTimeout(r, 900));                     // the reveal waits out the double-click window (440ms), then glides 260ms
   let g = await probe();
   assert.equal(g.depth, 2, "Guide → The idea selected");
   assert.ok(g.cols.length >= 3 && g.cols[2].rows.length > 0, `a third, list column opened (${g.cols.length})`);
@@ -212,14 +222,14 @@ try {
       globalThis.__rand = Math.random; Math.random = () => 0;
       globalThis.__declare.find("app").scaleSeed = 1;
     });
-    await new Promise((r) => setTimeout(r, 1000)); // the spring settles
+    await settled(page); // the spring settles
   };
   const zoomOff = async () => {
     await page.evaluate(() => {
       globalThis.__declare.find("app").scaleSeed = 0;
       if (globalThis.__rand) Math.random = globalThis.__rand;
     });
-    await new Promise((r) => setTimeout(r, 1000));
+    await settled(page);
   };
   const winGeo = () => page.evaluate(() => {
     const w = globalThis.__w;
@@ -273,7 +283,7 @@ try {
       const box = document.querySelector('[data-declare-slot^="run:"]');
       return box != null && box.__childApp != null;
     }, { timeout: 30000 });
-    await new Promise((r) => setTimeout(r, 800));
+    await settled(page);
     await zoomOn();
     const r = await page.evaluate(() => {
       const aw = globalThis.__declare.find("app.wins").childViews.find((c) => c.constructor.name === "AppWindow");

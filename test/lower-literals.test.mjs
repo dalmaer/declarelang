@@ -13,6 +13,7 @@
 //      only the tag text rich text reads as it arrives (a literal with no source
 //      position) and data shapes, which are declarations, not parsed values.
 import assert from "node:assert/strict";
+import { Worker, isMainThread, parentPort, workerData } from "node:worker_threads";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname, basename, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,62 +37,82 @@ const files = [
   ...folder(resolve(ROOT, "test/probe")),
 ];
 
-const unlowered = [], parsed = [];
-for (const f of files) {
-  let b;
-  try { b = await compileProgram(readFileSync(f, "utf8"), { originDir: dirname(f), mainId: f, facts: true, stripPos: false }); } catch { continue; }
-  if (b.program === null) continue;
-  const where = relative(ROOT, f);
-  for (const u of b.unlowered ?? []) unlowered.push(`${where}:${u.pos?.line}: ${u.why}`);
-  withLiteralSink((lit) => {
-    if (lit.pos?.line === 0 || lit.kind === "schema") return;   // text read at run time; a data shape
-    parsed.push(`${where}:${lit.pos?.line}: ${lit.kind}${lit.kind === "ident" ? " " + lit.name : ""}`);
-  }, () => {
-    try {
-      const app = buildProgram(b.program);
-      app.$attach(new HeadlessBackend(), null);
-      settle();
-      app.discard();
-    } catch { /* booting is verify's subject; only what it parsed is this test's */ }
-  });
+async function lowerAll(files) {
+  const unlowered = [], parsed = [];
+  for (const f of files) {
+    let b;
+    try { b = await compileProgram(readFileSync(f, "utf8"), { originDir: dirname(f), mainId: f, facts: true, stripPos: false }); } catch { continue; }
+    if (b.program === null) continue;
+    const where = relative(ROOT, f);
+    for (const u of b.unlowered ?? []) unlowered.push(`${where}:${u.pos?.line}: ${u.why}`);
+    withLiteralSink((lit) => {
+      if (lit.pos?.line === 0 || lit.kind === "schema") return;   // text read at run time; a data shape
+      parsed.push(`${where}:${lit.pos?.line}: ${lit.kind}${lit.kind === "ident" ? " " + lit.name : ""}`);
+    }, () => {
+      try {
+        const app = buildProgram(b.program);
+        app.$attach(new HeadlessBackend(), null);
+        settle();
+        app.discard();
+      } catch { /* booting is verify's subject; only what it parsed is this test's */ }
+    });
+  }
+  return { unlowered, parsed };
 }
 
-await test(`the compile ships every literal as its value (${files.length} programs)`, () => {
-  assert.deepEqual(unlowered.slice(0, 20), [], `${unlowered.length} literal(s) shipped as text`);
-});
+// A compile is mostly the typecheck, and 267 of them in one thread set the
+// suite's floor: the corpus is split across a few worker threads, each its own
+// runtime and compiler, and their findings are gathered.
+const SHARDS = 2;
+const unlowered = [], parsed = [];
+if (!isMainThread) {
+  parentPort.postMessage(await lowerAll(workerData));
+} else {
+  const shards = Array.from({ length: SHARDS }, (_, k) => files.filter((_, i) => i % SHARDS === k));
+  const found = await Promise.all(shards.map((part) => new Promise((done, fail) => {
+    const w = new Worker(new URL(import.meta.url), { workerData: part });
+    w.once("message", done);
+    w.once("error", fail);
+  })));
+  for (const r of found) { unlowered.push(...r.unlowered); parsed.push(...r.parsed); }
 
-await test("a compiled program parses none of its own literals at run time", () => {
-  assert.deepEqual(parsed.slice(0, 20), [], `${parsed.length} literal(s) parsed at run time — a position the checker does not coerce`);
-});
+  await test(`the compile ships every literal as its value (${files.length} programs)`, () => {
+    assert.deepEqual(unlowered.slice(0, 20), [], `${unlowered.length} literal(s) shipped as text`);
+  });
 
-// A provision is computed at compile time too (program-schema.ts provisionValue),
-// so one no form admits — which would provide nothing, every reader falling to
-// its default — is refused like the same literal in a declared slot.
-await test("a provided value that would provide nothing is refused; every real one ships as its value", async () => {
-  const bad = await compileProgram(`App [ textColor = #12, Text [ text = "a" ] ]`, {});
-  assert.equal(bad.program, null, "#12 provides nothing");
-  assert.match(bad.errors.map((e) => e.message).join("\n"), /textColor = .*would provide nothing/);
-  for (const [src, want] of [
-    [`App [ textColor = navy, Text [ text = "a" ] ]`, 0x000080],
-    [`App [ fontWeight = bold, Text [ text = "a" ] ]`, "bold"],
-    [`App [ fontFamily = ["Georgia", "serif"], Text [ text = "a" ] ]`, "Georgia, serif"],
-  ]) {
-    const ok = await compileProgram(src, {});
-    assert.ok(ok.program !== null, `${src}: ${ok.errors.map((e) => e.message).join("; ")}`);
-    const v = ok.program.root.attrs[0].value;
-    assert.deepEqual([v.kind, v.value], ["value", want], src);
-  }
-  // a built-in preset ships as its record (lowerThemeNames) — the build then
-  // needs no preset table; a theme the program declares stays a name, resolved
-  // from its own declaration
-  const themed = await compileProgram(`App [ theme = Cupertino, Text [ text = "a" ] ]`, {});
-  assert.ok(themed.program !== null, "a theme name is a provision");
-  const tv = themed.program.root.attrs[0].value;
-  assert.equal(tv.kind, "value", "a built-in preset ships as its record");
-  assert.equal(typeof tv.value?.accent, "number", "…with the preset's tokens");
-  const own = await compileProgram(`theme Mine [ accent = #112233 ]\nApp [ theme = Mine, Text [ text = "a" ] ]`, {});
-  assert.ok(own.program !== null, own.errors.map((e) => e.message).join("; "));
-  assert.equal(own.program.root.attrs[0].value.kind, "ident", "a declared theme stays a name");
-});
+  await test("a compiled program parses none of its own literals at run time", () => {
+    assert.deepEqual(parsed.slice(0, 20), [], `${parsed.length} literal(s) parsed at run time — a position the checker does not coerce`);
+  });
 
-summarize("lower-literals");
+  // A provision is computed at compile time too (program-schema.ts provisionValue),
+  // so one no form admits — which would provide nothing, every reader falling to
+  // its default — is refused like the same literal in a declared slot.
+  await test("a provided value that would provide nothing is refused; every real one ships as its value", async () => {
+    const bad = await compileProgram(`App [ textColor = #12, Text [ text = "a" ] ]`, {});
+    assert.equal(bad.program, null, "#12 provides nothing");
+    assert.match(bad.errors.map((e) => e.message).join("\n"), /textColor = .*would provide nothing/);
+    for (const [src, want] of [
+      [`App [ textColor = navy, Text [ text = "a" ] ]`, 0x000080],
+      [`App [ fontWeight = bold, Text [ text = "a" ] ]`, "bold"],
+      [`App [ fontFamily = ["Georgia", "serif"], Text [ text = "a" ] ]`, "Georgia, serif"],
+    ]) {
+      const ok = await compileProgram(src, {});
+      assert.ok(ok.program !== null, `${src}: ${ok.errors.map((e) => e.message).join("; ")}`);
+      const v = ok.program.root.attrs[0].value;
+      assert.deepEqual([v.kind, v.value], ["value", want], src);
+    }
+    // a built-in preset ships as its record (lowerThemeNames) — the build then
+    // needs no preset table; a theme the program declares stays a name, resolved
+    // from its own declaration
+    const themed = await compileProgram(`App [ theme = Cupertino, Text [ text = "a" ] ]`, {});
+    assert.ok(themed.program !== null, "a theme name is a provision");
+    const tv = themed.program.root.attrs[0].value;
+    assert.equal(tv.kind, "value", "a built-in preset ships as its record");
+    assert.equal(typeof tv.value?.accent, "number", "…with the preset's tokens");
+    const own = await compileProgram(`theme Mine [ accent = #112233 ]\nApp [ theme = Mine, Text [ text = "a" ] ]`, {});
+    assert.ok(own.program !== null, own.errors.map((e) => e.message).join("; "));
+    assert.equal(own.program.root.attrs[0].value.kind, "ident", "a declared theme stays a name");
+  });
+
+  summarize("lower-literals");
+}

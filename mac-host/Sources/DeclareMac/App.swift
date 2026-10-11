@@ -400,11 +400,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// before it has nowhere to go yet.
     private var launched = false
 
-    /// The window everything global addresses: the control channel, the menu
-    /// actions, the published geometry. Key first, then the most recent — a
-    /// harness that just opened a window has not necessarily focused it.
+    /// The window everything global addresses: the menu actions, the
+    /// published geometry. Key first, then the most recent — a harness that
+    /// just opened a window has not necessarily focused it.
     var front: ProgramWindow? {
         windows.first { $0.window.isKeyWindow } ?? windows.last
+    }
+
+    /// The window the MAIN control channel addresses: the front one that is not
+    /// a lane's (a lane's window answers only to its own channel).
+    var frontUnlaned: ProgramWindow? {
+        windows.first { $0.window.isKeyWindow && $0.lane == nil } ?? windows.last { $0.lane == nil }
     }
 
     func applicationDidFinishLaunching(_ n: Notification) {
@@ -435,7 +441,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // while they run, and the events cannot land in someone else's window.
         // It addresses whichever window is front, so it outlives any one of them.
         if ProcessInfo.processInfo.environment["DECLARE_CONTROL"] != nil {
-            control = ControlChannel(target: { [weak self] in self?.front })
+            control = ControlChannel(target: { [weak self] in self?.frontUnlaned })
+            ControlChannel.main = control
             control?.start()
         }
         // A document the Finder handed us wins over every default: it is what the
@@ -577,6 +584,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func windowClosed(_ w: ProgramWindow) {
+        w.lane?.stop()
         windows.removeAll { $0 === w }
         sessionChanged()
     }

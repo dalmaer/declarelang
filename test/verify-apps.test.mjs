@@ -9,7 +9,7 @@
 // per-app assert/state scripts, run pre-release — not in the main suite. They are
 // not optional, only deferred: test/ladder.test.mjs (`npm run test:ladder`)
 // climbs them for every app that ships an assert/states script.
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readdirSync, existsSync, statSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,9 +17,26 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let pass = 0, fail = 0;
 
+// Each verify is its own process and shares nothing with the others, so they
+// run a few at a time; results are reported in the order they are listed.
 function verify(file, extra = []) {
-  const r = spawnSync("node", [join(ROOT, "tools/verify.mjs"), file, "--json", "--rung", "4", ...extra], { cwd: ROOT, encoding: "utf8" });
-  try { return JSON.parse(r.stdout); } catch { return { ok: false, _crash: (r.stderr || r.stdout || "").slice(-300) }; }
+  return new Promise((done) => {
+    const p = spawn("node", [join(ROOT, "tools/verify.mjs"), file, "--json", "--rung", "4", ...extra], { cwd: ROOT });
+    let out = "", err = "";
+    p.stdout.on("data", (d) => (out += d));
+    p.stderr.on("data", (d) => (err += d));
+    p.on("close", () => {
+      try { done(JSON.parse(out)); } catch { done({ ok: false, _crash: (err || out || "").slice(-300) }); }
+    });
+  });
+}
+const AT_ONCE = 3;
+async function verifyAll(jobs) {
+  const results = new Array(jobs.length);
+  let next = 0;
+  const worker = async () => { while (next < jobs.length) { const i = next++; results[i] = await verify(...jobs[i]); } };
+  await Promise.all(Array.from({ length: AT_ONCE }, worker));
+  return results;
 }
 
 function test(name, fn) {
@@ -40,10 +57,6 @@ const apps = readdirSync(join(ROOT, "apps"))
   .map((n) => join("apps", n, `${n}.declare`))
   .filter((f) => existsSync(join(ROOT, f)) && statSync(join(ROOT, f)).isFile());
 
-for (const f of apps) {
-  test(`example ${f} — clean through R4 (compile, typecheck, boot)`, () => assertClean(verify(f), f));
-}
-
 // A directory whose ENTRY is an HTML page (not a name-matched program) escapes
 // the sweep above; its programs are runnable examples all the same and list
 // themselves here. (two-way: the embedding showcase — three apps, one page.)
@@ -57,9 +70,6 @@ const htmlEntryPrograms = [
   "library/platform-apps/inspector/inspector.declare",
   "library/platform-apps/viewer/viewer.declare",
 ];
-for (const f of htmlEntryPrograms) {
-  test(`example ${f} — clean through R4 (compile, typecheck, boot)`, () => assertClean(verify(f), f));
-}
 
 // ── every library source, under the probe wrapper ───────────────────────────
 const libDir = join(ROOT, "library");
@@ -67,9 +77,10 @@ const libFiles = existsSync(libDir)
   ? readdirSync(libDir).filter((n) => n.endsWith(".declare")).map((n) => join("library", n))
   : [];
 
-for (const f of libFiles) {
-  test(`library ${f} — clean through R4 under --wrap probe`, () => assertClean(verify(f, ["--wrap"]), f));
-}
+const examples = [...apps, ...htmlEntryPrograms];
+const reports = await verifyAll([...examples.map((f) => [f]), ...libFiles.map((f) => [f, ["--wrap"]])]);
+examples.forEach((f, i) => test(`example ${f} — clean through R4 (compile, typecheck, boot)`, () => assertClean(reports[i], f)));
+libFiles.forEach((f, i) => test(`library ${f} — clean through R4 under --wrap probe`, () => assertClean(reports[examples.length + i], f)));
 
 console.log(`\nverify-apps: ${pass} passed, ${fail} failed (${apps.length} apps, ${libFiles.length} library files)`);
 process.exit(fail === 0 ? 0 : 1);

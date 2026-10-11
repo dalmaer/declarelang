@@ -22,6 +22,8 @@
 //   attach NAME [input] · detach · automation   (the session the title bar shows —
 //     Automation.swift; `input` lets a person's input through, for a rig that
 //     posts real events itself)
+//   lane NAME [url]   (a new window with a channel of its own beside this one —
+//     …NAME.in / .out / .err; see LANES below. mac-host/channel.mjs is a client)
 
 import AppKit
 import CoreImage
@@ -31,7 +33,8 @@ final class ControlChannel {
     /// `/tmp/declare-ctl.in` unless the bundle names another (`DeclareCtlPipe`
     /// in Info.plist — a VARIANT app built beside the main one, so two trees
     /// can drive two apps on one machine without crossing wires).
-    private let inPath: String = (Bundle.main.infoDictionary?["DeclareCtlPipe"] as? String) ?? "/tmp/declare-ctl.in"
+    static let mainPath: String = (Bundle.main.infoDictionary?["DeclareCtlPipe"] as? String) ?? "/tmp/declare-ctl.in"
+    let inPath: String
     private var outPath: String { inPath.hasSuffix(".in") ? String(inPath.dropLast(3)) + ".out" : inPath + ".out" }
     private var timer: Timer?
     private var activity: NSObjectProtocol?
@@ -48,7 +51,52 @@ final class ControlChannel {
     private var bridge: Bridge! { target()?.bridge }
     private var view: DeclareView? { target()?.view }
 
-    init(target: @escaping () -> ProgramWindow?) { self.target = target }
+    /// The session this channel's commands run under and its windows show.
+    let automation: Automation
+    /// This channel's name when it is a LANE (below); nil for the main channel.
+    let lane: String?
+
+    /// The host's channel, which addresses the front window. Set at launch.
+    static weak var main: ControlChannel?
+
+    init(target: @escaping () -> ProgramWindow?) {
+        self.target = target
+        self.inPath = Self.mainPath
+        self.automation = Automation.shared
+        self.lane = nil
+    }
+
+    // ── LANES: one window, one channel ───────────────────────────────────────
+    // The main channel addresses whichever window is front, so it drives one
+    // program at a time and one automation session. A rig that runs several
+    // programs at once — a test suite spreading its programs over windows —
+    // asks the main channel for a LANE: `lane NAME [url]` opens a new window
+    // with its own channel beside the main one (…NAME.in / .out / .err), and
+    // everything about that window goes through it: its commands, its load
+    // verdict (`waitload`, the error sidecar), its automation session and its
+    // title-bar label. Two lanes share nothing but the app, so their clients
+    // never read each other's replies. Closing the window ends the lane.
+    init(lane name: String, window: ProgramWindow) {
+        self.target = { [weak window] in window }
+        let base = Self.mainPath.hasSuffix(".in") ? String(Self.mainPath.dropLast(3)) : Self.mainPath
+        self.inPath = base + "." + name + ".in"
+        self.automation = Automation()
+        self.lane = name
+        automation.register(window)
+    }
+
+    /// The channel that reports on `w`'s loads: its lane's, else the main one.
+    static func reporting(for w: ProgramWindow?) -> ControlChannel? { w?.lane ?? main }
+
+    /// Stop listening (a lane whose window closed). The reply file stays: the
+    /// `closewindow` that ended the lane is answered there, and its client has
+    /// yet to read it.
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        if let a = activity { ProcessInfo.processInfo.endActivity(a); activity = nil }
+        for p in [inPath, errPath, inPath + ".take"] { try? FileManager.default.removeItem(atPath: p) }
+    }
 
     // ── THE FAILURE SIDECAR ────────────────────────────────────────────────
     //
@@ -67,13 +115,10 @@ final class ControlChannel {
     // `windows` counts its own lines, `newwindow` answers `ok windows=N`, the
     // gate reads `layers=N` — and a prefix or an extra line would break every
     // one of those readers to fix a problem none of them have.
-    private static var errPath: String {
-        let p = (Bundle.main.infoDictionary?["DeclareCtlPipe"] as? String) ?? "/tmp/declare-ctl.in"
-        return (p.hasSuffix(".in") ? String(p.dropLast(3)) : p) + ".err"
-    }
+    private var errPath: String { (inPath.hasSuffix(".in") ? String(inPath.dropLast(3)) : inPath) + ".err" }
     /// A load or compile failed: publish it. Called whether or not anything was
     /// shown, so a headless or automated host reports the same as a visible one.
-    static func noteLoadFailure(_ msg: String) {
+    func noteLoadFailure(_ msg: String) {
         outstanding = msg
         try? msg.write(toFile: errPath, atomically: true, encoding: .utf8)
         settleLoad("error")
@@ -85,25 +130,25 @@ final class ControlChannel {
     // whole time. The host knows the moment either way: a load becomes
     // `loading` on its attempt, `ok` on its first commit, `error` when it fails
     // (and the error page's own commit does not undo that).
-    private(set) static var loadState = "loading"   // nothing has loaded yet
-    private static var loadWaiters: [() -> Void] = []
+    private(set) var loadState = "loading"   // nothing has loaded yet
+    private var loadWaiters: [() -> Void] = []
     /// The program committed its first frame since its load began.
-    static func noteCommitted() { if loadState == "loading" { settleLoad("ok") } }
-    private static func settleLoad(_ s: String) {
+    func noteCommitted() { if loadState == "loading" { settleLoad("ok") } }
+    private func settleLoad(_ s: String) {
         loadState = s
         let w = loadWaiters
         loadWaiters = []
         for f in w { f() }
     }
-    fileprivate static var loadVerdict: String { loadState == "error" ? "error: " + (outstanding ?? "") : loadState }
+    fileprivate var loadVerdict: String { loadState == "error" ? "error: " + (outstanding ?? "") : loadState }
     /// The failure standing over this host right now, or nil. Held in memory as
     /// well as on disk so the refusal below costs nothing per command.
-    private(set) static var outstanding: String?
+    private(set) var outstanding: String?
     /// A new load has begun: the previous verdict no longer describes the host.
     /// Cleared on the ATTEMPT rather than on success, because the success
     /// signal a caller could use — a commit — is one the error page produces
     /// too, and clearing on that would report a failed load as healthy.
-    static func clearLoadFailure() {
+    func clearLoadFailure() {
         outstanding = nil
         try? FileManager.default.removeItem(atPath: errPath)
         loadState = "loading"
@@ -126,7 +171,7 @@ final class ControlChannel {
             options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
             reason: "driven through the control channel")
         try? "".write(toFile: inPath, atomically: true, encoding: .utf8)
-        let t = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in self?.poll(); Automation.shared.tick() }
+        let t = Timer(timeInterval: 0.03, repeats: true) { [weak self] _ in self?.poll(); self?.automation.tick() }
         RunLoop.main.add(t, forMode: .common)
         timer = t
         NSLog("[control] listening on %@", inPath)
@@ -175,16 +220,16 @@ final class ControlChannel {
         switch verb {
         case "attach":
             guard a.count > 1 else { return "usage: attach NAME [input]" }
-            Automation.shared.attach(name: a[1], allowInput: a.dropFirst(2).contains("input"), target: target())
-            return "ok " + Automation.shared.describe()
+            automation.attach(name: a[1], allowInput: a.dropFirst(2).contains("input"), target: target())
+            return "ok " + automation.describe()
         case "detach":
-            Automation.shared.detach()
+            automation.detach()
             return "ok"
         case "automation":
-            return Automation.shared.describe()
+            return automation.describe()
         default:
-            let appLevel = ["windows", "newwindow", "closewindow"].contains(verb)
-            if let refusal = Automation.shared.note(words: a, target: target(), appLevel: appLevel) { return refusal }
+            let appLevel = lane == nil && ["windows", "newwindow", "closewindow", "lane"].contains(verb)
+            if let refusal = automation.note(words: a, target: target(), appLevel: appLevel) { return refusal }
         }
         // Almost every verb below reaches through `bridge`/`view` into a window.
         // With none open there is nothing to address, and answering plainly
@@ -200,7 +245,7 @@ final class ControlChannel {
         // sidecar (above) lets a caller notice without asking; this makes the
         // caller who never asks fail LOUDLY at the point of use instead of
         // collecting plausible numbers about an error page.
-        if let e = Self.outstanding, !Self.whileFailed.contains(verb) {
+        if let e = outstanding, !Self.whileFailed.contains(verb) {
             return "!! load failed: " + e
         }
         func num(_ i: Int) -> Double { i < a.count ? (Double(a[i]) ?? 0) : 0 }
@@ -212,13 +257,13 @@ final class ControlChannel {
             // `waitload [seconds]` — answers when the current load has an
             // outcome: `ok` (it committed a frame), `error: <message>`, or
             // `timeout` (default 20s). At once when there already is one.
-            if Self.loadState != "loading" { return Self.loadVerdict }
+            if loadState != "loading" { return loadVerdict }
             let limit = a.count > 1 ? (Double(a[1]) ?? 20) : 20
             var answered = false
-            Self.loadWaiters.append { [weak self] in
+            loadWaiters.append { [weak self] in
                 guard !answered else { return }
                 answered = true
-                self?.reply([Self.loadVerdict])
+                self?.reply([self?.loadVerdict ?? "loading"])
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + limit) { [weak self] in
                 guard !answered else { return }
@@ -463,12 +508,31 @@ final class ControlChannel {
             guard let app = NSApp.delegate as? AppDelegate else { return "no app" }
             if app.windows.isEmpty { return "(none)" }
             return app.windows.map {
-                ($0 === app.front ? "* " : "  ") + "#\($0.window.windowNumber) "
+                ($0 === target() ? "* " : "  ") + "#\($0.window.windowNumber) "
                 + "\(Int($0.window.frame.width))x\(Int($0.window.frame.height)) \($0.currentURL)"
+                + ($0.lane.map { " lane=\($0.lane ?? "")" } ?? "")
             }.joined(separator: "\n")
+        case "lane":
+            // `lane NAME [url]` — a window with a channel of its own (LANES,
+            // above). Answers where that channel listens.
+            guard lane == nil else { return "error: a lane opens lanes only from the main channel" }
+            guard a.count > 1, a[1].allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
+                return "usage: lane NAME [url]   (NAME: letters, digits, - and _)"
+            }
+            guard let app = NSApp.delegate as? AppDelegate else { return "no app" }
+            if app.windows.contains(where: { $0.lane?.lane == a[1] }) { return "error: lane \(a[1]) is open" }
+            let w = app.newWindow()
+            let ch = ControlChannel(lane: a[1], window: w)
+            w.lane = ch
+            ch.start()
+            w.refreshAutomation()
+            let url = a.dropFirst(2).joined(separator: " ")
+            if !url.isEmpty { w.open(url) }
+            return "ok lane=\(a[1]) window=#\(w.window.windowNumber) in=\(ch.inPath)"
         case "newwindow":
             // `newwindow [url]` — a second program, in its own window and its
             // own runtime. Without this the multi-window path has no probe.
+            guard lane == nil else { return "error: a lane drives its own window; ask the main channel for another lane" }
             guard let app = NSApp.delegate as? AppDelegate else { return "no app" }
             let url = a.dropFirst().joined(separator: " ")
             let w = app.newWindow()
@@ -476,7 +540,7 @@ final class ControlChannel {
             return "ok windows=\(app.windows.count)"
         case "closewindow":
             guard let app = NSApp.delegate as? AppDelegate else { return "no app" }
-            guard let w = app.front else { return "no window" }
+            guard let w = target() else { return "no window" }
             w.window.performClose(nil)
             return "ok windows=\(app.windows.count)"
         case "lasterror":

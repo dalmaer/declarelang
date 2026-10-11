@@ -27,6 +27,7 @@ import puppeteer from "puppeteer-core";
 import { test, summarize } from "./harness.mjs";
 import { createDeclareServer } from "../server/create.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { settled } from "./settle.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 function findChrome() {
@@ -50,8 +51,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // a coarse grid over the whole canvas — enough to compare two renderings
 // without pulling megabytes of pixels through the CDP boundary
-const GRAB = `(async () => {
-  await new Promise((r) => setTimeout(r, 700));
+const GRAB = `(() => {
   const c = document.querySelector("canvas");
   const g = c.getContext("2d");
   const out = [];
@@ -64,15 +64,29 @@ const GRAB = `(async () => {
   return out;
 })()`;
 
+/** The grid once the picture has stopped changing: two grabs 100 ms apart agree
+ *  (the canvas paints, and its raster lands, after the program is at rest). */
+async function stillGrab(pg) {
+  let prev = await pg.evaluate(GRAB);
+  for (let i = 0; i < 50; i++) {
+    await sleep(100);
+    const next = await pg.evaluate(GRAB);
+    if (next.every((v, k) => v === prev[k])) return next;
+    prev = next;
+  }
+  throw new Error("the canvas never stopped changing");
+}
+
 async function grab(probe, forceFallback) {
   // a FRESH page per grab: evaluateOnNewDocument stacks on a reused one, so the
   // second setting would ride on top of the first
   const pg = await browser.newPage();
   await pg.setViewport({ width: 600, height: 400, deviceScaleFactor: 2 });
   await pg.evaluateOnNewDocument(`window.__declareForceFilterFallback = ${forceFallback}`);
-  await pg.goto(`${B}/test/probe/${probe}.declare?render=canvas`, { waitUntil: "networkidle0", timeout: 60000 });
+  await pg.goto(`${B}/test/probe/${probe}.declare?render=canvas`, { waitUntil: "load", timeout: 60000 });
   await pg.waitForFunction("window.__app != null", { timeout: 30000 });
-  const out = await pg.evaluate(GRAB);
+  await settled(pg);
+  const out = await stillGrab(pg);
   await pg.close();
   return out;
 }
