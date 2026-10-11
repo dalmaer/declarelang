@@ -84,34 +84,51 @@ Then check every need in the plan against
   and the widget you are about to build is often already in the library — and before
   deciding Declare can't do something. A miss exits 1; `--example` shows the name in
   the guide's working code.
-- **Complete programs** — `apps/<name>/<name>.declare`, named below by their folder. Each
-  opens with a comment on how it is put together, and the table below cites the class or
-  App member to look at.
-  - `calendar` — month, week, day and year as one surface that each view change carries
-    continuously; events dragged between days and edited in a panel.
-  - `tracker` — a million issues: a virtualized list, search as you type, filter and sort
-    menus, editing through a draft, create and delete with undo, multi-select, keyboard
-    shortcuts. It is <!--stat:tracker.code-->990<!--/stat--> lines of code; read it whole when your
-    program is records at scale.
-  - `weather` — one app in a phone design and a desktop design: drawn instrument cards in
-    a masonry layout, a list row that becomes the city's page, a live clock.
-  - `marketmap` — a treemap of a market over time: a data source with its own queries,
-    layouts of its own, zoom and drill on springs, drawn sparklines.
-  - `desktop` — a window system: windows as records, dragged, resized and minimized to a
-    magnifying dock; a menu bar built from records; other programs running in its windows.
-  - `birds` — a field guide and quiz whose whole state is its address: back, forward and
-    deep links.
-  - `sampler` — every library control, under four switchable themes.
-  - `swatchbook` — everything a view can look like, one case at a time: type, rich text
-    and whole documents, paint, effects, transforms, images, drawing. It is also the test
-    that holds the renderers to the same picture.
-  - `two-way` — three files rather than one: embedding both ways, a Declare app in an HTML
-    page (`dial.declare`, `pulse.declare`) and a Declare app hosting other code
-    (`crossings.declare`).
+- **Complete programs** — each opens with a comment on how it is put together, and the
+  table below cites the class or App member to look at. Find the one nearest what you
+  are building:
+  - **Records people list, search, filter and edit** — most applications: issues, mail,
+    tickets, listings, transactions, a catalog. → `apps/tracker/tracker.declare`, ten
+    thousand records and a million on demand: one dataset class holds them and makes every
+    write; the list is a dataset derived from it, virtualized, with headings as a second
+    row class; editing through a draft; menus, shortcuts, undo. It is
+    <!--stat:tracker.code-->990<!--/stat--> lines of code, and worth reading whole.
+  - **A surface over time, or things dragged between places** — a schedule, a timeline, a
+    board, a grid you zoom from years to a day. → `apps/calendar/calendar.declare`, read
+    first (above).
+  - **Status to take in at a glance, on phone and desktop alike** — conditions, a dashboard
+    of instruments, a list whose rows open into pages. → `apps/weather/weather.declare` and
+    its drawn instruments in `weather-art.declare`: one program in two designs, a row that
+    grows into a page on one spring, swipe paging, a masonry layout of its own.
+  - **Data drawn and changing, zoomed into** — charts, a map of many tiles, values
+    scrubbed through time. → `apps/marketmap/marketmap.declare`: a data class that answers
+    queries, a layout of its own that reshapes as a sprung value moves, zoom and drill on
+    springs, drawn sparklines.
+  - **Pages with addresses, or steps in a sequence** — a guide or gallery whose pages can
+    be linked, a quiz or lesson where Back undoes a step. →
+    `apps/birds/birds.declare`: `location` for the page you could hand a stranger,
+    `waypoint` for each step, links throughout, a picture that flies from its tile to its
+    page and back.
+  - **A content site** — a landing page, documents, a long article. →
+    `apps/homepage/homepage.declare`: sections in one column, documents fetched as Markdown
+    at their own addresses, a header and nav built from records, a narrow-screen sheet,
+    embedded live programs (`live.declare`); `apps/architecture/architecture.declare`: a
+    long article with live figures, standalone or hosted inside another page.
+  - **Objects people move and resize on a surface; windows** — a canvas, a board of
+    cards, a window system. → `apps/desktop/desktop.declare`, the largest program, best
+    read a class at a time: windows as records whose order is their stacking, drag and
+    resize, a window manager and launcher as classes with no view, menus and shortcuts
+    from one set of records, other programs running in windows.
+  - **Another library's widget inside your program** — a map, a video player, a code
+    editor, a chart library. → `apps/two-way/crossings.declare` hosts two plain-JavaScript
+    apps in `DOMIsland`s: values go down with `provides`, come back with `exposed(…)`, and
+    commands cross with `post`. (`dial.declare` and `pulse.declare` are the other
+    direction: Declare programs inside an HTML page.)
 
-  The other folders in `apps/` are not models to copy: `docs`, `homepage` and
-  `architecture` are Declare's own site, and the three `lzx-*` programs are faithful
-  ports of 2003-era OpenLaszlo samples.
+  Two programs are references rather than models: `apps/sampler` shows every library
+  control under four themes, and `apps/swatchbook` shows everything a view can look like,
+  one case per card: look a control or an appearance up there to see it rendered and how
+  it is spelled.
 - **The library** — `library/`: the source of every library class, written in Declare like
   your program.
 - **Running, checking and building** — `docs/operational/`.
