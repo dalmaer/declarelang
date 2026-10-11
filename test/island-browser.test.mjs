@@ -7,7 +7,9 @@
 //   - tenant→host: the tenant's exposed `pos` crossed at link, host text shows it;
 //   - host→tenant: writing the host's `vol` re-derives the tenant's hostProvided read;
 //   - verbs round-trip: host post → tenant onPost bumps what it exposes and acks →
-//     host sees both the new pos and the ack.
+//     host sees both the new pos and the ack;
+//   - where the tenant is crosses both ways: it starts at the island's location,
+//     and its navigate() comes to the island's onNavigate, not the page.
 import assert from "node:assert/strict";
 import http from "node:http";
 import path from "node:path";
@@ -76,6 +78,30 @@ async function run(label, url, tenantOf) {
     const s = await page.evaluate(`({ pos: window.__app.player.exposed("pos", 0), log: window.__app.log })`);
     assert.equal(s.pos, 4, "tenant's onPost bumped its exposed value and the bump crossed");
     assert.equal(s.log, "ack;", "…and the tenant's post landed on the island's onPost");
+  });
+
+  await test(`${label}: the tenant starts at the island's location, and its navigation comes to the island`, async () => {
+    const s = await page.evaluate(`({ at: ${tenantOf}.location, nav: window.__app.nav, url: location.pathname })`);
+    assert.equal(s.at, "start", "the island's location seeded the tenant's");
+    assert.equal(s.nav, "other|there|false", "the tenant's navigate() reached onNavigate, broken into program and place");
+    assert.ok(s.url.endsWith("bridge-host.declare"), "the page did not navigate");
+  });
+
+  if (label === "dom") await test(`${label}: the place the tenant left comes back with it`, async () => {
+    const box = `document.querySelector('[data-declare-slot^="run:"]')`;
+    await page.evaluate(`${box}.scrollTop = 150`);
+    await sleep(100);
+    await page.evaluate(`window.__app.player.location = "elsewhere"`);    // the tenant leaves "start"
+    await sleep(150);
+    const left = await page.evaluate(`window.__app.player.departedPlace`);
+    assert.equal(JSON.parse(left).s, 150, "departedPlace holds the box's scroll at the moment of leaving");
+    await page.evaluate(`${box}.scrollTop = 0`);
+    await page.evaluate(`(() => { const i = window.__app.player; i.place = ${JSON.stringify(left)}; i.location = "start" })()`);
+    await sleep(300);
+    const s = await page.evaluate(`({ at: ${tenantOf}.location, y: ${box}.scrollTop, place: window.__app.player.place })`);
+    assert.equal(s.at, "start");
+    assert.equal(s.y, 150, "the box scrolled back to where it was left");
+    assert.equal(s.place, "", "the place was taken");
   });
 
   await test(`${label}: no page errors`, async () => {

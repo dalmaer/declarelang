@@ -34,7 +34,11 @@ export const APP_NAME = process.env.DECLARE_MAC_APP ?? "Declare Mac";
  *  gated is the tree it serves (`node tools/reload-dev.mjs`). Override with
  *  DECLARE_ORIGIN, as the conformance and crossrender rigs do. */
 export const ORIGIN = process.env.DECLARE_ORIGIN ?? `http://127.0.0.1:${process.env.PORT ?? "8200"}`;
-export const CTL_IN = process.env.DECLARE_CTL_PIPE ?? "/tmp/declare-ctl.in";
+// A variant app listens on its own pipe by default, named from the app ("Declare Mac
+// Overlay" → /tmp/declare-overlay-ctl.in), so two trees' hosts never share one.
+const VARIANT_SLUG = APP_NAME.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^declare-mac-?/, "");
+export const CTL_IN = process.env.DECLARE_CTL_PIPE
+  ?? (VARIANT_SLUG === "" ? "/tmp/declare-ctl.in" : `/tmp/declare-${VARIANT_SLUG}-ctl.in`);
 export const CTL_OUT = CTL_IN.replace(/\.in$/, "") + ".out";
 
 export const SEARCH = [

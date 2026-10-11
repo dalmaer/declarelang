@@ -73,7 +73,8 @@ import { fileURLToPath } from "node:url";
 // string/template ISLANDS inside them (line starts inside an island are never
 // re-indented — that whitespace is program data).
 
-const PUNCT = { "[": "lb", "]": "rb", "(": "lp", ")": "rp", "=": "eq", ",": "comma", ":": "colon", ".": "dot", "|": "pipe", "@": "at" };
+const PUNCT = { "[": "lb", "]": "rb", "(": "lp", ")": "rp", "=": "eq", ",": "comma", ":": "colon", ".": "dot", "|": "pipe", "@": "at",
+  "<": "lt", ">": "gt", "&": "amp", "*": "star", "!": "bang" };
 const isDigit = (c) => c >= "0" && c <= "9";
 const isIdentStart = (c) => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
 const isIdentPart = (c) => isIdentStart(c) || isDigit(c);
@@ -180,6 +181,9 @@ export function lex(src) {
     if (c === "-" && src[i + 1] === ">") { i += 2; push("arrow", start); continue; }
     if (c === "<" && src[i + 1] === "-" && src[i + 2] === ">") { i += 3; push("bindtwo", start); continue; }
     if (c === "<" && src[i + 1] === "-") { i += 2; push("subfrom", start); continue; }
+    // `=>` — a TypeScript function type's arrow, beside Declare's own `->`;
+    // lexed before `=`, as in the parser
+    if (c === "=" && src[i + 1] === ">") { i += 2; push("fatarrow", start); continue; }
     if (PUNCT[c]) { i++; push(PUNCT[c], start); continue; }
     if (c === '"' && src[i + 1] === '"' && src[i + 2] === '"') {
       i += 3;
@@ -240,41 +244,92 @@ function analyze(tokens) {
     return nc[p++];
   };
 
-  // A type reference, as the parser reads it (language §4): a NAME with an
-  // optional `?`, or a FUNCTION type `(params) -> Ret`. Consumes tokens only —
-  // the formatter re-emits from the token stream, so nothing is rebuilt here.
-  function readTypeRef(what) {
-    if (tok().kind === "lp") {
-      p++;
-      while (tok().kind === "ident") {
-        p++;
-        if (tok().kind === "colon") { tok().colonKind = "param"; p++; readTypeRef("a parameter type name"); }
+  // A TYPE, as the parser reads it (parser.ts parseTypeRef, mirrored rule for
+  // rule): TypeScript's grammar — unions and intersections, `T[]` and `T["k"]`
+  // glued to the type, generics, tuples, object types (a `{ }` code token),
+  // function types (`(a: T) => R`, or Declare's own `->`), parenthesized types,
+  // string and number literal types, keyof/typeof/readonly/unique — and
+  // Declare's `T?`. Consumes tokens and marks their spacing roles only — the
+  // formatter re-emits from the token stream, so nothing is rebuilt here.
+  // Returns the index of the type's last token.
+  function readTypeRef(what, nullable = true) {
+    readIntersection(what);
+    while (tok().kind === "pipe") { p++; readIntersection(what); }
+    if (nullable && tok().kind === "query") p++;
+    return nc[p - 1];
+  }
+  function readIntersection(what) {
+    readPostfix(what);
+    while (tok().kind === "amp") { p++; readPostfix(what); }
+  }
+  function readPostfix(what) {
+    readPrimary(what);
+    for (;;) {
+      const prev = tokens[nc[p - 1]];
+      const glued = (prev.kind === "ident" || prev.kind === "rb" || prev.kind === "rp" || prev.kind === "gt") && tok().start === prev.end;
+      // a glued `[` around members is a named child's body, not the type's
+      if (!glued || tok().kind !== "lb") break;
+      if (tok(1).kind === "rb") { tok().role = "arr"; tok(1).role = "arr"; p += 2; continue; }
+      if ((tok(1).kind === "string" || tok(1).kind === "number") && tok(2).kind === "rb") {
+        tok().role = "arr"; tok(1).role = "arr"; tok(2).role = "arr"; p += 3; continue;
+      }
+      break;
+    }
+  }
+  function readPrimary(what) {
+    const t = tok();
+    if (t.kind === "lp") {
+      // a FUNCTION type when what follows `(` is a parameter list; else a
+      // parenthesized type (`(A | B)[]`)
+      const mark = p;
+      if (tryFunctionType()) return;
+      p = mark + 1;
+      readTypeRef(what);
+      expect("rp", "')'");
+      return;
+    }
+    if (t.kind === "string" || t.kind === "number" || t.kind === "code") { p++; return; }
+    if (t.kind === "lb") {             // a TUPLE type
+      t.role = "tuple"; p++;
+      while (tok().kind !== "rb") {
+        readTypeRef("a tuple element type");
         if (tok().kind === "comma") p++; else break;
       }
-      expect("rp", "')'");
-      if (tok().kind === "arrow") { p++; readTypeRef("a return type name"); }
-      if (tok().kind === "query") p++;
-      return null;
+      tok().role = "tuple";
+      expect("rb", "']'");
+      return;
     }
-    // a STRING-LITERAL UNION — `status: "open" | "closed"` — is a type on an
-    // attribute or a parameter (the parser's literal union, 2026-09-05); read
-    // the alternatives, then the optional `?`
-    if (tok().kind === "string") {
+    const name = expect("ident", what);
+    const r = tokens[name].raw;
+    if (r === "keyof" || r === "typeof" || r === "readonly" || r === "unique") { readPostfix(what); return; }
+    while (tok().kind === "dot" && tok(1).kind === "ident") p += 2;
+    if (tok().kind === "lt") {         // generic arguments
       p++;
-      while (tok().kind === "pipe" && tok(1).kind === "string") p += 2;
+      while (tok().kind !== "gt") {
+        readTypeRef("a type argument");
+        if (tok().kind === "comma") p++; else break;
+      }
+      expect("gt", "'>'");
+    }
+  }
+  // `(a: T, b?: U) -> R` or `=> R` — false, consuming nothing the caller keeps,
+  // when the parentheses do not hold a parameter list
+  function tryFunctionType() {
+    p++; // (
+    while (tok().kind !== "rp") {
+      if (tok().kind !== "ident") return false;
+      p++;
       if (tok().kind === "query") p++;
-      return null;
+      if (tok().kind === "colon") {
+        tok().colonKind = "param"; p++;
+        try { readTypeRef("a parameter type name"); } catch { return false; }
+      }
+      if (tok().kind === "comma") { p++; continue; }
+      if (tok().kind !== "rp") return false;
     }
-    const t = expect("ident", what);
-    // `Window[]` — array suffix, only when GLUED to the name (spaced `[ ]` is a
-    // child body; adjacency separates the readings, as in the parser).
-    while (tok().kind === "lb" && tok(1).kind === "rb" && tok().start === tokens[t].end) {
-      tok().role = "arr"; tok(1).role = "arr";
-      const rb = idx(1); p += 2;
-      tokens[t].end = tokens[rb].end;   // extend for a further `[]`/`?` adjacency
-    }
-    if (tok().kind === "query") p++;
-    return t;
+    p++; // )
+    if (tok().kind === "arrow" || tok().kind === "fatarrow") { p++; readTypeRef("a return type name", false); }
+    return true;
   }
 
   function parseLiteral() {
@@ -383,7 +438,25 @@ function analyze(tokens) {
       } else if (tok().kind === "colon") {
         tok().colonKind = "decl";
         p++;
-        if (tok().kind === "lb") { // class-keyed entry `Button: [ … ]`
+        // `v: [number, number]` — a TUPLE type when the brackets hold a type
+        // list and a default, a separator or the end follows (the parser's test)
+        let tuple = false;
+        if (tok().kind === "lb") {
+          const mark = p;
+          try {
+            readTypeRef("a type");
+            const after = tok().kind;
+            tuple = after === "eq" || after === "comma" || after === "rb";
+          } catch { tuple = false; }
+          if (!tuple) {
+            for (let q = mark; q < p; q++) { delete tokens[nc[q]].role; delete tokens[nc[q]].colonKind; }
+            p = mark;
+          }
+        }
+        if (tuple) {
+          if (tok().kind === "eq") { p++; end = parseLiteral(); } else end = nc[p - 1];
+          kind = "decl";
+        } else if (tok().kind === "lb") { // class-keyed entry `Button: [ … ]`
           end = parseBody(false).close;
           if (tok().kind === "code") end = nc[p++]; // `[ … ] { json }` — a raw body after the attrs
           kind = "child";
@@ -404,6 +477,7 @@ function analyze(tokens) {
         // `-> Ret` is house style; `: Ret` also parses, as in the parser.
         while (tok().kind === "ident") {
           p++;
+          if (tok().kind === "query") p++;   // `c?: T` — TypeScript's optional parameter
           if (tok().kind === "colon") { tok().colonKind = "param"; p++; readTypeRef("a parameter type name"); }
           if (tok().kind === "comma") p++; else break;
         }
@@ -638,6 +712,8 @@ function gap(prev, t) {
   if (t.kind === "lp" && prev.kind === "colon" && prev.colonKind !== "path") return 1;
   if (t.role === "arr") return 0;                       // `Window[]` — the suffix glues
   if (t.kind === "comma" || t.kind === "dot" || t.kind === "rp" || t.kind === "lp" || t.kind === "query") return 0;
+  // generic arguments glue: `Map<string, Row>`
+  if (t.kind === "lt" || t.kind === "gt" || prev.kind === "lt") return 0;
   // The trailing-comment gap (§2.7, re-ruled 2026-07-13): minimum two
   // spaces, no upper bound — the author's spacing is preserved verbatim
   // above the floor (the same school as the interior rule below).

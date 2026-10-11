@@ -160,18 +160,21 @@ final class Bridge {
     var onNavigate: ((String, Bool) -> Void)?
     /// The runtime's history mirror (mac-boot wireMacHistory): the app's
     /// (location, waypoint) pair changed in a settle — (loc, step, verb, the
-    /// departed page's scroll offset). The window keeps the trail.
-    var onHistoryEntry: ((String, String, String, Double) -> Void)?
+    /// id of the entry the app is now on). The window keeps the trail; the
+    /// program keeps what it knows about each entry under that id (where the
+    /// user was scrolled — mac-boot, runtime scroll-places).
+    var onHistoryEntry: ((String, String, String, String) -> Void)?
     /// Make the CURRENT trail entry agree with the app — after a boot or a
-    /// traversal (the web's square-by-replace).
-    var onHistorySquare: ((String, String) -> Void)?
+    /// traversal (the web's square-by-replace): (loc, step, id).
+    var onHistorySquare: ((String, String, String) -> Void)?
 
-    /// Drive the live program to a history pair — the popstate direction. The
+    /// Drive the live program to a history entry — the popstate direction. The
     /// runtime restores the step directly, the address through `follow` (so
-    /// the app's onFollow hook applies — pass, redirect, veto), then squares
-    /// the entry back through historySquare.
-    func travel(loc: String, step: String, scroll: Double) {
-        guard let data = try? JSONSerialization.data(withJSONObject: [loc, step, scroll]),
+    /// the app's onFollow hook applies — pass, redirect, veto), lands where the
+    /// user was on that entry (its id), then squares the entry back through
+    /// historySquare.
+    func travel(loc: String, step: String, id: String) {
+        guard let data = try? JSONSerialization.data(withJSONObject: [loc, step, id]),
               let args = String(data: data, encoding: .utf8) else { return }
         onRuntime { [weak self] in
             self?.ctx.evaluateScript("globalThis.__declareTravel && __declareTravel.apply(null, \(args))")
@@ -420,13 +423,13 @@ final class Bridge {
 
         // HISTORY, from the program to the window — the pair mirror's two
         // outward verbs (see onHistoryEntry / onHistorySquare).
-        host.setObject({ [weak self] (loc: String, step: String, verb: String, scroll: Double) in
-            DispatchQueue.main.async { self?.onHistoryEntry?(loc, step, verb, scroll) }
-        } as @convention(block) (String, String, String, Double) -> Void, forKeyedSubscript: "historyEntry")
+        host.setObject({ [weak self] (loc: String, step: String, verb: String, id: String) in
+            DispatchQueue.main.async { self?.onHistoryEntry?(loc, step, verb, id) }
+        } as @convention(block) (String, String, String, String) -> Void, forKeyedSubscript: "historyEntry")
 
-        host.setObject({ [weak self] (loc: String, step: String) in
-            DispatchQueue.main.async { self?.onHistorySquare?(loc, step) }
-        } as @convention(block) (String, String) -> Void, forKeyedSubscript: "historySquare")
+        host.setObject({ [weak self] (loc: String, step: String, id: String) in
+            DispatchQueue.main.async { self?.onHistorySquare?(loc, step, id) }
+        } as @convention(block) (String, String, String) -> Void, forKeyedSubscript: "historySquare")
 
         // The Inspector opened or closed. PUSHED from JS rather than polled:
         // mounting is async (compile, then mount), so the titlebar control read

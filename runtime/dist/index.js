@@ -26,7 +26,7 @@ export { Inspect, setInspectionTarget, inspectionTarget } from "./inspect-servic
 export { pickAt, dependentsOf, expandValue, slotsOf } from "./inspect.js";
 export { Node } from "./node.js";
 export { View, App, withHostProvides, inheritedCursor, onDiscard, deferralStats, deferralProblems } from "./view.js";
-export { Island, DOMIsland, linkIslandTenant, islandProvisions } from "./island.js";
+export { Island, DOMIsland, linkIslandTenant, islandProvisions, islandNavigation } from "./island.js";
 export { Text } from "./text.js";
 export { Image } from "./image.js";
 export { TextInput } from "./text-input.js";
@@ -44,6 +44,7 @@ export { Animator } from "./animator.js";
 export { AnimatorGroup } from "./animator-group.js";
 export { settle, afterSettle, observe, kernelReady, kernelReadySync, kernelLoaded, kernelStats } from "./reactive.js";
 export { inspect, find, explain, stats, clock, bridgeFor } from "./inspect.js";
+export { scrollPlaces, holdScrollPlaces, dropScrollPlaces } from "./scroll-places.js";
 export { Draw, record, replay } from "./draw.js";
 export { Font, FontFace, fontsReady, setFontHost, FONT_WEIGHTS } from "./font.js";
 export { fontString, textWidth, fontMetrics, provideMeasurer } from "./measure.js";

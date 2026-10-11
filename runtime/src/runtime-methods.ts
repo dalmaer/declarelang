@@ -67,7 +67,7 @@ export const RUNTIME_METHODS: Readonly<Record<string, readonly string[]>> = {
  *  each class and recomputes the lists (minus `$`-names and attributes). */
 export const RUNTIME_FIELDS: Readonly<Record<string, readonly string[]>> = {
   View: ["_navLink", "exposes", "extentRelistQueued", "insetX", "insetY", "maskUsers", "scrollsOn", "travelHost", "visH", "visMode", "visOn", "visScale", "visW", "visX", "visY"],
-  App: ["demoSources", "hostServices", "hostSink", "hostValues", "lastRevealLocation", "liveReport", "pageScroll", "pageWeight", "pendingAnchor", "pendingHistoryVerb", "pendingInspect", "pendingNav", "pendingOpen", "pumpOn", "pumpRetireHooked", "readyDelivered", "revealPump", "sourceLines"],
+  App: ["demoSources", "departArmed", "hostServices", "hostSink", "hostValues", "lastRevealLocation", "liveReport", "pageScroll", "pageWeight", "pendingAnchor", "pendingHistoryVerb", "pendingInspect", "pendingNav", "pendingOpen", "pumpOn", "pumpRetireHooked", "readyDelivered", "revealPump", "sourceLines"],
   Image: ["bitmap", "loadSeq", "natural"],
   Media: ["el", "loadSeq"],
   Video: ["natural"],

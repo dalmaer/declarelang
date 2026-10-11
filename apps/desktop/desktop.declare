@@ -47,7 +47,7 @@ use [ BracketIcon, CodeIcon, AutoIcon, LightbulbIcon, BrandMark, HelpSearch ]
 // file itself, which the Declare Viewer window displays.
 
 ship [
-    islands = ["../../../library/platform-apps/viewer/viewer", "../../calendar/calendar", "../../birds/birds", "../../marketmap/marketmap", "../../asteroids/asteroids"],
+    islands = ["../../../library/platform-apps/viewer/viewer", "../../docs/docs", "../../calendar/calendar", "../../birds/birds", "../../marketmap/marketmap"],
     files = ["desktop.declare"]
     ]
 
@@ -69,6 +69,12 @@ window — it parks it in the dock as a live thumbnail that rides the same
 magnification swell as the icons, blended by `miniT` from a free window
 (0) to a docked one (1).
 */
+
+// one stop on a window's back/forward trail: where it was, and where in that
+// the person had scrolled (both opaque to the window — see Window.trail)
+
+schema Stop [ at: string, place: string ]
+
 
 class Window [ width = 560, height = 400, clip = true,
     fill = { provided("theme").surface },
@@ -104,6 +110,47 @@ class Window [ width = 560, height = 400, clip = true,
     // shade, no zoom — the strips vanish and the yellow/green lights go inert
 
     plain: boolean = false,
+
+    // BACK AND FORWARD, for the windows whose app asks for them at opening
+    // (`backForward` in the window's record — Docs and Birds): the stops the
+    // window has made, and where in that list it stands. A stop is where the
+    // window was and how far in it the person had scrolled, both opaque here:
+    // a window kind says what they are and how to return to them
+    // (`showPlace`); an app window's are its program's location and place.
+
+    backForward: boolean = { :props.backForward ?? false },
+    trail: Stop[] = [],
+    trailAt: number = -1,
+    walking: boolean = false,                    // a ‹ › step is landing: the stop it lands on is not a new one
+    walkFrom: number = -1,                       // …and the stop it left, which keeps where the person was
+
+    // the window moved from `prev` to `now`; `left` is where in `prev` the
+    // person was
+
+    notePlace(prev: string, now: string, left: string) {
+        const t = this.trail.slice()
+        if (this.walking) {
+            this.walking = false
+            if (this.walkFrom >= 0 && this.walkFrom < t.length) t[this.walkFrom] = { at: t[this.walkFrom].at, place: left }
+            this.trail = t
+            return
+            }
+        const kept = t.slice(0, this.trailAt + 1)
+        if (kept.length == 0) kept.push({ at: prev, place: "" })   // where the window started
+        kept[kept.length - 1] = { at: kept[kept.length - 1].at, place: left }
+        kept.push({ at: now, place: "" })
+        this.trail = kept
+        this.trailAt = kept.length - 1
+        },
+    travel(step: number) {
+        const at = this.trailAt + step
+        if (at < 0 || at >= this.trail.length) return
+        this.walkFrom = this.trailAt
+        this.trailAt = at
+        this.walking = true
+        this.showPlace(this.trail[at].at, this.trail[at].place)
+        },
+    showPlace(at: string, place: string) { },
     recId: string = { "" + (:id ?? "") },       // my window record's id (wm.list)
     forApp: DesktopApp = { app.launcher.byId("" + (:appId ?? "")) },   // the application this window belongs to
     appPath: string = { :props.appPath ?? "" },  // an AppWindow's program path; "" elsewhere
@@ -493,6 +540,18 @@ class Window [ width = 560, height = 400, clip = true,
                 ]
             ],
 
+        // ‹ › — only on a window whose app asked for them
+
+        nav: View [ x = 80, y = 6, visible = { classroot.backForward },
+            layout: SimpleLayout [ axis = x, spacing = 2 ],
+            BarArrow [ glyph = "‹", disabled = { classroot.trailAt <= 0 },
+                press() { classroot.travel(-1) }
+                ],
+            BarArrow [ glyph = "›", disabled = { classroot.trailAt >= classroot.trail.length - 1 },
+                press() { classroot.travel(1) }
+                ]
+            ],
+
         cap: Text [ x = center, y = center, fontSize = 13, fontWeight = semibold,
             textColor = { classroot.active ? provided("theme").text : provided("theme").textMuted },
             text = { classroot.title } ],
@@ -639,6 +698,18 @@ rim a shade darker than the fill (never black), and on bar-hover it reveals
 a glyph drawn in a dark tone of the same hue — a thick rounded ×, a minus
 bar, and a pair of triangles split along the diagonal for zoom.
 */
+
+// a back or forward arrow in a window's title bar — a control, so it has
+// keyboard, focus and pressed states; dim when there is nowhere to go
+
+class BarArrow extends Control [ width = 26, height = 23, cornerRadius = 6,
+    glyph: string = "",
+    fill = { hovered ? provided("theme").controlHovered : null },
+    t: Text [ x = center, y = -3, fontSize = 22, wrap = false, text = { classroot.glyph },
+        textColor = { classroot.disabled ? provided("theme").textMuted : provided("theme").text },
+        opacity = { classroot.disabled ? 0.45 : 1 } ]
+    ]
+
 
 class TrafficLight [ y = 0, width = 14, height = 14, cornerRadius = 7,
     c:   Color = #EC6A5E,
@@ -1031,7 +1102,7 @@ class ListColumn extends FilesColumn [
                     // first click arms the pending item and selects
                     if (!w.secondClick(this)) {
                         w.pendingAt = at
-                        w.pendingItem = ({ name: "" + :name, path: "" + :path, doc: "" + :doc, hasKids: !!:hasKids, at: at })
+                        w.pendingItem = ({ name: "" + :name, path: "" + :path, doc: "" + :doc, loc: "" + :loc, hasKids: !!:hasKids, at: at })
                         w.pendingPX = app.pointerX
                         w.pendingPY = app.pointerY
                         w.selPath = at
@@ -1097,7 +1168,7 @@ class FilesWindow extends Window [
     cpx0: number = 0,
     cwk: number = -1,                            // depth of the column being dragged
     pendingAt: string = "",                      // the item awaiting a possible second click (data-level double-click)
-    pendingItem: object,                         // that item's record (name/path/doc/hasKids/at) — what a second click opens
+    pendingItem: object,                         // that item's record (name/path/doc/loc/hasKids/at) — what a second click opens
 
     // the pointer at the first click (root space): a double-click is time +
     // pointer distance, so a row sliding under the cursor (the strip's reveal
@@ -1123,7 +1194,7 @@ class FilesWindow extends Window [
         const parts = selPath == "" ? [] : selPath.split("\n")
         const item = (n, p) => ({ name: "" + n.name, kind: "" + (n.kind || ""), label: "" + (n.label || ""),
             hasKids: (n.children != null && n.children.length > 0),
-            path: "" + (n.path || ""), doc: "" + (n.doc || ""), preview: "" + (n.preview || ""),
+            path: "" + (n.path || ""), doc: "" + (n.doc || ""), loc: "" + (n.loc || ""), preview: "" + (n.preview || ""),
             at: p.join("\n") })
         let level = ((model || ({ })).browse) || []
         // descend to the window's root folder — its children are the first column
@@ -1152,14 +1223,18 @@ class FilesWindow extends Window [
         },
     cols: Dataset [ contents = { { list: classroot.columnData(classroot.selPath, app.docsModel.value, classroot.rootPath) } } ],
 
-    // open a leaf — every leaf is a document. An authored file (`path`) opens its
-    // source; a hydrated page (`doc`, assembled by the model) opens whole. Same
-    // Markdown window either way; the browser special-cases nothing.
+    // open a leaf — every leaf is a document. One the docs app shows (`loc`, its
+    // place there: a guide chapter, a reference page) opens in Docs, as a
+    // Finder opens a document in its application; any other opens in the
+    // Markdown window — an authored file (`path`) as its source, a hydrated page
+    // (`doc`, assembled by the model) whole. The browser special-cases nothing.
 
     // `v` is the view the open came from — the row, the Open button, never the
     // whole window — and it is what the new window zooms out of.
 
     openLeaf(leaf: object, v: View?) {
+        const loc = "" + (leaf.loc || "")
+        if (loc != "") { app.launcher.openInDocs(loc, v); return }
         const d = "" + (leaf.doc || ""), p = "" + (leaf.path || "")
         if (d != "") { app.launcher.openDoc(d, "" + leaf.name, v); return }
         if (p != "") app.launcher.openViewer("../../" + p, v)
@@ -1262,6 +1337,19 @@ class AppWindow extends Window [ width = 880, height = 560,
     // follows its navigation. `appTitle` is the fallback until the child is up.
 
     appTitle: string = { :props.appTitle ?? "" },
+    startAt: string = { :props.location ?? "" },   // where the hosted program starts, when a link opened it there
+
+    // a place, for back and forward, is the hosted program's location
+
+    here: string = { this.island.location },
+    trackChanges = ["here"],
+    onChange(e: ChangeEvent) {
+        if (this.backForward) for (const c of e.changed) this.notePlace("" + c.previousValue, "" + c.currentValue, this.island.departedPlace)
+        },
+    showPlace(at: string, place: string) {
+        this.island.place = place
+        this.island.location = at
+        },
     title = { this.island.childName != "" ? this.island.childName : this.appTitle },
 
     // the window provides its tenant the desktop's appearance (below), live:
@@ -1277,6 +1365,12 @@ class AppWindow extends Window [ width = 880, height = 560,
         onClick()       { classroot.activate() },
         onHold()        { classroot.activate() },
         program = { classroot.appPath },
+        onInit() { this.location = classroot.startAt },
+
+        // a link inside the hosted app: the desktop opens it in a window
+        // (Launcher.openAddress), and the page stays the desktop
+
+        onNavigate(n: IslandNavigation) { app.launcher.openAddress(n, classroot.forApp) },
 
         // what the window provides its tenant, each read there with
         // hostProvided(name, default): the desktop's appearance (a tenant's
@@ -1771,9 +1865,9 @@ and the `launch` verb behind its dock icon and menu items.
 
 One taxonomy covers every citizen. A **built-in** app (Files, Jots) opens
 windows of this very program. A **hosted** app (Calendar, 50 Birds, Market Map,
-Asteroids, Declare Viewer) is a foreign program carried the same way — hosting is a subclass with
-a program path, not a different mechanism. An **inert** app (Mail, Music,
-Terminal) owns a quip and raises the alert. Chrome never switches on an
+Declare Viewer, Documentation) is a foreign program carried the same way — hosting is a subclass with
+a program path, not a different mechanism. An **inert** app (Write, Mail,
+Music, Terminal) owns a quip and raises the alert. Chrome never switches on an
 app id: the dock icon, the About box, the alert sheet, and a minimized
 window's badge all read the one instance, so the art, the name, and the
 running dot cannot disagree — and adding an application is one class plus one
@@ -1812,6 +1906,7 @@ class HostedApp extends DesktopApp [             // a foreign program — the sa
     base: string = "",                           // provided to it: its home, relative to this app
     subject: string = "",                        // provided to it: the program it shows (the viewer)
     place: string = "",                          // window placement policy ("clearDock")
+    backForward: boolean = false,                // its windows carry ‹ › over the places it shows
     launch(v: View?) { app.launcher.openHosted(this, v, "") }
     ]
 
@@ -1854,6 +1949,42 @@ class ViewerApp extends HostedApp [ id = "declareviewer", label = "Declare Viewe
     blurb = "Reader, source, and live editor over any Declare program — here, hosted as an embedded app.",
     glyph = "[  ]", hue1 = #2E6FE0, hue2 = #12A594,
     prog = "../../../library/platform-apps/viewer/viewer", subject = "desktop.declare", src = "../../library/platform-apps/viewer/viewer.declare"
+    ]
+
+
+class DocsApp extends HostedApp [ id = "docs", label = "Documentation", title = "Declare Docs",
+    blurb = "The actual apps/docs — the guide and the reference — hosted as an embedded app.",
+    hue1 = #FFA94D, hue2 = #F7811E, drawn = true, backForward = true,
+    prog = "../../docs/docs", base = "../docs/", src = "../docs/docs.declare",
+    face(d: Draw) {
+        // an open book, flat and schematic: the page block's edge showing
+        // under two white pages that meet at the spine
+        d.fillStyle = 0xFCE3C4
+        d.beginPath()
+        d.moveTo(24, 16.5)
+        d.lineTo(9.5, 14.5)
+        d.lineTo(9.5, 35.5)
+        d.lineTo(24, 38.5)
+        d.lineTo(38.5, 35.5)
+        d.lineTo(38.5, 14.5)
+        d.closePath()
+        d.fill()
+        d.fillStyle = 0xFFFFFF
+        d.beginPath()
+        d.moveTo(23.4, 14.8)
+        d.quadraticCurveTo(18, 11.4, 11.5, 12)            // left page, top
+        d.lineTo(11.5, 33.4)
+        d.quadraticCurveTo(18, 33, 23.4, 36.2)            // left page, bottom
+        d.closePath()
+        d.fill()
+        d.beginPath()
+        d.moveTo(24.6, 14.8)
+        d.quadraticCurveTo(30, 11.4, 36.5, 12)            // right page, top
+        d.lineTo(36.5, 33.4)
+        d.quadraticCurveTo(30, 33, 24.6, 36.2)            // right page, bottom
+        d.closePath()
+        d.fill()
+        }
     ]
 
 
@@ -1905,7 +2036,7 @@ class JotsApp extends DesktopApp [ id = "jots", label = "Jots", title = "Jots",
 
 class BirdsApp extends HostedApp [ id = "birds", label = "50 Birds", title = "50 Birds",
     blurb = "The actual apps/birds — Audubon's plates as a field guide — hosted as an embedded app.",
-    hue1 = #66C95F, hue2 = #2C9243, drawn = true,
+    hue1 = #66C95F, hue2 = #2C9243, drawn = true, backForward = true,
     prog = "../../birds/birds", base = "../birds/", src = "../birds/birds.declare",
     face(d: Draw) {
         // the bird: a perched songbird facing right — one white
@@ -1966,42 +2097,24 @@ class MarketMapApp extends HostedApp [ id = "marketmap", label = "Market Map", t
     ]
 
 
-class AsteroidsApp extends HostedApp [ id = "asteroids", label = "Asteroids", title = "Asteroids",
-    blurb = "The actual apps/asteroids — Atari's 1979 arcade game, frame for frame — hosted as an embedded app.",
-    hue1 = #2A2E35, hue2 = #0B0C0E, drawn = true,
-    prog = "../../asteroids/asteroids", base = "../asteroids/", src = "../asteroids/asteroids.declare",
+class WriteApp extends InertApp [ id = "write", label = "Write", title = "Write",
+    quip = "No.", hue1 = #F49B45, hue2 = #C96B1D, drawn = true,
     face(d: Draw) {
-        // the arcade's screen: a rock and the saucer on dark grey glass, drawn as a vector
-        // monitor shows them — a soft blue bloom round a blue-white core, each corner a
-        // touch brighter where the beam dwells
-        const glass = d.createRadialGradient(24, 21, 2, 24, 24, 34)
-        glass.addColorStop(0, "#2A2E35"); glass.addColorStop(0.65, "#17191D"); glass.addColorStop(1, "#0B0C0E")
-        d.fillStyle = glass
-        d.fillRect(0, 0, 48, 48)
-        const beam = (pts, cx, cy, size, turn) => {
-            const c = Math.cos(turn), s = Math.sin(turn), at = []
-            for (let i = 0; i < pts.length; i += 2)
-                at.push([cx + (pts[i] * c - pts[i + 1] * s) * size, cy - (pts[i] * s + pts[i + 1] * c) * size])
-            const trace = () => {
-                d.beginPath()
-                d.moveTo(at[0][0], at[0][1])
-                for (const p of at.slice(1)) d.lineTo(p[0], p[1])
-                d.stroke()
-                }
-            d.lineJoin = "round"; d.lineCap = "round"
-            d.shadowColor = "rgba(110,150,255,0.65)"; d.shadowBlur = 3
-            d.strokeStyle = "rgba(150,185,255,0.32)"; d.lineWidth = 2.2
-            trace()
-            d.shadowColor = "rgba(190,210,255,0.9)"; d.shadowBlur = 1.5
-            d.strokeStyle = "#EEF3FF"; d.lineWidth = 1.15
-            trace()
-            d.shadowBlur = 0
-            d.fillStyle = "#FFFFFF"
-            for (const p of at) { d.beginPath(); d.arc(p[0], p[1], 0.75, 0, Math.PI * 2); d.fill() }
-            }
-        beam([0, 16, 16, 32, 32, 16, 24, 0, 32, -16, 8, -32, -16, -32, -32, -16, -32, 16, -16, 32, 0, 16], 29.09, 17.75, 0.334, 0.15)
-        beam([-8, 4, 8, 4], 16.33, 35.79, 0.37, 0)
-        beam([20, -4, -20, -4, -8, -12, 8, -12, 20, -4, 8, 4, 4, 12, -4, 12, -8, 4, -20, -4], 16.33, 35.79, 0.37, 0)
+        // the pencil: eraser upper-left, tip lower-right. Body + tip in
+        // white; the eraser seam struck back in the plate's hue.
+        d.fillStyle = 0xFFFFFF
+        d.beginPath()
+        d.moveTo(7.8, 12.2); d.lineTo(14.2, 5.8); d.lineTo(35.7, 27.3); d.lineTo(29.3, 33.7)
+        d.closePath(); d.fill()
+        d.beginPath()
+        d.moveTo(35.7, 27.3); d.lineTo(29.3, 33.7); d.lineTo(39.5, 37.5)
+        d.closePath(); d.fill()
+        d.strokeStyle = this.hue1
+        d.lineWidth = 1.6
+        d.beginPath()
+        d.moveTo(11.4, 15.7); d.lineTo(17.7, 9.4)
+        d.moveTo(13.5, 17.8); d.lineTo(19.8, 11.5)
+        d.stroke()
         }
     ]
 
@@ -2328,11 +2441,12 @@ class Launcher extends Node [
     files:    FilesApp    [ ],
     markdown: MarkdownApp [ ],
     viewer:   ViewerApp   [ ],
+    docs:     DocsApp     [ ],
     calendar: CalendarApp [ ],
     jots:     JotsApp     [ ],
     birds:    BirdsApp    [ ],
     marketmap: MarketMapApp [ ],
-    asteroids: AsteroidsApp [ ],
+    write:    WriteApp    [ ],
     mail:     MailApp     [ ],
     music:    MusicApp    [ ],
     terminal: TerminalApp [ ],
@@ -2340,8 +2454,8 @@ class Launcher extends Node [
 
     // the dock's order, and the enumeration every by-id lookup walks
 
-    roster: DesktopApp[] = { [this.files, this.markdown, this.viewer, this.calendar,
-        this.jots, this.birds, this.marketmap, this.asteroids, this.mail, this.music, this.terminal] },
+    roster: DesktopApp[] = { [this.files, this.markdown, this.viewer, this.docs, this.calendar,
+        this.jots, this.birds, this.marketmap, this.write, this.mail, this.music, this.terminal] },
 
     byId(id: string) -> DesktopApp { return this.roster.find((a) => a.id == id) ?? null },
 
@@ -2388,6 +2502,40 @@ class Launcher extends Node [
         return v as View
         },
 
+    // A link an app followed inside its window. One that names a Declare
+    // program opens it at the place it names: in that program's own window if
+    // one is open (brought forward and sent there), else in a new one — the
+    // window of the desktop app whose program it is, or of the app that opened
+    // the link. Anything else is the page's to follow.
+
+    openAddress(n: IslandNavigation, owner: DesktopApp?) {
+        if (n.program == "") { app.navigate(n.to); return }
+        const hosted = this.hostedFor(n.program)
+        const open = app.wm.windows().find((w) => w.appPath != "" && this.sameProgram(w.appPath, n.program))
+        if (open != null) {
+            (open as AppWindow).island.location = n.location
+            app.wm.focusWin(open)
+            return
+            }
+        if (hosted != null) { this.openHosted(hosted, null, "", n.location); return }
+        if (owner == null) { app.navigate(n.to); return }
+        const k = app.wm.spawn()
+        this.openWin(app.wm.mintId(), "AppWindow", owner,
+            ({ appPath: n.program, appTitle: n.program.split("/").pop() || "", location: n.location,
+                wx: 140 + (k % 5) * 30, wy: 40 + (k % 5) * 22, width: 880, height: 560 }), null)
+        },
+
+    // which of this desktop's apps runs `program` (an address): its own
+    // program path, climbs taken off, is the address's tail
+
+    hostedFor(program: string) -> HostedApp? {
+        return (this.roster.find((a) => this.sameProgram("" + ((a as HostedApp).prog ?? ""), program)) as HostedApp) ?? null
+        },
+    sameProgram(path: string, program: string) -> boolean {
+        const tail = path.replace(/^(\.\.\/)+/, "").replace(/\.declare$/, "")
+        return tail != "" && (program == tail || program.endsWith("/" + tail))
+        },
+
     openWin(id: string, cls: string, a: DesktopApp, props: object, v: View?) {
         this.putBorn(id, v)
         app.wm.addWin(({ id: id, cls: cls, appId: a.id, mini: false, props: props }))
@@ -2396,9 +2544,9 @@ class Launcher extends Node [
 
     // View & Edit Source opens the running program itself in the Declare
     // Viewer — as an embedded app in a desktop window: the AppWindow hosts
-    // library/platform-apps/viewer, and `program=` in its env segment names the subject (a
-    // path valid in this app's transport base). The viewer self-loads that
-    // program's ?segments and ?file artifacts — reader mode by default.
+    // library/platform-apps/viewer and provides it `subject`, the program to
+    // show (a path valid in this app's transport base). The viewer self-loads
+    // that program's ?segments and ?file artifacts — reader mode by default.
 
     openSource(a: DesktopApp) {
         this.openHosted(this.viewer, null, "" + a.src)
@@ -2486,6 +2634,15 @@ class Launcher extends Node [
 
     openDoc(md: string, nm: string, v: View?) { if (md != "") this.openMarkdown(({ inlineDoc: md, docName: nm }), v) },
 
+    // a place in the docs: the Docs window brought forward and sent there, or a
+    // new one opened at it
+
+    openInDocs(loc: string, v: View?) {
+        const open = app.wm.windows().find((w) => w.appPath != "" && this.sameProgram(w.appPath, "" + this.docs.prog))
+        if (open != null) { (open as AppWindow).island.location = loc; app.wm.focusWin(open); return }
+        this.openHosted(this.docs, v, "", loc)
+        },
+
     // a full Declare app in a window — a hosted application: the AppWindow's
     // island mounts `a.prog` ("../../calendar/calendar" runs the real
     // calendar; the path is demos/-relative, the island convention). `subject`
@@ -2494,7 +2651,7 @@ class Launcher extends Node [
     // Hosted apps count separately (running dots + Quit are per application),
     // and each launch-bounces on its first open — the shared gate.
 
-    openHosted(a: HostedApp, v: View?, subject: string) {
+    openHosted(a: HostedApp, v: View?, subject: string, at?: string) {
         this.gated(a, () => {
             this.dismissAbouts()
             const n = app.wm.spawn()
@@ -2517,7 +2674,7 @@ class Launcher extends Node [
             this.openWin(app.wm.mintId(), "AppWindow", a,
                 ({ appPath: "" + a.prog, appTitle: "" + a.title, wx: wx, wy: wy,
                     width: ww, height: wh,
-                    base: "" + a.base, subject: subject != "" ? subject : "" + a.subject,
+                    base: "" + a.base, subject: subject != "" ? subject : "" + a.subject, location: at ?? "", backForward: a.backForward,
                     bornX: o != null ? o.x - wx : -1, bornY: o != null ? o.y - wy - app.menuBarH : -1 }), v)
             })
         },

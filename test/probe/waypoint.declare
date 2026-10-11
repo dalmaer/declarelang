@@ -14,5 +14,11 @@ App [ fill = #16191E, location = "", waypoint = "",
 
     column: View [ x = 20, y = 80, width = 300, height = 2400, fill = #223344,
         marker: View [ x = 0, y = 1200, width = 300, height = 40, fill = #46586A ]
+        ],
+
+    // a pane of its own, scrolled apart from the page: Back returns both
+
+    pane: View [ x = 340, y = 80, width = 200, height = 300, scrolls = y, fill = #1C2630,
+        View [ width = 200, height = 2000, fill = #2A3A4A ]
         ]
     ]

@@ -1,16 +1,17 @@
-// build-mac — the native client's two bundles.
+// build-mac — the Mac app's two bundles, written to mac-host/.build/bundles/ for the
+// app build (build-mac-app.mjs) to bake in. They are build outputs, never committed.
 //
-//   bundles/declare-mac.js           the runtime + the mac backend + the boot
-//                                    ladder, as ONE script (JavaScriptCore has
-//                                    no module loader — an IIFE is the honest
-//                                    delivery, and it is what the Swift shell
-//                                    evaluates after mac-env.js).
-//   bundles/declare-compiler-mac.js  the compiler, same treatment, exposing
-//                                    globalThis.__declareCompiler — loaded ON
-//                                    DEMAND for the client-compile tier, so a
-//                                    server-compiled boot never pays for it.
+//   declare-mac.js           the runtime + the mac backend + the boot ladder, as ONE
+//                            script (JavaScriptCore has no module loader — an IIFE is
+//                            the honest delivery, and it is what the Swift shell
+//                            evaluates after mac-env.js).
+//   declare-compiler-mac.js  the one compiler, bundles/declare-compiler.js, wrapped the
+//                            same way, exposing globalThis.__declareCompiler — loaded
+//                            ON DEMAND for the client-compile tier, so a
+//                            server-compiled boot never pays for it.
 //
-// Run after `npm run build` (needs runtime/dist + compiler/dist).
+// Run by build-mac-app.mjs after derive's tsc and bundles steps (it needs runtime/dist
+// and bundles/declare-compiler.js).
 
 import { build } from "esbuild";
 import path from "node:path";
@@ -19,7 +20,7 @@ import { writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const OUT = path.join(ROOT, "bundles");
+const OUT = path.join(ROOT, "mac-host/.build/bundles");     // baked into the app; never committed
 mkdirSync(OUT, { recursive: true });
 
 const kb = (n) => (n / 1024).toFixed(0) + " KB";
@@ -70,11 +71,12 @@ async function bundle(entry, outfile, globalName, { keepNames = false, define = 
 
 // The compiler entry: a tiny wrapper so the bundle exposes exactly the calls
 // the native host uses — the program compile (the compile thread and the
-// in-context fallback), the library registration, and the reader's highlighter.
+// in-context fallback), the library registration, and the reader's highlighter
+// and the program index (line counts, where each class lives).
 const COMPILER_ENTRY = path.join(OUT, ".compiler-mac-entry.js");
 writeFileSync(COMPILER_ENTRY, `
-import { compileProgram, setDefaultLibrary, highlight } from "${path.join(ROOT, "bundles/declare-compiler.js").replace(/\\/g, "/")}";
-globalThis.__declareCompiler = { compileProgram, setDefaultLibrary, highlight };
+import { compileProgram, setDefaultLibrary, highlight, programIndex } from "${path.join(ROOT, "bundles/declare-compiler.js").replace(/\\/g, "/")}";
+globalThis.__declareCompiler = { compileProgram, setDefaultLibrary, highlight, programIndex };
 `);
 
 console.log("build-mac:");

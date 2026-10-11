@@ -26,6 +26,16 @@ with `island.exposed("docH", 0)`. Both are reactive, per settle, with no
 handshake to write. `post(topic, payload)` / `onPost(m: IslandPost)` carry the
 verbs.
 
+For a host that runs a program the person browses — a documentation reader in a
+window — two more cross on their own, with nothing named on either side. **Where it
+is**: `location` is the tenant's location, both ways — set it to start the program
+at a place or send it to one, and read it to follow where the program has gone;
+`departedPlace` and `place` carry where the person had scrolled, for back and
+forward. **Where it wants to go**: the program's `navigate(to)` and `openWindow(to)`
+come to the island as `onNavigate(n: IslandNavigation)` when the island declares it,
+so the host decides what a link leading out of it means — a desktop opens a window.
+Without it, the page navigates. A host that only shows a program uses none of this.
+
 The window frame, activation, and titling belong to the caller — a desktop window
 adds an `onPointerDown` that raises itself and reads `childName` for its title; the
 homepage and the viewer just size the box. This primitive is only the embedding.
@@ -46,12 +56,36 @@ every island whose `program` is a literal, and for every name the program declar
 unless the program declares `ship [ compiler = true ]`, so an island naming a program the
 build did not produce reports that, with the fix, rather than mounting nothing.
 
+## location
+Where the program is: its own `location`, carried both ways. Set it before the program
+mounts and the program starts there, as a page starts at its URL's fragment; set it
+later and the program follows it (its `onFollow` applies). The program's own
+navigation is reflected back here, so a host can show where it is, keep it, or walk
+it back — Back and Forward across an island are the host's to give. Assign it from a
+handler or `onInit`: a constraint here would own a value the program also writes.
+
+## departedPlace
+Where in the program the person was when it last left a location — how far its
+scrolling panes, and the island's own box, were scrolled — as an opaque value. A
+host that keeps a history of where the program has been (back and forward on a
+window) stores it with the location being left, and hands it back as `place`.
+Written by the platform; nothing to set.
+
+## place
+Set it, together with `location`, to return the program to a place it left: once
+the move has settled and the content can hold it, each pane and the island's box
+scroll back to where `departedPlace` said they were. The user's first scroll
+cancels a landing still in progress. Read back, it is `""` again once taken.
+
 ## slot
 The host's slot marker, derived from `program` — `run:<program>` — which is what the island host wires. Nothing to set by hand.
 */
 
 class AppIsland extends DOMIsland [
     program: string = "",
+    location: string = "",
+    place: string = "",
+    departedPlace: string = "",
 
     // the host mount key: `run:<program>`. No program → empty slot → the
     // island stays detached (DOMIsland unmounts it).

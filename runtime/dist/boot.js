@@ -13,7 +13,6 @@ import { App, View, withHostProvides } from "./view.js";
 import { applyDeps } from "./deps.js";
 import { fontsReady } from "./font-value.js";
 import { setAppAssetBase } from "./asset-base.js";
-import { setAppDataBase } from "./data.js";
 import { DeclareError, notAboard } from "./errors.js";
 import { Keys } from "./keys.js";
 import { Focus, deliverKeys } from "./focus.js";
@@ -560,10 +559,14 @@ export async function renderProgramAsync(program, host, backend, options) {
     const root = buildProgram(program, { deps: opts.deps, provides: opts.provides });
     done("instantiate");
     opts.beforeMount?.(root);
-    if (assetBase != null) {
+    // ASSETS only. An embedded program's relative DATA resolves in its host's
+    // space, through the page's transport — the contract hosts write to (the
+    // desktop provides each app its `base`, and the app's sources prefix it; it
+    // provides the Viewer a `subject` spelled from the desktop's folder). A data
+    // base here would hold only after this line, so a program's first fetch and
+    // its later ones would name different files.
+    if (assetBase != null)
         setAppAssetBase(root, assetBase);
-        setAppDataBase(root, assetBase); // data rides the same sibling rule, per app
-    }
     mark("fonts");
     await fontsReady(root);
     done("fonts");

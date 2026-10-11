@@ -514,15 +514,28 @@ anchor selects the **viewpoint within it** — which view is brought into sight.
   existing primitive.
 - Collision rules (stated once, boring on purpose): views before slugs,
   preorder-first, duplicate slugs get deterministic `-2` suffixes.
-- Scroll on traversal (this fence was later crossed on purpose, §11.4): the
-  host stamps the APP's scroll offset into the outgoing history entry and
-  restores it after the arrival settles, on the web and on the Mac alike. It is
-  the host's job rather than the browser's because the browser's own restoration
-  fires before the traversal has settled and so measures the wrong extent. The
-  limitation that remains: only the app's own scroll is stamped. A scrolling
-  pane inside the app has no per-entry memory, so a reading column lands at its
-  top or its anchor. If a pane's position is part of the place, it belongs in
-  the location.
+- Scroll on traversal: Back and Forward land where the user left the entry —
+  the app's scroll and every scrolling pane's offset, by view path
+  (`runtime/src/scroll-places.ts`). The division of labor is the same on the
+  web and on the Mac:
+  - The native side (the browser's history, the Mac window's trail) keeps the
+    entries, each carrying an id.
+  - The host notes each entry's place in a table keyed by that id, at the
+    moment the app leaves it: its first `location` or `waypoint` write of a
+    settle (`App.$departing`), so a navigation that also moves to the top
+    cannot overwrite where the user was; a traversal; or leaving the page or
+    program. The web keeps the table in `sessionStorage`, so leaving the site
+    and coming Back finds it; the Mac keeps it in the window's context, so Back
+    across programs finds it.
+  - The runtime lands the place when a traversal arrives, as a held intent like
+    the `@name` reveal: at the close of the traversal's settle, each offset is
+    asked for once the content can hold it and kept until the platform reports
+    it there; the user's first scroll drops it.
+
+  It is the host's job rather than the browser's because the browser's own
+  restoration fires before the traversal has settled and so measures the wrong
+  extent. An arrival (a link, a reload, a pasted URL) lands at the top or at
+  its anchor.
 
 ## 7. Extraction: the crawler model
 
@@ -704,8 +717,7 @@ prewarm regenerated. Phase-specific acceptance on top:
 IN: everything above. OUT — explicitly, even where adjacent: the replace-form
 history spelling (§10.1); a `location` declaration modifier (§1, rejected);
 scroll restoration beyond top-or-anchor (§10.2) — **later built anyway**, for
-the app's own scroll only: the hosts stamp and restore it per entry, see §6;
-what stays out is a per-entry memory for panes INSIDE the app; any parser/diagnostics work
+the app's scroll and its panes' on traversal, see §6; any parser/diagnostics work
 (the concurrent track owns parser.ts/check.ts — do not touch them, overlap is
 the merge's enemy); any docs-content work beyond §11.2's list.
 

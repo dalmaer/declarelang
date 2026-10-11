@@ -18,7 +18,7 @@
 //     class's source shapes the output like any include, and the browser's own
 //     compile records them too. Only the runtime/compiler BUNDLE stays out, gated by
 //     BUILD_ID. An earlier note here claimed they were dropped; they never were.)
-//   • segments — { path, segments, metrics } for the code viewer, served by the
+//   • segments — { path, segments } for the code viewer, served by the
 //     service worker's `?segments` route (it builds the key itself).
 //
 // (The `crawler` kind was removed 2026-08-12 — nothing ever read it. See the
@@ -206,15 +206,15 @@ for (const prog of PROGRAMS) {
   step(`${prog.main} · compile + run artifact`);
   {
     // The VIEWER artifacts — every prebaked app ships its reader too: the
-    // highlighted segments and line metrics the dev server serves as
-    // `?segments`, here committed so the static host's viewer (standalone or
-    // embedded) shows the same reader. READ BY THE SERVICE WORKER, which builds
-    // the key itself (service-worker.js segmentsResponse) rather than going
-    // through loadPrewarm — so a grep for loadPrewarm call sites does not find
-    // this consumer. Validated against the ONE file the segments derive from —
-    // the program's own source; a miss falls through to the raw bytes, which is
-    // the viewer's plain-code fallback.
-    const payload = { path: prog.main, segments: highlight(src), metrics: lineMetrics(src) };
+    // highlighted segments the dev server serves as `?segments`, here committed
+    // so the static host's viewer (standalone or embedded) shows the same
+    // reader. READ BY THE SERVICE WORKER, which builds the key itself
+    // (service-worker.js segmentsResponse) rather than going through
+    // loadPrewarm — so a grep for loadPrewarm call sites does not find this
+    // consumer. Validated against the ONE file the segments derive from — the
+    // program's own source. The line metrics are not here: the worker counts
+    // them, since the whole-app figure reads every included file.
+    const payload = { path: prog.main, segments: highlight(src) };
     writeArtifact(prewarmKey(prog.main, "segments", {}), {
       main: prog.main, kind: "segments", props: {},
       payload,

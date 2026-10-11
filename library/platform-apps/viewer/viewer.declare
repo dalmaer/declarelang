@@ -17,10 +17,14 @@
 // errors sandwiched between); the A stepper zooms every text size; the
 // sun / half-disc / moon switch picks Light / System / Dark.
 //
-// A program's `include [ "…" ]` paths and its bare library tags are links: the
-// reader follows them in place (the location names the file), ‹ › appear
-// beside the brand once a link has been followed, and an include's Edit tab —
-// classes, no App, nothing to run — says which program to edit instead.
+// The code is linked: an `include [ "…" ]` path opens that file; a class the
+// program declares opens where it is declared, at that line; a platform class
+// opens its reference page. The reader follows a file link in place (the
+// location names the file, and the host's Back walks it), and an include's
+// Edit tab — classes, no App, nothing to run — says which program to edit
+// instead.
+
+include [ "reference.declare" ]
 
 // the appearance switch names its icons in data, so the build keeps the classes
 
@@ -32,6 +36,7 @@
 class Block [ kind: string = "",
     md: string = "",
     html: string = "",
+    lines: number = 1,                           // the code's line count, for its declarations' markers
     nested: boolean = false,                     // born inside a declaration's body: an aside, not a section break
     joinBelow: boolean = false,                  // the next segment is a nested aside: this card's bottom-left squares
 
@@ -96,7 +101,20 @@ class Block [ kind: string = "",
                 // file links read as links: the conventional blue, underlined
 
                 linkColor = { app.isDark ? 0x58A6FF : 0x0969DA }, linkUnderline = true ]
-            ]
+            ],
+
+        // the declarations this card holds: a marker at each one's line, named
+        // for it, so a link to `@Name` lands there — the platform's reveal waits
+        // for the file, then scrolls the marker to the top. A marker is shown
+        // only once its card's code has a height (the browser measures it a
+        // frame after it renders), and the reveal does not land on what is not
+        // shown. Named only while the reader shows, so the source view's
+        // markers can take the same names.
+
+        View [ datapath = :marks[], width = 1, height = 1,
+            anchor = { app.mode == "reader" ? :name : "" },
+            visible = { parent.body.height > 0 },
+            y = { :line * parent.body.height / Math.max(1, classroot.lines) } ]
         ]
     ]
 
@@ -118,6 +136,10 @@ class SizeBtn [ width = 34, height = 30, cornerRadius = 6,
 
 App [ fill = { provided("theme").background },
 
+    // a declaration a link lands on sits a little below the top of the page
+
+    revealInset = 24,
+
     // the page title is the viewed file itself ("calendar.declare") — the seeds
     // land after boot, so the served title stands until the path arrives
 
@@ -137,7 +159,12 @@ App [ fill = { provided("theme").background },
     // sources fetch it — the seeds keep serving only the file the page was
     // opened on.
 
-    segSrc: DataSource [ format = "text", auto = true, url = { app.srcUrl("?segments") } ],
+    segSrc: DataSource [ format = "text", auto = true, url = { app.srcUrl("?segments") },
+        // the program's class index comes with the file it was opened on, and
+        // stays while the reader follows links to other files
+
+        onLoad() { if (app.fileRel == "") app.openedDefs = app.defsOf(this.value) }
+        ],
 
     // when the raw file lands (the env-driven embedded case has no seeds),
     // publish it on the live channel: the edit pane's island then runs the
@@ -147,16 +174,19 @@ App [ fill = { provided("theme").background },
         onLoad() { if (app.liveCard == "" && app.fileRel == "") { app.liveCard = "__raw__"; app.liveSource = "" + (this.value || "") } }
         ],
 
-    // the url the two sources fetch: the host's program when embedded, the
-    // followed file when the location names one, nothing when the seeds serve.
-    // A followed file is named by its path from the deploy root, and the
-    // sources resolve against the opened program's own directory, so the path
-    // climbs from there to the root: the same request on a host serving at its
-    // origin and on one serving under a subpath (a project's GitHub Pages).
+    // the url the two sources fetch: the followed file when the location names
+    // one, else the host's program when embedded, nothing when the seeds serve.
+    // With a host's program, a followed file is spelled the way the program
+    // is — relative to the same base, or a whole URL — so it is fetched as
+    // written. Standalone, it is named by its path from the deploy root, and
+    // the sources resolve against the opened program's own directory, so the
+    // path climbs from there to the root: the same request on a host serving
+    // at its origin and on one serving under a subpath (a project's GitHub
+    // Pages).
 
     srcUrl(q: string) -> string {
-        if (app.hostProgram != "") return app.hostProgram + q
-        if (app.fileRel == "") return ""
+        if (app.fileRel == "") return app.hostProgram == "" ? "" : app.hostProgram + q
+        if (app.hostProgram != "") return app.fileRel + q
         const depth = app.seededPath().replace(/^\/+/, "").split("/").length - 1
         return "../".repeat(depth) + app.fileRel + q
         },
@@ -164,6 +194,11 @@ App [ fill = { provided("theme").background },
     // the program a host names as the subject (the desktop's viewer window); "" standalone
 
     hostProgram: string = { hostProvided("subject", "") },
+
+    // where the docs app is, for a platform class's reference page — "" on a
+    // host that has none (the Mac app provides "")
+
+    docsBase: string = { hostProvided("docs", "apps/docs/") },
 
     barH: number = 52,
     topM: number = 40,    // reader top margin (foot matches it at the bottom)
@@ -181,8 +216,12 @@ App [ fill = { provided("theme").background },
     // (`reader/apps/weather/weather-art.declare`). One spelling for every
     // file, and the fragment names the file to anyone it is handed to.
 
-    mode: string = { (app.location || "reader").split("/")[0] || "reader" },
-    fileRel: string = { (app.location || "").indexOf("/") < 0 ? "" : app.location.slice(app.location.indexOf("/") + 1) },
+    // A trailing `@Name` lands on a declaration in that file (`reader/apps/
+    // asteroids/game.declare@Game`); `place` is the location without it.
+
+    place: string = { (app.location || "").split("@")[0] },
+    mode: string = { (app.place || "reader").split("/")[0] || "reader" },
+    fileRel: string = { app.place.indexOf("/") < 0 ? "" : app.place.slice(app.place.indexOf("/") + 1) },
 
     // The history walk is the host's — the browser's Back/Forward, the mac
     // titlebar's ‹ › — because a followed file is one location entry and a tab
@@ -216,6 +255,7 @@ App [ fill = { provided("theme").background },
     // host→app channel; parse + normalise so every record has kind/md/html.
 
     doc: Dataset [ contents = { app.parseDoc() } ],
+    plainMarks: Dataset [ contents = { { marks: app.marksIn(app.plainHtml()) } } ],
 
     parseDoc() {
         const raw = app.fileRel == "" ? ((app.demoSources && app.demoSources["__source__"]) || app.segSrc.value || "[]") : (app.segSrc.value || "[]")
@@ -237,56 +277,103 @@ App [ fill = { provided("theme").background },
             segs = [({ kind: "code", html: "<pre>" + e + "</pre>" })]
             }
         return ({ segments: segs.map((s, i) => ({ kind: s.kind, md: s.md || "", html: s.kind == "code" ? app.linkFiles(s.html || "") : "", nested: s.nested == true,
-            joinBelow: segs[i + 1] != null && segs[i + 1].nested == true })) })
+            joinBelow: segs[i + 1] != null && segs[i + 1].nested == true,
+            lines: s.kind == "code" ? app.lineCount(s.html || "") : 1, marks: s.kind == "code" ? app.marksIn(s.html || "") : [] })) })
         },
 
-    // Include links. A code segment's html is the highlighter's <pre> of
-    // <span class=…> tokens; two token shapes name another file, and each
-    // becomes an in-app link — an <a href="#reader/…"> the reader follows
-    // through app.follow, so it works on every renderer and the history
-    // walks it. (1) the path strings inside an `include [ … ]` directive,
-    // resolved against the viewed file's directory; (2) a bare library tag
-    // (`Button [`), resolved through the manifest the server seeds
-    // (__library__) — the way to read the library from any program.
+    // a code block's lines, and the classes and schemas declared on them —
+    // read off the html with its tags taken out (the highlighter keeps the text
+    // verbatim inside its spans)
+
+    lineCount(html: string) -> number { return html.replace(/<[^>]*>/g, "").split("\n").length },
+    marksIn(html: string) -> object[] {
+        const out = []
+        const lines = html.replace(/<[^>]*>/g, "").split("\n")
+        for (let i = 0; i < lines.length; i++) {
+            const m = /^\s*(class|schema)\s+([A-Z]\w*)/.exec(lines[i])
+            if (m != null) out.push({ name: m[2], line: i })
+            }
+        return out
+        },
+
+    // LINKS in code. A code segment's html is the highlighter's <pre> of
+    // <span class=…> tokens, and three shapes become links — each an <a href>
+    // the reader follows through app.follow, so it works on every renderer and
+    // the history walks it:
+    //   (1) a path inside an `include [ … ]` or `script [ … ]` directive — that
+    //       file, resolved against the viewed file's folder;
+    //   (2) a class or schema the program declares (`Game [`, `extends Game`,
+    //       `: Task`) — where it is declared, at that line (`@Game`);
+    //   (3) a platform class (`Button [`) — its reference page, where the host
+    //       has the docs (`docsBase`).
+    // A name at its own declaration (`class Game`) is not a link.
 
     linkFiles(html: string) -> string {
         const dir = app.viewedDir()
-        const lib = app.library()
         const base = app.mode
         const q = String.fromCharCode(34)                     // the double quote, kept out of this body's regexes
         const inc = new RegExp('<span class=' + q + 'k' + q + '>(include|script)<\\/span>\\s*\\[([\\s\\S]*?)\\]', 'g')
         const str = new RegExp('<span class=' + q + 's' + q + '>' + q + '([^' + q + ']+)' + q + '<\\/span>', 'g')
-        const tag = new RegExp('<span class=' + q + 't' + q + '>([A-Z]\\w*)<\\/span>', 'g')
+        const tag = new RegExp('(<span class=' + q + 'k' + q + '>class<\\/span> |schema )?<span class=' + q + 't' + q + '>([A-Z]\\w*)<\\/span>', 'g')
         // the anchor's text is bare (no accent span inside): the accent would
         // compose over the link color, and a link should read as a link —
         // linkColor + linkUnderline on the HTMLText style it. The quote marks
         // stay outside the anchor, in the string accent: the file is the link,
         // its quoting is syntax.
         const quote = '<span class=' + q + 's' + q + '>' + q + '</span>'
-        let out = html.replace(inc, (m, kw, body) =>
+        const out = html.replace(inc, (m, kw, body) =>
             '<span class=' + q + 'k' + q + '>' + kw + '</span> [' + body.replace(str, (m2, p) =>
                 quote + '<a href=' + q + '#' + base + '/' + app.resolveRel(dir, p) + q + '>' + p + '</a>' + quote) + ']')
-        if (lib != null) {
-            const libDir = ('' + lib.base).replace(/^\/+/, '')
-            out = out.replace(tag, (m, t) =>
-                lib.manifest[t] ? '<a href=' + q + '#' + base + '/' + libDir + lib.manifest[t] + q + '>' + t + '</a>' : m)
-            }
-        return out
+        return out.replace(tag, (m, decl, t) => {
+            if (decl) return m
+            const at = app.declaredAt(t)
+            if (at != "") return '<a href=' + q + '#' + at + q + '>' + t + '</a>'
+            if (app.docsBase != "" && REFERENCE_CLASSES.includes(t)) return '<a href=' + q + app.docsBase + '#reference/' + t + q + '>' + t + '</a>'
+            return m
+            })
         },
 
-    // a path relative to `dir`, normalised: `rooms/../art.declare` → `art.declare`
+    // THE CLASS INDEX — name → the declaring file's path from a file's folder
+    // ("" for that file itself), worked out by the host (the compiler's
+    // programIndex) and handed over with the file: seeded as __defs__, or in
+    // the ?segments payload. The program's index comes with the file the page
+    // opened on; a followed file brings its own declarations.
+
+    openedDefs: Record<string, string> = { {} },
+    defsOf(payload: string) -> Record<string, string> {
+        try { const p = JSON.parse(payload || "null"); return (p && p.defs) || {} } catch (e) { return {} }
+        },
+    programDefs() -> Record<string, string> {
+        try { const s = app.demoSources && app.demoSources["__defs__"]; if (s) return JSON.parse(s) } catch (e) { }
+        return app.openedDefs
+        },
+    openingDir() -> string { const p = app.seededPath(); const i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i + 1) },
+
+    // where `t` is declared, as a location in the current tab — "" when the
+    // program declares no such name. The file shown now answers first.
+
+    declaredAt(t: string) -> string {
+        const here = app.fileRel == "" ? app.programDefs() : app.defsOf(app.segSrc.value || "")
+        if (here[t] === "") return app.mode + (app.fileRel == "" ? "" : "/" + app.fileRel) + "@" + t
+        const p = app.programDefs()[t]
+        if (typeof p != "string") return ""
+        return app.mode + (p == "" ? "" : "/" + app.resolveRel(app.openingDir(), p)) + "@" + t
+        },
+
+    // a path relative to `dir`, normalised: `rooms/../art.declare` → `art.declare`.
+    // A climb past the start is kept (`../calendar/` + `x.declare` →
+    // `../calendar/x.declare`: the host's program may sit beside this one), and
+    // a whole URL resolves as a URL (`file:///…/apps/sampler/`).
 
     resolveRel(dir: string, p: string) -> string {
+        if (/^[a-z][a-z0-9+.-]*:\/\//i.test(dir)) return new URL(p, dir).href
         const parts = (dir + p).split("/")
-        const stack = []
-        for (const s of parts) { if (s == "..") stack.pop(); else if (s != "." && s != "") stack.push(s) }
+        const stack: string[] = []
+        for (const s of parts) {
+            if (s == "..") { if (stack.length == 0 || stack[stack.length - 1] == "..") stack.push(s); else stack.pop() }
+            else if (s != "." && s != "") stack.push(s)
+            }
         return stack.join("/")
-        },
-
-    // the seeded library manifest, or null where no host seeded one
-
-    library() -> object {
-        try { return JSON.parse((app.demoSources && app.demoSources["__library__"]) || "null") } catch (e) { return null }
         },
 
     // the verbatim file as one escaped, monospace <pre> — the plain-text view
@@ -330,82 +417,28 @@ App [ fill = { provided("theme").background },
 
     viewedDir() -> string { const p = app.filePath(); const i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i + 1) },
 
-    // the compiler's line count for the viewed file (host-seeded __metrics__:
-    // lineMetrics() — total / code / comment / blank), rendered beside the title
+    // the compiler's line count, as the host hands it over (programMetrics():
+    // total / code / comment / blank, and `app` — the same plus `files` — when
+    // the file declares the App: the file and everything it includes, the
+    // library's left out). Seeded as __metrics__, or carried by the ?segments
+    // payload when the viewer loads the file itself. Lines are counted with
+    // their comments and without; blank lines are neither.
 
-    metaLabel() {
+    metrics() {
         let m = null
         if (app.fileRel == "") { try { m = JSON.parse((app.demoSources && app.demoSources["__metrics__"]) || "null") } catch (e) { m = null } }
-        // self-loading: the ?segments payload carries the same metrics
         if (m == null && app.segSrc.value) {
             try { const p = JSON.parse(app.segSrc.value); m = (p && p.metrics) || null } catch (e) { m = null }
             }
-        // a static host serves the raw file but answers no ?segments — count
-        // the lines here, so the label holds on every hosting mode
-        if (m == null && app.rawText() != "") m = this.localMetrics(app.rawText())
-        return m == null ? "" : "· " + m.total + " lines, " + m.code + " code"
+        return m
         },
-
-    // the compiler's line classification in miniature: comments mask out,
-    // """ text blocks and whole { } constraint bodies mask in (a // inside a
-    // body is body, not comment — the compiler's rule), and a line counts
-    // as code when anything masked-in and non-blank survives on it
-
-    localMetrics(src: string) -> object {
-        const s = "" + src
-        const n = s.length
-        let total = 0
-        let code = 0
-        let has = false
-        let depth = 0                            // { } body nesting — everything inside is code
-        let inBlock = false                      // /* */ outside a body — comment
-        let inText = false                       // """ block — code
-        let bodyBlock = false                    // /* */ inside a body — still code, braces ignored
-        let i = 0
-        while (i < n) {
-            const c = s[i]
-            if (c == "\n") { total = total + 1; if (has) code = code + 1; has = false; i = i + 1; continue }
-            if (inBlock) { if (c == "*" && s[i + 1] == "/") { inBlock = false; i = i + 2 } else i = i + 1; continue }
-            if (inText) {
-                if (c != " " && c != "\t" && c != "\r") has = true
-                if (c == "\"" && s[i + 1] == "\"" && s[i + 2] == "\"") { inText = false; i = i + 3 } else i = i + 1
-                continue
-                }
-            if (depth > 0) {
-                if (c != " " && c != "\t" && c != "\r") has = true
-                if (bodyBlock) { if (c == "*" && s[i + 1] == "/") { bodyBlock = false; i = i + 2 } else i = i + 1; continue }
-                if (c == "/" && s[i + 1] == "*") { bodyBlock = true; i = i + 2; continue }
-                if (c == "/" && s[i + 1] == "/") { while (i < n && s[i] != "\n") i = i + 1; continue }
-                if (c == "\"" || c == "'") {
-                    const q = c
-                    i = i + 1
-                    while (i < n && s[i] != q) { if (s[i] == "\\") i = i + 1; i = i + 1 }
-                    i = i + 1
-                    continue
-                    }
-                if (c == "{") depth = depth + 1
-                if (c == "}") depth = depth - 1
-                i = i + 1
-                continue
-                }
-            if (c == "/" && s[i + 1] == "*") { inBlock = true; i = i + 2; continue }
-            if (c == "/" && s[i + 1] == "/") { while (i < n && s[i] != "\n") i = i + 1; continue }
-            if (c == "\"" && s[i + 1] == "\"" && s[i + 2] == "\"") { inText = true; has = true; i = i + 3; continue }
-            if (c == "\"" || c == "'") {
-                const q = c
-                has = true
-                i = i + 1
-                while (i < n && s[i] != q) { if (s[i] == "\\") i = i + 1; i = i + 1 }
-                i = i + 1
-                continue
-                }
-            if (c == "{") { depth = 1; has = true; i = i + 1; continue }
-            if (c != " " && c != "\t" && c != "\r") has = true
-            i = i + 1
-            }
-        if (n > 0 && s[n - 1] != "\n") { total = total + 1; if (has) code = code + 1 }
-        return ({ total: total, code: code })
+    counts(c: { code: number; comment: number }) -> string {
+        return (c.code + c.comment).toLocaleString("en-US") + " lines with comments, " + c.code.toLocaleString("en-US") + " without"
         },
+    hasMetrics: boolean = { app.metrics() != null },
+    hasWhole: boolean = { app.hasMetrics && app.metrics().app != null && app.metrics().app.files > 1 },
+    fileCounts: string = { app.hasMetrics ? app.counts(app.metrics()) + (app.hasWhole ? " ·" : "") : "" },
+    appCounts: string = { app.hasWhole ? "(" + app.metrics().app.files + " files): " + app.counts(app.metrics().app) : "" },
     dirName() { const p = app.filePath(); const i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i + 1) },
     baseName() { const p = app.filePath(); const i = p.lastIndexOf("/"); return i < 0 ? p : p.slice(i + 1) },
 
@@ -456,9 +489,15 @@ App [ fill = { provided("theme").background },
 
                 // the size of the thing, quietly: the compiler's own count
 
-                gapm: View [ width = 10, height = 1 ],
-                m: Text [ y = { 8 * app.fontScale }, fontSize = { 13 * app.fontScale }, wrap = false,
-                    textColor = { provided("theme").textMuted }, text = { app.metaLabel() } ]
+                gapm: View [ width = 14, height = 1 ],
+                m: View [ y = { 8 * app.fontScale }, visible = { app.hasMetrics },
+                    fontSize = { 13 * app.fontScale }, textColor = { provided("theme").textMuted },
+                    layout: SimpleLayout [ axis = x, spacing = 4 ],
+                    Text [ fontWeight = bold, wrap = false, text = "This file:" ],
+                    Text [ wrap = false, text = { app.fileCounts } ],
+                    Text [ fontWeight = bold, wrap = false, visible = { app.hasWhole }, text = "Whole app" ],
+                    Text [ wrap = false, visible = { app.hasWhole }, text = { app.appCounts } ]
+                    ]
                 ],
 
             // a blue→teal thread of the brand accent, the origin of the code spine
@@ -474,7 +513,7 @@ App [ fill = { provided("theme").background },
             x = { Math.max(24, (parent.width - this.width) / 2) },
             datapath = { app.doc.value },
             layout: SimpleLayout [ axis = y, spacing = 12 ],
-            Block [ datapath = :segments[], kind = :kind, md = :md, html = :html, nested = { :nested == true }, joinBelow = { :joinBelow == true } ]
+            Block [ datapath = :segments[], kind = :kind, md = :md, html = :html, nested = { :nested == true }, joinBelow = { :joinBelow == true }, lines = { :lines } ]
             ],
 
         // plain view: the verbatim source as one monospace flow (same size/theme)
@@ -491,6 +530,16 @@ App [ fill = { provided("theme").background },
             body: View [ x = 20, y = 16, width = { parent.width - 40 }, scrolls = x, height = { this.contentHeight },
                 HTMLText [ x = 0, y = 0, width = 100%, html = { app.plainHtml() },
                     fontScale = { app.fontScale }, bodyColor = { app.codeFg() }, selectable = true ]
+                ],
+
+            // the declarations' markers, as on the reader's cards — named only
+            // while this view shows
+
+            marks: View [ y = 16, width = 1, height = 1, datapath = { app.plainMarks.value },
+                View [ datapath = :marks[], width = 1, height = 1,
+                    anchor = { app.mode == "source" ? :name : "" },
+                    visible = { parent.parent.body.height > 0 },
+                    y = { :line * parent.parent.body.height / Math.max(1, app.lineCount(app.plainHtml())) } ]
                 ]
             ],
 

@@ -330,11 +330,11 @@ syntax:
     panel: Menu? = null                         // a class — the attribute holds an instance
 usage: form-declare
 
-Declares a new reactive attribute — the way state enters a program. The type comes from the
-same vocabulary a signature uses: a primitive (`number`, `string`, `boolean`), `Color`,
-`Length`, `Radius`, a class, a declared schema, a literal union
-(`"open" | "closed"`), an array of any of these, or a function type. The default is a bare
-literal or a `{ }` expression.
+Declares a new reactive attribute — the way state enters a program. The type is a
+TypeScript type, the same vocabulary a signature uses: TypeScript's built-ins (`number`,
+`string`, `Map<string, Row>`), Declare's own (`Color`, `Length`, `Radius`), a class, a
+declared schema, a literal union (`"open" | "closed"`), an array, a tuple, or a function
+type. The default is a bare literal or a `{ }` expression.
 
 A declaration's `{ }` default is only a **formula**: reading it inlines the
 expression, and an assignment simply replaces it — the right tool for a value you may take
@@ -346,8 +346,8 @@ Compare `set`: a set attribute is owned by its `{ }` and refuses assignment.
 - A declaration carries a type; the colon is not optional.
   > says: expected a type or class name, got '='
   > probe: App [ other: = 1 ]
-- The type must be one the language knows; the message lists them.
-  > says: unknown type 'Widget' — a declared attribute's type is one of number, string, boolean, Color, Length, Radius, Shape, Inset, array, object, View, Theme
+- The type must be one the program can name; the message says where types come from.
+  > says: unknown type 'Widget' in 'Widget?' — a declared type is TypeScript's
   > probe: App [ x2: Widget? = null ]
 - An attribute the class already has is set, not declared again.
   > says: App already has an attribute 'width' — a declaration introduces a new one; write 'width = …' to set the existing one
@@ -429,9 +429,6 @@ compiler never reads.
 - Parameters are typed; a bare name has no type.
   > says: parameter 'a' has no type — a signature is typed name-first: 'f(a: number)'
   > probe: App [ f(a) { } ]
-- Type annotations do not live in bodies: a local takes no annotation (contextual typing covers it); narrow with a cast (`x as T`), and put declared types on attributes.
-  > says: annotates a name ('x') — names declared in a body take no type annotation (contextual typing covers them); a cast narrows an expression (x as T), and declared types live on the attribute (name: type = …)
-  > probe: App [ f() { const x: number = 1 } ]
 - An attribute's value is one expression; statements live in methods.
   > says: an attribute value is one expression, not statements; move the logic into a method and call it (e.g. { classroot.compute() })
   > probe: App [ width = { const w = 10; w } ]

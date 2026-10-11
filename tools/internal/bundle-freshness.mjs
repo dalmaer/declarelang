@@ -40,21 +40,23 @@ export const BUNDLES = [
     build: "tools/internal/build-compiler.mjs",
     inputs: ["compiler/dist", "runtime/dist", "tools/internal/build-compiler.mjs"],
   },
-  // The NATIVE client's two bundles. Same rule, same reason: the mac host
-  // evaluates declare-mac.js as its whole world, so an unrebuilt bundle is a
-  // silently stale runtime — the recorded footgun, one platform over. Both come
-  // out of ONE script (build-mac.mjs), which rebuildStale runs once per pass.
+];
+
+/** The Mac app's two bundles, built by the app build (build-mac-app.mjs) into
+ *  mac-host/.build/bundles/ and baked into the app; never committed. Same rule,
+ *  same reason: the host evaluates declare-mac.js as its whole world, so an
+ *  unrebuilt bundle is a silently stale runtime. Both come out of ONE script
+ *  (build-mac.mjs), which rebuildStale runs once per pass. */
+export const MAC_BUNDLES = [
   {
-    out: "bundles/declare-mac.js",
+    out: "mac-host/.build/bundles/declare-mac.js",
     build: "tools/internal/build-mac.mjs",
     inputs: ["browser", "runtime/dist", "tools/internal/build-mac.mjs"],
   },
   {
-    // ⚠ inputs is the COMPILER BUNDLE, not compiler/dist: build-mac re-wraps
-    // bundles/declare-compiler.js as an IIFE for JSC. It must therefore come
-    // AFTER that entry here, so a compiler change rebuilds the web bundle first
-    // and this one sees the newer mtime in the same pass.
-    out: "bundles/declare-compiler-mac.js",
+    // the one compiler, bundles/declare-compiler.js, wrapped as a script for
+    // JavaScriptCore, which has no module loader
+    out: "mac-host/.build/bundles/declare-compiler-mac.js",
     build: "tools/internal/build-mac.mjs",
     inputs: ["bundles/declare-compiler.js", "tools/internal/build-mac.mjs"],
   },
@@ -93,13 +95,13 @@ export function isStale(root, bundle) {
  *  bundles that still disagree with their sources. So when derive's hashes say
  *  run, this runs. The mtime fast path remains right for the other callers
  *  (the dev server's on-demand rebuild, stamp-version's pre-hash sweep). */
-export function rebuildStale(root, { only = null, log = console.error, force = false } = {}) {
+export function rebuildStale(root, { bundles = BUNDLES, only = null, log = console.error, force = false } = {}) {
   const rebuilt = [];
-  // One script can produce SEVERAL artifacts (build-mac.mjs writes both native
+  // One script can produce SEVERAL artifacts (build-mac.mjs writes both Mac
   // bundles), so a pass runs each script at most once — otherwise asking for two
-  // stale siblings rebuilds the 5.7 MB compiler bundle twice.
+  // stale siblings rebuilds the compiler twice.
   const ran = new Set();
-  for (const b of BUNDLES) {
+  for (const b of bundles) {
     if (only !== null && !only.includes(b.out)) continue;
     if (!force && !isStale(root, b)) continue;
     if (ran.has(b.build)) { rebuilt.push(b.out); continue; }

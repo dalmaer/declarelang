@@ -114,9 +114,12 @@ await test("the viewer inside the CANVAS desktop gets its host's data", async ()
 await test("viewer: an include path is a link that views the included file in place; Edit on it points back at the program", async () => {
   await page.goto(`${B}/apps/weather/weather.declare?viewer=reader`, { waitUntil: "networkidle0", timeout: 60000 });
   await settled(page);
-  const hrefs = await page.evaluate(() => [...document.querySelectorAll("a[href^='#reader/']")].map((a) => a.getAttribute("href")));
+  const hrefs = await page.evaluate(() => [...document.querySelectorAll("a")].map((a) => a.getAttribute("href")));
   assert.ok(hrefs.includes("#reader/apps/weather/weather-art.declare"), `the include is a link, got ${JSON.stringify(hrefs.slice(0, 4))}`);
-  assert.ok(hrefs.some((h) => h.startsWith("#reader/") && h.endsWith("/library/simplelayout.declare")), "a bare library tag links to its library file");
+  // a class the program declares in the include links to its declaration;
+  // a platform class links to its reference page
+  assert.ok(hrefs.includes("#reader/apps/weather/weather-art.declare@WindDial"), "a class declared in the include links to its line");
+  assert.ok(hrefs.includes("apps/docs/#reference/SimpleLayout"), "a platform class links to its reference page");
   const st = () => page.evaluate(() => { const a = window.__declare.find("app"); return { loc: a.location, file: a.filePath(), isInclude: a.isInclude }; });
   await page.evaluate(() => window.__declare.find("app").follow("#reader/apps/weather/weather-art.declare"));
   await settled(page);
@@ -137,6 +140,24 @@ await test("viewer: an include path is a link that views the included file in pl
   await page.goBack(); await settled(page);
   s = await st();
   assert.equal(s.file, "apps/weather/weather.declare", "browser Back walks files, never tabs");
+});
+
+await test("viewer: a class link lands on its declaration's line", async () => {
+  await page.goto(`${B}/apps/weather/weather.declare?viewer=reader`, { waitUntil: "networkidle0", timeout: 60000 });
+  await settled(page);
+  await page.evaluate(() => window.__declare.find("app").follow("#reader/apps/weather/weather-art.declare@WindDial"));
+  await settled(page);
+  const at = await page.evaluate(() => {
+    const a = window.__declare.find("app");
+    let mark = null;
+    const walk = (n) => { if (n.anchor === "WindDial") mark = n; for (const c of n.children || []) walk(c); };
+    walk(a);
+    const top = mark.$surface.element.getBoundingClientRect().top - a.content.$surface.element.getBoundingClientRect().top;
+    return { file: a.filePath(), top, scrollY: a.content.scrollY, inset: a.revealInset };
+  });
+  assert.equal(at.file, "apps/weather/weather-art.declare");
+  assert.ok(at.scrollY > 0, "the reader scrolled");
+  assert.ok(Math.abs(at.top - at.inset) <= 4, `the declaration sits at the top of the reader, below the inset (it is ${at.top}px down)`);
 });
 
 await test("viewer: a page opened DIRECTLY on an include points at no program — it cannot know one", async () => {

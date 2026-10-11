@@ -277,25 +277,45 @@ final class DeclareView: NSView {
             return
         }
         let key = Self.keyName(e)
-        bridge.call("__declareKey", ["keydown", key, mods(e), e.isARepeat ? 1 : 0])
+        bridge.call("__declareKey", ["keydown", key, mods(e), e.isARepeat ? 1 : 0, Self.keyCode(e.keyCode)])
         bridge.needsFrame()
         // Let ⌘-shortcuts reach the menu bar as well.
         if e.modifierFlags.contains(.command) { super.keyDown(with: e) }
     }
     override func keyUp(with e: NSEvent) {
-        bridge.call("__declareKey", ["keyup", Self.keyName(e), mods(e), 0])
+        bridge.call("__declareKey", ["keyup", Self.keyName(e), mods(e), 0, Self.keyCode(e.keyCode)])
         bridge.needsFrame()
     }
 
-    /// NSEvent → the DOM `KeyboardEvent.key` names the runtime expects.
+    /// A modifier key is a key, as in a browser: Shift, Control, Option and
+    /// Command go down and up on their own, each side by its own code. AppKit
+    /// reports them only as a change of flags, so which side moved, and which
+    /// way, is read from the flag of that side.
+    override func flagsChanged(with e: NSEvent) {
+        guard let (key, sideMask) = Self.modifierKeys[e.keyCode] else { return }
+        let down = e.keyCode == 57 ? e.modifierFlags.contains(.capsLock)
+                                   : e.modifierFlags.rawValue & sideMask != 0
+        bridge.call("__declareKey", [down ? "keydown" : "keyup", key, mods(e), 0, Self.keyCode(e.keyCode)])
+        bridge.needsFrame()
+    }
+    /// Modifier key codes → their `key`, and the device flag of that side.
+    private static let modifierKeys: [UInt16: (String, UInt)] = [
+        56: ("Shift", 0x2), 60: ("Shift", 0x4), 59: ("Control", 0x1), 62: ("Control", 0x2000),
+        58: ("Alt", 0x20), 61: ("Alt", 0x40), 55: ("Meta", 0x8), 54: ("Meta", 0x10), 57: ("CapsLock", 0),
+    ]
+
+    /// NSEvent → `KeyboardEvent.key`: what the key means, as a browser on this
+    /// Mac reports it. Option composes (⌥E is a dead key, ⌥A is "å"); with ⌘ or
+    /// Control the key is the unmodified character.
     static func keyName(_ e: NSEvent) -> String {
         switch e.keyCode {
-        case 36: return "Enter"
+        case 36, 76: return "Enter"
         case 48: return "Tab"
         case 49: return " "
         case 51: return "Backspace"
         case 53: return "Escape"
         case 117: return "Delete"
+        case 114: return "Insert"
         case 123: return "ArrowLeft"
         case 124: return "ArrowRight"
         case 125: return "ArrowDown"
@@ -305,10 +325,46 @@ final class DeclareView: NSView {
         case 116: return "PageUp"
         case 121: return "PageDown"
         default:
-            if let c = e.charactersIgnoringModifiers, !c.isEmpty { return c }
-            return ""
+            let code = keyCode(e.keyCode)
+            if code.count > 1, code.hasPrefix("F"), Int(code.dropFirst()) != nil { return code }
+            let composed = e.modifierFlags.contains(.option)
+                && !e.modifierFlags.contains(.command) && !e.modifierFlags.contains(.control)
+            let c = (composed ? e.characters : e.charactersIgnoringModifiers) ?? ""
+            if c.isEmpty { return composed ? "Dead" : "Unidentified" }
+            // AppKit's private-use function-key characters have no DOM name
+            if let u = c.unicodeScalars.first, (0xF700...0xF8FF).contains(u.value) { return "Unidentified" }
+            return c
         }
     }
+
+    /// The Mac's virtual key code → `KeyboardEvent.code`: the PHYSICAL key, by
+    /// its place on a US keyboard, whatever the layout prints on it — the names
+    /// a browser gives (Chromium's table), so `Keys.isDown("KeyA")` is the same
+    /// key on every host.
+    static func keyCode(_ k: UInt16) -> String {
+        Self.codes[k] ?? "Unidentified"
+    }
+    private static let codes: [UInt16: String] = [
+        0: "KeyA", 1: "KeyS", 2: "KeyD", 3: "KeyF", 4: "KeyH", 5: "KeyG", 6: "KeyZ", 7: "KeyX",
+        8: "KeyC", 9: "KeyV", 10: "IntlBackslash", 11: "KeyB", 12: "KeyQ", 13: "KeyW", 14: "KeyE",
+        15: "KeyR", 16: "KeyY", 17: "KeyT", 18: "Digit1", 19: "Digit2", 20: "Digit3", 21: "Digit4",
+        22: "Digit6", 23: "Digit5", 24: "Equal", 25: "Digit9", 26: "Digit7", 27: "Minus", 28: "Digit8",
+        29: "Digit0", 30: "BracketRight", 31: "KeyO", 32: "KeyU", 33: "BracketLeft", 34: "KeyI",
+        35: "KeyP", 36: "Enter", 37: "KeyL", 38: "KeyJ", 39: "Quote", 40: "KeyK", 41: "Semicolon",
+        42: "Backslash", 43: "Comma", 44: "Slash", 45: "KeyN", 46: "KeyM", 47: "Period", 48: "Tab",
+        49: "Space", 50: "Backquote", 51: "Backspace", 53: "Escape", 54: "MetaRight", 55: "MetaLeft",
+        56: "ShiftLeft", 57: "CapsLock", 58: "AltLeft", 59: "ControlLeft", 60: "ShiftRight",
+        61: "AltRight", 62: "ControlRight", 64: "F17", 65: "NumpadDecimal", 67: "NumpadMultiply",
+        69: "NumpadAdd", 71: "NumLock", 72: "AudioVolumeUp", 73: "AudioVolumeDown", 74: "AudioVolumeMute",
+        75: "NumpadDivide", 76: "NumpadEnter", 78: "NumpadSubtract", 79: "F18", 80: "F19",
+        81: "NumpadEqual", 82: "Numpad0", 83: "Numpad1", 84: "Numpad2", 85: "Numpad3", 86: "Numpad4",
+        87: "Numpad5", 88: "Numpad6", 89: "Numpad7", 90: "F20", 91: "Numpad8", 92: "Numpad9",
+        93: "IntlYen", 94: "IntlRo", 95: "NumpadComma", 96: "F5", 97: "F6", 98: "F7", 99: "F3",
+        100: "F8", 101: "F9", 102: "Lang2", 103: "F11", 104: "Lang1", 105: "F13", 106: "F16",
+        107: "F14", 109: "F10", 110: "ContextMenu", 111: "F12", 113: "F15", 114: "Insert", 115: "Home",
+        116: "PageUp", 117: "Delete", 118: "F4", 119: "End", 120: "F2", 121: "PageDown", 122: "F1",
+        123: "ArrowLeft", 124: "ArrowRight", 125: "ArrowDown", 126: "ArrowUp",
+    ]
 
     // ── cursor + overlays ───────────────────────────────────────────────────
 
@@ -348,9 +404,15 @@ final class DeclareView: NSView {
         case "move", "all-scroll": return .openHand
         case "not-allowed": return .operationNotAllowed
         case "crosshair": return .crosshair
+        case "none": return Self.blankCursor
         default: return .arrow
         }
     }
+
+    /// `cursor = "none"`: a transparent cursor rather than NSCursor.hide(),
+    /// whose hide/unhide calls must balance — this one simply stops showing
+    /// when the pointer leaves, like every other cursor.
+    private static let blankCursor = NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
 
     /// Glue every native overlay to its surface's box (after each commit).
     /// The model's rects are top-left; this view is unflipped (the layer tree
@@ -758,7 +820,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct Main {
     static func main() {
         let app = NSApplication.shared
-        app.setActivationPolicy(.regular)
+        // A rig's launch must not take the foreground from the person at the machine. An
+        // ordinary (.regular) app is activated by the system as it launches, whatever the
+        // app itself asks; an accessory app is not, and its windows show and render just
+        // the same. A rig that wants the foreground asks for it (`ctl activate`).
+        app.setActivationPolicy(Launch.isAutomated ? .accessory : .regular)
         let delegate = AppDelegate()
         app.delegate = delegate
         app.run()

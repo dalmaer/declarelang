@@ -34,12 +34,12 @@ import { hasSegments } from "./browser/prewarm-manifest.js";
 import { fnv1a } from "./compiler/dist/closure.js";
 // the segmenter the dev server and the source page run: dependency-free (no
 // compiler), so a `?segments` with no prebaked artifact is computed here
-import { highlight, lineMetrics } from "./compiler/dist/highlight.js";
+import { highlight, programIndex } from "./compiler/dist/highlight.js";
 
 // BUILD_ID — a content hash of the platform (runtime + compiler bundle + web client +
 // this worker + index.html), stamped by tools/internal/stamp-version.mjs. Left "dev" when unstamped
 // (local serving); a real deploy stamps it so cache-busting + the SW self-update engage.
-const BUILD_ID = "8ea6282e92f5";
+const BUILD_ID = "827fe9ae34f7";
 
 const ROOT = new URL("./", self.location);            // <origin>/…/  (this worker's dir == the distro root)
 const ORIGIN = ROOT.origin;
@@ -137,7 +137,9 @@ self.addEventListener("fetch", (event) => {
 // A prewarmed program's prebaked artifact is served after proving it still
 // matches the deployed source (one content-hash check against the one file
 // segments derive from); any other file — an include, a program off the list,
-// a stale artifact — is segmented here, over the source just fetched. Only a
+// a stale artifact — is segmented here, over the source just fetched. The
+// metrics and the class index are always worked out here: they read every file
+// the program includes, which one hash of the main file cannot vouch for. Only a
 // failed fetch falls through to the raw response.
 async function segmentsResponse(url, req) {
   try {
@@ -146,15 +148,19 @@ async function segmentsResponse(url, req) {
     const res = await revalidate(new Request(mainUrl.href));
     if (!res.ok) return res;
     const src = await res.text();
-    const segments = (payload) => new Response(JSON.stringify(payload), { headers: { "content-type": "application/json" } });
+    const library = new URL("library/", ROOT).href;
+    const { metrics, defs } = await programIndex(src, mainUrl.href,
+      async (u) => { const r = await revalidate(new Request(u)); return r.ok ? r.text() : null; },
+      (u) => u.startsWith(library));
+    const segments = (segs) => new Response(JSON.stringify({ path: rel, segments: segs, metrics, defs }), { headers: { "content-type": "application/json" } });
     // Ask the manifest first, at no request cost: only prewarmed programs ship
     // viewer artifacts (browser/prewarm-manifest.js).
     if (hasSegments(rel)) {
       const art = await (await revalidate(new Request(new URL("bundles/cache/" + prewarmKey(rel, "segments", {}) + ".json", ROOT).href))).json().catch(() => null);
       const want = art?.closure?.entries?.[0]?.v?.hash;
-      if (art?.payload != null && want != null && fnv1a(src) === want) return segments(art.payload);
+      if (art?.payload?.segments != null && want != null && fnv1a(src) === want) return segments(art.payload.segments);
     }
-    return segments({ path: rel, segments: highlight(src), metrics: lineMetrics(src) });
+    return segments(highlight(src));
   } catch {
     return revalidate(req);
   }

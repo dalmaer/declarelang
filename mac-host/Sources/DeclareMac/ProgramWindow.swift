@@ -118,40 +118,52 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
         // The runtime mirrors (app.location, app.waypoint) into this window's
         // trail — the native twin of the web host's history mirror
         // (host-client.js wirePageLocation), aimed at the titlebar arrows
-        // instead of a URL bar. "push" mints an entry (stamping the departed
-        // entry's scroll first, so Back lands where the user left); "replace"
-        // overwrites — a follow whose link declared `replace = true`.
-        bridge.onHistoryEntry = { [weak self] loc, step, verb, departScroll in
+        // instead of a URL bar. "push" mints an entry; "replace" overwrites —
+        // a follow whose link declared `replace = true`. Each entry carries the
+        // id the program names it by (see `Stop`).
+        bridge.onHistoryEntry = { [weak self] loc, step, verb, id in
             guard let self else { return }
             if verb == "replace" {
-                if trailAt >= 0 { trail[trailAt].loc = loc; trail[trailAt].step = step }
+                if onSubjectStop { viewerOpening.loc = loc; viewerOpening.step = step }
+                else if trailAt >= 0 { trail[trailAt].loc = loc; trail[trailAt].step = step }
             } else {
-                if trailAt >= 0 { trail[trailAt].scroll = departScroll }
                 if trailAt < trail.count - 1 { trail.removeSubrange((trailAt + 1)...) }
-                trail.append(Stop(url: currentURL, loc: loc, step: step))
+                trail.append(Stop(url: currentURL, loc: loc, step: step, id: id))
                 trailAt = trail.count - 1
             }
             refreshChrome()
         }
         // The current entry made to AGREE with the app — after a boot (the
-        // entry learns the program's initial or deep-linked pair) and after a
-        // traversal (onFollow may have redirected or vetoed; the entry holds
-        // what the app actually decided, the web's square-by-replace). A boot
-        // square also releases a held cross-program traversal pair.
-        bridge.onHistorySquare = { [weak self] loc, step in
+        // entry learns the program's initial or deep-linked pair, and its id)
+        // and after a traversal (onFollow may have redirected or vetoed; the
+        // entry holds what the app actually decided, the web's
+        // square-by-replace). A boot square also releases a held cross-program
+        // traversal: that entry keeps the id it had, and travel hands it to the
+        // program, which lands where the user was on it.
+        bridge.onHistorySquare = { [weak self] loc, step, id in
             guard let self, trailAt >= 0 else { return }
+            // In Source mode the program's own entry stands for the Viewer's
+            // opening; what the Viewer says about it is kept apart, and the
+            // program's pair is left as the program left it.
+            if onSubjectStop && pendingStop == nil {
+                viewerOpening = Stop(url: currentURL, loc: loc, step: step, id: id)
+                return
+            }
             trail[trailAt].loc = loc
             trail[trailAt].step = step
             if let p = pendingStop {
                 pendingStop = nil
-                if p.loc != loc || p.step != step {
+                if p.loc != loc || p.step != step || !p.id.isEmpty {
                     // ⚠ Next turn, not this one — this callback is reached from
                     // inside a JS commit (the boot's own settle); the onNavigate
                     // rule.
                     DispatchQueue.main.async { [weak self] in
-                        self?.bridge.travel(loc: p.loc, step: p.step, scroll: p.scroll)
+                        self?.bridge.travel(loc: p.loc, step: p.step, id: p.id)
                     }
                 }
+                if p.id.isEmpty { trail[trailAt].id = id }
+            } else {
+                trail[trailAt].id = id
             }
         }
         window.makeFirstResponder(view)
@@ -206,6 +218,24 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
     /// ordinary open is travel (`.push`), a reload or a mode change is not
     /// (`.stay`), and back/forward are already moving the cursor (`.replay`).
     func open(_ url: String, history: History = .push) {
+        // A URL copied from a browser may carry the platform's own requests
+        // (ProgramRequest). The two this app has a meaning for become what it
+        // does — Source mode on a tab, the Inspector — and the program itself
+        // is opened with the rest taken out.
+        let req = ProgramRequest(url)
+        if req.clean != url || req.viewer != nil || req.inspector {
+            if let tab = req.viewer {
+                if history == .push { remember(req.clean) }
+                // leaving any Source mode already on, without reopening its program
+                if viewing { dropViewerStops(); viewing = false; subjectURL = "" }
+                currentURL = req.clean
+                toggleSource(tab: tab)
+                return
+            }
+            if req.inspector { inspectAfterBoot = true }
+            open(req.clean, history: history)
+            return
+        }
         if history == .push { remember(url) }
         // A NEW ATTEMPT RETIRES THE OLD VERDICT — except an error page, which IS
         // the report of the failure and must not clear it. Cleared on the
@@ -278,9 +308,10 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
     // the native twin of host-client's wirePageLocation), so the arrows walk
     // in-app places exactly as a browser's do; a traversal within the live
     // program restores the pair through __declareTravel (the popstate
-    // direction) and never reboots. `scroll` is stamped at departure and
-    // restored on traversal — the browser's per-entry scroll, manually, for
-    // the same reason the web host owns it there.
+    // direction) and never reboots. `id` names the entry to the program,
+    // which keeps where the user was scrolled on it (mac-boot, runtime
+    // scroll-places) and lands there on travel — the browser's history entries
+    // and the web host's place table, in the same division of labor.
     //
     // WHAT IT DOES NOT HOLD. Source mode is a way of LOOKING at the program you
     // are on, not a place you went (see `viewing`), and a reload is not travel
@@ -291,9 +322,31 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
     // The shape is the browser's, because it is the one everybody already has:
     // a cursor into a list; going somewhere new from the middle discards the
     // forward half.
-    struct Stop { var url: String; var loc = ""; var step = ""; var scroll = -1.0 }
+    struct Stop { var url: String; var loc = ""; var step = ""; var id = "" }
     private var trail: [Stop] = []
     private var trailAt = -1
+    // SOURCE MODE'S OWN PLACES. Source is a way of looking (above), but the
+    // Viewer has places of its own — a followed include, a library class — and
+    // Back should walk them while you read. So while viewing, the Viewer's
+    // pushes are entries after the program's, and the program's entry stands
+    // for the Viewer's opening file (`viewerOpening` holds what the Viewer says
+    // about it, so the program's own pair is untouched). Leaving Source drops
+    // the Viewer's entries: the trail walks programs again.
+    private var viewerOpening = Stop(url: "")
+    private var onSubjectStop: Bool { viewing && trailAt >= 0 && trail[trailAt].url == subjectURL }
+    private func dropViewerStops() {
+        let viewer = viewerOpening.url
+        guard !viewer.isEmpty else { return }
+        var at = trailAt
+        var kept: [Stop] = []
+        for (i, stop) in trail.enumerated() {
+            if stop.url == viewer { if i <= trailAt { at -= 1 } ; continue }
+            kept.append(stop)
+        }
+        trail = kept
+        trailAt = min(max(at, kept.isEmpty ? -1 : 0), kept.count - 1)
+        viewerOpening = Stop(url: "")
+    }
     /// A cross-program traversal's target pair, applied when the freshly
     /// booted program squares its initial entry (onHistorySquare below).
     private var pendingStop: Stop? = nil
@@ -327,10 +380,15 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
         // clicked again.
         refreshChrome()
         let stop = trail[trailAt]
-        if stop.url == currentURL && !viewing {
-            bridge.travel(loc: stop.loc, step: stop.step, scroll: stop.scroll)
+        if onSubjectStop {
+            bridge.travel(loc: viewerOpening.loc, step: viewerOpening.step, id: viewerOpening.id)
             return
         }
+        if stop.url == currentURL {
+            bridge.travel(loc: stop.loc, step: stop.step, id: stop.id)
+            return
+        }
+        if viewing { dropViewerStops() }
         viewing = false
         subjectURL = ""
         pendingStop = stop
@@ -397,13 +455,20 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
     /// open between means the page itself cannot load. Reset by `open()`.
     private var errorPageRetried = false
 
-    @objc func toggleViewer() {
+    @objc func toggleViewer() { toggleSource(tab: "") }
+
+    /// Source mode on or off; entering it opens the Viewer on `tab` ("" or
+    /// "reader" is the Viewer's own default, else "source" or "edit").
+    func toggleSource(tab: String) {
         if viewing {
+            dropViewerStops()
             viewing = false
             let back = subjectURL
             subjectURL = ""
             // `.stay`: coming back OUT of Source lands on the program you were
-            // already on. It is the same place, seen the usual way.
+            // already on. It is the same place, seen the usual way — and where
+            // you were in it: the entry rides the reboot like a traversal's.
+            if trailAt >= 0 && trail[trailAt].url == back { pendingStop = trail[trailAt] }
             if !back.isEmpty { open(back, history: .stay) }
         } else {
             guard !currentURL.isEmpty else { return }
@@ -417,20 +482,17 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
             subjectURL = currentURL
             viewing = true
             // The Viewer is a program like any other, told what to read through
-            // its env — the same `program=` the desktop's "View & Edit Source"
-            // passes. Relative to the viewer's own directory, as its transport
-            // base expects.
+            // what its host provides: `subject`, the value the desktop's viewer
+            // window provides its island, read with `hostProvided("subject")`.
+            // The boot URL's query is what this host provides (mac-boot.js).
+            // `docs` is empty: this app carries no docs, so the Viewer links no
+            // reference pages.
             // `.stay`: Source is a mode, not a destination (see `trail`).
-            //
-            // ⚠ `?program=` IS A RESERVED REQUEST KEY (reqtypes.ts REQ.PROGRAM:
-            // "the compiled program as JSON"). It is the Viewer's env key — the
-            // desktop passes the same one through island env — and it is safe
-            // HERE only because this URL is a `file:` URL inside the app bundle,
-            // which no server ever classifies. Point Source mode at an http
-            // viewer URL and requestType would answer PROGRAM: the server would
-            // return viewer.declare COMPILED instead of running it.
-            open(Bridge.platformBase() + "library/platform-apps/viewer/viewer.declare?program=" + (subjectURL.addingPercentEncoding(
-                withAllowedCharacters: .urlQueryAllowed) ?? subjectURL), history: .stay)
+            // A tab other than the Viewer's default is its starting location,
+            // the fragment a deep link carries.
+            let at = tab == "" || tab == "reader" ? "" : "#" + tab
+            open(Bridge.platformBase() + "library/platform-apps/viewer/viewer.declare?docs=&subject=" + (subjectURL.addingPercentEncoding(
+                withAllowedCharacters: .urlQueryAllowed) ?? subjectURL) + at, history: .stay)
         }
         refreshChrome()
     }
@@ -661,5 +723,38 @@ final class ProgramWindow: NSObject, NSWindowDelegate {
         let f = window.frame
         return SessionStore.Entry(url: currentURL, x: f.origin.x, y: f.origin.y,
                                   w: f.width, h: f.height)
+    }
+}
+
+
+/// A program URL as a browser would write it, read for this app. The platform's
+/// request keys (compiler/src/reqtypes.ts) and compile modifiers (flags.ts) ask
+/// the dev server for a representation or a build of the program; here:
+///   · `viewer` (with a tab, or none for the reader) opens Source mode, and
+///     `inspector` opens the Inspector over the program — what they mean here;
+///   · `build`, `extract`, `program`, `file`, `segments` name artifacts this app
+///     does not make or serves itself (the Viewer's reads, mac-boot
+///     readerRequest), and `render`, `crawler`, `kernel` address a host that
+///     decides those itself — taken out, and the program runs.
+/// Every other key stays: the values this host provides the program.
+struct ProgramRequest {
+    let clean: String
+    let viewer: String?
+    let inspector: Bool
+
+    static let reserved: Set<String> = ["viewer", "inspector", "build", "extract", "program", "file", "segments", "render", "crawler", "kernel"]
+
+    init(_ url: String) {
+        guard url.contains("?"), var comps = URLComponents(string: url), let items = comps.queryItems,
+              items.contains(where: { ProgramRequest.reserved.contains($0.name) }) else {
+            clean = url; viewer = nil; inspector = false
+            return
+        }
+        let v = items.first(where: { $0.name == "viewer" })
+        viewer = v.map { ($0.value ?? "").isEmpty ? "reader" : $0.value! }
+        inspector = items.contains(where: { $0.name == "inspector" })
+        let kept = items.filter { !ProgramRequest.reserved.contains($0.name) }
+        comps.queryItems = kept.isEmpty ? nil : kept
+        clean = comps.string ?? url
     }
 }

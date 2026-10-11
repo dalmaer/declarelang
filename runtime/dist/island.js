@@ -7,6 +7,7 @@ import { View, fireEvent } from "./view.js";
 import { declarationsOf, defineAttributes, localProvision } from "./attributes.js";
 import { observe } from "./reactive.js";
 import { BoundaryValues } from "./boundary.js";
+import { scrollPlaces, holdScrollPlaces } from "./scroll-places.js";
 /** The value an island provides under `name` — the `provided("name")` read AT
  *  the island: its own provision or declared slot first, then its ancestors.
  *  Undefined when nothing provides it. Tracked (the readers of a provision
@@ -144,6 +145,43 @@ function syncNamed(read, put, drop, label) {
     // is compared here, name by name, so identical values deliver nothing
     return observe(() => { const r = read(); return Object.keys(r).sort().flatMap((k) => [k, r[k]]); }, () => apply(read()), label);
 }
+/** An embedded app's navigation verbs, answered by the island that hosts it
+ *  when that island declares `onNavigate` — the hosting program decides what
+ *  a link inside it means (a desktop opens a window) — and by `fallback`, the
+ *  page or the window, when it does not. `resolve` makes an address absolute
+ *  the way the host's own navigation would. A host hands the result to the
+ *  tenant as its services (provideHostServices). */
+export function islandNavigation(island, resolve, fallback) {
+    const routed = (u, newWindow) => {
+        if (island === null || typeof island.onNavigate !== "function")
+            return false;
+        fireEvent(island, "navigate", navigationOf(resolve(u), newWindow));
+        return true;
+    };
+    return {
+        navigate: (u) => { if (!routed(u, false))
+            fallback.navigate(u); },
+        openWindow: (u) => { if (!routed(u, true))
+            fallback.openWindow(u); },
+    };
+}
+function navigationOf(to, newWindow) {
+    let program = "", location = "";
+    try {
+        const u = new URL(to);
+        location = decodeURIComponent(u.hash.slice(1));
+        const path = (u.origin === "null" ? u.protocol + "//" : u.origin) + u.pathname; // a file: URL's origin is "null"
+        if (u.pathname.endsWith(".declare"))
+            program = path.slice(0, -".declare".length);
+        else if (u.pathname.endsWith("/")) {
+            const dir = u.pathname.split("/").filter((s) => s !== "").pop();
+            if (dir !== undefined)
+                program = path + dir;
+        }
+    }
+    catch { /* not a URL: it names no program */ }
+    return { to, program, location, newWindow };
+}
 /** Link an Island to a DECLARE tenant (host-client renderChild, the canvas
  *  island service, the mac runner). DOWN: every name on the island's
  *  `provides` list, resolved at the island, is provided to the tenant (what
@@ -153,7 +191,7 @@ function syncNamed(read, put, drop, label) {
  *  both ways. Build the tenant with `provides: islandProvisions(island)` so
  *  its first evaluation already sees what the host provides, and link it
  *  before its first settle. Returns the unlink. */
-export function linkIslandTenant(island, tenant) {
+export function linkIslandTenant(island, tenant, box = null) {
     const undo = [];
     undo.push(syncNamed(() => islandProvisions(island), (n, v) => tenant.provide(n, v), (n) => tenant.provide(n, undefined), "link:provides"));
     undo.push(syncNamed(() => {
@@ -169,6 +207,42 @@ export function linkIslandTenant(island, tenant) {
             }
         return out;
     }, (n, v) => island.exposedValues.write(n, v), (n) => island.exposedValues.clear(n), "link:exposes"));
+    // WHERE THE TENANT IS — an island that declares `location` (AppIsland)
+    // carries its tenant's location both ways. The host's value seeds the
+    // tenant before its first settle, and a later write sends it there (as a
+    // follow, so the tenant's onFollow applies); the tenant's own navigation is
+    // reflected back up. What the host does with it — show it, keep it, walk it
+    // back — is the host's: Back across an island is the host's to give.
+    const host = island;
+    if (typeof host.location === "string") {
+        if (host.location !== "" && tenant.location !== host.location)
+            tenant.location = host.location;
+        undo.push(observe(() => tenant.location, (v) => { if (host.location !== v)
+            host.location = v; }, "link:location-up"));
+        undo.push(observe(() => host.location, (v) => { if (tenant.location !== v)
+            tenant.follow("#" + v); }, "link:location-down"));
+    }
+    // WHERE IN IT the tenant was — its panes' scroll by path and its box's own
+    // (runtime scroll-places) — published as `departedPlace` the moment it
+    // leaves a location (its first location write of a settle, App.$departing),
+    // and landed when the host sets `place` (after the move it pairs with has
+    // settled, as a page's Back lands). Opaque to the host: it keeps the value
+    // with its own record of where the tenant was, and hands it back.
+    if (typeof host.departedPlace === "string" && typeof host.place === "string") {
+        tenant.$onDepart = () => {
+            host.departedPlace = JSON.stringify({ ...(box !== null ? { s: box.scrollY() } : {}), v: scrollPlaces(tenant) });
+        };
+        undo.push(() => { tenant.$onDepart = null; });
+        undo.push(observe(() => host.place, (v) => {
+            if (v === "")
+                return;
+            try {
+                holdScrollPlaces(tenant, JSON.parse(v), box !== null ? (y) => box.scrollTo(y) : null);
+            }
+            catch { /* not a place */ }
+            host.place = "";
+        }, "link:place"));
+    }
     // verbs, both directions
     island.tenantSink = {
         message: (topic, payload) => fireEvent(tenant, "post", { topic, payload }),

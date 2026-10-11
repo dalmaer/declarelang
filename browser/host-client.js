@@ -16,7 +16,7 @@
 // Relative import so the whole tree is subpath-portable (GitHub Pages project
 // pages live under /<repo>/): resolved against THIS module's URL, not the page's.
 import { installLiveEdit } from "./live-edit.js";
-import { mapUrl, buildProgram, mountApp, fontsReady, settle, reflectAppName, DomBackend, CanvasBackend, provideTransport, observe, isEmbedded, provideHostServices, setAppAssetBase, setAppDataBase, kernelReady } from "../runtime/dist/host-api.js";
+import { mapUrl, buildProgram, mountApp, fontsReady, settle, reflectAppName, DomBackend, CanvasBackend, provideTransport, observe, isEmbedded, provideHostServices, setAppAssetBase, setAppDataBase, kernelReady, scrollPlaces, holdScrollPlaces, dropScrollPlaces } from "../runtime/dist/host-api.js";
 import { wireIslands } from "./host-islands.js";
 
 // A compiled program arrives as ONE thing: `program`, the parsed, checked,
@@ -206,11 +206,13 @@ export async function bootHost(cfg) {
   let mirrored = app.location;                          // what the entry currently reflects (seeded above)
   let mirroredW = app.waypoint;
   // The entry's state object. Namespaced under `declare` so nothing else's
-  // pushState collides; `w` is the waypoint, `s` a scroll snapshot stamped at
-  // DEPARTURE (below) so a traversal can land where the user left. Coordinates,
-  // never data: past ~64KB the contract is being violated and we say so —
-  // loudly, before some browser's serialization limit says it cryptically.
-  const entryState = (w, s) => ({ declare: s == null ? { w } : { w, s } });
+  // pushState collides; `w` is the waypoint, `id` names the entry in the place
+  // table below. Coordinates, never data: past ~64KB the contract is being
+  // violated and we say so — loudly, before some browser's serialization
+  // limit says it cryptically.
+  const entryState = (w, id) => ({ declare: { w, id } });
+  const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  let entryId = typeof history.state?.declare?.id === "string" ? history.state.declare.id : newId();
   const guardStep = () => {
     if (app.waypoint.length > 64 * 1024)
       console.error("[Declare] waypoint exceeds 64KB — a waypoint is coordinates in the session, not the session's data; derive the data from it instead (guide: URLs, links and history)");
@@ -227,39 +229,55 @@ export async function bootHost(cfg) {
   // agrees with the app, so there is nothing left for the mirror to do.
   const syncByReplace = () => {
     const url = urlFor(app.location);
-    if (location.pathname + location.search + location.hash !== url || stepOf() !== app.waypoint)
-      history.replaceState(entryState(app.waypoint, history.state?.declare?.s), "", url);   // the scroll stamp survives the squaring
+    if (location.pathname + location.search + location.hash !== url || stepOf() !== app.waypoint || history.state?.declare?.id !== entryId)
+      history.replaceState(entryState(app.waypoint, entryId), "", url);
     mirrored = app.location;
     mirroredW = app.waypoint;
     if (app.pendingHistoryVerb !== undefined) app.pendingHistoryVerb = "push";
   };
   syncByReplace();
-  // Scroll is PER-ENTRY, manually: the browser's own restoration fires before
-  // the traversal's settle (wrong extent), so the host owns it — each entry is
-  // stamped with its scroll at departure (the push below) and at pagehide, and
-  // restored after the TRAVERSAL's settle. The pagehide stamp serves leaving
-  // the site and coming Back (a cross-document traversal re-creates the
-  // document and reads it at boot); it is measurably NOT what a reload sees —
-  // Chrome discards a replaceState issued from pagehide when the navigation is
-  // a reload. Anchor arrivals keep the reveal instead: a stored `@name` intent
-  // is the truer landing than a pixel offset against re-derived content.
+  // WHERE THE USER WAS, per entry (runtime scroll-places has the division of
+  // labor): the page's scroll and every scrolling pane's, noted at the moment
+  // the app leaves an entry and landed by the runtime when a traversal comes
+  // back to it. The browser's own restoration fires before the traversal's
+  // settle (wrong extent), so the host owns it. The table is keyed by the
+  // entry's id and kept in sessionStorage, so leaving the site (or reloading)
+  // and coming Back finds it. Anchor arrivals keep the reveal instead: a
+  // stored `@name` intent is the truer landing than a pixel offset.
   if ("scrollRestoration" in history) history.scrollRestoration = "manual";
-  const stampScroll = () => {
-    history.replaceState(entryState(stepOf(), scrollY), "", location.pathname + location.search + location.hash);
+  const PLACES = "declare.places";
+  let places = {};
+  try { places = JSON.parse(sessionStorage.getItem(PLACES) || "{}") || {}; } catch { places = {}; }
+  const livePlace = () => ({ s: scrollY, v: scrollPlaces(app) });
+  const note = (id, place) => {
+    delete places[id];
+    places[id] = place;                                 // newest last, so the cap drops the oldest
+    const ids = Object.keys(places);
+    for (let i = 0; i < ids.length - 100; i++) delete places[ids[i]];
   };
-  addEventListener("pagehide", stampScroll);
-  const restoreScroll = (s) => {
-    if (typeof s !== "number") return;
-    // two frames: the traversal's writes settle and paint first, so the extent
-    // the scroll lands against is the restored entry's, not the departed one's
-    requestAnimationFrame(() => requestAnimationFrame(() => { if (!stopped) scrollTo(0, s); }));
+  const keep = () => {
+    note(entryId, livePlace());
+    try { sessionStorage.setItem(PLACES, JSON.stringify(places)); } catch { /* storage refused: in-page Back still works */ }
   };
+  addEventListener("pagehide", keep);
+  // The app's first location or waypoint write of a settle is the moment it
+  // leaves this entry; the place is noted then, before anything later in that
+  // handler moves the page (App.$departing).
+  let departing = null;
+  app.$onDepart = () => { departing = livePlace(); };
+  const rootTo = (y) => { scrollTo(0, y); return scrollY; };
+  const land = (id) => { const p = places[id]; if (p) holdScrollPlaces(app, p, rootTo); };
   // Only a TRAVERSAL lands where the user left the entry. An arrival lands at
   // the top, because the top is what the URL says — the same rule as the step.
   // (An `@name` reveal still wins: that one IS in the URL.)
-  if (traversed && (!seedFrag || seedFrag.indexOf("@") < 0)) restoreScroll(history.state?.declare?.s);
+  if (traversed && (!seedFrag || seedFrag.indexOf("@") < 0)) land(entryId);
   const onPop = (e) => {
     if (stopped) return;
+    // The entry just left, noted before anything changes on screen: popstate
+    // arrives with the browser already on the new entry, the page still the old.
+    note(entryId, livePlace());
+    dropScrollPlaces(app);
+    entryId = typeof e.state?.declare?.id === "string" ? e.state.declare.id : newId();
     // A TRAVERSAL arrival restores the PAIR: the step first (written directly —
     // a waypoint has no door to guard, since it can never arrive from outside
     // the app; every restored value is one this app wrote earlier), then the
@@ -273,21 +291,28 @@ export async function bootHost(cfg) {
     if (typeof app.follow === "function") app.follow("#" + ref);
     else app.location = ref;
     syncByReplace();
-    if (ref.indexOf("@") < 0) restoreScroll(e.state?.declare?.s);
+    departing = null;
+    if (ref.indexOf("@") < 0) land(entryId);
   };
   addEventListener("popstate", onPop);
   // A held reveal intent dies on the user's first gesture (location.md
   // §0.5.5): wheel/touch are unambiguously the user's; the reveal's own
   // programmatic scroll cannot self-cancel because a LANDED reveal already
-  // cleared the intent synchronously, before its scroll event dispatches.
-  const onUserScroll = () => { if (!stopped && typeof app.$cancelReveal === "function") app.$cancelReveal(); };
+  // cleared the intent synchronously, before its scroll event dispatches. A
+  // held place landing dies the same way.
+  const onUserScroll = () => {
+    if (stopped) return;
+    dropScrollPlaces(app);
+    if (typeof app.$cancelReveal === "function") app.$cancelReveal();
+  };
   addEventListener("wheel", onUserScroll, { passive: true });
   addEventListener("touchstart", onUserScroll, { passive: true });
   undo.push(() => {
     removeEventListener("popstate", onPop);
-    removeEventListener("pagehide", stampScroll);
+    removeEventListener("pagehide", keep);
     removeEventListener("wheel", onUserScroll);
     removeEventListener("touchstart", onUserScroll);
+    app.$onDepart = null;
   });
   // app.appName → document.title, the mirror-per-settle discipline made
   // literal: `observe` runs the mirror at the close of any settle that changed
@@ -322,14 +347,16 @@ export async function bootHost(cfg) {
       const verb = app.pendingHistoryVerb === "replace" ? "replace" : "push";
       if (app.pendingHistoryVerb !== undefined) app.pendingHistoryVerb = "push";
       guardStep();
-      if (verb === "replace") history.replaceState(entryState(app.waypoint), "", urlFor(app.location));
+      dropScrollPlaces(app);                            // the app moved on: no late landing
+      if (verb === "replace") history.replaceState(entryState(app.waypoint, entryId), "", urlFor(app.location));
       else {
-        // stamp the OUTGOING entry with its own pair and the departure scroll,
-        // so Back can land the user exactly where they left it…
-        history.replaceState(entryState(mirroredW, scrollY), "", urlFor(mirrored));
-        // …then mint the new one
-        history.pushState(entryState(app.waypoint), "", urlFor(app.location));
+        // note where the user left the OUTGOING entry — as it was when the app
+        // started to leave (departing), else as it is — then mint the new one
+        note(entryId, departing ?? livePlace());
+        entryId = newId();
+        history.pushState(entryState(app.waypoint, entryId), "", urlFor(app.location));
       }
+      departing = null;
       mirrored = app.location;
       mirroredW = app.waypoint;
     }
@@ -360,6 +387,8 @@ export async function bootHost(cfg) {
     navigate: (u) => { if (!stopped) location.href = new URL(u, DISTRO_ROOT).href; },
     openWindow: (u) => { if (!stopped) window.open(new URL(u, DISTRO_ROOT).href, "_blank"); },
   };
+  // how an address resolves here — what an island's onNavigate is handed
+  const resolveNav = (u) => new URL(u, DISTRO_ROOT).href;
   provideHostServices(app, embedded ? navServices : {
     ...navServices,
     // app.inspect(slot) — open the Inspector on an embedded app (or on this one
@@ -379,7 +408,7 @@ export async function bootHost(cfg) {
   // registered for last below: everything they reach must exist before the
   // discovery replay fires.
   const islands = wireIslands({
-    app, host, cfg, seeds, compile: () => compile, navServices, isStopped: () => stopped, undo,
+    app, host, cfg, seeds, compile: () => compile, navServices, resolveNav, isStopped: () => stopped, undo,
     live: () => live, hasProgram, buildApp,
   });
 

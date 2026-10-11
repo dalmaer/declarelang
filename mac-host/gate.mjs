@@ -16,18 +16,28 @@
 //
 // The app is navigated IN PROCESS (`__declareBoot`) rather than relaunched, so
 // a whole corpus costs one launch — its own, when no controllable host is
-// running (window at the back, light appearance, closed at the end). Programs
-// come from main's dev server (app.mjs ORIGIN).
+// running (window at the back, light appearance, closed at the end).
+//
+// WHERE THE PROGRAMS COME FROM. The gate measures the tree it sits in, and
+// serves it itself. The host opens most programs from disk (`file:`), the way
+// a person opens a .declare file; the few in OVER_HTTP it opens from a plain
+// static server the gate starts — files and 404s, no compiler — because the
+// host compiles for itself and must find includes and assets by relative
+// address there too. Chrome, the reference side, loads every program from a
+// Declare server the gate starts on the same tree.
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
-import { CTL_IN, CTL_OUT, APP_NAME, ORIGIN, hostBinary } from "./app.mjs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync, statSync } from "node:fs";
+import { CTL_IN, CTL_OUT, APP_NAME, hostBinary } from "./app.mjs";
 import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { channel, openLane } from "./channel.mjs";
+import http from "node:http";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { createDeclareServer } from "../server/create.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(HERE, "..");
 const BASELINE = path.join(HERE, "gate-baseline.json");
 const IN = CTL_IN, OUT = CTL_OUT;
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
@@ -80,6 +90,40 @@ const CORPUS = [
   "apps/desktop/desktop.declare",
   "apps/lzx-dashboard/lzx-dashboard.declare",
 ];
+
+/** The programs the host opens over HTTP rather than from disk: one with no
+ *  includes, one that includes a sibling source, and one that hosts other
+ *  programs in islands. */
+const OVER_HTTP = new Set(["calendar", "lzx-dashboard", "desktop"]);
+
+/** Listen on a free local port; resolves to the origin. */
+async function listen(handler) {
+  const s = http.createServer(handler);
+  await new Promise((r) => s.listen(0, "127.0.0.1", r));
+  s.unref();
+  return `http://127.0.0.1:${s.address().port}`;
+}
+const declareServer = createDeclareServer({
+  mountSpecs: [{ prefix: "/", dir: ROOT }, { prefix: "/declare/", dir: ROOT, platform: true }],
+  mode: "distro",
+});
+const WEB = await listen(declareServer.handler);
+// a static host and nothing more: a file, a directory's index.html, or 404
+const STATIC = await listen((req, res) => {
+  let fp;
+  try { fp = path.join(ROOT, decodeURIComponent(new URL(req.url, "http://x").pathname)); }
+  catch { res.writeHead(400); return res.end(); }
+  if (fp !== ROOT && !fp.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
+  try {
+    if (statSync(fp).isDirectory()) fp = path.join(fp, "index.html");
+    res.writeHead(200);
+    res.end(readFileSync(fp));
+  } catch { res.writeHead(404); res.end(); }
+});
+/** Where the host opens `prog` from. */
+const hostUrl = (prog) => OVER_HTTP.has(path.basename(prog, ".declare"))
+  ? `${STATIC}/${prog}` : pathToFileURL(path.join(ROOT, prog)).href;
+const via = (prog) => OVER_HTTP.has(path.basename(prog, ".declare")) ? "http" : "file";
 
 const args = process.argv.slice(2);
 const bless = args.includes("--bless");
@@ -159,7 +203,7 @@ async function ensureHost() {
   const bin = hostBinary();
   if (bin === null) throw new Error("no native host is built — npm run build:mac");
   ownHost = spawn(bin, [], { detached: true, stdio: "ignore",
-    env: { ...process.env, DECLARE_CONTROL: "1", DECLARE_APPEARANCE: "light", DECLARE_URL: `${ORIGIN}/${CORPUS[0]}` } });
+    env: { ...process.env, DECLARE_CONTROL: "1", DECLARE_APPEARANCE: "light", DECLARE_URL: hostUrl(CORPUS[0]) } });
   for (let i = 0; i < 150; i++) { await sleep(0.1); try { if ((await ctlQuick("ping")) === "ok") break; } catch { /* booting */ } }
   await ctl("waitload 30");
   await ctl("occlusion ignore");
@@ -188,13 +232,13 @@ const execFileP = promisify(execFile);
  *  window with Chrome's DOM rendering. */
 async function measure(prog, send, windowId, outDir, booted = false) {
   const name = path.basename(prog, ".declare");
-  const url = `${ORIGIN}/${prog}`;
+  const url = `${WEB}/${prog}`;
   // navigate the running app, in process — then wait for the program itself,
   // not for a guess at how long it takes (awaitProgram: the cold-run race)
   let before = NaN, loaded = "ok";
   if (!booted) {
     before = await layerCount(send);
-    await send(`eval __declareBoot(${JSON.stringify(url + "?render=mac")}); 'ok'`);
+    await send(`eval __declareBoot(${JSON.stringify(hostUrl(prog) + "?render=mac")}); 'ok'`);
     // the host's own verdict: `ok` at the new program's first frame, or its error
     // (__declareBoot announces the load before eval returns, so this is this load's)
     loaded = await send("waitload 30", 35000);
@@ -209,7 +253,7 @@ async function measure(prog, send, windowId, outDir, booted = false) {
     if (m) { differing = +m[1]; structural = +m[2]; } else err = "no number";
     scheme = out.match(/\b(dark|light)\b/)?.[1] ?? null;
   } catch (e) { err = (e.message || String(e)).slice(0, 60); }
-  return { name, differing, structural, err, scheme };
+  return { name, via: via(prog), differing, structural, err, scheme };
 }
 
 // Each run captures into directories of its own: /tmp/fidelity is shared by
@@ -237,13 +281,13 @@ try {
       await Promise.all(Array.from({ length: Math.min(LANES, todo.length) }, async (_, k) => {
         let i = next++;
         // named for this run, so a lane a crashed run left open never blocks the next
-        const lane = await openLane(`gate${process.pid}-${k + 1}`, `${ORIGIN}/${todo[i]}?render=mac`, main);
+        const lane = await openLane(`gate${process.pid}-${k + 1}`, `${hostUrl(todo[i])}?render=mac`, main);
         lanes.push(lane);
         await lane.send("attach gate");
         const v = await lane.send("waitload 30", 35000);
         const out = `${OUT_BASE}-${k + 1}`;
         results[i] = v === "ok" ? await measure(todo[i], lane.send, lane.window, out, true)
-          : { name: path.basename(todo[i], ".declare"), differing: NaN, structural: NaN, err: `load: ${v}`.slice(0, 60), scheme: null };
+          : { name: path.basename(todo[i], ".declare"), via: via(todo[i]), differing: NaN, structural: NaN, err: `load: ${v}`.slice(0, 60), scheme: null };
         while (next < todo.length) { i = next++; results[i] = await measure(todo[i], lane.send, lane.window, out); }
       }));
     } finally { await cleanup(lanes); }
@@ -261,8 +305,8 @@ for (const r of results) {
 // ── report ──────────────────────────────────────────────────────────────────
 const TOL = 0.75;                        // %-points of regression tolerated
 let failed = 0, fresh = 0;
-console.log("\n  program            differing   structural      vs baseline");
-console.log("  " + "─".repeat(62));
+console.log("\n  program            via   differing   structural      vs baseline");
+console.log("  " + "─".repeat(68));
 for (const r of rows) {
   const b = base[r.name];
   let verdict;
@@ -275,7 +319,7 @@ for (const r of rows) {
     else if (d < -TOL) verdict = `improved ${sign}${d.toFixed(2)}pt`;
     else verdict = `ok (${sign}${d.toFixed(2)}pt)`;
   }
-  console.log(`  ${r.name.padEnd(18)} ${String(r.differing).padStart(7)}%  ${String(r.structural).padStart(8)}%   ${verdict}`);
+  console.log(`  ${r.name.padEnd(18)} ${r.via.padEnd(5)} ${String(r.differing).padStart(7)}%  ${String(r.structural).padStart(8)}%   ${verdict}`);
 }
 // PROGRAMS THAT RENDER A CLOCK. The date itself cancels — both sides render
 // the same instant, so the native-vs-DOM residual is what is measured and a

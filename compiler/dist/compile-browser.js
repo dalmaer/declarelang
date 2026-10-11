@@ -24,9 +24,10 @@ import { searchIncludePath } from "./include-search.js";
 // a real flag here, identical to Node, instead of a silent no-op.
 export { provideLib } from "./typecheck.js";
 // Re-exported so the browser bundle also carries the source-viewer highlighter
-// (the same highlight() the dev server runs for `?view=reader` / `?segments`). It has
-// no dependencies, so it adds negligible weight — browser/boot-source.js reads it here.
-export { highlight } from "./highlight.js";
+// (the same highlight() the dev server runs for `?view=reader` / `?segments`), and the
+// line count and class index it reports beside it. They have no dependencies, so they add negligible
+// weight — the Mac host's reader reads them here.
+export { highlight, programIndex } from "./highlight.js";
 // The parser, for a host that needs to READ a Declare snippet at run time —
 // the Inspector's evaluator (runtime/src/inspect-service.ts provideEvalParser)
 // takes it from here when the Inspector opens, so no boot bundle carries one.

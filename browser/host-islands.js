@@ -6,7 +6,7 @@
 // capability, compiler/src/capabilities.ts); there, wireIslands is a stand-in
 // whose methods do nothing.
 
-import { mapUrl, renderProgramAsync, afterSettle, disposeApp, DomBackend, observe, provideHostServices, onIslandSlot, setAppAssetBase, linkIslandTenant, islandProvisions, mountEmbeddedApp, kernelReady } from "../runtime/dist/host-api.js";
+import { mapUrl, renderProgramAsync, afterSettle, disposeApp, DomBackend, observe, provideHostServices, onIslandSlot, setAppAssetBase, assetBaseFor, linkIslandTenant, islandProvisions, islandNavigation, mountEmbeddedApp, kernelReady } from "../runtime/dist/host-api.js";
 
 /** Wire the islands of `app`, the app bootHost just mounted in `host`. Returns
  *  `renderChild` (a live edit re-renders an island through it), `retry` (the
@@ -14,7 +14,7 @@ import { mapUrl, renderProgramAsync, afterSettle, disposeApp, DomBackend, observ
  *  (register for island slots — called last, since the replay fires
  *  synchronously into everything above it) and `dispose` (the page's
  *  teardown, after its wiring is undone). */
-export function wireIslands({ app, host, cfg, seeds, compile, navServices, isStopped, undo, live, hasProgram, buildApp }) {
+export function wireIslands({ app, host, cfg, seeds, compile, navServices, resolveNav, isStopped, undo, live, hasProgram, buildApp }) {
   // Render an ALREADY-COMPILED program as an embedded child app inside <box>. The
   // box lives inside THIS app's marked tree, so the child auto-detects it is embedded
   // (runtime isEmbedded): it sizes to the box, scopes focus/pointer, never touches
@@ -28,12 +28,24 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
   // has no path of its own and the host states it (the Viewer knows the file it
   // is showing). Null leaves the page default in force. The data twin of this
   // is cfg.dataBase above — same rule, different seam.
-  const childAssetBase = (name) => {
-    if (!name.startsWith("__") && cfg.demoBase) {
-      try { return new URL(name + ".declare", new URL(cfg.demoBase, document.baseURI)).href; } catch {}
+  const childAssetBase = (name, dir = null) => {
+    if (!name.startsWith("__") && (dir || cfg.demoBase)) {
+      try { return new URL(name + ".declare", new URL(dir || cfg.demoBase, document.baseURI)).href; } catch {}
     }
     if (cfg.assetBase) { try { return new URL(cfg.assetBase, document.baseURI).href; } catch {} }
     return null;
+  };
+
+  // Where an island's program lives: beside the app the island sits in. The
+  // page's own islands use the page's demo folder (cfg.demoBase); an island
+  // inside an embedded app — a docs page's live example, with docs hosted in a
+  // desktop window — uses that app's own `demos/`, beside its program. Null
+  // means the page's.
+  const demoDirFor = (view) => {
+    const root = view ? view.root : null;
+    if (root == null || root === app) return null;
+    const base = assetBaseFor(root);
+    try { return base ? new URL("demos/", base).href : null; } catch { return null; }
   };
 
   async function renderChild(box, compiled, name) {
@@ -62,11 +74,13 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
       // but unlinked, said loudly — a broken link must not take the render.
       const islView = islandViewOf.get(box);
       const childOpts = {
-        assetBase: childAssetBase(name || ""),
+        assetBase: childAssetBase(name || "", demoDirFor(islandViewOf.get(box))),
         provides: islView && typeof islView.post === "function" ? islandProvisions(islView) : undefined,
         beforeMount: (app) => {
           if (!islView || typeof islView.post !== "function") return;
-          try { childUndo.push(linkIslandTenant(islView, app)); }
+          // the box is the tenant's viewport: its scroll is where a page app scrolls
+          const boxScroll = { scrollY: () => box.scrollTop, scrollTo: (y) => { box.scrollTop = y; return box.scrollTop; } };
+          try { childUndo.push(linkIslandTenant(islView, app, boxScroll)); }
           catch (e) { console.error(`[Declare] ${name || "island"}: ${e.message}`); }
         },
       };
@@ -75,10 +89,11 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
       if (childApp) {
         childApp.demoSources = seeds;                     // populate a nested copy's own editors
         // The child's own wiring, by observation (its lifetime is known HERE):
-        //  • verbs — a child's navigate()/openWindow() were serviced by nobody
-        //    before (every such link was dead); page-level nav is the right
-        //    meaning for a preview's outbound link.
-        provideHostServices(childApp, navServices);
+        //  • verbs — a child's navigate()/openWindow() go to its island first:
+        //    an island that declares onNavigate decides what a link inside it
+        //    means (a desktop opens a window); otherwise the page navigates,
+        //    the right meaning for a preview's outbound link.
+        provideHostServices(childApp, islandNavigation(islandViewOf.get(box) ?? null, resolveNav, navServices));
         //  • appName ↑ childName — the island's name mirror (was a 60Hz page
         //    scan in dom-backend; now one observe per mounted child).
         const view = islandViewOf.get(box);
@@ -107,15 +122,19 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
   // result is cached back into `seeds` so retries, a copied editor, and a nested child
   // app all reuse it. Returns null on a failed/absent fetch so the box stays eligible
   // and the next rAF tick retries (a truthy "" only when there's simply no source).
-  async function sourceFor(name) {
-    if (seeds[name] != null) return seeds[name];
-    if (!cfg.demoBase) return "";
+  // A program's source: the page's seed, or fetched. "" when there is no such
+  // program (the server said so) — final; null when the fetch itself failed,
+  // which a retry may get past.
+  async function sourceFor(name, dir = null) {
+    if (dir == null && seeds[name] != null) return seeds[name];
+    if (!dir && !cfg.demoBase) return "";
     try {
-      const base = new URL(cfg.demoBase, document.baseURI);   // demoBase may be relative (dev <base>) or absolute (static host)
+      const base = new URL(dir || cfg.demoBase, document.baseURI);   // demoBase may be relative (dev <base>) or absolute (static host)
       // through the URL map: a package that ships a program's source as a file
       // (ship [ files = […] ]) serves it from its own folder
       const res = await fetch(mapUrl(new URL(name + ".declare", base).href), { cache: "no-cache" });
-      if (res.ok) return (seeds[name] = await res.text());
+      if (res.ok) { const text = await res.text(); if (dir == null) seeds[name] = text; return text; }
+      return "";
     } catch {}
     return null;
   }
@@ -142,7 +161,7 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
     const name = box.dataset.declareSlot.slice(4);
     if (box.dataset.wired || box.dataset.wiring) return;
     box.dataset.wiring = "1";                              // in-flight: one compile at a time
-    const { compiled, unseeded } = await resolveCompiled(name);
+    const { compiled, unseeded } = await resolveCompiled(name, demoDirFor(islandViewOf.get(box)));
     delete box.dataset.wiring;
     if (unseeded) return;
     if (!hasProgram(compiled)) { deferPreview({ el: box }); return; }  // compiler not warm / fetch missed — retry when it lands
@@ -156,12 +175,12 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
   // LIVE-EDIT channels (__raw__, __page__) with nothing published yet — they
   // mount only when an edit arrives through watchLive, never by fetch.
   const unbuilt = new Set();                             // islands reported once as not built
-  async function resolveCompiled(name) {
+  async function resolveCompiled(name, dir = null) {
     let compiled = null;
     // The VALIDATED prewarm tier, same as the page boot's (boot-uniform wires
     // it in): a slot whose program is on the committed prewarm list mounts
     // with no compiler and no compile; null (absent/stale) falls through.
-    if (compiled == null && typeof cfg.prewarm === "function") {
+    if (compiled == null && dir == null && typeof cfg.prewarm === "function") {
       try { compiled = await cfg.prewarm(name); } catch {}
     }
     if (compiled == null) {
@@ -177,8 +196,14 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
         }
         return { compiled: null, unseeded: true };
       }
-      const src = await sourceFor(name);                  // seed, or fetched on demand
-      compiled = src == null ? null : await compile()(src, name); // src null (fetch failed) ⇒ retry via defer; compiled AS the demo's own file (its includes resolve beside it)
+      const src = await sourceFor(name, dir);             // seed, or fetched on demand
+      // no such program: said once, and the box stays empty — a retry would
+      // only ask again for what the server already said is not there
+      if (src === "") {
+        if (!unbuilt.has(name)) { unbuilt.add(name); console.error(`[Declare] island '${name}': no such program (${dir || cfg.demoBase || "no demo folder"})`); }
+        return { compiled: null, unseeded: true };
+      }
+      compiled = src == null ? null : await compile()(src, name, dir); // src null (fetch failed) ⇒ retry via defer; compiled AS the demo's own file (its includes resolve beside it)
     }
     return { compiled, unseeded: false };
   }
@@ -203,7 +228,7 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
     if (view.__childApp) return;                                  // already mounted: the link carries changes
     if (canvasWiring.has(view)) return;
     canvasWiring.add(view);
-    const { compiled, unseeded } = await resolveCompiled(name);
+    const { compiled, unseeded } = await resolveCompiled(name, demoDirFor(view));
     canvasWiring.delete(view);
     if (unseeded || isStopped()) return;
     if (!hasProgram(compiled)) { deferPreview({ view, slot: slotStr }); return; }
@@ -211,7 +236,7 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
     try {
       await kernelReady();
       const childApp = buildApp(compiled, { provides: typeof view.post === "function" ? islandProvisions(view) : undefined });
-      const base = childAssetBase(name || "");
+      const base = childAssetBase(name || "", demoDirFor(view));
       // ASSET base only — deliberately no per-app DATA base: an island child's
       // relative data urls resolve through the PAGE's transport, its host's
       // space (the desktop passes the viewer `program=desktop.declare`, a path
@@ -228,7 +253,7 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, isSto
       }
       mountEmbeddedApp(childApp, view);
       childApp.demoSources = seeds;
-      provideHostServices(childApp, navServices);
+      provideHostServices(childApp, islandNavigation(view, resolveNav, navServices));
       view.__childApp = childApp;
     } catch (e) {
       console.error(`[Declare] canvas island '${name || "?"}' failed to mount`, e);

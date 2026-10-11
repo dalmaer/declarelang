@@ -159,6 +159,11 @@ interface Cursor { readonly data: any; readonly path: readonly string[] }
 /** One message across the island boundary — what \`post\` sends and \`onPost\`
  *  receives between an embedded app and its host. */
 interface IslandPost { readonly topic: string; readonly payload: unknown }
+/** A navigation the embedded app asked for — what an island's \`onNavigate\`
+ *  receives: \`to\`, the address made absolute; \`program\`, the Declare program it
+ *  names ("" when none); \`location\`, the place after its \`#\`; \`newWindow\`, whether
+ *  it asked for a window of its own (\`openWindow\`). */
+interface IslandNavigation { readonly to: string; readonly program: string; readonly location: string; readonly newWindow: boolean }
 /** A linear gradient: \`gradient(#F8F8F8, #D8D8D8)\` top to bottom, or with an angle
  *  first — \`gradient("90deg", …)\`. Colors spread evenly; \`stop(offset, color)\` places
  *  one exactly. Legal in a bare slot, which is why it is a call and not a record. */

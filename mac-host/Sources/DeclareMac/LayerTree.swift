@@ -327,7 +327,6 @@ final class LayerTree {
         // sampler quadratic. See Frost.swift.
         let fr = refreshFrosts()
         refreshBlends()
-        refreshMasks()
         frostLastN = fr.n; frostLastMs = fr.ms
         frostTotalN += fr.n; frostTotalMs += fr.ms
 
@@ -343,6 +342,9 @@ final class LayerTree {
         // Geometry is final now — this is the first moment a flow's band is
         // worth rastering, and it is still inside the transaction below.
         flushBands()
+        // Stencil masks render last: a stencil's drawing and text are on its
+        // layers only now, and a commit that brings them may be the last.
+        refreshMasks()
         // Frosts need nothing here. They are background filters on their own
         // layers, so the compositor re-derives them from whatever it draws
         // beneath — on every frame it presents, not merely on the settles we
@@ -903,8 +905,8 @@ final class LayerTree {
     }
 
     /// Keep a node's mask layer sized to its box (a gradient mask) or placed at
-    /// the stencil's box (a view mask), and re-render a stencil whose epoch is
-    /// behind. Called from the op arm, from place(), and per commit.
+    /// the stencil's box (a view mask; refreshMasks renders it). Called from
+    /// the op arm, from place(), and per commit.
     func syncMask(_ n: Node) {
         if let g = n.maskGradient {
             let m = (n.layer.mask as? CAGradientLayer) ?? {
@@ -922,10 +924,6 @@ final class LayerTree {
             // the stencil's box, in the masked node's y-up layer space
             m.bounds = CGRect(origin: .zero, size: CGSize(width: st.w, height: st.h))
             m.position = CGPoint(x: st.x, y: n.box.size.height - st.y - st.h)
-            if n.maskEpoch != frostEpoch, let stencil = nodes[st.id] {
-                n.maskEpoch = frostEpoch
-                m.contents = renderStencil(stencil, size: CGSize(width: st.w, height: st.h))
-            }
         }
     }
 
@@ -947,9 +945,17 @@ final class LayerTree {
         return ctx.makeImage()
     }
 
-    /// Per commit: stencil masks whose input may have changed re-render.
+    /// Per commit: stencil masks whose input may have changed re-render. Only
+    /// here, never as an op lands: the stencil's own drawing reaches its layers
+    /// at the end of the commit, and a render stamped mid-commit would keep the
+    /// stencil as it was before them.
     func refreshMasks() {
-        for (_, n) in nodes where n.maskStencil != nil && n.maskEpoch != frostEpoch { syncMask(n) }
+        for (_, n) in nodes where n.maskEpoch != frostEpoch {
+            guard let st = n.maskStencil, let stencil = nodes[st.id] else { continue }
+            syncMask(n)
+            n.maskEpoch = frostEpoch
+            n.layer.mask?.contents = renderStencil(stencil, size: CGSize(width: st.w, height: st.h))
+        }
     }
 
     // ── the frost (compositing.md §5.3) ─────────────────────────────────────

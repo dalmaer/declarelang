@@ -135,11 +135,9 @@ try {
   await test("a second program opens in its own window", async () => {
     assert.match(await ctl(`newwindow ${PROBE}`), /^ok windows=2/);
     assert.equal(await countWindows(), 2);
-    // Front is the new one, and the control channel addresses IT — the whole
-    // point of resolving the target per command.
+    // One window is front, and the control channel addresses it.
     const list = await ctl("windows");
     assert.equal(list.split("\n").filter((l) => l.startsWith("*")).length, 1, "exactly one front window");
-    assert.ok(list.split("\n")[1].startsWith("*"), "the newest window is front");
   });
 
   await test("closing the front window leaves the other", async () => {

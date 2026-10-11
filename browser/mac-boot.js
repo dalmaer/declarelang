@@ -15,7 +15,8 @@
 // native.
 
 import { buildProgram, mountApp, settle, observe, provideTransport, provideMeasurer, fontsReady, bridgeFor, kernelReadySync,
-         Keys, Focus, deliverKeys, setInspectionTarget, linkIslandTenant, islandProvisions, setAppAssetBase } from "../runtime/dist/index.js";
+         Keys, Focus, deliverKeys, setInspectionTarget, linkIslandTenant, islandProvisions, setAppAssetBase,
+         scrollPlaces, holdScrollPlaces, dropScrollPlaces, islandNavigation, provideHostServices } from "../runtime/dist/index.js";
 import { MacBackend, flushOps, provideHitPath, macScrollFacts, macWheel, macRichHeight, macRichLink,
          macEditInput, macEditFocus, macEditEnter, embedsPending, mountEmbed, clearEmbed, surfaceById,
          publishChildName, islandViewById, macScrollTo, surfaceOrigin, createOverlaySurface, rootBox,
@@ -39,29 +40,31 @@ provideTransport((url, opts) => {
  *
  *  The Viewer reads a program through `<program>?segments` (highlighted spans +
  *  line metrics) and `<program>?file` (the bytes). Those are DEV SERVER
- *  endpoints — `server/create.mjs serveSource` — and Source mode on this host
- *  routinely points at a `file:` program with no server anywhere, where they
- *  answer nothing and the Viewer shows its chrome over an empty document.
+ *  endpoints — `server/create.mjs serveSource` — and this host reads programs
+ *  from disk (`file:`) and from any HTTP server that serves the files, where
+ *  they answer nothing (a plain server ignores the query and returns the file).
  *
- *  So the host answers them itself. It can: `?file` is the read the host already
- *  does, and `?segments` is `highlight()` on the compiler this app carries. Only
- *  `file:` URLs are intercepted — an http program still gets the real endpoints
- *  from the server that is serving it, which is the same answer by construction
- *  (both sides call the same `highlight`).
+ *  So the host answers them itself, for every program it reads, wherever it
+ *  comes from: `?file` is the read the host already does, and `?segments` is
+ *  `highlight()` on the compiler this app carries — the answer the dev server
+ *  gives, by construction (both sides call the same functions). Only a
+ *  `.declare` or `.ts` path is taken: an app's own endpoint that happens to
+ *  take `?file` is left to its server.
  *
- *  `metrics` is deliberately absent: it costs a second toolchain entry point,
- *  and viewer.declare already counts lines locally when the payload omits it
- *  (`localMetrics`, written for static hosts, which is exactly this case).
+ *  `metrics` and `defs` are `programIndex()` on the same compiler: the file's
+ *  line count (for a program's main file, the whole app's too) and where each
+ *  of the program's classes lives — its includes read beside it, the
+ *  library's left out.
  *
  *  Returns null when the request is not one of these, so the caller falls
  *  through to the ordinary fetch. */
 function readerRequest(href) {
-  if (!/^file:/i.test(href)) return null;
   const q = href.lastIndexOf("?");
   if (q < 0) return null;
   const kind = href.slice(q + 1);
   if (kind !== "file" && kind !== "segments") return null;
   const path = href.slice(0, q);
+  if (!/\.(declare|ts)$/i.test(path)) return null;
   // ⚠ THE SHIM'S SHAPE, not `new Response`. There is no Response class in this
   // context — mac-env's fetch resolves a plain object with exactly these
   // members, and a synthesized reply that does not match it fails wherever a
@@ -83,8 +86,13 @@ function readerRequest(href) {
     // want it in a window that booted from cache.
     if (!(await loadCompiler(platformBase()))) return reply(503, "no compiler", "text/plain");
     try {
-      const segments = await globalThis.__declareCompiler.highlight(source);
-      return reply(200, JSON.stringify({ path: path.split("/").pop(), segments }), "application/json");
+      const C = globalThis.__declareCompiler;
+      const segments = await C.highlight(source);
+      const library = new URL("library/", platformBase()).href;
+      const { metrics, defs } = await C.programIndex(source, path,
+        async (u) => { const r = await fetch(u); return r.ok ? r.text() : null; },
+        (u) => u.startsWith(library));
+      return reply(200, JSON.stringify({ path: path.split("/").pop(), segments, metrics, defs }), "application/json");
     } catch (e) {
       return reply(500, String((e && e.message) || e), "text/plain");
     }
@@ -186,9 +194,25 @@ function compileSource(url, src, dir, distro) {
   })();
 }
 
+// The platform's request keys and compile modifiers (reqtypes.ts, flags.ts):
+// what they mean on this host the window has already done (ProgramWindow
+// ProgramRequest — Source mode, the Inspector); none is the program's to read,
+// and none may reach the read of its source (a dev server would answer
+// `?viewer` with a page, not the program).
+const REQUEST_KEYS = new Set(["viewer", "inspector", "build", "extract", "program", "file", "segments", "render", "crawler", "kernel"]);
+function withoutRequests(url) {
+  const q = url.indexOf("?");
+  if (q < 0) return url;
+  const hash = url.indexOf("#", q);
+  const params = new URLSearchParams(url.slice(q + 1, hash < 0 ? undefined : hash));
+  for (const k of REQUEST_KEYS) params.delete(k);
+  const rest = params.toString();
+  return url.slice(0, q) + (rest ? "?" + rest : "") + (hash < 0 ? "" : url.slice(hash));
+}
+
 async function fromClient(programUrl) {
   const distro = platformBase();
-  const src = await (await fetch(programUrl)).text();
+  const src = await (await fetch(withoutRequests(programUrl).split("#")[0])).text();
   // The program's OWN directory, absolute — which is what makes its includes
   // resolve beside IT while the library still resolves against the distro.
   const dir = programUrl.replace(/[^/]*$/, "");
@@ -235,6 +259,7 @@ export async function macBoot(url) {
   // under the program on screen.
   if (currentApp !== null) {
     const prev = currentApp;
+    note(entryId, placeOf(prev));          // the window is leaving this entry: where the user was
     currentApp = null; liveApps.delete(prev);
     try { prev.discard(); settle(); flushOps(); }
     catch (e) { H.log("error", "discarding the previous program: " + ((e && e.message) || e)); }
@@ -325,8 +350,8 @@ async function seedDemos(app, mainDir) {
  *  OUTWARD per settle: one trail entry when either half changed (both changed
  *  = one entry, restored atomically), the verb from app.pendingHistoryVerb —
  *  a follow whose link declared `replace = true` overwrites instead of
- *  burying Back — and the departed page's scroll rides along, so Back lands
- *  where the user left.
+ *  burying Back. Each entry is named by an id the window stores and hands
+ *  back on travel.
  *
  *  INWARD on an arrow press (__declareTravel — the popstate direction): the
  *  step written directly (a waypoint can never arrive from outside the app;
@@ -334,28 +359,69 @@ async function seedDemos(app, mainDir) {
  *  `follow` so the onFollow hook applies — pass, redirect, veto — and
  *  whatever the app decided is squared back to the entry (historySquare).
  *  A traversal never pushes, so a redirect rule can never trap Back in a
- *  loop. Scroll restores unless the address carries an `@` reveal — a stored
- *  anchor intent is the truer landing than a pixel offset (the web's rule).
+ *  loop.
+ *
+ *  WHERE THE USER WAS, per entry (runtime scroll-places has the division of
+ *  labor, the same as the web host's): the root's scroll and every scrolling
+ *  pane's, noted in the table below at the moment the app leaves an entry — its
+ *  first location or waypoint write of a settle, a traversal, or the program
+ *  being replaced — and landed by the runtime when a traversal comes back. The
+ *  table outlives each program (one context per window), so Back across
+ *  programs finds it. Anchor arrivals keep the reveal instead: a stored
+ *  `@name` intent is the truer landing than a pixel offset (the web's rule).
  *
  *  Inert when unused: an app that writes neither pair half holds both
  *  initials, and nothing pushes — the arrows keep walking programs only. */
+const places = new Map();                  // entry id → { s, v }
+let entryId = "";
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const placeOf = (app) => ({ s: app.$surface ? app.$surface.scrollOffset : 0, v: scrollPlaces(app) });
+const note = (id, place) => {
+  if (id === "") return;
+  places.delete(id);
+  places.set(id, place);                   // newest last, so the cap drops the oldest
+  if (places.size > 100) places.delete(places.keys().next().value);
+};
+
 function wireMacHistory(app) {
   if (!H.historyEntry) return;             // an older host binary keeps no pair trail
   let mirrored = app.location;
   let mirroredW = app.waypoint;
-  H.historySquare(mirrored, mirroredW);    // the boot entry learns its (deep-linked) pair
+  // the boot entry learns its (deep-linked) pair and an id — the window keeps
+  // the id it already has when this boot is a traversal, and says so on travel
+  entryId = newId();
+  H.historySquare(mirrored, mirroredW, entryId);
+  // the app's first location or waypoint write of a settle is the moment it
+  // leaves this entry: noted then, before anything later in that handler moves
+  // the page (App.$departing)
+  let departing = null;
+  app.$onDepart = () => { departing = placeOf(app); };
+  const rootTo = (y) => {
+    if (!app.$surface) return y;
+    macScrollTo(app.$surface.id, y);
+    return app.$surface.scrollOffset;
+  };
   observe(() => [app.location, app.waypoint], () => {
     if (currentApp !== app) return;        // a later boot owns the window now
     if (app.location === mirrored && app.waypoint === mirroredW) return;
     const verb = app.pendingHistoryVerb === "replace" ? "replace" : "push";
     if (app.pendingHistoryVerb !== undefined) app.pendingHistoryVerb = "push";
-    H.historyEntry(app.location, app.waypoint, verb,
-      app.$surface ? app.$surface.scrollOffset : 0);
+    dropScrollPlaces(app);                 // the app moved on: no late landing
+    if (verb === "push") {
+      note(entryId, departing ?? placeOf(app));
+      entryId = newId();
+    }
+    departing = null;
+    H.historyEntry(app.location, app.waypoint, verb, entryId);
     mirrored = app.location;
     mirroredW = app.waypoint;
   }, "host:history");
-  globalThis.__declareTravel = (loc, step, scroll) => {
+  globalThis.__declareTravel = (loc, step, id) => {
     if (currentApp !== app) return;
+    // the entry just left, noted before anything changes on screen
+    note(entryId, placeOf(app));
+    dropScrollPlaces(app);
+    entryId = id || newId();
     if (app.waypoint !== step) app.waypoint = step;
     if (typeof app.follow === "function") app.follow("#" + loc);
     else app.location = loc;
@@ -365,10 +431,13 @@ function wireMacHistory(app) {
     // same dance: onPop's syncByReplace runs before the settle's observers).
     mirrored = app.location;
     mirroredW = app.waypoint;
+    departing = null;
+    // held before the settle, so it lands at that settle's close — after
+    // anything the app does on arrival
+    const p = places.get(entryId);
+    if (p && loc.indexOf("@") < 0) holdScrollPlaces(app, p, rootTo);
     settle();
-    H.historySquare(mirrored, mirroredW);
-    if (typeof scroll === "number" && scroll >= 0 && loc.indexOf("@") < 0 && app.$surface)
-      macScrollTo(app.$surface.id, scroll);
+    H.historySquare(mirrored, mirroredW, entryId);
     flushOps();
   };
 }
@@ -414,15 +483,16 @@ const programName = (u) => {
 /** The boot URL's query as the values the native host provides, by name —
  *  `{}` when there is no query. Coerced (true/false/1/0 → booleans, numerics →
  *  numbers) so `hostProvided("dark", false)` reads a boolean and a scale a
- *  number, as they would from a page's `boot({ provides })`. The RENDER
- *  control (`?render=mac`) is dropped: it addresses the host, not the program,
- *  and every gate URL carries it. */
+ *  number, as they would from a page's `boot({ provides })`. The platform's
+ *  request keys and compile modifiers (REQUEST_KEYS: `viewer`, `inspector`,
+ *  `render`, …) are left out: they address the host, which has acted on them
+ *  where they mean something here, and are never the program's. */
 function launchParams(url) {
   const q = url.indexOf("?");
   const out = {};
   if (q < 0) return out;
-  for (const [k, raw] of new URLSearchParams(url.slice(q + 1))) {
-    if (k === "render") continue;
+  for (const [k, raw] of new URLSearchParams(url.slice(q + 1).split("#")[0])) {
+    if (REQUEST_KEYS.has(k)) continue;
     out[k] = raw === "true" || raw === "1" ? true
            : raw === "false" || raw === "0" ? false
            : raw !== "" && !isNaN(Number(raw)) ? Number(raw) : raw;
@@ -796,10 +866,24 @@ function mountCompiled(surfaceId, compiled, assetUrl) {
   // link failure leaves the tenant mounted, unlinked, and said loudly — same
   // rule as host-client's renderChild.
   if (linkable) {
-    try { embedUnlinks.set(surfaceId, linkIslandTenant(islView, child)); }
+    // the box is the tenant's viewport: its scroll is where a page app scrolls
+    const boxScroll = { scrollY: () => box.scrollOffset || 0, scrollTo: (y) => { box.scrollToY?.(y); return box.scrollOffset || 0; } };
+    try { embedUnlinks.set(surfaceId, linkIslandTenant(islView, child, boxScroll)); }
     catch (e) { log("island link: " + e.message); }
   }
   child.$attach(backend, null);
+  // The child's navigate()/openWindow(): its island first — an island that
+  // declares onNavigate decides what a link inside it means (a desktop opens
+  // a window) — else this window, as the window's own program's links do
+  // (navTick: resolved against the program).
+  {
+    const base = globalThis.__declareMain || globalThis.__declareBase || "";
+    const resolve = (u) => new URL(u, base).href;
+    provideHostServices(child, islandNavigation(islView ?? null, resolve, {
+      navigate: (u) => H.navigate(resolve(u), false),
+      openWindow: (u) => H.navigate(resolve(u), true),
+    }));
+  }
   // The child's RELATIVE assets live in its own program's directory, never the
   // host's (host-client's childAssetBase). Without this, birds-in-a-desktop-
   // window resolved every plate against the DESKTOP's directory — all 404.
@@ -886,7 +970,10 @@ globalThis.__declareBoot = (url) => {
 // here — `pinch` true for a trackpad magnify or ctrl+wheel. Scrolling itself
 // is the host's process now (scrolling.md): it moves the layers and reports
 // what it moved as FACTS, once per frame, after the frame that showed them.
-globalThis.__declareWheel = (x, y, dx, dy, pinch) => macWheel(x, y, dx || 0, dy || 0, !!pinch);
+globalThis.__declareWheel = (x, y, dx, dy, pinch) => {
+  if (currentApp !== null) dropScrollPlaces(currentApp);   // the user's hand outranks a held landing
+  macWheel(x, y, dx || 0, dy || 0, !!pinch);
+};
 globalThis.__declareScrollFacts = (batch) => { macScrollFacts(batch); settle(); flushOps(); };
 globalThis.__declareTraceHit = (x, y) => macTraceHit(x, y);
 globalThis.__declareRichHeight = (id, h) => { macRichHeight(id, h); settle(); flushOps(); };

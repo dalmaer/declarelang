@@ -761,7 +761,7 @@ const TYPE_GROUPS = [
              "FitAlign", "FontLate", "FontWeight", "Justify", "Motion", "Numerals", "NumeralWidth",
              "Process", "ScrollAnchor", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
   ["Values", ["Color", "Fill", "Gradient", "Length", "Percent", "Radius", "Inset", "Shape", "Stroke", "BoxStroke", "Outline",
-              "Shadow", "Filter", "Backdrop", "Theme", "MotionCurve", "Cursor", "TextMeasure", "IslandPost", "DelayHandle"]],
+              "Shadow", "Filter", "Backdrop", "Theme", "MotionCurve", "Cursor", "TextMeasure", "IslandPost", "IslandNavigation", "DelayHandle"]],
   ["Text", ["TextStyle", "TextStyles", "BlockGeometry", "RichTextLayout"]],
   ["Event payloads", ["PointerEvent", "PointerUpEvent", "TouchEvent", "Touch", "WheelEvent", "PinchEvent",
                       "KeyEvent", "FocusGeometry", "TooltipEvent", "StreamMessage", "ChangeEvent", "ValueChange"]],
@@ -951,8 +951,11 @@ const themeTokensDoc = (spine) => {
 function buildBrowse(dm, spine, types) {
   const ref = dm.reference;
   const cat = (name, children, subtitle = "") => ({ name, subtitle, kind: "category", children });
+  // `loc` — where the docs app shows a leaf (its location: guide/<chapter>,
+  // reference/<Name>, language/<form>), so a browser of this tree can open the
+  // leaf there; a leaf without one is a document the docs app does not show
   const elementLeaf = (id) => ({ name: ref[id].name, subtitle: ref[id].extends ? "extends " + ref[id].extends : "", kind: "element",
-    label: ref[id].origin === "library" ? "Class" : "Built-in element",
+    label: ref[id].origin === "library" ? "Class" : "Built-in element", loc: "reference/" + id,
     doc: elementDoc(id, ref), preview: preview(ref[id].doc || "") });
   const hydrated = (name, md) => ({ name, subtitle: "", kind: "reference", label: "Reference", doc: md, preview: preview(md) });
   const tenetLeaf = (t) => ({ name: t.name ?? t.title, subtitle: "", kind: "tenet", label: "Tenet", doc: segMd(t.segs), preview: preview(segText(t.segs)) });
@@ -964,7 +967,7 @@ function buildBrowse(dm, spine, types) {
       fileLeaf("Getting started", "apps/homepage/getstarted.md"),
     ]),
     cat("Guide", (dm.guideParts ?? []).map((p) => cat(p.part,
-      p.chapters.map((ch) => fileLeaf(ch.num + ". " + (ch.short || ch.title), "docs/guide/" + ch.id + ".md", "Guide chapter"))))),
+      p.chapters.map((ch) => ({ ...fileLeaf(ch.num + ". " + (ch.short || ch.title), "docs/guide/" + ch.id + ".md", "Guide chapter"), loc: "guide/" + ch.id }))))),
     // the reference mirrors the docs app's rail: the language forms first, then
     // the classes by topic (extract's CLASS_GROUPS — the one place the order lives)
     cat("Reference", [

@@ -6,8 +6,8 @@
 Scrolling looks like several features — a page that scrolls, panes that scroll inside
 it, chrome that stays put — but it is one model, and it starts from a fact about
 quality: **the browser's own page scroll is the best scroller you will ever be
-offered.** It has the physics your user's hands already know, it remembers its position
-across Back and Forward, the browser's toolbar collapses for it, and it is the only
+offered.** It has the physics your user's hands already know, the browser's toolbar
+collapses for it, and it is the only
 scroll a browser lets a second finger turn into a pinch-zoom. So the model gives your
 content that scroller first.
 
@@ -38,7 +38,8 @@ log: View [ width = 100%, height = 320, scrolls = y,
 
 A finger or wheel on the pane scrolls the pane; elsewhere it scrolls the page. The
 nearest scroller wins, with native momentum and its own edge bounce, and panes nest to
-any depth. Inside a `{ }` body the axis is a string, so compare it explicitly
+any depth. Back and Forward return each pane, like the page, to where the user left it,
+with no code of yours. Inside a `{ }` body the axis is a string, so compare it explicitly
 (`scrolls == "y"`); `"none"` is a truthy string.
 
 **A scroller takes the pointer over its whole box**, whether or not it declares a

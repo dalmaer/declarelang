@@ -592,13 +592,21 @@
       shiftKey: !!(mods & 1), metaKey: !!(mods & 2), ctrlKey: !!(mods & 4), altKey: !!(mods & 8),
     }));
   };
-  g.__declareKey = (type, key, mods, repeat) => {
-    win.dispatchEvent(ev(type, {
-      key, code: key, repeat: !!repeat,
-      shiftKey: !!(mods & 1), metaKey: !!(mods & 2), ctrlKey: !!(mods & 4), altKey: !!(mods & 8),
-    }));
-    doc.dispatchEvent(ev(type, { key, code: key, repeat: !!repeat,
-      shiftKey: !!(mods & 1), metaKey: !!(mods & 2), ctrlKey: !!(mods & 4), altKey: !!(mods & 8) }));
+  // `code` is the physical key, as the host read it. A key the host makes up
+  // (the control channel's `key`, a Tab handed back from a field) names only
+  // the key, so its code is the one that key has on a US keyboard.
+  const codeOf = (key) =>
+    /^[a-z]$/i.test(key) ? "Key" + key.toUpperCase()
+    : /^[0-9]$/.test(key) ? "Digit" + key
+    : key === " " ? "Space"
+    : ({ "'": "Quote", "/": "Slash", ",": "Comma", ".": "Period", ";": "Semicolon", "-": "Minus", "=": "Equal",
+         "[": "BracketLeft", "]": "BracketRight", "\\": "Backslash", "`": "Backquote",
+         Shift: "ShiftLeft", Control: "ControlLeft", Alt: "AltLeft", Meta: "MetaLeft" })[key] ?? key;
+  g.__declareKey = (type, key, mods, repeat, code) => {
+    const props = () => ({ key, code: code ?? codeOf(key), repeat: !!repeat,
+      shiftKey: !!(mods & 1), metaKey: !!(mods & 2), ctrlKey: !!(mods & 4), altKey: !!(mods & 8) });
+    win.dispatchEvent(ev(type, props()));
+    doc.dispatchEvent(ev(type, props()));
   };
   g.__declareResize = (w, h, scale) => {
     win.innerWidth = w; win.innerHeight = h;

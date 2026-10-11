@@ -17,7 +17,7 @@
 //   { type:"production", id, args }           → writeProduction's result, errors projected
 //   { type:"fresh",      id, closure, props } → boolean (isUpToDate over diskProbe)
 //   { type:"highlight",  id, src }            → segments
-//   { type:"metrics",    id, src }            → line metrics
+//   { type:"index",      id, src, file, libraryDir } → { metrics, defs } (highlight.ts programIndex)
 
 import { parentPort } from "node:worker_threads";
 import path from "node:path";
@@ -25,7 +25,9 @@ import { isUpToDate, diskProbe, crawlExtract, diskDataResolver, crawlerDocument 
 // the PROGRAM-shaped compile (compiler/src/declarec.ts: the Node front over the
 // shared program tail) — what /compile answers with, so a page never parses
 import { compileProgram } from "../compiler/dist/declarec.js";
-import { highlight, lineMetrics } from "../compiler/dist/highlight.js";
+import { readFileSync } from "node:fs";
+import { pathToFileURL, fileURLToPath } from "node:url";
+import { highlight, programIndex } from "../compiler/dist/highlight.js";
 import { writeProduction } from "../tools/declarec.mjs";
 
 async function handle(m) {
@@ -60,8 +62,15 @@ async function handle(m) {
       return isUpToDate(m.closure, m.props, diskProbe);
     case "highlight":
       return highlight(m.src);
-    case "metrics":
-      return lineMetrics(m.src);
+    case "index": {
+      // what the reader is told about the program: the file's count and the
+      // whole app's, and where each class lives — its files read from disk,
+      // the library's left out
+      const library = pathToFileURL(m.libraryDir).href + "/";
+      return programIndex(m.src, pathToFileURL(m.file).href,
+        (u) => { try { return readFileSync(fileURLToPath(u), "utf8"); } catch { return null; } },
+        (u) => u.startsWith(library));
+    }
     default:
       throw new Error("unknown toolchain op: " + m.type);
   }

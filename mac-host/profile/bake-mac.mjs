@@ -6,8 +6,8 @@
 //
 // WHY A SWAP AND NOT A BUILD FLAG. `mac-host/bundle.sh --runtime <bundle>` is
 // what run.mjs's header still documents, and it no longer exists: bundle.sh is
-// now a two-line wrapper around build-mac-app.mjs, which bakes
-// `bundles/declare-mac.js` and PROVES every baked file against its source. So a
+// now a two-line wrapper around build-mac-app.mjs, which builds and bakes the
+// app's own `declare-mac.js` and PROVES every baked file against its source. So a
 // metered app is made in two steps — build the app honestly, then replace the
 // one file and re-sign — rather than by teaching the real build to accept an
 // unverifiable runtime.

@@ -181,6 +181,17 @@ await test("literate /* */ block: byte-exact, interior never re-indented", () =>
   if (out !== again) throw new Error("not idempotent");
 });
 
+await test("every type the parser accepts formats — generics, tuples, object, function, union, intersection, indexed, literal types, `c?:`", () => {
+  const src = "class H extends Node [\n    a: Map< string ,Row > = null,\n    b: [ number,number ] = [1, 2],\n    c: { x: number; y: number } = { { x: 0, y: 0 } },\n"
+    + "    d: (Row & { e: boolean }) | null = null,\n    k: keyof Row = \"id\",\n    n: Row[\"name\"] = \"\",\n    l: 1 | 2 = 1,\n    g: Array<Array<number>> = [],\n"
+    + "    f(x ?: string, cb:(r: Row)=>boolean) -> Row| null { return null }\n    ]\n";
+  const out = fmt(src);
+  for (const want of ["a: Map<string, Row> = null", "b: [number, number] = [1, 2]", "c: { x: number; y: number } =", "d: (Row & { e: boolean }) | null",
+    "k: keyof Row", "n: Row[\"name\"]", "l: 1 | 2", "g: Array<Array<number>>", "f(x?: string, cb: (r: Row) => boolean) -> Row | null"])
+    if (!out.includes(want)) throw new Error(`missing '${want}':\n` + out);
+  if (fmt(out) !== out) throw new Error("not idempotent");
+});
+
 await test("trailing // gap (re-ruled 2026-07-13): min 2, no maximum — alignment is the author's", () => {
   const src = "App [\n    x = 1,// glued\n    yy = 2, // one space\n    z = 3,        // author's column, preserved\n    w = 4                        // very wide — still the author's\n    ]\n";
   const out = fmt(src);
@@ -342,6 +353,56 @@ await test("a one-line top-level declaration stays one line", () => {
   if (fmt(src) !== src) throw new Error("one-line top-level rewritten:\n" + fmt(src));
 });
 
+// The project's files with extension `ext`, as git sees the project: tracked
+// files and new ones not ignored. Asked of git where there is a repository;
+// without one (a plain copy of the tree) the same answer comes from a walk that
+// honors every .gitignore the way git does for the rules this repository
+// writes: a name or glob matches at any depth, a rule with a `/` inside is
+// anchored to its .gitignore's folder, a trailing `/` matches folders only,
+// and `!` re-includes.
+function projectFiles(ext) {
+  try {
+    return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "*" + ext], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .split("\n").filter(Boolean);
+  } catch { /* not a repository: walk */ }
+  const glob = (g) => g.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\*\*/g, "\u0000").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]").replace(/\u0000/g, ".*");
+  const rulesOf = (dir) => {
+    const f = join(dir, ".gitignore");
+    if (!existsSync(f)) return [];
+    return readFileSync(f, "utf8").split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("#")).map((l) => {
+      const negate = l.startsWith("!");
+      let pat = negate ? l.slice(1) : l;
+      const dirOnly = pat.endsWith("/");
+      if (dirOnly) pat = pat.slice(0, -1);
+      const anchored = pat.includes("/");
+      if (pat.startsWith("/")) pat = pat.slice(1);
+      return { negate, dirOnly, re: new RegExp("^" + (anchored ? "" : "(?:.*/)?") + glob(pat) + "$") };
+    });
+  };
+  const ignored = (stack, rel, isDir) => {
+    let out = false;
+    for (const { base, rules } of stack) {
+      const sub = base === "" ? rel : rel.startsWith(base + "/") ? rel.slice(base.length + 1) : null;
+      if (sub === null) continue;
+      for (const r of rules) if ((!r.dirOnly || isDir) && r.re.test(sub)) out = !r.negate;
+    }
+    return out;
+  };
+  const out = [];
+  const walk = (rel, stack) => {
+    const here = [...stack, { base: rel, rules: rulesOf(rel === "" ? "." : rel) }];
+    for (const e of readdirSync(rel === "" ? "." : rel, { withFileTypes: true })) {
+      if (e.name === ".git") continue;
+      const path = rel === "" ? e.name : rel + "/" + e.name;
+      if (ignored(here, path, e.isDirectory())) continue;
+      if (e.isDirectory()) walk(path, here);
+      else if (e.name.endsWith(ext)) out.push(path);
+    }
+  };
+  walk("", []);
+  return out.sort();
+}
+
 await test("the whole corpus is canon (docs/system-design excluded)", () => {
   // The formatter defines the style; this is the gate that the corpus obeys it.
   // The pre-commit hook REFUSES a non-canon staged file, so drift should rarely
@@ -356,8 +417,7 @@ await test("the whole corpus is canon (docs/system-design excluded)", () => {
   // one most likely to be off canon, and listing only tracked files let a new probe
   // pass the suite and fail at the commit hook (2026-09-15). Ignored trees
   // (my-apps/) stay out; a tracked file deleted on disk is skipped.
-  const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "*.declare"], { encoding: "utf8" })
-    .split("\n").filter((f) => f && !f.startsWith("docs/system-design/") && existsSync(f));
+  const files = projectFiles(".declare").filter((f) => !f.startsWith("docs/system-design/") && existsSync(f));
   const bad = files.filter((f) => {
     const before = readFileSync(f, "utf8");
     let after; try { after = formatSource(before); }

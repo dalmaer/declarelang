@@ -31,7 +31,7 @@ provideLib((name) => {
 // does everything the Node one can, as architecture and as principle.
 export { extractStatic, extractFromProgram, staticHtml, blocksHtml, crawlerDocument } from "./static-html.js";
 export { crawlLocations, crawlDocument, crawlExtract, fragmentHrefs, canonKey } from "./crawl.js";
-export { highlight, lineMetrics } from "./highlight.js";
+export { highlight, lineMetrics, programMetrics, programIndex } from "./highlight.js";
 export { settleHeadless, approximateMeasurer, DEFAULT_ENV } from "./headless.js";
 export { DiskTracker, diskProbe, statValidator, hashValidator } from "./cache-node.js";
 export { isUpToDate, validatorsEqual, lookupKey, contentTag, fnv1a } from "./closure.js";

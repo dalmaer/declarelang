@@ -120,6 +120,12 @@ const RULES = [
     run: () => run("npx", ["tsc", "-b"]),
   },
   {
+    name: "viewer-reference",        // the platform classes the Viewer links to their reference pages
+    inputs: ["tools/internal/viewer-reference.mjs", "runtime/dist", "library/autoincludes.json"],
+    outputs: ["library/platform-apps/viewer/reference.declare"],
+    run: () => run("node", ["tools/internal/viewer-reference.mjs"]),
+  },
+  {
     name: "bundles",                 // the committed platform bundles — pure functions of tree inputs
     inputs: ["tools/internal/bundle-freshness.mjs", "tools/internal/build-boot.mjs", "tools/internal/build-compiler.mjs",
              "runtime/dist", "compiler/dist", "browser"],
@@ -176,6 +182,17 @@ const RULES = [
     outputs: [".derive/docs-extract.json", "apps/docs/chapters", "apps/docs/search-index.json",
               { dir: "apps/docs/demos", pre: "seg_" }],         // the generated islands, and only those
     run: () => run("node", ["tools/internal/doc/extract.mjs"]),
+  },
+  {
+    name: "stats-docs",              // the desktop's figure, once the docs it carries are final
+    // The desktop ships the docs program as an island, and its bundle names the
+    // docs' files by their content — so the desktop's size moves with what extract
+    // just wrote, after `stats` measured it. The figures prose cites (calendar,
+    // tracker) carry no docs and come out the same, so the stamps stay true.
+    inputs: ["apps/docs/chapters", "apps/docs/search-index.json", { dir: "apps/docs/demos", pre: "seg_" }],
+    outputs: [],
+    stamps: ["apps/homepage/stats.json"],
+    run: () => run("node", ["tools/internal/prewarm.mjs", "--stats-only"]),
   },
   {
     name: "bake-crawler",            // the root page's static extraction (runs the homepage itself)

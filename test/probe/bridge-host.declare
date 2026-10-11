@@ -1,17 +1,21 @@
 // Island-boundary probe, HOST side (test/island-browser.test.mjs): an AppIsland
 // that provides `volume` down and reads the tenant's exposed `pos` up — plus
-// the verb pair. Runs the same on the DOM backend and on canvas (surface
+// the verb pair; it starts the tenant at a location and answers the tenant's
+// navigation itself. Runs the same on the DOM backend and on canvas (surface
 // composition).
 
 App [ width = 400, height = 300, fill = #101820,
     vol: number = 0.7,
     log: string = "",
+    nav: string = "",
 
     player: AppIsland [ x = 10, y = 10, width = 200, height = 120,
         program = "../bridge-tenant",
         provides = ["volume"],
         volume: number = { app.vol },
-        onPost(m: IslandPost) { app.log = app.log + m.topic + ";" }
+        onPost(m: IslandPost) { app.log = app.log + m.topic + ";" },
+        onInit() { this.location = "start" },
+        onNavigate(n: IslandNavigation) { app.nav = n.program.split("/").pop() + "|" + n.location + "|" + n.newWindow }
         ],
 
     posOut: Text [ x = 10, y = 150, textColor = whitesmoke,

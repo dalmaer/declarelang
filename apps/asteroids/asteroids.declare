@@ -63,11 +63,26 @@ App [ fill = black,
     paused: boolean = false,
     keys: Keys [
         onKeyDown(e: KeyEvent) {
+            app.restCursor()
             if (e.repeat || e.meta || e.ctrl || e.alt) return
             if (app.paused) app.paused = false
             else if (e.key == "Escape" && app.game.playing) app.paused = true
             }
         ],
+
+    // In play the cursor is hidden over the game, and comes back when the game stops, when it
+    // is paused, or when the mouse moves more than a few pixels. A key hides it again.
+
+    cursor = { (app.game.mode == "starting" || app.game.mode == "playing") && !app.paused && !app.mouseMoved
+        ? "none" : "" },
+    mouseMoved: boolean = false,
+    restX: number = 0,                  // where the pointer was at the last key
+    restY: number = 0,
+    restCursor() { mouseMoved = false; restX = pointerX; restY = pointerY },
+    trackChanges = ["pointerX", "pointerY"],
+    onChange(e: ChangeEvent) {
+        if (Math.abs(pointerX - restX) > 4 || Math.abs(pointerY - restY) > 4) mouseMoved = true
+        },
 
     // The arcade moves the game on a frame every 16 ms. Where a whole number of the display's
     // frames comes within 5% of that, as at 60 Hz and its multiples, the game moves on every

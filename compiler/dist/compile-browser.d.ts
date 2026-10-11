@@ -4,7 +4,7 @@ export type { ProgramBuild } from "./program-build.js";
 import type { AutoIncludeHost } from "../../runtime/dist/include.js";
 import type { Closure, Validator } from "./closure.js";
 export { provideLib } from "./typecheck.js";
-export { highlight } from "./highlight.js";
+export { highlight, programIndex } from "./highlight.js";
 export { parseProgram } from "../../runtime/dist/parser.js";
 export { checkAttr, checkMethod, checkClassValue } from "../../runtime/dist/check.js";
 export { extractStatic, extractFromProgram, staticHtml, blocksHtml, crawlerDocument } from "./static-html.js";

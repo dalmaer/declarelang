@@ -1,12 +1,17 @@
 // Island-boundary probe, TENANT side: exposes `pos`, reads the host-provided
 // `volume`, answers a host post by bumping what it exposes — the round trip
-// in one handler.
+// in one handler. A "go" post also navigates, which the host's island answers
+// (onNavigate) instead of the page.
 
-App [ width = 200, height = 120, fill = #22303C,
+App [ width = 200, height = 600, fill = #22303C,                   // taller than its box: the box scrolls
     exposes = ["pos"],
     volume: number = { hostProvided("volume", 0) },
     pos: number = 3,
 
     volT: Text [ x = 8, y = 8, textColor = whitesmoke, text = { "v" + app.volume } ],
-    onPost(m: IslandPost) { app.pos = app.pos + 1; app.post("ack", m.topic) }
+    onPost(m: IslandPost) {
+        app.pos = app.pos + 1
+        app.post("ack", m.topic)
+        if (m.topic == "go") app.navigate("other/other.declare#there")
+        }
     ]

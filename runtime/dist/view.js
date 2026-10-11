@@ -1157,9 +1157,9 @@ export class View extends Node {
         // in-motion state in; nothing here pushes out (a request is a verb call).
         const scrolling = (a) => { this.$scrollingChanged(a); };
         if (this.scrolls === "y" || this.scrolls === "both")
-            s.setScroll?.(true, (y) => { this.scrollY = y; }, scrolling);
+            s.setScroll?.(true, (y) => { this.scrollY = y; this.$shownY = y; }, scrolling);
         if (this.scrolls === "x" || this.scrolls === "both")
-            s.setScrollX?.(true, (x) => { this.scrollX = x; }, scrolling);
+            s.setScrollX?.(true, (x) => { this.scrollX = x; this.$shownX = x; }, scrolling);
         // A DECLARED START, applied once as a request (a hidden pane holds it —
         // dom-backend SCROLL_WANT; boot.ts re-applies after the first layout).
         if (this.scrollStartY !== 0)
@@ -1944,11 +1944,16 @@ function markRichPending(v) {
  *  reveal's landing depends on every flow above the target in document order,
  *  and "which flows sit between" is exactly the geometry that isn't settled
  *  yet. Conservative, cheap (only runs while an intent is held), and false
- *  everywhere on synchronous backends — headless stays first-call (§0.11). */
+ *  everywhere on synchronous backends — headless stays first-call (§0.11).
+ *  A hidden view's flows are passed over: hidden, a view takes no part in its
+ *  parent's layout, so its measurement moves no target — and a flow measures
+ *  only once shown, so counting it would hold every reveal while it hides. */
 function anyRichPending(root) {
     let pending = false;
     const walk = (n) => {
         if (pending)
+            return;
+        if (n instanceof View && !n.visible)
             return;
         if (n.measurePending === true) {
             pending = true;
@@ -2424,6 +2429,20 @@ export class App extends View {
      *  makes the reveal's own scrollIntoView (whose scroll event arrives a tick
      *  later) safe from self-cancellation. */
     $cancelReveal() { this.pendingAnchor = null; }
+    /** The host's departure hook (scroll-places.ts): called at the first
+     *  `location` or `waypoint` write of a settle — the moment the app leaves
+     *  where it was, before anything later in that handler moves the page — so
+     *  the host can note where the user was. Null on a host that keeps no
+     *  history. */
+    $onDepart = null;
+    departArmed = false;
+    $departing() {
+        if (this.departArmed || this.$onDepart === null)
+            return;
+        this.departArmed = true;
+        afterSettle(() => { this.departArmed = false; });
+        this.$onDepart();
+    }
     /** The App's auto-extent is the HOST, not its content: an unset width/height
      *  follows hostWidth/hostHeight (reactive on resize), so the root app fills its
      *  enclosing area with no declaration — the near-universal case. An explicit
@@ -2563,12 +2582,12 @@ defineAttributes(App, {
     // a clean URL. NOT readOnly — navigation IS a write from app code. The push arms
     // the reveal pump: a location carrying `@name` is an intent, and the write is
     // the moment it arms (scheduleReveal — no host pumps this per frame anymore).
-    location: { def: "", push: (a) => a.$scheduleReveal() },
+    location: { def: "", push: (a) => { a.$departing(); a.$scheduleReveal(); } },
     // `waypoint` — the history-carried step (schema.ts has the full contract).
     // A stored reactive slot exactly like location, with the opposite visibility:
     // the host mirrors it into the History entry's STATE OBJECT (never the URL)
     // and writes it back on traversal. Default "" = the declared initial step.
-    waypoint: { def: "" },
+    waypoint: { def: "", push: (a) => a.$departing() },
     demoSources: { def: {} },
     liveReport: { def: "" },
     // the size floor (bindExtent) — author-settable, 0 = none

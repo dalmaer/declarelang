@@ -72,7 +72,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { BUNDLES, newestMtime } from "./bundle-freshness.mjs";
+import { MAC_BUNDLES, newestMtime, rebuildStale } from "./bundle-freshness.mjs";
 import { SEARCH, APP_NAME, CTL_IN } from "../../mac-host/app.mjs";
 // A variant app ("Declare Mac Graphics") gets its own bundle identifier — its
 // own UserDefaults, its own LaunchServices entry — and its own control pipe.
@@ -91,16 +91,18 @@ const die = (m) => { process.stderr.write("\n✗  " + m + "\n"); process.exit(1)
 // `from` is derived from — omitted means "it is its own input" (a source file,
 // so being newer than itself is trivially true and the hash check is the whole
 // test). For anything bundle-freshness already owns, the inputs come from THERE.
-const bundleInputs = (out) => BUNDLES.find((b) => b.out === out)?.inputs;
+const bundleInputs = (out) => MAC_BUNDLES.find((b) => b.out === out)?.inputs;
 
 const BAKE = [
   { from: "mac-host/.build/release/DeclareMac", to: `Contents/MacOS/${APP_NAME}`,
     inputs: ["mac-host/Sources", "mac-host/Package.swift", "mac-host/build.sh", "kernel/src", "kernel/include"] },
   { from: "browser/mac-env.js", to: "Contents/Resources/mac-env.js" },
-  { from: "bundles/declare-mac.js", to: "Contents/Resources/declare-mac.js",
-    inputs: bundleInputs("bundles/declare-mac.js") },
-  { from: "bundles/declare-compiler-mac.js", to: "Contents/Resources/bundles/declare-compiler-mac.js",
-    inputs: bundleInputs("bundles/declare-compiler-mac.js") },
+  // the app's own bundles, built just below into mac-host/.build/bundles/ (never committed):
+  // the runtime with the Mac backend, and the one compiler wrapped for JavaScriptCore
+  { from: "mac-host/.build/bundles/declare-mac.js", to: "Contents/Resources/declare-mac.js",
+    inputs: bundleInputs("mac-host/.build/bundles/declare-mac.js") },
+  { from: "mac-host/.build/bundles/declare-compiler-mac.js", to: "Contents/Resources/bundles/declare-compiler-mac.js",
+    inputs: bundleInputs("mac-host/.build/bundles/declare-compiler-mac.js") },
   // NOT bundles/version.json — that one is WRITTEN, not copied. See `toolchain`.
   // Classes, icons and themes — all .declare source, compiled on device.
   // Source and manifests only (.declare + .json): library/platform-apps/ carries a
@@ -159,6 +161,7 @@ const SKIP_INPUTS = [
   { at: "mac-host/Declare.icns" },
   { at: "tools/internal/build-mac.mjs" }, { at: "tools/internal/build-compiler.mjs" },
   { at: "tools/internal/build-boot.mjs" }, { at: "tools/internal/build-mac-app.mjs" },
+  { at: "tools/internal/bundle-freshness.mjs" },                   // what the app's bundles are built from
 ];
 function inputHashOf() {
   const h = createHash("sha256");
@@ -273,6 +276,16 @@ try {
 } catch (e) {
   process.stderr.write((e.stdout ?? "") + (e.stderr ?? ""));
   die("tsc or the bundle rebuild failed — the tree does not build, so there is nothing to bake.");
+}
+
+// The app's own bundles, from what derive just built: into mac-host/.build/bundles/,
+// which nothing commits, to be baked below. Always rebuilt: the self-skip above has
+// already said a source moved, and a file's mtime is no proof of what built it.
+say("  the app's bundles (build-mac.mjs)");
+try {
+  rebuildStale(ROOT, { bundles: MAC_BUNDLES, force: true, log: (m) => say("    " + m) });
+} catch (e) {
+  die("the app's bundles did not build — see the error above.");
 }
 
 // 3. The Swift binary. build.sh owns the JIT entitlement and its own

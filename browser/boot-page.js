@@ -97,10 +97,12 @@ export async function bootPage(cfg) {
   // the page's program, so a demo's include looked in the page's directory and
   // the island stayed silently blank (the include form's page, 2026-09-10). The
   // "__"-named live-edit channels have no file and keep the page as their origin.
+  // An island inside an embedded app names its program from THAT app's demo
+  // folder (`dir`, host-islands demoDirFor), not the page's.
   const demoBase = new URL("demos/", mainDir).href;              // where mountPreviews fetches unseeded previews
-  const liveCompile = async (src, name) => {
+  const liveCompile = async (src, name, dir = null) => {
     try {
-      const origin = name && !name.startsWith("__") ? new URL(name + ".declare", demoBase) : mainUrl;
+      const origin = name && !name.startsWith("__") ? new URL(name + ".declare", dir || demoBase) : mainUrl;
       // The host's own compile when it has one (the dev server's); else the
       // external compiler. Either way a PROGRAM (compileProgram: parsed,
       // checked, deps applied), so the page instantiates it with no parser.

@@ -44,6 +44,7 @@ for (const f of pidFiles) {
 
 // The port question. $PORT or 8200 — the same default the supervisor uses.
 const port = process.env.PORT ?? "8200";
+let foreign = false;           // a server on the port that is not this checkout's
 if (!signaledPorts.has(port)) {
   let who = null;
   try {
@@ -54,12 +55,12 @@ if (!signaledPorts.has(port)) {
     console.log(`reload: ⚠ a dev server IS answering on :${port} — pid ${who.pid}, root ${who.root}, started ${who.started}`);
     console.log(`        but it was not started by this checkout's supervisor, so this build cannot reload it.`);
     console.log(`        It keeps serving the modules it loaded at birth. Stop it (kill ${who.pid}) and start one here.`);
-    process.exit(0);
+    foreign = true;
   }
 }
 
-if (pidFiles.length === 0) console.log("reload: no dev server running — nothing to signal");
-else if (signaled === 0) console.log("reload: no reachable dev server — nothing reloaded");
+if (!foreign && pidFiles.length === 0) console.log("reload: no dev server running — nothing to signal");
+else if (!foreign && signaled === 0) console.log("reload: no reachable dev server — nothing reloaded");
 
 // ── the Mac app, OPT-IN ─────────────────────────────────────────────────────
 //
@@ -79,18 +80,30 @@ else if (signaled === 0) console.log("reload: no reachable dev server — nothin
 // OPT-IN, PER MACHINE, NEVER COMMITTED: the flag file `.derive/mac-auto` (the
 // .derive/ dir is already untracked) or DECLARE_MAC_AUTO=1 for one run. Absent
 // the flag this block is inert — a distro user, a commit, CI never need Swift.
-const MAC_AUTO = process.env.DECLARE_MAC_AUTO === "1" || existsSync(path.join(ROOT, ".derive", "mac-auto"));
+//
+// The library is among what the app bakes, so a library edit brings the app up to
+// date here exactly as a runtime edit does: the build's self-skip hashes the library
+// sources along with the runtime's.
+//
+// The flag file may hold an app NAME — a second tree on the same machine names its
+// own app ("Declare Mac Overlay") so its automatic builds never replace the main
+// tree's "Declare Mac". DECLARE_MAC_APP, when set, wins.
+const MAC_FLAG = path.join(ROOT, ".derive", "mac-auto");
+const MAC_AUTO = process.env.DECLARE_MAC_AUTO === "1" || existsSync(MAC_FLAG);
 if (MAC_AUTO) {
+  const named = existsSync(MAC_FLAG) ? readFileSync(MAC_FLAG, "utf8").trim() : "";
+  const env = { ...process.env, ...(named && !process.env.DECLARE_MAC_APP ? { DECLARE_MAC_APP: named } : {}) };
+  if (env.DECLARE_MAC_APP) console.log(`mac: building "${env.DECLARE_MAC_APP}"`);
   // --no-stage: an automatic rebuild never touches the git index
   const b = spawnSync(process.execPath, [path.join(ROOT, "tools/internal/build-mac-app.mjs"), "--no-stage"],
-                      { cwd: ROOT, encoding: "utf8" });
+                      { cwd: ROOT, encoding: "utf8", env });
   process.stdout.write((b.stdout ?? "").split("\n").filter(Boolean).map((l) => "mac: " + l).join("\n") + "\n");
   if (b.status !== 0) { process.stderr.write(b.stderr ?? ""); console.log("mac: ✗ the app did not build — see above"); process.exit(1); }
   if (/already current/.test(b.stdout ?? "")) {
     console.log("mac: app already current — no rebuild, no verify");
   } else {
     console.log("mac: app rebuilt — smoke-verifying with one launch (test/mac-shell.test.mjs)…");
-    const v = spawnSync(process.execPath, [path.join(ROOT, "test/mac-shell.test.mjs")], { cwd: ROOT, stdio: "inherit" });
+    const v = spawnSync(process.execPath, [path.join(ROOT, "test/mac-shell.test.mjs")], { cwd: ROOT, stdio: "inherit", env });
     if (v.status !== 0) { console.log("mac: ✗ smoke verify FAILED — the rebuilt app is installed but did not pass its launch check"); process.exit(1); }
     console.log("mac: ✓ rebuilt and smoke-verified");
   }

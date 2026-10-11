@@ -87,7 +87,7 @@ export function createToolchain(platformDir) {
     production: (args) => call("production", { args }),
     fresh: (closure, props) => call("fresh", { closure, props }),
     highlight: (src) => call("highlight", { src }),
-    metrics: (src) => call("metrics", { src }),
+    index: (src, file, libraryDir) => call("index", { src, file, libraryDir }),
     fingerprint,
     stats: () => ({ spawns }),
   };

@@ -816,7 +816,15 @@ class ClassDetail [ width = 100%,
 
     header: View [ width = 100%,
         layout: SimpleLayout [ axis = y, spacing = 12 ],
-        Eyebrow [ text = { "REFERENCE · " + (:origin == "library" ? "STANDARD LIBRARY" : "BUILT-IN") + (:source != null ? " · " + :source : "") } ],
+        eyebrow: View [ layout: SimpleLayout [ axis = x, spacing = 14, align = baseline ],
+            Eyebrow [ text = { "REFERENCE · " + (:origin == "library" ? "STANDARD LIBRARY" : "BUILT-IN") + (:source != null ? " · " + :source : "") } ],
+
+            // a library class is Declare like any program: its source opens in
+            // the Viewer (`navigate` resolves the path against the distro root)
+
+            Eyebrow [ visible = { :origin == "library" && :source != null }, text = "VIEW SOURCE →",
+                textColor = { provided("theme").accent }, cursor = "pointer", link = { "" + :source + "?viewer" } ]
+            ],
         Title [ fontSize = { 32 * app.fontScale }, text = { classroot.cname } ],
 
         // the chain, every ancestor a link — and the class's subclasses
@@ -1296,7 +1304,7 @@ class ChapterDetail [ width = 100%,
 
     wanted: boolean = { classroot.pageLive || classroot.src.loaded },
     src: DataSource [ auto = true,
-        url = { classroot.wanted ? "chapters/" + classroot.cid + ".json" : "" } ],
+        url = { classroot.wanted ? app.base + "chapters/" + classroot.cid + ".json" : "" } ],
 
     loading: Text [ visible = { classroot.src.loading }, fontSize = { 14 * app.fontScale }, textColor = { provided("theme").textMuted }, text = "Loading the chapter…" ],
     failed:  Text [ visible = { classroot.src.failed }, fontSize = { 14 * app.fontScale }, textColor = { provided("theme").textMuted }, wrap = true, width = 100%,
@@ -1462,6 +1470,21 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
     form:     string = { app.mode == "language" ? (app.page.split("/")[1] || "") : app.formAt },
     tname:    string = { app.mode == "type" ? (app.page.split("/")[1] || app.typeAt) : app.typeAt },
 
+    // Each mode's pane is built the first time that mode is shown, and kept
+    // after, so a return to it is instant: a boot on a guide chapter builds the
+    // guide and none of the reference. Each flag starts as "showing now" and is
+    // set for good the first time it is (the assignment replaces the formula).
+
+    refSeen:  boolean = { app.mode == "reference" },
+    langSeen: boolean = { app.mode == "language" },
+    typeSeen: boolean = { app.mode == "type" },
+    trackChanges = ["mode"],
+    onChange(e: ChangeEvent) {
+        if (app.mode == "reference") app.refSeen = true
+        if (app.mode == "language") app.langSeen = true
+        if (app.mode == "type") app.typeSeen = true
+        },
+
     // a form's display name, for a related-forms chip
 
     formName(slug: string) -> string {
@@ -1521,7 +1544,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
     searchQ: string = "",
     searchSel: number = -1,                    // the focused result row (-1 = the field itself holds focus)
     searchIdx: DataSource [ auto = true,
-        url = { app.searchQ != "" || this.loaded ? "search-index.json" : "" } ],
+        url = { app.searchQ != "" || this.loaded ? app.base + "search-index.json" : "" } ],
     searchHits: array = { app.findDocs(app.searchQ, app.searchIdx.value) },
     hits: Dataset [ contents = { { items: app.searchHits } } ],   // the same list as declared data — the results page's cursor root (the navSource idiom)
 
@@ -1680,7 +1703,12 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
     codeBackground = { provided("theme").chipBg },
     codeRule = { provided("theme").accentSecondary },
 
-    docs: DataSource [ url = "../../docs/declare-model.json" ],
+    // Hosted in another program (the desktop's window), this app's relative
+    // data resolves in the host's space, and the host provides where this app
+    // lives as `base`; standalone it is "" and the paths are this folder's.
+
+    base: string = { hostProvided("base", "") },
+    docs: DataSource [ url = { app.base + "../../docs/declare-model.json" } ],
     datapath = { docs.value },                 // root every :path below into the model
     onInit() { this.docs.fetch() },            // DataSource is explicit-fetch — kick it once, on construction
 
@@ -1871,6 +1899,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
             // the column starts, and 26 under the last class group
 
             refNav: View [ width = 100%, visible = { app.mode == "reference" || app.mode == "language" || app.mode == "type" },
+                exists = { app.refSeen || app.langSeen || app.typeSeen },     // built when that half is first shown
                 padding = [16, 0, 26, 0],
                 layout: SimpleLayout [ axis = y, spacing = 2 ],
                 langEyebrow: Mono [ fontSize = 12, letterSpacing = 1.4, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "LANGUAGE" ],
@@ -1933,14 +1962,14 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
                (ClassTab, above) still replicates the full list — that is what
                visibility requires of a navigator. */
 
-            refCol: View [ width = 100%, visible = { app.mode == "reference" },
+            refCol: View [ width = 100%, visible = { app.mode == "reference" }, exists = { app.refSeen },
                 ClassDetail [ datapath = { (app.docs.read(["tree"]) || []).find(c => c.name == app.selected) }, cname = :name ]
                 ],
 
             // the language pane: the index (no cursor) or ONE form's page, re-rooted to
             // the selection exactly as the reference page is
 
-            langCol: View [ width = 100%, visible = { app.mode == "language" },
+            langCol: View [ width = 100%, visible = { app.mode == "language" }, exists = { app.langSeen },
                 FormIndex [ datapath = { app.docs.read(["forms"]) } ],
                 FormDetail [ datapath = { ((app.docs.read(["forms", "pages"]) || {}) as any)[app.form] }, slug = { "" + :slug } ]
                 ],
@@ -1948,7 +1977,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
             // the type pane — ONE page, re-rooted to the selection, exactly as
             // the reference and language panes are
 
-            typeCol: View [ width = 100%, visible = { app.mode == "type" },
+            typeCol: View [ width = 100%, visible = { app.mode == "type" }, exists = { app.typeSeen },
                 TypeDetail [ datapath = { ((app.docs.read(["types", "pages"]) || {}) as any)[app.tname] }, tname = { "" + :name } ]
                 ]
             ],

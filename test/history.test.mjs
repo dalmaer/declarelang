@@ -13,8 +13,10 @@
 //   - a fresh page at the same URL starts at the declared initial (a URL
 //     carries no waypoint — the stranger test, enforced by construction);
 //   - `follow(ref, true)` (the replace verb) overwrites the pair, no entry;
-//   - a traversal lands at the departed entry's scroll (the per-entry stamp),
-//     and a reload does not — the same rule, applied to the other coordinate.
+//   - a traversal lands where the user left the entry — the page's scroll and
+//     every scrolling pane's, as they were when the app started to leave, so a
+//     navigation that also moves to the top cannot overwrite them — and a
+//     reload does not: the same rule, applied to the other coordinate.
 
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -152,18 +154,39 @@ try {
     await page.evaluate(() => scrollTo(0, 0));
     await sleep(100);
     await back();
-    await sleep(250);                                  // restore waits two frames past the settle
+    await sleep(250);
     const y = await page.evaluate(() => scrollY);
     assert.ok(Math.abs(y - 900) <= 2, `Back returned to the departed scroll (got ${y})`);
   });
 
-  await test("a reload lands at the top, even on an entry carrying a scroll stamp", async () => {
-    // We are standing on the entry the traversal above restored: it holds that
-    // entry's departure stamp and the page sits at it. The scroll is the other
-    // coordinate, and it follows the same rule — traversal restores it, an
-    // arrival does not, because the top is what the URL says.
-    const stamped = await page.evaluate(() => history.state?.declare?.s);
-    assert.ok(stamped > 0, `precondition: the entry carries its stamp (got ${stamped})`);
+  await test("a pane lands where it was, and moving to the top while leaving does not lose it", async () => {
+    await page.evaluate(() => { scrollTo(0, 600); window.__app.pane.scrollTo(700); });
+    await sleep(150);
+    // a page that starts each new place at its top: navigate, then go to the
+    // top, in the same handler
+    await page.evaluate(() => { window.__app.location = "fresh"; scrollTo(0, 0); window.__app.pane.scrollTo(0); });
+    await tick();
+    await back();
+    await sleep(250);
+    const at = await page.evaluate(() => ({ page: scrollY, pane: document.querySelector("[data-declare-scroll]")?.scrollTop }));
+    assert.ok(Math.abs(at.page - 600) <= 2, `the page came back (got ${at.page})`);
+    assert.ok(Math.abs(at.pane - 700) <= 2, `the pane came back (got ${at.pane})`);
+    await fwd();
+    await sleep(250);
+    const there = await page.evaluate(() => ({ page: scrollY, pane: document.querySelector("[data-declare-scroll]")?.scrollTop }));
+    assert.equal(Math.round(there.page), 0, "Forward: the page where it was left there");
+    assert.equal(Math.round(there.pane), 0, "Forward: the pane where it was left there");
+    await back();
+    await sleep(250);
+  });
+
+  await test("a reload lands at the top, even on an entry with a place to return to", async () => {
+    // We are standing on the entry the traversal above restored, and the page
+    // sits at its place. The scroll is the other coordinate, and it follows the
+    // same rule — traversal restores it, an arrival does not, because the top
+    // is what the URL says.
+    const before = await page.evaluate(() => scrollY);
+    assert.ok(before > 0, `precondition: the page sits at the entry's place (got ${before})`);
     await page.reload({ waitUntil: "networkidle2" });
     await page.waitForFunction(() => !!window.__app, { timeout: 30000 });
     await sleep(400);                                  // past the restore's two-frame window

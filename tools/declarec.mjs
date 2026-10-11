@@ -380,9 +380,9 @@ export async function buildProduction(source, opts = {}) {
   // ⚠ `--render mac` IS NOT A BUILD TARGET, and must not silently become one.
   // Two different constructs share the word "mac" and only one of them is a
   // declarec job:
-  //   • the mac RUNTIME — bundles/declare-mac.js, the JS the native host loads
-  //     as its world. Built once for the platform by tools/internal/build-mac.mjs
-  //     and kept fresh by bundle-freshness.mjs, not per app.
+  //   • the mac RUNTIME — declare-mac.js, the JS the native host loads as its
+  //     world. Built into the Mac app by the app build (npm run build:mac), not
+  //     per program.
   //   • "package this program as a Mac app" — a standalone .app carrying the
   //     program. A separate construct, still to be designed.
   // Until the second exists, refuse: this used to fall through a two-way ternary
@@ -391,9 +391,8 @@ export async function buildProduction(source, opts = {}) {
   if (opts.render === "mac") {
     const why =
       "--render mac is not a build target.\n"
-      + "  The native host loads the mac RUNTIME bundle, which is a platform artifact,\n"
-      + "  not a per-app build:   node tools/internal/build-mac.mjs\n"
-      + "  (kept fresh automatically — see tools/internal/bundle-freshness.mjs)\n"
+      + "  The native host loads the mac RUNTIME bundle, which the Mac app carries,\n"
+      + "  built in when the app is built:   npm run build:mac\n"
       + "  Packaging a program as a standalone .app is a separate construct, not implemented.";
     // `report` is what the CLI prints; it must not be "" or the `??` below it
     // selects the empty string and the reason vanishes.

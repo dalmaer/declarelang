@@ -779,8 +779,10 @@ const DOMIslandSchema = {
     // `post` — the island's inbound verb: the hosted side's post(topic,
     // payload) lands here as onPost({ topic, payload }). The outbound half is
     // the island's own post() method; standing values cross as `provides`
-    // (down) and `exposed(…)` (up).
-    events: ["post"],
+    // (down) and `exposed(…)` (up). `navigate` — the hosted program's
+    // navigate(to) / openWindow(to), delivered to the island when it declares
+    // onNavigate (island.ts islandNavigation), else carried out by the page.
+    events: ["post", "navigate"],
 };
 // TextInput (Layer 3, docs/system-design/input.md): an editable text field — the first
 // EDITOR (language §9, the leaf-input exception). `text` is the model/draft slot,
@@ -1366,6 +1368,7 @@ export const EVENT_PAYLOAD = {
     tooltip: "TooltipEvent",
     message: "StreamMessage", // Stream: data/type/id (streams.ts)
     post: "IslandPost", // Island bridge: { topic, payload } (view.ts)
+    navigate: "IslandNavigation", // Island: a hosted program's navigation (island.ts)
     // payload-free: focus, blur, escapeFocus, init, enter, load, ready,
     // start, stop, repeat, apply, remove, open, close, error
 };

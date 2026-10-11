@@ -271,6 +271,11 @@ export declare class View extends Node {
     defaultplacement: string;
     scrollY: number;
     scrollX: number;
+    /** @internal The offset the PLATFORM last reported — never the eager write a
+     *  `scrollTo` makes to scrollY. Where a restored place is confirmed
+     *  (scroll-places.ts). Unset until the platform has reported. */
+    $shownY?: number;
+    $shownX?: number;
     scrollStartY: number;
     scrollStartX: number;
     scrolling: boolean;
@@ -1142,6 +1147,14 @@ export declare class App extends View {
      *  makes the reveal's own scrollIntoView (whose scroll event arrives a tick
      *  later) safe from self-cancellation. */
     $cancelReveal(): void;
+    /** The host's departure hook (scroll-places.ts): called at the first
+     *  `location` or `waypoint` write of a settle — the moment the app leaves
+     *  where it was, before anything later in that handler moves the page — so
+     *  the host can note where the user was. Null on a host that keeps no
+     *  history. */
+    $onDepart: (() => void) | null;
+    private departArmed;
+    $departing(): void;
     /** The app's size floor. An app that degrades below some width declares
      *  `minWidth = 600` and the auto-extent never goes under it: in a narrower
      *  host the app holds its floor and the STAGE pans natively (the page

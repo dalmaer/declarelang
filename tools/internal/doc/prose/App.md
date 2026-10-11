@@ -102,7 +102,9 @@ The height floor — the twin of `minWidth`. Below it the app holds its size and
 Navigate the host **out** of the app: `app.navigate("https://…")` for an external link, or
 `app.navigate("some/app.declare")` for another program (resolved against the distro root). It
 is a service **method**, not an attribute — call it from a handler; `app.navigate = …` is an
-error.
+error. Running inside another program's island, the call goes to that island first: when
+it declares `onNavigate`, the host decides what the link means (a desktop opens a window),
+and otherwise the page navigates. The program writes the same call either way.
 
 ## follow()
 The **one operation behind every arrival**: a linked
@@ -336,7 +338,8 @@ opinion, and the host keeps whatever title it served.
 
 ## openWindow()
 Opens a URL in a new window or tab — the service action, so a `{ }` body never touches the
-document. `navigate` is the same-window form.
+document. `navigate` is the same-window form. Inside an island, it reaches the island's
+`onNavigate` first, as `navigate` does, with `newWindow` true.
 
 ## inspect()
 Opens the Inspector on this app, or on an embedded child app when given its island key

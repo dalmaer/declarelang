@@ -270,6 +270,95 @@ canvas, its view — (the Declare tenant an island mounted). Everything else a
 backend or host plants is internal and may vanish without notice. None of
 them is a global: a page's own scripts share no names with Declare.
 
+## Tenants requiring navigation
+
+Most hosted programs need none of what follows: a preview or a widget runs in its
+box and the host leaves it alone. This section is for a host that runs a program
+the person **browses** — a documentation reader, a field guide, a site with pages
+— inside a window or a panel of its own. Such a host wants to open the program
+at a particular place, to show where it has gone, to decide what happens when one
+of its links leads out of it, and to give it back and forward. Neither program
+names anything to make this work: the island carries the tenant's **location**
+and its **links** on its own.
+
+**Where it is.** [`location`](declare-docs:AppIsland.location) on an `AppIsland` is
+its tenant's [`location`](declare-docs:App.location), carried both ways. Set it and
+the tenant starts there, as a page starts at its URL's fragment; set it later and
+the tenant goes there, through its own `onFollow`. When the tenant moves itself, the
+island's `location` follows, so the host can show where its tenant is:
+
+```declare-fragment
+docs: AppIsland [ program = "../../docs/docs",
+    onInit() { this.location = "reference/Button" }    // start on that page
+    ],
+crumb: Text [ text = { app.docs.location } ]           // and say where it is now
+```
+
+Assign it from a handler or `onInit`, not with a constraint: the tenant writes it
+too, and a constraint would claim a value two sides move.
+
+**Where it wants to go.** A program's [`navigate(to)`](declare-docs:App.method.navigate)
+and [`openWindow(to)`](declare-docs:App.method.openWindow) are its links leaving it.
+Inside an island they come to the island first, as
+[`onNavigate`](declare-docs:DOMIsland.event.navigate), and the host decides what a
+link means; declaring the handler is the claim, and without one the page navigates.
+The tenant writes nothing different — it calls `navigate` as it would running alone.
+
+```declare-fragment
+viewer: AppIsland [ program = "../../viewer/viewer",
+    onNavigate(n: IslandNavigation) {
+        if (n.program == "") { app.navigate(n.to); return }   // not a Declare program: the page follows it
+        app.side.program = n.program                          // a program: open it beside this one,
+        app.side.location = n.location                        // at the place the link names
+        }
+    ]
+```
+
+The [`IslandNavigation`](declare-docs:type:IslandNavigation) arrives worked out:
+`n.to` is the address made absolute, `n.program` the Declare program it names (a
+directory taken as its same-named program; `""` for anything else), `n.location` the
+place after its `#`, and `n.newWindow` whether the tenant asked for a window of its
+own. That is how the desktop opens a reference page from the Viewer: the Viewer's
+link names the docs app, and the desktop opens it in a window at that page.
+
+**Back and forward across a tenant.** The page's Back walks the page, never a
+tenant's moves. A host that wants back and forward for its tenant keeps them itself:
+the island's `location` reports every move, and setting it steps back. To return the
+person to where they were scrolled as well, the island reports
+[`departedPlace`](declare-docs:AppIsland.departedPlace) each time the tenant leaves a
+location — how far its panes, and the island's own box, were scrolled. Keep it with
+the location, and hand it back as [`place`](declare-docs:AppIsland.place) when you
+step:
+
+```declare-fragment
+schema Stop [ at: string, place: string ]
+
+App [
+    stops: Stop[] = [],
+    stepping: boolean = false,                          // a step back is not a new stop
+    pane: AppIsland [ program = "../../docs/docs",
+        trackChanges = ["location"],
+        onChange(e: ChangeEvent) {
+            if (app.stepping) { app.stepping = false; return }
+            app.stops = [...app.stops, { at: "" + e.changed[0].previousValue, place: this.departedPlace }]
+            }
+        ],
+    back() {
+        const s = app.stops[app.stops.length - 1]
+        if (s == null) return
+        app.stops = app.stops.slice(0, -1)
+        app.stepping = true
+        app.pane.place = s.place                          // the place first, then the location it belongs to
+        app.pane.location = s.at
+        }
+    ]
+```
+
+The place lands once the move has settled and the content can hold it, and the
+person's first scroll cancels a landing still under way — the same landing as the
+page's own Back. The desktop's Docs and Birds windows do exactly this, forward
+included, with ‹ › in their title bars.
+
 ## Loading foreign code at runtime
 
 An island's interior is not Declare's to ship — that is the whole point of the
@@ -326,7 +415,8 @@ send the command as `post`, or move the border.
 ---
 
 **What you can now do:** put a Declare app in any page, host foreign content in a box
-Declare sizes, run one Declare program inside another, and pass values and messages
-across each boundary by name.
+Declare sizes, run one Declare program inside another, pass values and messages
+across each boundary by name, and follow and steer where a hosted program is — what
+its links do, and its back and forward.
 
 [Next: **Packaging for production** →](declare-docs:guide:packaging)

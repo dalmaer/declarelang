@@ -27,7 +27,7 @@ a different tool. The build walks the chain in order:
 runtime/src, compiler/src  ──tsc──▶  */dist
 */dist                     ──build-boot, build-compiler──▶  bundles/declare-*.js
 bundles/declare-compiler.js
-  + runtime/dist, browser  ──build-mac──▶  bundles/declare-*-mac.js
+  + runtime/dist, browser  ──build-mac──▶  mac-host/.build/bundles/declare-*-mac.js
 mac-host/Sources           ──swift build, codesign──▶  .build/release/DeclareMac
 all of the above           ──build-mac-app──▶  Declare Mac.app
 ```
@@ -48,6 +48,11 @@ The artifact→inputs table lives in `tools/internal/build-mac-app.mjs`, and the
 of it is *imported* from `tools/internal/bundle-freshness.mjs` rather than restated. That
 matters: one copy of the pairing cannot drift from another.
 
+The app's two bundles — the runtime with the Mac backend, and the one compiler wrapped for
+JavaScriptCore — are build outputs of the app alone. They are written to
+`mac-host/.build/bundles/`, which nothing commits, and the build stops if any piece it
+bakes is missing.
+
 `bash mac-host/bundle.sh` still works — it is a wrapper on the same build.
 
 ### Where it lands
@@ -67,11 +72,14 @@ document handler when it is installed in one, so **double-clicking a `.declare` 
 nothing until the app lives there**. The in-tree fallback runs fine — it simply cannot be
 the handler.
 
-**There is one app on the machine, and every harness drives it.** There is deliberately no
+**There is one app per tree, and every harness drives it.** There is deliberately no
 second "dev build": `mac-host/.build/release/DeclareMac` is a SwiftPM intermediate, never
 run directly. The gates, the conformance suite and `test/mac-shell.test.mjs` all launch
 the installed app (`mac-host/app.mjs` is the one place that answers "where is it?"), so
-what they measure is what ships.
+what they measure is what ships. A second tree on the same machine builds and drives its
+own app under its own name (`DECLARE_MAC_APP="Declare Mac Overlay"`), with its own bundle
+identifier and its own control pipe (`/tmp/declare-overlay-ctl.in`), so it never touches
+the first tree's.
 
 ### The app is independent of the tree
 
@@ -107,6 +115,26 @@ is, so a rebuild that changes nothing keeps the cache.
 It also means **a mac build writes nothing into the tree.** The web's cache-busters —
 `service-worker.js`, `index.html`, every `apps/*/index.html` — are derive's, never a
 per-machine app build's. The dependency runs one way.
+
+### Keeping it current
+
+`npm run build:mac` rebuilds whenever anything the app carries has changed — the runtime,
+the compiler, the library, the browser code, the Swift host, the kernel or the build
+scripts — and does nothing when none has: it hashes those sources before building
+anything. A library edit and a runtime edit are alike here. The web needs no build for a
+library edit, because the dev server reads the library afresh on every compile; the app
+carries its own copy, so it follows on its next build.
+
+With the per-machine flag `.derive/mac-auto` (or `DECLARE_MAC_AUTO=1` for one run),
+`npm run build:dev` brings the app up to date as its last step and smoke-tests it with one
+launch. The flag is never committed. In a second tree, put the app's name in the flag file
+(`Declare Mac Overlay`) and the automatic build makes that app instead of the first
+tree's.
+
+A harness's launch stays in the background: an automated host starts as an accessory app,
+which the system does not bring forward, and keeps rendering behind other windows (the
+control channel holds off App Nap; `ctl occlusion ignore` keeps a covered window painting).
+A rig that needs the foreground asks for it with `ctl activate`.
 
 > **The platform is chosen when the app is built.** There is no way to point a built app at
 > a different tree, and the build will not bake a stale platform — so when the runtime
@@ -217,9 +245,9 @@ layer commit (2790 ops))`. Launch the host from a terminal to see it.
 
 - **The app behaves like an older version of the platform** — it is one. Run
   `npm run build:mac`; it rebuilds every stale link in the chain and refuses to assemble
-  an app from anything stale. `tsc` alone is not enough — the host runs
-  `bundles/declare-mac.js`, not `runtime/dist` — which is why this is one command rather
-  than four.
+  an app from anything stale. `tsc` alone is not enough — the host runs its own build of
+  the runtime, made by the app build, not `runtime/dist` — which is why this is one
+  command rather than four.
 - **`ctl platform`** answers where the compiler and library are being read from, and which
   toolchain is baked in. It is a `file://` URL inside the `.app`; anything else means the
   bundle was not assembled by the build.

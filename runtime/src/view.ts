@@ -594,6 +594,11 @@ export class View extends Node {
   declare defaultplacement: string;
   declare scrollY: number;
   declare scrollX: number;
+  /** @internal The offset the PLATFORM last reported — never the eager write a
+   *  `scrollTo` makes to scrollY. Where a restored place is confirmed
+   *  (scroll-places.ts). Unset until the platform has reported. */
+  declare $shownY?: number;
+  declare $shownX?: number;
   declare scrollStartY: number;
   declare scrollStartX: number;
   declare scrolling: boolean;
@@ -1373,8 +1378,8 @@ export class View extends Node {
     // The facts' read halves: the platform mirrors its offset and its
     // in-motion state in; nothing here pushes out (a request is a verb call).
     const scrolling = (a: boolean) => { this.$scrollingChanged(a); };
-    if (this.scrolls === "y" || this.scrolls === "both") s.setScroll?.(true, (y) => { this.scrollY = y; }, scrolling);
-    if (this.scrolls === "x" || this.scrolls === "both") s.setScrollX?.(true, (x) => { this.scrollX = x; }, scrolling);
+    if (this.scrolls === "y" || this.scrolls === "both") s.setScroll?.(true, (y) => { this.scrollY = y; this.$shownY = y; }, scrolling);
+    if (this.scrolls === "x" || this.scrolls === "both") s.setScrollX?.(true, (x) => { this.scrollX = x; this.$shownX = x; }, scrolling);
     // A DECLARED START, applied once as a request (a hidden pane holds it —
     // dom-backend SCROLL_WANT; boot.ts re-applies after the first layout).
     if (this.scrollStartY !== 0) this.$surface?.scrollToY?.(this.scrollStartY);
@@ -2126,11 +2131,15 @@ function markRichPending(v: View): void {
  *  reveal's landing depends on every flow above the target in document order,
  *  and "which flows sit between" is exactly the geometry that isn't settled
  *  yet. Conservative, cheap (only runs while an intent is held), and false
- *  everywhere on synchronous backends — headless stays first-call (§0.11). */
+ *  everywhere on synchronous backends — headless stays first-call (§0.11).
+ *  A hidden view's flows are passed over: hidden, a view takes no part in its
+ *  parent's layout, so its measurement moves no target — and a flow measures
+ *  only once shown, so counting it would hold every reveal while it hides. */
 function anyRichPending(root: View): boolean {
   let pending = false;
   const walk = (n: Node): void => {
     if (pending) return;
+    if (n instanceof View && !n.visible) return;
     if ((n as unknown as { measurePending?: boolean }).measurePending === true) { pending = true; return; }
     for (const c of n.children) walk(c);
   };
@@ -2680,6 +2689,20 @@ export class App extends View {
    *  later) safe from self-cancellation. */
   $cancelReveal(): void { this.pendingAnchor = null; }
 
+  /** The host's departure hook (scroll-places.ts): called at the first
+   *  `location` or `waypoint` write of a settle — the moment the app leaves
+   *  where it was, before anything later in that handler moves the page — so
+   *  the host can note where the user was. Null on a host that keeps no
+   *  history. */
+  $onDepart: (() => void) | null = null;
+  private departArmed = false;
+  $departing(): void {
+    if (this.departArmed || this.$onDepart === null) return;
+    this.departArmed = true;
+    afterSettle(() => { this.departArmed = false; });
+    this.$onDepart();
+  }
+
   /** The app's size floor. An app that degrades below some width declares
    *  `minWidth = 600` and the auto-extent never goes under it: in a narrower
    *  host the app holds its floor and the STAGE pans natively (the page
@@ -2849,12 +2872,12 @@ defineAttributes(App, {
   // a clean URL. NOT readOnly — navigation IS a write from app code. The push arms
   // the reveal pump: a location carrying `@name` is an intent, and the write is
   // the moment it arms (scheduleReveal — no host pumps this per frame anymore).
-  location: { def: "", push: (a: App) => a.$scheduleReveal() },
+  location: { def: "", push: (a: App) => { a.$departing(); a.$scheduleReveal(); } },
   // `waypoint` — the history-carried step (schema.ts has the full contract).
   // A stored reactive slot exactly like location, with the opposite visibility:
   // the host mirrors it into the History entry's STATE OBJECT (never the URL)
   // and writes it back on traversal. Default "" = the declared initial step.
-  waypoint: { def: "" },
+  waypoint: { def: "", push: (a: App) => a.$departing() },
   demoSources: { def: {} },
   liveReport: { def: "" },
   // the size floor (bindExtent) — author-settable, 0 = none

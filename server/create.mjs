@@ -269,10 +269,13 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
     let segments;
     try { segments = await toolchain.highlight(source); }
     catch (e) { return send(res, 500, String((e && e.message) || e), "text/plain"); }
+    // the file's line count (and the whole app's when it declares the App),
+    // and where each of the program's classes lives
+    const { metrics, defs } = await toolchain.index(source, absPath, path.join(PLATFORM_DIR, "library"));
     if (rt === REQ.SEGMENTS)
-      return send(res, 200, JSON.stringify({ path: relPath, segments, metrics: await toolchain.metrics(source) }), "application/json");
+      return send(res, 200, JSON.stringify({ path: relPath, segments, metrics, defs }), "application/json");
     const mode = rt === REQ.SOURCE ? "source" : rt === REQ.EDIT ? "edit" : "reader";
-    return send(res, 200, withServerMarker(await sourcePage(relPath, segments, source, backendClass, mode)));
+    return send(res, 200, withServerMarker(await sourcePage(relPath, segments, source, metrics, defs, backendClass, mode)));
   }
 
 
@@ -299,7 +302,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
     } catch { return {}; }
   }
 
-  async function sourcePage(relPath, segments, rawSource, backendClass, mode = "") {
+  async function sourcePage(relPath, segments, rawSource, metrics, defs, backendClass, mode = "") {
     // the PROGRAM form — the page instantiates it with no parser of its own
     const r = await toolchain.compileProgram(readFileSync(path.join(VIEWER_DIR, "viewer.declare"), "utf8"), { originDir: VIEWER_DIR });
     if (r.program === null) {
@@ -318,7 +321,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
       // the child's render outright and leave the edit pane blank
       assetBase: "/" + relPath.replace(/^\/+/, "").replace(/[^/]*$/, ""),
       seeds: { __source__: JSON.stringify(segments), __raw__: rawSource, __path__: relPath,
-        __metrics__: JSON.stringify(await toolchain.metrics(rawSource)),
+        __metrics__: JSON.stringify(metrics), __defs__: JSON.stringify(defs),
         // the class library's tag → file manifest, with the URL the files are
         // served at, so the viewer can link a bare `Button [` to button.declare
         __library__: JSON.stringify({ base: platURL("library/"), manifest: libraryManifest() }) },
@@ -755,10 +758,8 @@ bootHost(cfg);
 
       // a platform BUNDLE → rebuild if stale, but only when the platform is a
       // real distro checkout (a node_modules platform has no sources to rebuild).
-      // The list is every artifact in bundle-freshness's BUNDLES, including the
-      // two NATIVE ones: declare-compiler-mac.js is fetched over HTTP by the
-      // host's client-compile tier, and declare-mac.js is served so the host can
-      // be pointed at a URL rather than a checkout.
+      // The list is bundle-freshness's BUNDLES. The Mac app's bundles are not
+      // among them: the app carries its own, built in when it is built.
       if (canRebuildBundles && BUNDLES.some((b) => p === platURL(b.out) || p === "/" + b.out)) {
         const bundleRel = p.startsWith(PLAT) ? p.slice(PLAT.length) : p.slice(1);
         try { rebuildStale(PLATFORM_DIR, { only: [bundleRel] }); } catch (e) { console.error("bundle rebuild failed:", e.message); }

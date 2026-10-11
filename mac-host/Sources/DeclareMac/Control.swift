@@ -336,6 +336,32 @@ final class ControlChannel {
             bridge.call("__declareKey", ["keyup", name, mods, 0])
             bridge.needsFrame()
             return "ok"
+        case "nativekey":
+            // `nativekey down|up|flags <keyCode> [chars] [flags-hex]` — a real
+            // NSEvent handed to the view's own keyDown / keyUp / flagsChanged,
+            // so the host's reading of a keystroke (its key and code tables,
+            // modifier sides) is tested as the keyboard drives it, without the
+            // app having to be frontmost. `flags` carries the raw modifier
+            // flags, device side bits included (0x20102 = left Shift down).
+            guard a.count > 2, let v = view, let k = UInt16(a[2]) else {
+                return "usage: nativekey down|up|flags <keyCode> [chars] [flags-hex]"
+            }
+            let type: NSEvent.EventType = a[1] == "up" ? .keyUp : a[1] == "flags" ? .flagsChanged : .keyDown
+            let ch = a.count > 3 ? (a[3] == "space" ? " " : a[3]) : ""
+            let flags = NSEvent.ModifierFlags(rawValue: a.count > 4 ? UInt(a[4], radix: 16) ?? 0 : 0)
+            guard let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags,
+                                           timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: v.window?.windowNumber ?? 0, context: nil,
+                                           characters: type == .flagsChanged ? "" : ch,
+                                           charactersIgnoringModifiers: type == .flagsChanged ? "" : ch,
+                                           isARepeat: false, keyCode: k)
+            else { return "bad event" }
+            switch type {
+            case .keyUp: v.keyUp(with: e)
+            case .flagsChanged: v.flagsChanged(with: e)
+            default: v.keyDown(with: e)
+            }
+            return "ok"
         case "trace":
             bridge.call("__declareTraceHit", [num(1), num(2)])
             return "ok (see the log)"

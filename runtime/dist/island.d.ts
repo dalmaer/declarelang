@@ -1,6 +1,12 @@
 import { View, type App } from "./view.js";
 import type { Surface } from "./backend.js";
 import { BoundaryValues } from "./boundary.js";
+/** The island's own box, as a host hands it to the link: its scroll, which is
+ *  where a tenant that scrolls as a page scrolls (the box is its viewport). */
+export interface IslandBox {
+    scrollY(): number;
+    scrollTo(y: number): number;
+}
 /** The value an island provides under `name` — the `provided("name")` read AT
  *  the island: its own provision or declared slot first, then its ancestors.
  *  Undefined when nothing provides it. Tracked (the readers of a provision
@@ -50,6 +56,31 @@ export declare class Island extends View {
     private handle;
     $foreignHandle(): Record<string, unknown>;
 }
+/** One navigation an embedded app asked for — its `navigate(to)` or
+ *  `openWindow(to)` — as its island's `onNavigate` receives it: the address
+ *  made absolute, the Declare program it names (its `.declare` path without
+ *  the extension, a directory taken as its same-named program; "" when it
+ *  names none) and the location after its `#`, and whether it asked for a
+ *  window of its own. */
+export interface IslandNavigation {
+    to: string;
+    program: string;
+    location: string;
+    newWindow: boolean;
+}
+/** An embedded app's navigation verbs, answered by the island that hosts it
+ *  when that island declares `onNavigate` — the hosting program decides what
+ *  a link inside it means (a desktop opens a window) — and by `fallback`, the
+ *  page or the window, when it does not. `resolve` makes an address absolute
+ *  the way the host's own navigation would. A host hands the result to the
+ *  tenant as its services (provideHostServices). */
+export declare function islandNavigation(island: View | null, resolve: (u: string) => string, fallback: {
+    navigate(u: string): void;
+    openWindow(u: string): void;
+}): {
+    navigate(u: string): void;
+    openWindow(u: string): void;
+};
 /** Link an Island to a DECLARE tenant (host-client renderChild, the canvas
  *  island service, the mac runner). DOWN: every name on the island's
  *  `provides` list, resolved at the island, is provided to the tenant (what
@@ -59,7 +90,7 @@ export declare class Island extends View {
  *  both ways. Build the tenant with `provides: islandProvisions(island)` so
  *  its first evaluation already sees what the host provides, and link it
  *  before its first settle. Returns the unlink. */
-export declare function linkIslandTenant(island: Island, tenant: App): () => void;
+export declare function linkIslandTenant(island: Island, tenant: App, box?: IslandBox | null): () => void;
 /** DOMIsland — the FOREIGN-CONTENT island (design: the `DOMIsland [ … ]` view). A leaf
  *  whose box Declare lays out and constrains normally, but whose interior is
  *  host-managed DOM: the `slot` key is reflected onto the element (DOM backend)

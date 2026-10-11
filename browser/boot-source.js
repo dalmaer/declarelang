@@ -12,10 +12,10 @@ import { bootHost } from "./host-client.js";
 import { hydrateProgram } from "../runtime/dist/host-api.js";
 import { registerServiceWorker } from "./register-sw.js";
 import { loadCompiler, ensureLibrary } from "./compiler-client.js";
-// highlight + lineMetrics are DEPENDENCY-FREE (no TS, no compiler bundle): the
+// highlight + programIndex are DEPENDENCY-FREE (no TS, no compiler bundle): the
 // segmenter the server runs is the same module, imported directly — so a source
 // page never needs the compiler download just to render segments.
-import { highlight, lineMetrics } from "../compiler/dist/highlight.js";
+import { highlight, programIndex } from "../compiler/dist/highlight.js";
 import { loadBuild } from "./prewarm-cache.js";
 import { prewarmedEntry } from "./prewarm-manifest.js";
 
@@ -77,6 +77,11 @@ async function run() {
     // it faithfully); __path__ = the tree-relative path shown in the head. The viewer
     // reads them off app.demoSources.
     const segments = highlight(raw);
+    // the file's line count (and the whole app's), and where each class lives:
+    // its includes fetched beside it, the library's left out
+    const index = await programIndex(raw, new URL(target).href,
+      async (u) => { const r = await fetch(u, { cache: "no-cache" }); return r.ok ? r.text() : null; },
+      (u) => u.startsWith(new URL("library/", ROOT).href));
     const relPath = new URL(target).pathname.replace(new URL(ROOT).pathname, "");
     const viewedDir = new URL(".", target).href;    // the file's own directory — the island child's data/asset base
     document.title = (relPath.split("/").pop() || "source") + " — source";
@@ -92,7 +97,7 @@ async function run() {
       // is what left the edit pane blank for every app declaring a font.
       dataBase: viewedDir, assetBase: viewedDir,
       seeds: { __source__: JSON.stringify(segments), __raw__: raw, __path__: relPath,
-        __metrics__: JSON.stringify(lineMetrics(raw)) },
+        __metrics__: JSON.stringify(index.metrics), __defs__: JSON.stringify(index.defs) },
       // the live-edit mode's recompile seam — the warm-loading client above,
       // reporting failure as `{ report }` so the viewer's diagnostics pane fills
       compile: async (s) => {
