@@ -26,6 +26,10 @@ tools/internal/pointer
 # commit/push; anything worth keeping graduates into apps/.
 my-apps/
 
+# Stargate's checked entry: the game plus the arcade recording its checks replay, written
+# beside the game by my-apps/stargate-reference/tools/make-checked.mjs
+apps/stargate/checked.declare
+
 # misc
 *.log
 .DS_Store

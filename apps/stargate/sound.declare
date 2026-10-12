@@ -16,10 +16,10 @@
 // `Speaker` holds the recordings and plays whichever the board says is sounding.
 //
 // The recordings in `sounds` are the arcade's board as MAME plays it, a file for each
-// number: `20.wav` is sound 20. Four of its sounds never end, and are loops: 15, 22, and
-// 14, which rises a step each time it is sent again (`14-1.wav` to `14-31.wav`). Sound 18
+// number: `20.m4a` is sound 20. Four of its sounds never end, and are loops: 15, 22, and
+// 14, which rises a step each time it is sent again (`14-1.m4a` to `14-31.m4a`). Sound 18
 // changes each time it is sent again, and the game only ever sends it in one run, which is
-// recorded whole (`18-warp.wav`).
+// recorded whole (`18-warp.m4a`).
 
 script {
     // a sound: how much it matters, and its tune, a step at a time: [so many times, so many
@@ -186,7 +186,7 @@ class Clip extends Audio [ inMemory = true,
     number: number = 0,
     step: number = 0,                   // for sound 14, which step this is
     file: string = "",
-    source = { "sounds/" + file + ".wav" },
+    source = { "sounds/" + file + ".m4a" },
     take: number = 0,
     trackChanges = ["take"],
     onChange() {
