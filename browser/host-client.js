@@ -47,12 +47,12 @@ const fragmentOf = () => decodeURIComponent(location.hash.replace(/^#/, ""));
  *   backend?: "DomBackend"|"CanvasBackend",
  *   pageWeight?: number, sourceLines?: number,
  *   seeds?: Record<string,string>,        // { <demo>: editorSeedSource, __page__: rawPageSource }
- *   demoBase?: string,                    // abs URL of the demos dir; previews with no seed fetch <demoBase><name>.declare on demand
+ *   islandBase?: string,                  // abs URL of the page program's folder; an island with no seed fetches <islandBase><program>.declare on demand
  *   compile?: (source: string, name: string) => Promise<{program:object}|{report:string}|null>,  // live recompile (server/in-browser); null = keep last
  *   canCompile?: boolean,        // false: no compiler on this host (a production build) — an island with no artifact is an error, not a retry
  *   location?: string,           // initial app.location when it is NOT in the URL fragment — the host's ?view= → initial-location translation (docs/system-design/location.md §4); a real fragment still wins
  *   dataBase?: string,           // abs/page-relative URL of the VIEWED program's directory: a source page's <base> points at the Viewer, so the island's relative DataSource urls (its data lives beside its file) are re-based here via the transport seam
- *   assetBase?: string,          // the same rule for the island child's BITMAPS and web FACES (asset-base.ts): a "__"-named live-edit island (the Viewer's edit pane) has no path of its own, so the host states the viewed program's directory. A named demo derives its own from demoBase.
+ *   assetBase?: string,          // the same rule for the island child's BITMAPS and web FACES (asset-base.ts): a "__"-named live-edit island (the Viewer's edit pane) has no path of its own, so the host states the viewed program's directory. A named island derives its own from islandBase.
  * }}
  */
 export async function bootHost(cfg) {

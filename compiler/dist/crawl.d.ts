@@ -46,8 +46,8 @@ export interface CrawlOptions {
      *  empty box; with it, every VISIBLE island's tenant is booted headlessly,
      *  extracted, and inlined where the island sits, so a page composed of
      *  programs is indexed as the page a reader sees. Callers resolve the name
-     *  exactly as the host does (`<name>.declare` in the host program's `demos/`
-     *  folder). Absent: islands stay empty, the pre-island behavior. A name that
+     *  exactly as the host does (`<program>.declare`, relative to the host
+     *  program). Absent: islands stay empty, the pre-island behavior. A name that
      *  does not resolve or compile FAILS the crawl (the loud-failure rule). */
     islands?: (name: string) => Promise<IslandProgram | null> | IslandProgram | null;
 }

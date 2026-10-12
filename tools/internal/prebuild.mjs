@@ -47,13 +47,12 @@ async function buildExample(name) {
   const pageWeight = Math.round((RUNTIME_GZ_BYTES + gzipSync(tracked.source).length) / 1024);
   const sourceLines = src.split("\n").filter((l) => { const t = l.trim(); return t !== "" && !t.startsWith("//"); }).length;
 
-  // Validate demos too (the site + docs ship a demos/ dir; the flagship apps don't).
-  // No manifest is emitted: a page seeds only the demos it names in boot(), and every
-  // other preview is fetched from its demos/ dir ON DEMAND when it first goes live
-  // (host-islands.js mountPreview) — the in-process echo of browse-to-run.
+  // Validate the programs the homepage and the docs run in their islands too: each
+  // keeps them in a folder of its own (`demos/`, the two apps' choice of name), and
+  // an island fetches its program ON DEMAND when it first goes live.
   let demos = 0;
   const demoDir = path.join(dir, "demos");
-  if (existsSync(demoDir)) {
+  if ((name === "homepage" || name === "docs") && existsSync(demoDir)) {
     for (const f of readdirSync(demoDir).sort()) {
       if (!f.endsWith(".declare")) continue;
       fail(`demo ${f}`, await compile(readFileSync(path.join(demoDir, f), "utf8"), {}));

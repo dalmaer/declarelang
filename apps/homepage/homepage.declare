@@ -1149,17 +1149,17 @@ App [ tagline: string = "a UI language for you and your AI",
             s3: DemoSection [ num = "02", head = "Declare it. It runs. It stays true.",
                 lead = "A constraint isn’t a callback you remember to re-run — it’s a standing relationship the runtime keeps true, re-derived the moment its inputs change.",
                 caption = "Three constraints track one value: the big number, the bar’s width, and its color. Click to bump v — all three update together, and the color crosses cool to warm at the halfway mark.",
-                demo = "reactivity" ],
+                demo = "demos/reactivity" ],
 
             s4: DemoSection [ num = "03", head = "Declare the shape, not the loop.",
                 lead = "A view can be built from data instead of laid out by hand — the shape written once, the data deciding how many there are and what each one says.",
                 caption = "One Gauge, instanced once per row of the data. Edit a number or add a row and the list rebuilds itself — no loop, no keys. And Gauge is auto-included: no import, no definition, just use it.",
-                demo = "from-data" ],
+                demo = "demos/from-data" ],
 
             s5: DemoSection [ num = "04", head = "Motion you declare, not schedule.",
                 lead = "You say where a thing belongs; a Spring finds the path there and settles by physics — motion you declare, not a timeline you sequence.",
                 caption = "Click to toggle the ball’s target between two positions. The Spring follows and settles by physics — no timeline, no frames driven by hand.",
-                demo = "spring" ],
+                demo = "demos/spring" ],
 
             /* ### The feedback loop — the page's argument for WHY the language is
                shaped this way, placed where it can land: after three tiny programs
@@ -1396,7 +1396,7 @@ App [ tagline: string = "a UI language for you and your AI",
         grid: GridBg [ bottom = { parent.island.y + parent.island.height } ],
 
         island: AppIsland [ y = { 56 + app.safeTop }, width = { app.width },
-            program = { app.location == "architecture" ? "../../architecture/architecture" : "" },
+            program = { app.location == "architecture" ? "../architecture/architecture" : "" },
 
             // the site's appearance and type, provided to the tenant by name —
             // it reads each with hostProvided(name, default)

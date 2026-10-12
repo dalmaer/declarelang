@@ -100,17 +100,13 @@ export function programName(urlPath) {
  *   staticBlock?: string,     // baked #declare-static for a crawler (the server's ?crawler flag);
  *                             //   the SW never bakes at request time (crawlers don't install workers)
  *   iconBase?: string|null,   // if set, emit favicon links resolved against it (…/ ending in a slash)
- *   demos?: string[]|null,    // the live-edit panels to seed, when the producer can KNOW them
- *                             //   (a host that reads the filesystem). null = "unknown", and boot
- *                             //   falls back to probing for a committed demos.json; an ARRAY —
- *                             //   including an empty one — is an answer, and boot asks nothing.
  * }}
  */
-export function runWrapper({ name, bootUrl, staticBlock = "", iconBase = null, main = null, title = "", demos = null, preloads = [] }) {
+export function runWrapper({ name, bootUrl, staticBlock = "", iconBase = null, main = null, title = "", preloads = [] }) {
   const script = `<script type="module">
   import boot from ${JSON.stringify(bootUrl)};
   const q = new URLSearchParams(location.search);
-  boot({ main: ${JSON.stringify(main)} ?? location.pathname, backend: q.get("render") === "canvas" ? "CanvasBackend" : undefined${demos === null ? "" : `, demos: ${JSON.stringify(demos)}`} });
+  boot({ main: ${JSON.stringify(main)} ?? location.pathname, backend: q.get("render") === "canvas" ? "CanvasBackend" : undefined });
 </script>`;
   return shell({ name, staticBlock, iconBase, title, script, bootUrl, preloads });
 }
@@ -133,23 +129,22 @@ export function runWrapper({ name, bootUrl, staticBlock = "", iconBase = null, m
  *    navigation is SW-served in the requested mode, and the stub is out of the loop.
  *
  * @param cfg {{ name: string, bootUrl: string, serveCoreUrl: string, iconBase?: string|null,
- *              demos?: string[]|null,     // as runWrapper: the baker reads the directory, so it KNOWS
  *              preloads?: string[] }}     // what boot will fetch before it can render (preloadLinks)
  */
-export function stubPage({ name, bootUrl, serveCoreUrl, iconBase = null, demos = null, preloads = [] }) {
+export function stubPage({ name, bootUrl, serveCoreUrl, iconBase = null, preloads = [] }) {
   const script = `<script type="module">
   import boot from ${JSON.stringify(bootUrl)};
   import { requestType, REQ, directoryProgram } from ${JSON.stringify(serveCoreUrl)};
   const q = new URLSearchParams(location.search);
   if (requestType(q) !== REQ.RUN && "serviceWorker" in navigator)
     navigator.serviceWorker.ready.then(() => location.reload());
-  boot({ main: directoryProgram(location.pathname) ?? location.pathname, backend: q.get("render") === "canvas" ? "CanvasBackend" : undefined${demos === null ? "" : `, demos: ${JSON.stringify(demos)}`} });
+  boot({ main: directoryProgram(location.pathname) ?? location.pathname, backend: q.get("render") === "canvas" ? "CanvasBackend" : undefined });
 </script>`;
   return shell({ name, staticBlock: "", iconBase, title: "", script, bootUrl, preloads });
 }
 
 /** The `<link rel="preload">` lines for what boot fetches BEFORE it can render — the
- *  prewarm artifact, the demo seeds — so those requests leave with the page instead
+ *  prewarm artifact — so that request leave with the page instead
  *  of after the boot bundle has arrived and run: on a static host that is one round
  *  trip off the cold first frame. `as="fetch"` with `crossorigin` is what makes the
  *  browser hand the response to boot's own same-origin `fetch()` — the mode and

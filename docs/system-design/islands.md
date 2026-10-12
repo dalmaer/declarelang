@@ -83,9 +83,9 @@ tenant any address it should read, and a tenant that reads its OWN files asks fo
 home: the desktop's app windows provide `base`, and Calendar, Birds, and Market Map read
 `hostProvided("base", "") + "<file>"`. A production package honors the same contract —
 its URL map answers those host-space addresses with the tenant's packaged files
-(app-packaging.md §8). Island program NAMES resolve against the page program's `demos/`
-folder at every depth, a nested island included — unlike assets, which resolve per
-program; recorded as an open question (§8).
+(app-packaging.md §8). An island's `program` is a path relative to the program that
+names it, like any address in a program; a build resolves every island against the page
+program, a nested one included — recorded as an open question (§8).
 
 This rule is what dissolves the embedded-examples dilemma raised during the
 theming discussion: the ~53 doc islands need NO per-example declaration to
@@ -183,7 +183,7 @@ and the theming seam (§5) land aimed at it.
    own audit pass either way.
 4. Whether the house token pair is exactly the docs/homepage palette distilled
    or a third, neutral record.
-5. Whether an island NESTED in a tenant should resolve its program name against the
-   tenant's own `demos/` folder rather than the page's — per program, as assets
-   already are. No program nests named islands today; the build mirrors the run-time
+5. Whether a build should resolve an island NESTED in a tenant against the tenant's
+   own program rather than the page's — per program, as the run-time host and assets
+   already do. No program nests named islands today; the build mirrors the run-time
    rule until this is ruled (app-packaging.md §8).

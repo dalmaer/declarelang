@@ -27,7 +27,6 @@ import { requestType, REQ, runWrapper, programName, directoryProgram } from "../
 import { createToolchain } from "./toolchain.mjs";
 import { parseFlags, DEFAULT_FLAGS } from "../compiler/dist/flags.js";
 import { rebuildStale, BUNDLES } from "../tools/internal/bundle-freshness.mjs";
-import { demoNames } from "../tools/internal/bake-app-stubs.mjs";
 import { createMounts, describeMounts } from "./mounts.mjs";
 import { createProxy } from "./proxy.mjs";
 import { PLATFORM_DIR, defaultBuildCache } from "./config.mjs";
@@ -279,18 +278,6 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
   }
 
 
-  /** The demo panels this program ships, via the ONE shared rule
-   *  (tools/internal/bake-app-stubs.mjs). ALWAYS an array, never null: this host
-   *  reads the filesystem, so "none" and "unknown" are never confused here — which
-   *  is what stops boot probing for a demos.json that was never going to exist. */
-  function demoNamesFor(urlPath) {
-    try {
-      const hit = mounts.resolve(urlPath);
-      if (!hit) return [];
-      return demoNames(path.dirname(hit.abs), programName(urlPath));
-    } catch { return []; }
-  }
-
   /** tag → library file, from library/autoincludes.json (the `$provide` rules
    *  dropped). Read per page — the file is small and a library edit shows. */
   function libraryManifest() {
@@ -381,10 +368,6 @@ bootHost(cfg);
     return runWrapper({
       name: programName(urlPath), bootUrl: bootURL("bundles/declare-boot.js"),
       staticBlock, iconBase: bootURL("assets/"), main: urlPath, title,
-      // This host READS THE FILESYSTEM, so it always answers — and an empty array
-      // is an answer ("none to seed"), which is what stops boot probing for a
-      // demos.json that was never going to exist (browser/boot-uniform.js).
-      demos: demoNamesFor(urlPath),
     });
   }
 

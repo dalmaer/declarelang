@@ -268,7 +268,6 @@ async function serverCompile(mainUrl, source) {
  *   main: string,                  // page's .declare, relative to the page (e.g. "./calendar.declare")
  *   backend?: "DomBackend"|"CanvasBackend",
  *   pageWeight?: number, sourceLines?: number,
- *   demos?: string[],              // (site) demo names under <main-dir>/demos/<name>.declare to seed
  *   launcher?: boolean,            // entry page: a bare-path query launches that program (see launchTarget)
  *   program?: { program: object, deps?: any, source?: string },
  *                                  // the program ALREADY IN HAND — a site module (tools/declarec.mjs, the

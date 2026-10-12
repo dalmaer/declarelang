@@ -41,8 +41,9 @@ adds an `onPointerDown` that raises itself and reads `childName` for its title; 
 homepage and the viewer just size the box. This primitive is only the embedding.
 
 ## program
-What to run: a program name, a relative path (`"../../calendar/calendar"` reaches the
-real app — **no copy of the source, ever**), or the reserved `"__raw__"` live-edit
+What to run: the program's path without its `.declare`, relative to the program that
+names it like any address in a program (`"player"` is `player.declare` beside it, and
+`"../calendar/calendar"` reaches the real app — **no copy of the source, ever**), or the reserved `"__raw__"` live-edit
 channel, where the running program is the host app's `liveSource` and recompiles as it
 changes. **`""` detaches the island** and nothing mounts, which is how a closed panel
 stops paying for its tenant — and what bounds the recursion when a program embeds a

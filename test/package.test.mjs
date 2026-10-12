@@ -45,24 +45,24 @@ writeFileSync(path.join(srcDir, "demos", "tile.declare"), `App [ width = 120, he
 const otherDir = path.join(root, "apps", "other");
 mkdirSync(otherDir, { recursive: true });
 writeFileSync(path.join(otherDir, "other.json"), JSON.stringify({ word: "other's own data" }));
-writeFileSync(path.join(otherDir, "other.declare"), `ship [ islands = ["../../other/other"] ]
+writeFileSync(path.join(otherDir, "other.declare"), `ship [ islands = ["../other/other"] ]
 App [ width = 160, height = 40, d: DataSource [ url = { hostProvided("base", "") + "other.json" }, auto = true ],
     t: Text [ x = 4, y = 4, text = { app.d.loaded ? app.d.value.word : "waiting" } ] ]`);
 writeFileSync(path.join(srcDir, "demos", "late.declare"), `App [ width = 120, height = 40, fill = teal, Text [ x = 8, y = 8, text = "late compiled" ] ]`);
 writeFileSync(path.join(srcDir, "shipper.declare"), `ship [
-    islands = ["tile", "../../other/other"],
+    islands = ["demos/tile", "../other/other"],
     files = ["../../docs/model.json", "demos/late.declare"],
     compiler = true,
     inspector = true,
 ]
 App [ width = 400, height = 300,
-    which: string = "tile",
+    which: string = "demos/tile",
     late: string = "",
     model: DataSource [ url = "../../docs/model.json", auto = true ],
     greeting: Text [ x = 10, y = 10, text = { app.model.loaded ? app.model.value.greeting : "loading" } ],
     a: AppIsland [ x = 10, y = 40, width = 140, height = 50, program = { app.which } ],
     b: AppIsland [ x = 10, y = 100, width = 140, height = 50, program = { app.late } ],
-    o: AppIsland [ x = 200, y = 40, width = 160, height = 50, program = { app.which == "tile" ? "../../other/other" : "" },
+    o: AppIsland [ x = 200, y = 40, width = 160, height = 50, program = { app.which == "demos/tile" ? "../other/other" : "" },
         provides = ["base"], base: string = "../other/" ],
 ]`);
 
@@ -105,16 +105,16 @@ await test("the build carried everything the block named", () => {
 await test("served alone, the package boots, mounts its island, and reads its file from inside the folder", async () => {
   await page.goto(B + "/", { waitUntil: "networkidle0", timeout: 60000 });
   assert.ok(await until(() => page.evaluate(() => !!window.__app && window.__app.greeting.text === "from the docs model")), "the DataSource read the shipped copy of a file two levels up: " + errors.join(" | "));
-  assert.ok(await until(() => page.evaluate(() => [...document.querySelectorAll('[data-declare-slot="run:tile"]')].some((b) => b.__childApp))), "the declared island mounted from programs/");
+  assert.ok(await until(() => page.evaluate(() => [...document.querySelectorAll('[data-declare-slot="run:demos/tile"]')].some((b) => b.__childApp))), "the declared island mounted from programs/");
   assert.ok(requests.some((p) => /^\/files\/[0-9a-f]+\.json$/.test(p)), "the file came from files/, not from above the folder: " + requests.join(" "));
   assert.ok(requests.some((p) => /^\/programs\/[0-9a-f]+\.json$/.test(p)), "the island came from programs/");
-  assert.ok(await until(() => page.evaluate(() => [...document.querySelectorAll('[data-declare-slot="run:../../other/other"]')].some((b) => /other's own data/.test(b.textContent)))),
+  assert.ok(await until(() => page.evaluate(() => [...document.querySelectorAll('[data-declare-slot="run:../other/other"]')].some((b) => /other's own data/.test(b.textContent)))),
     "the sibling-folder island read its own data from the package: " + errors.join(" | ") + " — requests: " + requests.join(" "));
 });
 
 await test("an island the build never saw compiles on the page — the package carries the compiler", async () => {
-  await page.evaluate(() => { window.__app.late = "late"; });
-  assert.ok(await until(() => page.evaluate(() => [...document.querySelectorAll('[data-declare-slot="run:late"]')].some((b) => b.__childApp && /late compiled/.test(b.textContent))), 30000),
+  await page.evaluate(() => { window.__app.late = "demos/late"; });
+  assert.ok(await until(() => page.evaluate(() => [...document.querySelectorAll('[data-declare-slot="run:demos/late"]')].some((b) => b.__childApp && /late compiled/.test(b.textContent))), 30000),
     "the late island mounted after an in-page compile: " + errors.join(" | "));
   assert.ok(requests.some((p) => p === "/bundles/declare-compiler.js" || p === "/bundles/compile-worker.js"), "the compiler was fetched from the package");
   assert.ok(requests.some((p) => /^\/files\/[0-9a-f]+\.declare$/.test(p)), "its source came from the shipped file");

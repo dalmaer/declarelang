@@ -47,7 +47,7 @@ use [ BracketIcon, CodeIcon, AutoIcon, LightbulbIcon, BrandMark, HelpSearch ]
 // file itself, which the Declare Viewer window displays.
 
 ship [
-    islands = ["../../../library/platform-apps/viewer/viewer", "../../docs/docs", "../../calendar/calendar", "../../birds/birds", "../../marketmap/marketmap"],
+    islands = ["../../library/platform-apps/viewer/viewer", "../docs/docs", "../calendar/calendar", "../birds/birds", "../marketmap/marketmap"],
     files = ["desktop.declare"]
     ]
 
@@ -1322,7 +1322,7 @@ class FilesWindow extends Window [
 The window frame around an `AppIsland` — the library's app-embedding primitive.
 Give the island a `program` and it mounts that app as its own child: its own
 reactive graph, input router, sized to the island's box. The path is relative,
-so `"../../calendar/calendar"` reaches the real calendar app: no copy, no shim.
+so `"../calendar/calendar"` reaches the real calendar app: no copy, no shim.
 The window adds only what a window owns — the title (taken from the running
 child's own name, `island.childName`), activation, and the values it provides the
 environment it hands the island.
@@ -1948,14 +1948,14 @@ class MarkdownApp extends DesktopApp [ id = "markdown", label = "Markdown", titl
 class ViewerApp extends HostedApp [ id = "declareviewer", label = "Declare Viewer", title = "Declare Viewer",
     blurb = "Reader, source, and live editor over any Declare program — here, hosted as an embedded app.",
     glyph = "[  ]", hue1 = #2E6FE0, hue2 = #12A594,
-    prog = "../../../library/platform-apps/viewer/viewer", subject = "desktop.declare", src = "../../library/platform-apps/viewer/viewer.declare"
+    prog = "../../library/platform-apps/viewer/viewer", subject = "desktop.declare", src = "../../library/platform-apps/viewer/viewer.declare"
     ]
 
 
 class DocsApp extends HostedApp [ id = "docs", label = "Documentation", title = "Declare Docs",
     blurb = "The actual apps/docs — the guide and the reference — hosted as an embedded app.",
     hue1 = #FFA94D, hue2 = #F7811E, drawn = true, backForward = true,
-    prog = "../../docs/docs", base = "../docs/", src = "../docs/docs.declare",
+    prog = "../docs/docs", base = "../docs/", src = "../docs/docs.declare",
     face(d: Draw) {
         // an open book, flat and schematic: the page block's edge showing
         // under two white pages that meet at the spine
@@ -1991,7 +1991,7 @@ class DocsApp extends HostedApp [ id = "docs", label = "Documentation", title = 
 class CalendarApp extends HostedApp [ id = "calendar", label = "Calendar", title = "Declare Calendar",
     blurb = "The actual apps/calendar, running as an embedded child app in this window's island.",
     hue1 = #FFFFFF, hue2 = #EFEFF2, drawn = true, canOpen = false,
-    prog = "../../calendar/calendar", base = "../calendar/", src = "../calendar/calendar.declare",
+    prog = "../calendar/calendar", base = "../calendar/", src = "../calendar/calendar.declare",
     place = "clearDock",
     face(d: Draw) {
         d.fillStyle = 0xFFFFFF
@@ -2037,7 +2037,7 @@ class JotsApp extends DesktopApp [ id = "jots", label = "Jots", title = "Jots",
 class BirdsApp extends HostedApp [ id = "birds", label = "50 Birds", title = "50 Birds",
     blurb = "The actual apps/birds — Audubon's plates as a field guide — hosted as an embedded app.",
     hue1 = #66C95F, hue2 = #2C9243, drawn = true, backForward = true,
-    prog = "../../birds/birds", base = "../birds/", src = "../birds/birds.declare",
+    prog = "../birds/birds", base = "../birds/", src = "../birds/birds.declare",
     face(d: Draw) {
         // the bird: a perched songbird facing right — one white
         // silhouette (beak, crown, back, tail, breast), with the eye and
@@ -2071,7 +2071,7 @@ class BirdsApp extends HostedApp [ id = "birds", label = "50 Birds", title = "50
 class MarketMapApp extends HostedApp [ id = "marketmap", label = "Market Map", title = "Market Map",
     blurb = "The actual apps/marketmap — the S&P 500 as a treemap through the years — hosted as an embedded app.",
     hue1 = #1C1E22, hue2 = #1C1E22, drawn = true,
-    prog = "../../marketmap/marketmap", base = "../marketmap/", src = "../marketmap/marketmap.declare",
+    prog = "../marketmap/marketmap", base = "../marketmap/", src = "../marketmap/marketmap.declare",
     face(d: Draw) {
         // the map itself, edge to edge like the calendar's page: one large cap
         // and its neighbours in the day's two colours (the system green and
@@ -2644,8 +2644,8 @@ class Launcher extends Node [
         },
 
     // a full Declare app in a window — a hosted application: the AppWindow's
-    // island mounts `a.prog` ("../../calendar/calendar" runs the real
-    // calendar; the path is demos/-relative, the island convention). `subject`
+    // island mounts `a.prog` ("../calendar/calendar" runs the real
+    // calendar; the path is relative to this program). `subject`
     // overrides the app's own when the caller names a different one (View &
     // Edit Source's program); "" takes the app's own.
     // Hosted apps count separately (running dots + Quit are per application),

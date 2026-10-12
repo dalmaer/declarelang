@@ -22,12 +22,12 @@
 //   node tools/internal/bake-homepage-crawler.mjs
 
 import path from "node:path";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { crawlExtract, diskDataResolver } from "../../compiler/dist/compile-node.js";
 import { compileProgram } from "../../compiler/dist/declarec.js";
 import { preloadLinks } from "../../browser/serve-core.js";
-import { demoNames, preloadsFor } from "./bake-app-stubs.mjs";
+import { preloadsFor } from "./bake-app-stubs.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const HOMEPAGE = path.join(ROOT, "apps", "homepage", "homepage.declare");
@@ -43,9 +43,10 @@ const END = "<!--declare-static:end-->";
 // descriptions no longer embed the headline, so they cannot rot either.
 const HBEGIN = "<!--declare-head:begin-->";
 const HEND = "<!--declare-head:end-->";
-// The preloads — the homepage's prewarm artifact and its demo seeds, so boot's first
-// fetches leave with the HTML (serve-core preloadLinks). Derived from the same manifest
-// and key rule boot reads, through the one function the stub baker uses.
+// The preloads — the homepage's prewarm artifact (derived from the same manifest and key
+// rule boot reads, through the one function the stub baker uses) and the sources of its
+// live demos, which the homepage reads for its editors as it starts — so those fetches
+// leave with the HTML (serve-core preloadLinks).
 const PBEGIN = "<!--declare-preload:begin-->";
 const PEND = "<!--declare-preload:end-->";
 const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
@@ -69,12 +70,12 @@ if (built.program === null) {
 // `AppIsland`, and the host builds that tenant only in a live browser. Without a
 // resolver the crawl sees the island's empty box, so the longest article on the
 // site indexed as its nav chrome and nothing else. Resolve the name exactly as
-// the host does (browser/host-client.js: `<name>.declare` against the host
-// program's `demos/` folder), and every visible tenant is booted headlessly and
+// the host does (browser/host-client.js: `<program>.declare` relative to the host
+// program), and every visible tenant is booted headlessly and
 // inlined where its island sits. A name that does not resolve fails the crawl
 // loudly rather than baking a hole.
 const islands = async (name) => {
-  const file = path.resolve(path.dirname(HOMEPAGE), "demos", name + ".declare");
+  const file = path.resolve(path.dirname(HOMEPAGE), name + ".declare");
   let tenantSrc;
   try {
     tenantSrc = readFileSync(file, "utf8");
@@ -159,7 +160,9 @@ if (pi < 0 || pj < 0 || pj < pi) {
   process.exit(1);
 }
 const relMain = path.relative(ROOT, HOMEPAGE).split(path.sep).join("/");
-const preload = PBEGIN + "\n" + preloadLinks(preloadsFor(relMain, demoNames(path.dirname(HOMEPAGE)), "")) + PEND;
+const demoSources = readdirSync(path.join(path.dirname(HOMEPAGE), "demos")).filter((f) => f.endsWith(".declare")).sort()
+  .map((f) => `${relMain.slice(0, relMain.lastIndexOf("/") + 1)}demos/${f}`);
+const preload = PBEGIN + "\n" + preloadLinks([...preloadsFor(relMain, ""), ...demoSources]) + PEND;
 next = next.slice(0, pi) + preload + next.slice(pj + PEND.length);
 if (next === idx) { console.log("bake-homepage-crawler: unchanged"); process.exit(0); }
 writeFileSync(INDEX, next);

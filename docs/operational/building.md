@@ -16,7 +16,7 @@ never read by the running program), and whatever the program's `ship` block name
 `programs/` folder with one compiled program per island, a `files/` folder for what it reads
 from elsewhere, the compiler and the library's source when it compiles at run time.
 Deployable to any static host, as a folder that needs nothing outside itself. On the flagship calendar it lands
-around **<!--stat:calendar.wireKB-->120<!--/stat--> KB gzipped** — and that is the figure the
+around **<!--stat:calendar.wireKB-->119<!--/stat--> KB gzipped** — and that is the figure the
 homepage prints, measured on the build its own calendar page ships. The module carries
 everything a page needs and nothing else: the runtime's run path, your program, and the web
 host — the URL and history mirror (`app.location` ↔ the fragment, Back and Forward), island
@@ -45,7 +45,7 @@ about the program, never a build option:
 
 ```declare-fragment
 ship [
-    islands = ["player", "queue", "../../settings/settings"],
+    islands = ["player", "queue", "../settings/settings"],
     files = ["../../docs/model.json", "app.declare"],
     compiler = true,
     inspector = true,
@@ -71,8 +71,7 @@ carries three things for it: its compiled program, any classes it uses that your
 doesn't, and everything it would carry if it were packaged on its own — its data and
 assets, and whatever its own `ship` block names. `declarec` does both for every island program it can name: a literal
 `program = "player"` is found in the tree; a computed one is in the `ship` block. Names are
-spelled as `AppIsland.program` spells them — a name or a relative path, resolved from your
-program's `demos/` folder. Each is compiled ahead — the same compile, the same checks — and
+spelled as `AppIsland.program` spells them — a path relative to your program. Each is compiled ahead — the same compile, the same checks — and
 written as `programs/<hash>.json`, fetched the first time an island names it and
 instantiated in the running app. A build carries no compiler unless the block says so, so
 an island naming a program the build did not produce is a reported error at run time,
@@ -88,8 +87,7 @@ compiles at run time (`compiler = true` in its block) puts the compiler aboard i
 space, not its own folder — the desktop hands its viewer a path in the desktop's directory.
 A tenant that reads its own file asks its host for its home, `hostProvided("base", "")`, as
 Calendar, Birds, and Market Map do; the package maps that address to the copy it carries.
-Island program names resolve the same way at every depth: against the page program's
-`demos/` folder.
+Island program names resolve the same way at every depth: relative to the page program.
 
 ### Errors in a production build
 

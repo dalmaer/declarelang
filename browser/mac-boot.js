@@ -310,37 +310,7 @@ export async function macBoot(url) {
   H.setTitle(app.appName || programName(base));
   startPumps(app);
   wireMacHistory(app);
-  seedDemos(app, globalThis.__declareBase);
   return app;
-}
-
-/** The DEMO SEEDS (host-client's `app.demoSources`): a program that ships a
- *  `demos.json` beside itself names the demos whose sources seed its inline
- *  editors — `demos/<name>.declare`, keyed by name. The web boot reads the
- *  same file (boot-uniform.js); without this the homepage's "LIVE · EDITABLE"
- *  panels came up as one empty line on the native host — an empty field
- *  sizes to nothing, and there was nothing to type over. Off the critical
- *  path: the app is mounted and painting; the seeds land in a later settle.
- *  A program with no demos.json simply gets a 404 and no seeds. */
-async function seedDemos(app, mainDir) {
-  let demos = [];
-  try {
-    const r = await fetch(new URL("demos.json", mainDir).href);
-    if (!r.ok) return;
-    const j = await r.json();
-    demos = Array.isArray(j) ? j : [];
-  } catch { return; }
-  if (demos.length === 0) return;
-  const seeds = {};
-  await Promise.all(demos.map(async (name) => {
-    try {
-      const r = await fetch(new URL("demos/" + name + ".declare", mainDir).href);
-      if (r.ok) seeds[name] = await r.text();
-    } catch { /* a missing demo seeds nothing */ }
-  }));
-  if (currentApp !== app) return;        // a later boot owns the window now
-  app.demoSources = seeds;
-  settle(); flushOps(); H.needFrame();
 }
 
 /** (app.location, app.waypoint) ⟷ the WINDOW's trail — the same pair mirror
@@ -830,10 +800,9 @@ function liveTick() {
 async function mountChild(surfaceId, name) {
   const box = surfaceById(surfaceId);
   if (!box) return;
-  // `program` is a name or a relative path, resolved from the host program's
-  // demos/ folder — the web client's rule, kept.
+  // `program` is a path relative to the host program — the web client's rule, kept.
   const base = globalThis.__declareBase || "";
-  const url = new URL(name.endsWith(".declare") ? name : name + ".declare", new URL("demos/", base)).href;
+  const url = new URL(name.endsWith(".declare") ? name : name + ".declare", new URL(".", base)).href;
   const { program } = await resolveProgram(url);
   mountCompiled(surfaceId, { program }, url);
   log("island: " + name + " mounted");

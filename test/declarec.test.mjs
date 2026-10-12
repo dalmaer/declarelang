@@ -117,12 +117,12 @@ await test("a build compiles its islands ahead into programs/ and carries no com
   writeFileSync(resolve(dir, "demos", "tile.declare"), `App [ width = 80, height = 40, fill = tomato, Text [ x = 8, y = 8, text = "tile" ] ]`);
   writeFileSync(resolve(dir, "demos", "note.declare"), `App [ width = 200, height = 120, m: Markdown [ width = 100%, text = "# note" ] ]`);
   const src = `App [ width = 400, height = 300,
-    which: string = "note",
-    a: AppIsland [ x = 10, y = 10, width = 100, height = 60, program = "tile" ],
+    which: string = "demos/note",
+    a: AppIsland [ x = 10, y = 10, width = 100, height = 60, program = "demos/tile" ],
     b: AppIsland [ x = 10, y = 90, width = 300, height = 160, program = { app.which } ],
   ]`;
   // the computed island is undeclared: the build refuses to guess
-  const out = await buildProduction("ship [ islands = [ \"note\" ] ]\n" + src, { name: "host", originDir: dir });
+  const out = await buildProduction("ship [ islands = [ \"demos/note\" ] ]\n" + src, { name: "host", originDir: dir });
   assert.ok(out.ok, out.report);
   const names = out.files.map((f) => f.name);
   assert.equal(out.islands.length, 2, "one program per island name: the literal and the declared");

@@ -142,16 +142,15 @@ reactive graph, input router, and stage — sized to the box like any view.
 App [ fill = #F4F5F7,
     embed: AppIsland [ x = 20, y = 20,
         width = { parent.width - 40 }, height = { parent.height - 40 },
-        program = "../../homepage/demos/derived" ]
+        program = "../homepage/demos/derived" ]
     ]
 ```
 
 That is a real, second application running above — its own `app`, its own
-state, its own settle loop — not a copy of this one's. [`program`](declare-docs:AppIsland.program) takes a
-program name or a relative path. A name finds a program in the host program's own
-`demos/` folder, and a relative path resolves from that folder too — so
-`"../../calendar/calendar"` reaches the real calendar from an app beside it, with no
-copy. `""` detaches the island. Input stays honest at the seam, too: a
+state, its own settle loop — not a copy of this one's. [`program`](declare-docs:AppIsland.program) is the
+program's path without its `.declare`, relative to the program that names it, like
+any address in a program — so `"../calendar/calendar"` reaches the real calendar from
+an app beside it, with no copy, and `"player"` is `player.declare` beside your own. `""` detaches the island. Input stays honest at the seam, too: a
 click inside the tenant belongs to the tenant, while the host hears only *a
 press on the island* — which is how a desktop window raises itself when you
 click into the app it hosts. On the canvas renderer the tenant mounts by
@@ -170,7 +169,7 @@ the program says what it may be, in its `ship` block — the declaration that
 states what a package carries beyond what the source names:
 
 ```declare-fragment
-ship [ islands = ["player", "queue", "../../settings/settings"] ]
+ship [ islands = ["player", "queue", "../settings/settings"] ]
 ```
 
 Names are spelled exactly as `program` spells them. A name the build did not
@@ -288,7 +287,7 @@ the tenant goes there, through its own `onFollow`. When the tenant moves itself,
 island's `location` follows, so the host can show where its tenant is:
 
 ```declare-fragment
-docs: AppIsland [ program = "../../docs/docs",
+docs: AppIsland [ program = "../docs/docs",
     onInit() { this.location = "reference/Button" }    // start on that page
     ],
 crumb: Text [ text = { app.docs.location } ]           // and say where it is now
@@ -305,7 +304,7 @@ link means; declaring the handler is the claim, and without one the page navigat
 The tenant writes nothing different — it calls `navigate` as it would running alone.
 
 ```declare-fragment
-viewer: AppIsland [ program = "../../viewer/viewer",
+viewer: AppIsland [ program = "../viewer/viewer",
     onNavigate(n: IslandNavigation) {
         if (n.program == "") { app.navigate(n.to); return }   // not a Declare program: the page follows it
         app.side.program = n.program                          // a program: open it beside this one,
@@ -336,7 +335,7 @@ schema Stop [ at: string, place: string ]
 App [
     stops: Stop[] = [],
     stepping: boolean = false,                          // a step back is not a new stop
-    pane: AppIsland [ program = "../../docs/docs",
+    pane: AppIsland [ program = "../docs/docs",
         trackChanges = ["location"],
         onChange(e: ChangeEvent) {
             if (app.stepping) { app.stepping = false; return }

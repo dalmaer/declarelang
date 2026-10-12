@@ -150,7 +150,7 @@ await test("crawl: an AppIsland's tenant program is extracted where the island s
         Text [ text = "to the article", link = "#article" ]
         ],
     article: View [ shows = "article",
-        AppIsland [ width = 400, height = 300, program = { app.location == "article" ? "tenant" : "" },
+        AppIsland [ width = 400, height = 300, program = { app.location == "article" ? "demos/tenant" : "" },
             provides = ["dark"], dark: boolean = true ]
         ],
     hidden: AppIsland [ visible = false, width = 10, height = 10, program = "ghost" ]
@@ -168,7 +168,7 @@ await test("crawl: an AppIsland's tenant program is extracted where the island s
   const resolved = [];
   const islands = async (name) => {
     resolved.push(name);
-    if (name !== "tenant") return null;
+    if (name !== "demos/tenant") return null;
     const c = await compile(tenant, { originDir: ROOT });
     return { program: c.program, report: c.report };
   };
@@ -186,7 +186,7 @@ await test("crawl: an AppIsland's tenant program is extracted where the island s
 
   await assert.rejects(
     crawlLocations(r.program, { ...base, islands: async () => null }),
-    /island program 'tenant' was not found/,
+    /island program 'demos\/tenant' was not found/,
     "a tenant that does not resolve fails the crawl loudly");
 });
 

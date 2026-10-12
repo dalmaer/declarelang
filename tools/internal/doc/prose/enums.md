@@ -128,6 +128,13 @@ Whether the members of an `AnimatorGroup` run one after another or all at once. 
 is the group's own control — nothing else in the language reads it — and it is
 what makes a group more than a list of animators started together.
 
+## Scaling
+
+How a view's images and drawings look when they are shown larger or smaller. `smooth`
+blends neighbouring pixels, which suits photographs and an ordinary interface under a
+zoom. `pixelated` shows every pixel as a solid block, so pixel art stays sharp. A view's
+whole subtree follows its setting.
+
 ## ScrollAnchor
 
 What a scroller keeps still while its content changes size. `content` keeps the

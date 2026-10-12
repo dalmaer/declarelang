@@ -538,10 +538,9 @@ class Strip [ width = 100%, cornerRadius = 10,
 An editable source field beside a running preview — the same machinery as the
 homepage's editable demos: a `TextInput` seeded from the demo source that
 republishes edits on `app.liveSource`, and an `AppIsland` the host mounts
-the compiled child app into. Both are keyed by the class name: the editor
-seeds from `app.demoSources[<Class>]` (the server populates this from
-apps/docs/demos/), and the island's `program = <Class>` is what the host
-wires.
+the compiled child app into. Both are keyed by the example's program,
+`demos/<Class>` beside this one (the extractor writes it there): the editor's
+`editName` names the edit, and the island's `program` is what the host runs.
 */
 
 class DocField extends TextInput [ multiline = true, spellcheck = false, wrap = false,
@@ -565,6 +564,7 @@ class DocField extends TextInput [ multiline = true, spellcheck = false, wrap = 
 
 class Example [ width = 100%,
     cname:  string = { :name },
+    demo:   string = { "demos/" + cname },      // the example's program, beside this one
     elines: number = { :lines },
     esrc:   string = { :source },
     estage: number = { :stageH || 250 },   // extractor-measured stage height — the frame fits the settled app
@@ -572,7 +572,7 @@ class Example [ width = 100%,
 
     // this island's edit failed to compile (host publishes the report; see RunIsland)
 
-    broken: boolean = { app.liveCard == cname && app.liveReport != "" },
+    broken: boolean = { app.liveCard == demo && app.liveReport != "" },
     layout: SimpleLayout [ axis = y, spacing = 0 ],   // the preview frame abuts the code block below, no gap
 
     // the example's own title and lead (from the demo file's opening comment)
@@ -610,7 +610,7 @@ class Example [ width = 100%,
             width = { this.rlbl.width + 16 },
             fill = { hovered ? provided("theme").control : null },
             press() { classroot.panel.field.text = classroot.esrc
-                      app.liveCard = classroot.cname
+                      app.liveCard = classroot.demo
                       app.liveSource = classroot.esrc },
             rlbl: Text [ x = 8, y = 3, fontSize = 11, fontWeight = semibold,
                 textColor = { parent.hovered ? provided("theme").text : provided("theme").textMuted }, text = "Revert" ]
@@ -620,7 +620,7 @@ class Example [ width = 100%,
 
         hair:  View [ x = 18, y = 51, width = { parent.width - 30 }, height = 1, fill = { provided("theme").line } ],
         field: DocField [ x = 18, y = 60, width = { parent.width - 30 }, height = { parent.height - 68 },
-            editName = { classroot.cname }, src = { classroot.esrc } ]
+            editName = { classroot.demo }, src = { classroot.esrc } ]
         ],
 
     // the compile report at the island (see RunIsland — same teaching surface)
@@ -652,7 +652,7 @@ class Example [ width = 100%,
         card: View [ x = 18, y = 14, width = { parent.width - 30 }, height = { parent.height - 28 },
             cornerRadius = 8, fill = { provided("theme").surface },
             run: AppIsland [ x = 12, y = 12, width = { parent.width - 24 }, height = { parent.height - 24 },
-                program = { classroot.live ? classroot.cname : "" } ]
+                program = { classroot.live ? classroot.demo : "" } ]
             ],
 
         // a blue rule (a darker shade of the chipBg box tint) divides the code above from the
@@ -671,7 +671,7 @@ class Example [ width = 100%,
 Every `declare` code fence in any prose that compiles (as-is, or wrapped in
 `App […]`) becomes a `RunIsland`: the source above, its live preview below —
 edit and it re-runs. The extractor wrote its source to
-`apps/docs/demos/<id>.declare`, so the host seeds and mounts it exactly
+`apps/docs/demos/<id>.declare`, and the island runs it from there exactly
 like the homepage's demos. `live` (threaded from the page) keeps the
 preview's slot empty until its page is the one on screen, so only the visible
 page's islands ever compile.
@@ -679,6 +679,7 @@ page's islands ever compile.
 
 class RunIsland [ width = 100%,
     rid:    string  = { :id },
+    demo:   string  = { "demos/" + rid },       // the example's program, beside this one
     rsrc:   string  = { :source },
     rlines: number  = { :lines },
     rstage: number  = { :stageH || 200 },   // extractor-measured stage height — the frame fits the settled app
@@ -687,7 +688,7 @@ class RunIsland [ width = 100%,
     // this island's edit is the one that failed to compile — the host publishes the
     // report on app.liveReport (cleared by a clean compile), keyed by app.liveCard
 
-    broken: boolean = { app.liveCard == rid && app.liveReport != "" },
+    broken: boolean = { app.liveCard == demo && app.liveReport != "" },
     layout: SimpleLayout [ axis = y, spacing = 0 ],   // the preview frame abuts the code block, no gap
 
     // same code-box grammar as a static block (chipBg tint, 8px radius, 13px face),
@@ -714,7 +715,7 @@ class RunIsland [ width = 100%,
             width = { this.rlbl.width + 16 },
             fill = { hovered ? provided("theme").control : null },
             press() { classroot.editor.field.text = classroot.rsrc
-                      app.liveCard = classroot.rid
+                      app.liveCard = classroot.demo
                       app.liveSource = classroot.rsrc },
             rlbl: Text [ x = 8, y = 3, fontSize = 11, fontWeight = semibold,
                 textColor = { parent.hovered ? provided("theme").text : provided("theme").textMuted }, text = "Revert" ]
@@ -725,7 +726,7 @@ class RunIsland [ width = 100%,
         // a line of breathing room below the label before the code starts
 
         field: DocField [ x = 18, y = 46, width = { parent.width - 30 }, height = { parent.height - 54 },
-            editName = { classroot.rid }, src = { classroot.rsrc } ]
+            editName = { classroot.demo }, src = { classroot.rsrc } ]
         ],
 
     // the compile report, at the island — the diagnostic is a teaching surface, so a
@@ -746,7 +747,7 @@ class RunIsland [ width = 100%,
         card: View [ x = 18, y = 14, width = { parent.width - 30 }, height = { parent.height - 28 },
             cornerRadius = 8, fill = { provided("theme").surface },
             run: AppIsland [ x = 12, y = 12, width = { parent.width - 24 }, height = { parent.height - 24 },
-                program = { classroot.live ? classroot.rid : "" } ]
+                program = { classroot.live ? classroot.demo : "" } ]
             ],
         divider: View [ x = 0, y = 0, width = 100%, height = 2, fill = { provided("theme").rule } ],
         spine:   View [ x = 0, y = 0, width = 3, height = 100%, fill = { provided("theme").live } ]

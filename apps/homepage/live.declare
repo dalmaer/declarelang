@@ -4,11 +4,11 @@
 The homepage's numbered sections 02–04 each run a small Declare program beside
 its own source, and the source is editable. This file is everything that takes:
 an editable field, the panel around it, the frame the running program sits in,
-and the section that pairs them. It is this site's own machinery, and it rides
-two channels the homepage's host provides: `app.demoSources` seeds each demo's
-source, and `app.liveCard` / `app.liveSource` publish an edit for the host to
-recompile, which answers on `app.liveReport` when the edit does not compile.
-The demo programs themselves are the files in `demos/`.
+and the section that pairs them. It is this site's own machinery. Each demo is
+a program in `demos/`: the section reads its source like any file, for the
+editor, and runs it in an `AppIsland`. An edit is published on `app.liveCard` /
+`app.liveSource` for the host to recompile, which answers on `app.liveReport`
+when the edit does not compile.
 
 A `CodeField` is a native editable field seeded (uncontrolled, `initial`) from
 the demo’s source — it follows the source until you type, then holds the edit,
@@ -114,9 +114,9 @@ class PreviewFrame [ cornerRadius = 12, clip = true, fill = { provided("theme").
 Sections 02–04 share one shape — a `SectionHead`, a caption, and a live
 `SourcePanel` + `PreviewFrame` pair running the demo for real — so they are one
 class, named for that role, and the three use sites are the words that differ.
-`demo` is the demo's name in `app.demoSources`, the host→app seed channel: it
-picks the source the editor starts from AND the program the island runs, which
-is exactly the pairing that must never drift.
+`demo` is the demo program's path, from this program: it picks the source the
+editor starts from AND the program the island runs, which is exactly the
+pairing that must never drift.
 
 The two panels share the row 58/42 and stack below 760; the preview takes the
 source panel's height, so the code is never a scrolling listing and the picture
@@ -129,6 +129,7 @@ class DemoSection [ width = 100%,
     lead:    string = "",
     caption: string = "",
     demo:    string = "",
+    code: DataSource [ url = { classroot.demo + ".declare" }, format = "text", auto = true ],
     layout: SimpleLayout [ axis = y, spacing = 36 ],
     SectionHead [ num = { classroot.num }, head = { classroot.head }, lead = { classroot.lead } ],
     demoBody: View [ width = 100%,
@@ -137,7 +138,7 @@ class DemoSection [ width = 100%,
         cards: View [ width = 100%,
             layout: ResponsiveLayout [ plan = { [({ from: 760, flow: "row", gap: 20, share: ({ src: 58, prev: 42 }) }), ({ from: 0, flow: "stack", gap: 20, share: ({ src: 100, prev: 100 }) })] } ],
             src: SourcePanel [ editName = { classroot.demo },
-                src = { app.demoSources[classroot.demo] || "" } ],
+                src = { classroot.code.value || "" } ],
             prev: PreviewFrame [ runName = { classroot.demo }, height = { parent.src.height } ]
             ]
         ]

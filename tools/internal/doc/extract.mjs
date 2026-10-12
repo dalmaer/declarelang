@@ -67,13 +67,13 @@ const OUT = path.join(ROOT, ".derive/docs-extract.json");
 // model, assemble then augments the SAME file with its spine/browse sections —
 // so a checking run that wrote would silently strip them. (It did, once.)
 const CHECK = process.argv.includes("--check");
-const DEMOS = path.join(ROOT, "apps/docs/demos");         // generated islands land here (server seeds them)
+const DEMOS = path.join(ROOT, "apps/docs/demos");         // generated islands land here (the docs app runs them from here)
 
 // ── inline runnable examples: every prose ```declare block becomes a live edit/run
 // island IF it compiles as a whole program — as written (a complete `App […]`, or a
 // `class …` + `App`), or wrapped in `App [ … ]` for a bare view fragment. Each runnable
-// block is WRITTEN as apps/docs/demos/<id>.declare so the server/host seed it into
-// `app.demoSources[<id>]` exactly like the homepage demos, and the model records the
+// block is WRITTEN as apps/docs/demos/<id>.declare, which the docs app's island runs
+// as `demos/<id>`, and the model records the
 // prose as an ordered segment list the app renders (Markdown text, or an island).
 const genFiles = {};                                          // id → source, written to DEMOS at the end
 const PROSE = {};                                             // class → its parsed prose (members/methods), for the post-pass
@@ -432,8 +432,8 @@ const RUNTIME_NAME = {};                                // doc id → runtime cl
 // comment: the first `//` line is the title, the `//` lines after it (to the first
 // blank or code line) are the lead — Markdown, one or two sentences on what the
 // example shows. A demo without the comment titles itself "Example". The LIVE
-// PREVIEW is mounted by the host from the demos dir by the same name (dots
-// included — `Button.pair` → demos/Button.pair.declare).
+// PREVIEW is the docs app's island running `demos/<name>` (dots included —
+// `Button.pair` → demos/Button.pair.declare).
 async function readExample(name) {
   const dir = path.join(ROOT, "apps/docs/demos");
   if (!existsSync(dir)) return [];

@@ -174,8 +174,8 @@ async function assetFilesOf(dir) {
  *  ONCE, and the walk terminates.
  *
  *  Names resolve as the page host resolves them at run time — every island,
- *  at any depth, against the PAGE program's `demos/` folder (host-client
- *  childAssetBase / sourceFor take the one page `demoBase`). An island's DATA
+ *  at any depth, relative to the PAGE program (host-client childAssetBase /
+ *  sourceFor take the one page `islandBase`). An island's DATA
  *  resolves against its own program's folder, which is where its files are
  *  collected from and what their URL-map keys are relative to.
  *
@@ -192,10 +192,10 @@ async function buildIslands(program, originDir, keepPos) {
   while (queue.length > 0) {
     const name = queue.shift();
     if (originDir === undefined) throw new Error(`ship: this build has no source directory to resolve the island '${name}' against — build from a file (declarec <app.declare>)`);
-    const file = resolve(originDir, "demos", name + ".declare");
+    const file = resolve(originDir, name + ".declare");
     if (built.has(file)) continue;
     built.add(file);
-    if (!existsSync(file)) throw new Error(`ship: the island '${name}' names no program — expected ${relative(originDir, file)} (a name or a relative path, from the program's demos/ folder, as AppIsland.program spells it)`);
+    if (!existsSync(file)) throw new Error(`ship: the island '${name}' names no program — expected ${relative(originDir, file)} (a path relative to the program, as AppIsland.program spells it)`);
     const t = await buildProgramFile(file, name, keepPos);
     tenants.push({ name, ...t });
     const own = shipOf(t.program);
@@ -692,7 +692,7 @@ export async function buildProduction(source, opts = {}) {
     // it — and the module's boot() has the program in hand
     `<script type="module">\n` +
     `  import boot from "./${moduleName}";\n` +
-    `  boot({ main: "./${name}.declare"${canvas ? ', backend: "CanvasBackend"' : ""}, demos: [] });\n` +
+    `  boot({ main: "./${name}.declare"${canvas ? ', backend: "CanvasBackend"' : ""} });\n` +
     `</script>\n`;
 
   const sizes = {

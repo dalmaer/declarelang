@@ -172,7 +172,7 @@ async function tenantsOf(app, opts, refusals, depth) {
         const prog = await opts.islands(name);
         if (prog === null) {
             throw new Error(`crawl: the island program '${name}' was not found — an AppIsland's program must resolve ` +
-                `as the host resolves it (<name>.declare in the host program's demos/ folder)`);
+                `as the host resolves it (<program>.declare, relative to the host program)`);
         }
         if (prog.program === null) {
             throw new Error(`crawl: the island program '${name}' did not compile:\n${prog.report ?? ""}`);
@@ -191,16 +191,16 @@ async function tenantsOf(app, opts, refusals, depth) {
     return out;
 }
 /** A tenant's media resolve BESIDE ITS OWN PROGRAM at run time (host-client
- *  childAssetBase: the island's program path, from the host's `demos/`), but
+ *  childAssetBase: the island's program path, relative to the host's), but
  *  its serialized HTML is inlined into the HOST's document — so a relative
  *  `src`/`poster` is rewritten to the same place, relative to the host's
- *  directory (`resources/a.png` in "../../architecture/architecture" becomes
+ *  directory (`resources/a.png` in "../architecture/architecture" becomes
  *  `../architecture/resources/a.png`). Absolute, root-relative, data: and
  *  fragment URLs pass through; hrefs are never touched (navigation targets are
  *  authored against the deploy root, not a directory). */
 function rebaseTenant(html, name) {
     const parts = [];
-    for (const seg of ("demos/" + name).split("/").slice(0, -1)) {
+    for (const seg of name.split("/").slice(0, -1)) {
         if (seg === "..") {
             if (parts.length > 0 && parts[parts.length - 1] !== "..")
                 parts.pop();

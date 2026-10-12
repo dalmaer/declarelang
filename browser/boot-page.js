@@ -47,16 +47,14 @@ export const perfDone = (() => {
 
 /**
  * @param cfg {{
- *   main: string,                  // the program's URL, relative to the page — its directory is where
- *                                  //   its data, assets and demos live, whether or not the file itself is served
+ *   main: string,                  // the program's URL, relative to the page — its directory is what its
+ *                                  //   data, assets and islands' programs resolve against, whether or not the file itself is served
  *   program: object,               // the compiled program OBJECT — parsed, checked, its dependencies applied
  *                                  //   (a build's, an artifact's, a compile's): instantiated, never parsed here
  *   pageSource?: string|null,      // the program's raw text, for the seeds (`__page__`); the build has none
  *   backend?: "DomBackend"|"CanvasBackend",
  *   host?: HTMLElement, location?: string, provides?: object,
  *   pageWeight?: number, sourceLines?: number,
- *   demos?: string[],              // the demo editors to seed from <main-dir>/demos/<name>.declare; an empty
- *                                  //   array means "none" — only an ABSENT key makes the boot probe demos.json
  *   compile?: (src: string, origin: URL) => Promise<object|null>,
  *                                  // a live edit's compile, when the host has its own (the dev server's);
  *                                  //   default: the external compiler, fetched on first use
@@ -70,7 +68,7 @@ export const perfDone = (() => {
  */
 export async function bootPage(cfg) {
   const mainUrl = new URL(cfg.main, location.href);
-  const mainDir = new URL(".", mainUrl);                          // app-relative assets (demos) live here
+  const mainDir = new URL(".", mainUrl);                          // app-relative data, assets and islands resolve here
   // The app-relative data rule (docs/system-design/location.md §9), made true in the
   // LIVE browser: a relative DataSource url resolves against the PROGRAM's directory
   // — the same base diskDataResolver (Node crawl) and boot-extract (browser crawl)
@@ -89,20 +87,19 @@ export async function bootPage(cfg) {
   // the app's DataSources already meant the program's. One base, both.
   provideAssetBase(mainDir.href);
 
-  // Live-edit compile ("Edit this page" + demo previews): the compiler is fetched
-  // the first time an editor publishes — never on the path to first paint.
-  // A NAMED island (a demo under demos/) compiles as ITS OWN file — the origin its
-  // relative paths mean: an `include [ "…" ]` beside it resolves beside it, exactly
-  // as `verify` reads the same file on disk. Before this every island compiled as
-  // the page's program, so a demo's include looked in the page's directory and
-  // the island stayed silently blank (the include form's page, 2026-09-10). The
-  // "__"-named live-edit channels have no file and keep the page as their origin.
-  // An island inside an embedded app names its program from THAT app's demo
-  // folder (`dir`, host-islands demoDirFor), not the page's.
-  const demoBase = new URL("demos/", mainDir).href;              // where mountPreviews fetches unseeded previews
+  // Live-edit compile ("Edit this page" + island previews): the compiler is fetched
+  // the first time an editor publishes or an island has no build — never on the path
+  // to first paint. A NAMED island compiles as ITS OWN file — the origin its relative
+  // paths mean: an `include [ "…" ]` beside it resolves beside it, exactly as `verify`
+  // reads the same file on disk. The "__"-named live-edit channels have no file and
+  // keep the page as their origin. An island's `program` is a path relative to the
+  // program that names it, like any address in a program: the page's own islands
+  // resolve against the page program's directory, and an island inside an embedded
+  // app against THAT app's (`dir`, host-islands islandDirFor).
+  const islandBase = mainDir.href;                                // where an island's program is fetched from
   const liveCompile = async (src, name, dir = null) => {
     try {
-      const origin = name && !name.startsWith("__") ? new URL(name + ".declare", dir || demoBase) : mainUrl;
+      const origin = name && !name.startsWith("__") ? new URL(name + ".declare", dir || islandBase) : mainUrl;
       // The host's own compile when it has one (the dev server's); else the
       // external compiler. Either way a PROGRAM (compileProgram: parsed,
       // checked, deps applied), so the page instantiates it with no parser.
@@ -117,41 +114,16 @@ export async function bootPage(cfg) {
     } catch { return null; }
   };
 
-  // Seed only the demo editors the page NAMES up front (the site's few — whose editors
-  // read these seeds directly). Everything else is compiled ON DEMAND: the host fetches
-  // a preview's source from `demoBase` the first time that island goes live — the
-  // in-process echo of browse-to-run, no manifest, no bulk pre-seed. The docs name none
-  // (its ~50 inline examples' editors read their source from the doc model, and their
-  // previews are fetched on demand as the reader scrolls to each page).
+  // The page's own source, for "Edit this page". An island's program is compiled
+  // ON DEMAND: the host fetches its source from `islandBase` the first time that
+  // island goes live — the in-process echo of browse-to-run, no manifest.
   const seeds = { __page__: cfg.pageSource ?? null };
-  // The page NAMES its demos when its producer could know them — the dev server,
-  // the stub baker and a build all read the filesystem, so they always answer, and
-  // an EMPTY array is an answer: "this program has none to seed." Only a producer
-  // that genuinely cannot know omits the key — the SW's browse-to-run wrapper for a
-  // bare `<name>.declare` URL — and only then do we probe for the committed
-  // demos.json beside the program (bake-app-stubs writes it for exactly that case).
-  //
-  // Reading `!demos.length` as "unknown" was the bug: it conflated "none" with "not
-  // told", so every program without demo panels — every app in apps/, every program
-  // an author writes in my-apps/ — probed for a file that by design would never be
-  // there, and opened its console with a 404. Only apps/homepage has a demos.json.
-  let demos = Array.isArray(cfg.demos) ? cfg.demos : null;
-  if (demos === null) {
-    try { const j = await (await fetch(new URL("demos.json", mainDir), { cache: "no-cache" })).json(); demos = Array.isArray(j) ? j : []; } catch { demos = []; }
-  }
-  if (demos.length) {
-    const sDemos = perfStage("demo-seeds");
-    await Promise.all(demos.map(async (name) => {
-      try { seeds[name] = await (await fetch(new URL("demos/" + name + ".declare", mainDir), { cache: "no-cache" })).text(); } catch {}
-    }));
-    sDemos.end();
-  }
 
   // An island's program from a build the distro ships, when the host has one to
   // offer (boot-uniform, a site page); a deployed app has none, and its islands
   // compile through `compile`.
   const prewarmChild = cfg.prewarm
-    ? async (name) => { try { return await cfg.prewarm(new URL(name + ".declare", demoBase), name); } catch { return null; } }
+    ? async (name) => { try { return await cfg.prewarm(new URL(name + ".declare", islandBase), name); } catch { return null; } }
     : async () => null;
 
   const sRender = perfStage("render");
@@ -164,7 +136,7 @@ export async function bootPage(cfg) {
       provides: cfg.provides,                                      // the page as the topmost host: values the app reads with hostProvided("name", …)
       mainAssetBase: mainDir.href,                                 // per-app asset AND data base — N tenants, each its own program dir
       pageWeight: cfg.pageWeight, sourceLines: cfg.sourceLines,
-      seeds, demoBase, compile: liveCompile, prewarm: prewarmChild,
+      seeds, islandBase, compile: liveCompile, prewarm: prewarmChild,
       // a host with its own compile (the dev server) or the compiler bundle
       // aboard can produce any program; a production build can produce none
       canCompile: !!cfg.compile || COMPILER_ABOARD,
