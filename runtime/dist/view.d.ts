@@ -235,6 +235,13 @@ export declare class View extends Node {
      *  blending). `normal` = plain painting. A blending view blends as a unit,
      *  children included; paint only — hit testing and focus never change. */
     blend: "normal" | "multiply" | "screen" | "overlay" | "darken" | "lighten" | "colorDodge" | "colorBurn" | "hardLight" | "softLight" | "difference" | "exclusion" | "hue" | "saturation" | "color" | "luminosity" | "plusLighter";
+    /** How what is painted inside this view — its images and drawings, and its
+     *  descendants' — looks when shown larger or smaller. `smooth` blends
+     *  neighbouring pixels; `pixelated` shows every pixel as a solid block, a
+     *  drawing's pixels being one to each unit of the view, so pixel art stays
+     *  sharp under any scale above it. The whole subtree follows, as it follows
+     *  a transform; paint only — hit testing and focus never change. */
+    scaling: "smooth" | "pixelated";
     /** The frost (`frost(radius, saturation?)`; null = none): what has already
      *  painted beneath this view, sampled through a blur within the view's own
      *  painted shape — the view's `fill` then paints OVER the frosted sample,

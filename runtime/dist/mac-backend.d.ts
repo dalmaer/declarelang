@@ -64,6 +64,8 @@ export declare const OP: {
     readonly TRANSFORM3D: 48;
     /** This node is the eye for its children: perspective px (0 = none) (case 49). */
     readonly PERSPECTIVE: 49;
+    /** How the node's subtree resamples its images and drawings: "smooth" or "pixelated" (case 50). */
+    readonly SCALING: 50;
 };
 type Glide = {
     duration?: number;
@@ -86,7 +88,7 @@ export interface MacHost {
      *  DRAW op to carry: > 0 = a bitmap made now, < 0 = the host describes the
      *  recording as layers, 0 = nothing could be made. Runs on the calling
      *  (runtime) thread; the recording crosses once. */
-    drawRaster?(id: number, nums: Float64Array, at: Uint32Array, strs: readonly string[], bx: number, by: number, bw: number, bh: number, density: number): number;
+    drawRaster?(id: number, nums: Float64Array, at: Uint32Array, strs: readonly string[], bx: number, by: number, bw: number, bh: number, density: number, pixelated: number): number;
     /** Read back a native editable's current value (focus/blur sync). */
     editValue?(id: number): string;
     /** Lay a rich-text flow out natively and answer its height (cold path). */
@@ -251,6 +253,13 @@ declare class MacSurface implements Surface, SceneSurface {
      *  rasters into a bitmap at the backing scale, and that bitmap was stretched
      *  under a view scale. This hands the host the density to raster that
      *  remainder at, the same fix the DOM backend makes for the same softness. */
+    /** `scaling` (backend.ts). The host shows a pixelated subtree's image and
+     *  drawing layers through the nearest-pixel filter (LayerTree case 50); the
+     *  drawings below are remade, at one pixel per unit or back at the scale. */
+    private scalingMode;
+    setScaling(mode: string): void;
+    /** Under a `pixelated` view: this one or an ancestor. */
+    pixelated(): boolean;
     setRasterScale(k: number): void;
     setClip(pathData: string | null): void;
     setBoxClip(on: boolean): void;

@@ -1,0 +1,171 @@
+/*
+## Firebombers and fireballs
+
+A firebomber wanders, taking a new course at random times. Near the ship's height it
+dodges up or down away from it — and, after the first wave, lets go a fireball across the
+ship's path first. A fireball curves faster and faster down the screen, flickering, and
+burns out. Shot, either explodes three times over.
+*/
+
+class Firebombers extends Rules [ kinds = ["firebomber", "fireball", "boom"],
+
+    fled: number = 0,                   // how a firebomber stood to the ship when it last looked
+
+    picture(t: Thing) -> string { return (t.kind == "firebomber" ? "firebomber-" : "fireball-") + t.frame },
+
+    send(count: number) { for (let k = 0; k < count; k++) game.begin("firebomber", "arrive") },
+
+    // ── a firebomber's turn ──
+
+    arrive(turn: Turn) {
+        const t = game.newThing("firebomber")
+        const d = game.chance.draw() * 80, across = byte(Math.floor(d / 256) + 128)
+        t.x = across * 8 + d % 256 / 32
+        t.y = byte(across + 172) + d % 256 / 256
+        t.stays = true
+        game.link(turn, t)
+        game.enter(t)
+        this.newCourse(t)
+        t.course = (game.chance.last % 16) + 8
+        this.away(turn, t)
+        },
+
+    // Away from the screen it takes a new course now and then, looking every ten passes;
+    // near it, it wanders.
+
+    away(turn: Turn, t: Thing) {
+        while (!game.frozen && !this.nearScreen(t)) {
+            t.course = countDown(t.course!)
+            if (t.course < 128) { this.rest(turn, 10, "away"); return }
+            this.newCourse(t)
+            t.course = (game.chance.last % 16) + 8
+            }
+        t.shotIn = 0
+        this.wander(turn, t)
+        },
+    near(turn: Turn, t: Thing) {
+        if (t.shotIn != 0) t.shotIn = t.shotIn! - 1
+        this.wander(turn, t)
+        },
+    wander(turn: Turn, t: Thing) {
+        const shipY = game.world.ship.py
+        let gap = byte(Math.floor(t.y) - shipY), dodge = false
+        fled = gap
+        if (gap < 128) {
+            if (gap <= 9) { gap = this.mayFire(turn, t, true); if (gap < 0) return }
+            dodge = gap < 12
+            }
+        else {
+            gap = byte(-gap)
+            if (gap <= 12) { gap = this.mayFire(turn, t, false); if (gap < 0) return }
+            dodge = gap <= 15
+            }
+        this.point("steer")
+        if (dodge) {
+            const dodge = settings.firebomberDodge / 256, speed = fled >= 128 ? game.reverseUpDown(dodge) : dodge
+            t.vy = game.pilot.invisible ? speed : 2 * speed
+            t.course = (game.chance.last % 128) + 30
+            }
+        else {
+            t.course = countDown(t.course!)
+            if (t.course >= 128) { this.newCourse(t); t.course = (game.chance.last % 128) + 30 }
+            }
+        this.next(turn, t)
+        },
+
+    // Off the screen it waits; on it, it spins a frame each pass, the way it is going.
+
+    next(turn: Turn, t: Thing) {
+        this.point("on screen?")
+        if (t.py == 0) { this.rest(turn, 1, "away"); return }
+        t.frame = t.vx >= 0 ? t.frame % 4 + 1 : (t.frame + 2) % 4 + 1
+        this.rest(turn, 1, "near")
+        },
+    newCourse(t: Thing) {
+        const across = Math.floor(signed8(game.chance.third) / 16)
+        t.vx = (across >= 0 ? across + 10 : across - 10) / 32
+        t.vy = (game.chance.third < 128 ? game.chance.third + 80 : game.chance.third - 336) / 256
+        },
+    nearScreen(t: Thing) -> boolean { return game.across(t.x + 75) <= game.screenWidth + 150 },
+
+    // Whether a firebomber fires: never in the first wave, at random in the second and
+    // third, always after — once its last fireball is long enough gone. The answer is a
+    // number the firebomber then takes for its distance from the ship, or -1 if it fired.
+
+    mayFire(turn: Turn, t: Thing, above: boolean) -> number {
+        let answer = byte(game.director.wave - 1)
+        if (answer == 0) return 0
+        if (answer <= 2) {
+            fled = answer - 1
+            answer = game.chance.draw()
+            if (answer >= 224 || (answer > 128 && fled == 0)) { t.shotIn = 255 - settings.firebomberShots; return t.shotIn }
+            if (answer > 128) answer = 1
+            }
+        if (t.shotIn != 0) return answer
+        if (t.py == 0) return 0
+        this.letGo(turn, t, above)
+        return -1
+        },
+
+    // A fireball leaves across the ship's path, and the firebomber makes off the other way.
+
+    letGo(turn: Turn, t: Thing, above: boolean) {
+        const away = Math.floor(t.y) > game.world.ship.py ? (settings.firebomberDodge + 10) / 256 : game.reverseUpDown((settings.firebomberDodge + 16) / 256)
+        t.vy = game.pilot.invisible ? away : 2 * away
+        const shipLeft = game.offset(t.x, game.world.ship.planetX) >= 0
+        t.vx = shipLeft == above ? 1 : -1
+        const ballTurn = game.begin("fireball", "launch")
+        const ball = game.newThing("fireball")
+        ball.x = game.wrapX(t.x + 2)
+        ball.y = above ? t.y + 4 : t.y
+        ball.vx = (shipLeft ? -1 : 1) * (above ? 3 : 4)
+        ball.stays = true
+        game.link(ballTurn, ball)
+        ball.curve = above ? game.chance.last % 8 + 10 : game.chance.last % 8 + 18
+        game.enter(ball)
+        t.shotIn = 255 - settings.firebomberShots      // (the setting rises as the shots come faster)
+        this.next(turn, t)
+        },
+
+    // A fireball curves down the screen, flickering, and burns out after 31 looks or once
+    // it is far from the screen.
+
+    launch(turn: Turn, t: Thing) {
+        game.sound("fireball")
+        t.burnsFor = 32
+        this.rest(turn, 3, "fly")
+        },
+    fly(turn: Turn, t: Thing) {
+        t.burnsFor = t.burnsFor! - 1
+        if (!this.nearScreen(t) || t.burnsFor == 0) { game.end(turn); game.leave(t); return }
+        t.frame = (t.frame - 1 + (game.chance.last % 8)) % 8 + 1
+        t.vy = t.vy + signed8(t.curve!) / 256
+        turn.wait = 3
+        },
+
+    // Shot, either explodes three times over, five passes apart; its place in memory is
+    // held until the last.
+
+    hit(t: Thing, byShip: boolean) -> boolean {
+        if (t.kind == "firebomber") game.director.count("firebombers", -1)
+        game.award(t.kind == "firebomber" ? 250 : 100)
+        game.sound("fire hit")
+        const turn = game.turnOf(t.turn)
+        if (turn != null) game.end(turn)
+        game.leave(t)
+        game.memory.takeSlot(t.id)
+        const boom = game.begin("boom", "boom")
+        boom.wreck = t
+        boom.picture = t.kind == "firebomber" ? "firebomber-burst" : "fireball-burst"
+        boom.count = 3
+        return true
+        },
+    boom(turn: Turn) {
+        const wreck = turn.wreck!
+        game.effects.explode(turn.picture!, wreck)
+        turn.count = turn.count! - 1
+        if (turn.count != 0) { turn.wait = 5; return }
+        game.memory.giveSlot(wreck.id, wreck.y)
+        game.end(turn)
+        }
+    ]

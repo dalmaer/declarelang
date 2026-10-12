@@ -1,0 +1,214 @@
+/*
+## The men
+
+Ten men walk the planet's low ground. A lander takes one up; shot on the way, it drops
+him, and he falls — caught by the ship, or landing slowly enough, he lives, and the points
+for him rise from where he is. When the last man is gone the planet goes with him.
+
+A man's `state` says where he is: on the ground, taken up, falling, or carried by the ship.
+
+Three kinds of turn look after them:
+
+    men     walk          the men on the ground, one a pass in turn
+    fall    falling       a man dropped, until he lands, dies or is caught
+            hanging       caught, under the ship until it sets him down
+    bonus   caught, landed or setDown, then fade
+                          the points for a man saved, rising and fading
+*/
+
+class Men extends Rules [ kinds = ["man", "men", "fall", "bonus", "score"],
+
+    left: number = 0,                   // men still alive
+    kept: number = 0,                   // … as the last ship ended: the next lands as many
+    carried: number = 0,                // men the ship is carrying
+    nextPick: number = 0,               // where the last target was taken from the list
+
+    picture(t: Thing) -> string {
+        if (t.kind == "score") return "score-" + t.points
+        return (t.facing > 0 ? "man-right-" : "man-left-") + t.frame
+        },
+
+    // Men start on the low ground at random places in the 256 pixels of the planet from
+    // `from`, facing either way.
+
+    land(count: number, from: number) {
+        for (let k = 0; k < count; k++) {
+            const man = game.newThing("man")
+            game.chance.draw()
+            man.x = game.wrapX(from + 8 * (game.chance.second % 32)) + game.chance.third / 32
+            man.facing = game.chance.third % 2 == 1 ? 1 : -1
+            man.y = 224 + man.y % 1
+            man.stays = true
+            man.state = "ground"
+            game.enter(man)
+            game.world.men[game.world.men.indexOf(0)] = man.id
+            }
+        },
+
+    // As a ship starts: every man left goes back on the ground, two to each quarter of the
+    // planet while there are eight or more.
+
+    landAll() {
+        game.world.men = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        if (left > 7) for (const from of [0, 512, 1024, 1536]) this.land(Math.floor(left / 4), from)
+        for (let n = left > 7 ? left % 4 : left; n > 0; n--) this.land(1, 8 * game.chance.second)
+        nextPick = 0
+        carried = 0
+        },
+
+    // Men are handed out as targets in turn round the list.
+
+    pick(lander: Thing) -> boolean {
+        if (left == 0) return false
+        for (let k = 1; k <= 10; k++) {
+            const slot = (nextPick + k) % 10
+            if (game.world.men[slot] == 0) continue
+            nextPick = slot
+            lander.man = game.world.men[slot]; lander.listed = slot
+            return true
+            }
+        return false
+        },
+    stillThere(lander: Thing) -> Thing? {
+        const man = game.thing(lander.man ?? 0)
+        return man == null || game.world.men[lander.listed!] == 0 || man.state != "ground" ? null : man
+        },
+
+    // ── turns ──
+
+    // The men are walked one at a time, a man every other pass: a step of a pixel, the
+    // ground followed a row at a time, and now and then a turn round. A man off the screen
+    // stands still.
+
+    walk(t: Turn) {
+        t.count = ((t.count ?? 0) + 1) % 10
+        t.wait = 2
+        const man = game.thing(game.world.men[t.count])
+        if (man == null || man.py == 0 || man.state != "ground") return
+        const left = man.facing < 0
+        if (game.chance.last <= 8) {
+            man.facing = -man.facing; man.frame = 1
+            man.x = game.wrapX(man.x + (left ? 1 : -1))
+            return
+            }
+        const level = Math.min(232, byte(game.scenery.under(man.x) + (left ? 4 : 15))), y = Math.floor(man.y)
+        if (level != y) man.y = man.y + (level > y ? 1 : -1)
+        man.frame = 3 - man.frame
+        man.x = game.wrapX(man.x + (left ? -1 : 1))
+        },
+
+    // ── losing men ──
+
+    lose(man: Thing) {
+        if (game.gameOver) return
+        game.world.men[game.world.men.indexOf(man.id)] = 0
+        left = left - 1
+        if (left == 0) game.director.lastManGone()
+        else if (left <= 3) game.messages.show("few men", 0)
+        },
+    kill(man: Thing) {
+        this.lose(man)
+        game.leave(man)
+        game.effects.explode("man-burst", { x: game.wrapX(man.x - 2), y: man.y })
+        game.sound("man hit")
+        },
+
+    // A man on the ground or in a lander's grip dies when shot, but the ship passes over
+    // him. Falling, a shot kills him and the ship catches him — for 500 points, then 1000,
+    // 1500 and 2000 as it carries more. Carried, he is safe.
+
+    hit(man: Thing, byShip: boolean) -> boolean {
+        if (man.kind == "score") return false
+        const falling = game.turnOf(man.turn)
+        if (falling == null) {
+            if (byShip) return false
+            this.kill(man)
+            return true
+            }
+        if (man.state == "carried") return false
+        if (!byShip) { this.kill(man); game.end(falling); return true }
+        game.sound("man caught")
+        game.begin("bonus", "caught").thing = man.id
+        man.state = "carried"
+        falling.step = "hanging"
+        return false
+        },
+
+    // A lander carrying a man is shot: he falls.
+
+    drop(man: Thing) {
+        const fall = game.begin("fall", "falling")
+        fall.thing = man.id
+        game.sound("man falling")
+        man.vy = 0
+        man.turn = fall.id
+        man.state = "falling"
+        },
+
+    // He falls faster and faster. Reaching the ground slowly enough he lands, for 250
+    // points; otherwise he dies. Caught, he hangs under the ship until it brings him down
+    // to the ground, for 500.
+
+    falling(t: Turn, man: Thing) {
+        if (man.vy + 1 / 32 < 3) man.vy = man.vy + 1 / 32
+        if (game.scenery.under(man.x) > Math.floor(man.y)) { this.rest(t, 4, "falling"); return }
+        if (man.vy <= 0.875) { this.landOn(t, man, "landed"); return }
+        game.impact = { px: man.px + 2, py: man.py + 7 }
+        this.kill(man)
+        game.end(t)
+        },
+    hanging(t: Turn, man: Thing) {
+        man.vy = 0
+        man.y = Math.floor(game.world.ship.y) + 10 + man.y % 1
+        man.x = game.wrapX(game.world.ship.planetX + 4)
+        if (game.scenery.under(man.x) < Math.floor(man.y)) { carried = carried - 1; this.landOn(t, man, "setDown") }
+        else this.rest(t, 1, "hanging")
+        },
+    landOn(t: Turn, man: Thing, how: string) {
+        game.begin("bonus", how).thing = man.id
+        man.turn = 0
+        man.vy = 0
+        man.state = "ground"
+        game.sound("man landed")
+        game.end(t)
+        },
+
+    // The points for a man saved rise from where he is, and fade after a hundred passes.
+
+    caught(t: Turn, man: Thing) {
+        this.bonus(t, man, [500, 1000, 1500, 2000][Math.min(carried, 3)], true)
+        carried = carried + 1
+        },
+    landed(t: Turn, man: Thing) { this.bonus(t, man, 250, man.py != 0) },
+    setDown(t: Turn, man: Thing) { this.bonus(t, man, 500, true) },
+    fade(t: Turn, number: Thing?) {
+        if (number != null) game.leave(number)
+        game.end(t)
+        },
+    bonus(t: Turn, man: Thing, points: number, onScreen: boolean) {
+        game.award(points)
+        const number = game.newThing("score")
+        number.points = points
+        number.turn = t.id
+        const ship = game.world.ship
+        if (onScreen) {
+            game.chance.draw()
+            number.vx = Math.floor(signed8(game.chance.last) / 8) / 32 + game.pilot.pace(ship)
+            number.x = man.x
+            }
+        else if (game.offset(man.x, ship.planetX) < 0) {
+            number.x = game.scroll
+            number.vx = game.pilot.pace(ship) + 2
+            }
+        else {
+            number.x = game.wrapX(game.scroll + 312)
+            number.vx = game.pilot.pace(ship) - 2
+            }
+        number.vy = game.chance.second / 256 - 1
+        number.stays = true
+        number.y = game.wrapY(man.y + (man.y >= 128 ? -32 : 24))
+        game.enter(number)
+        t.thing = number.id
+        this.rest(t, 100, "fade")
+        }
+    ]

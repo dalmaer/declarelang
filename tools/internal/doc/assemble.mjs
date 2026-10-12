@@ -759,7 +759,7 @@ const sharedTypesDoc = (spine) => {
 const TYPE_GROUPS = [
   ["Enums", ["Axis", "Backface", "Blend", "Claim", "Credentials", "CrossAlign", "Edges",
              "FitAlign", "FontLate", "FontWeight", "Justify", "Motion", "Numerals", "NumeralWidth",
-             "Process", "ScrollAnchor", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
+             "Process", "Scaling", "ScrollAnchor", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
   ["Values", ["Color", "Fill", "Gradient", "Length", "Percent", "Radius", "Inset", "Shape", "Stroke", "BoxStroke", "Outline",
               "Shadow", "Filter", "Backdrop", "Theme", "MotionCurve", "Cursor", "TextMeasure", "IslandPost", "IslandNavigation", "DelayHandle"]],
   ["Text", ["TextStyle", "TextStyles", "BlockGeometry", "RichTextLayout"]],

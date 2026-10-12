@@ -1,0 +1,115 @@
+/*
+## Dynamos and space hums
+
+A dynamo drifts, spinning, changing its course a little at random times and keeping to the
+middle heights; on the screen and not too close to the ship, it lets go a space hum now and
+then, and recoils. A hum makes for the ship.
+
+A new dynamo starts at a fraction of a pixel that is whatever the turn before it left in the
+arcade's processor (see memory.declare).
+*/
+
+class Dynamos extends Rules [ kinds = ["dynamo", "hum"],
+
+    humsOut: number = 0,
+
+    picture(t: Thing) -> string { return (t.kind == "dynamo" ? "dynamo-" : "hum-") + t.frame },
+
+    send(count: number) { for (let k = 0; k < count; k++) game.begin("dynamo", "arrive") },
+
+    arrive(turn: Turn) {
+        const t = game.newThing("dynamo")
+        const across = Math.floor(game.chance.draw() / 2) + 64
+        t.x = across * 8
+        t.y = across - 4 + t.y
+        game.link(turn, t)
+        t.course = 1
+        t.shotIn = 255 - settings.dynamoShots       // (the setting rises as the hums come faster)
+        game.enter(t)
+        this.near(turn, t)
+        },
+
+    // Near the screen a dynamo spins, now and then takes a new course, and lets hums go; far
+    // from it, it sleeps, and takes a new course as it wakes.
+
+    near(turn: Turn, t: Thing) {
+        const from = game.across(t.x + 50)
+        if (from >= game.screenWidth + 100) {
+            t.shotIn = 19
+            this.rest(turn, 16, "far")
+            return
+            }
+        t.frame = t.vx < 0 ? t.frame % 4 + 1 : (t.frame + 2) % 4 + 1
+        if (t.shotIn != 0) t.shotIn = t.shotIn! - 1
+        t.course = countDown(t.course!)
+        if (t.course == 0) this.veer(t)
+        this.drifted(turn, t)
+        },
+    far(turn: Turn, t: Thing) { this.veer(t); this.drifted(turn, t) },
+    drifted(turn: Turn, t: Thing) {
+        this.letGoHum(t)
+        this.rest(turn, 2, "near")
+        },
+
+    // A new course: up or down a little toward the middle heights, and across a little
+    // slower if it was going fast.
+
+    veer(t: Thing) {
+        t.course = game.chance.second % 32 + 16
+        const seed = game.chance.last
+        const down = t.vy <= -0.5 ? true : t.vy >= 0.5 ? false : t.y < 106
+        t.vy = t.vy + (down ? seed % 64 : seed % 64 - 64) / 256
+        const slowed = t.vx < -1.25 || t.vx > 1.25 ? Math.floor(t.vx * 16) / 32 : t.vx       // halved, to a 32nd
+        t.vx = slowed + Math.floor(signed8(game.chance.third) / 16) / 32
+        },
+    letGoHum(t: Thing) {
+        if (t.shotIn != 0 || !game.inSight(t.x)) return
+        const off = game.offset(game.world.ship.planetX, t.x)
+        if ((off < 0 ? game.reverseAcross(off) : off) <= 50) return       // not within fifty pixels of the ship
+        t.shotIn = Math.min(255, 255 - settings.dynamoShots + game.chance.upTo(24))
+        if (humsOut >= 6) return
+        game.begin("hum", "launch").from = t.id
+        humsOut = humsOut + 1
+        game.sound("hum")
+        const shipRight = game.offset(t.x, game.world.ship.planetX) < 0
+        if (shipRight != t.vx < 0) t.vx = game.reverseAcross(t.vx)
+        },
+
+    // A hum makes for the ship: across until it is over or under it, and up or down unless
+    // it is already near the ship's height and still far off. Off the screen it keeps on.
+
+    launch(turn: Turn) {
+        const from = game.thing(turn.from!)!
+        const t = game.newThing("hum")
+        t.x = game.wrapX(from.x + (game.offset(from.x, game.world.ship.planetX) < 0 ? 7 : -3))
+        t.y = from.y + 2
+        game.link(turn, t)
+        t.aimIn = 1
+        game.enter(t)
+        this.seek(turn, t)
+        },
+    seek(turn: Turn, t: Thing) {
+        const ship = game.world.ship
+        if (game.across(t.x) > game.screenWidth) { this.rest(turn, 12, "seek"); return }
+        t.frame = 3 - t.frame
+        this.rest(turn, 3, "seek")
+        t.aimIn = countDown(t.aimIn!)
+        if (t.aimIn != 0) return
+        t.aimIn = 4
+        const overShip = Math.abs(game.offset(ship.planetX + 5, t.x)) <= 9
+        const speed = settings.mineSpeed
+        const climb = speed / 256
+        if (overShip || Math.abs(ship.y - t.y) > 10) t.vy = 2 * (ship.y >= t.y ? climb : game.reverseUpDown(climb))
+        else t.vy = 0
+        t.vx = overShip ? 0 : game.offset(ship.planetX, t.x) >= 0 ? speed / 32 : game.reverseAcross(speed / 32)
+        },
+
+    // Shot: a dynamo 200, a hum 100.
+
+    hit(t: Thing, byShip: boolean) -> boolean {
+        if (t.kind == "dynamo") game.director.count("dynamos", -1)
+        else humsOut = humsOut - 1
+        game.destroy(t, t.kind == "dynamo" ? 200 : 100, "dynamo hit", t.kind + "-burst")
+        return true
+        }
+    ]

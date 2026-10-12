@@ -342,7 +342,7 @@ final class Bridge {
         // positive when a bitmap was made, negative when main will describe the
         // recording as layers, 0 when there was nothing to make.
         host.setObject({ [weak self] (id: Int, nums: JSValue, at: JSValue, strs: JSValue,
-                                      bx: Double, by: Double, bw: Double, bh: Double, density: Double) -> Double in
+                                      bx: Double, by: Double, bw: Double, bh: Double, density: Double, pixelated: Double) -> Double in
             guard let self else { return 0 }
             let t0 = CFAbsoluteTimeGetCurrent()
             // copied out once (two memcpys): the recording is read here, and later
@@ -353,7 +353,9 @@ final class Bridge {
             let list = Recording(nums: q, at: a, strs: (strs.toArray() as? [String]) ?? [],
                                  bx: CGFloat(bx), by: CGFloat(by), bw: CGFloat(bw), bh: CGFloat(bh))
             var bitmap: (image: CGImage, geom: (x: CGFloat, y: CGFloat, w: CGFloat, h: CGFloat, scale: CGFloat))?
-            if !(LayerTree.layersOn && LayerDescribe.describable(list, scale: self.cachedScale)) {
+            // a pixelated drawing (`scaling`) is always a bitmap — at one pixel
+            // per unit, the density it arrives with — never described as layers
+            if pixelated != 0 || !(LayerTree.layersOn && LayerDescribe.describable(list, scale: self.cachedScale)) {
                 guard let made = DrawReplay.bitmap(list, density: CGFloat(density), bridge: self) else { return 0 }
                 bitmap = made
                 if let dumpId = ProcessInfo.processInfo.environment["DECLARE_DUMP_DRAW"], Int(dumpId) == id {
@@ -376,7 +378,7 @@ final class Bridge {
             self.nextDrawing += 1
             self.drawings[h] = FinishedDrawing(list: list, bitmap: bitmap)
             return Double(bitmap != nil ? h : -h)
-        } as @convention(block) (Int, JSValue, JSValue, JSValue, Double, Double, Double, Double, Double) -> Double,
+        } as @convention(block) (Int, JSValue, JSValue, JSValue, Double, Double, Double, Double, Double, Double) -> Double,
            forKeyedSubscript: "drawRaster")
 
         // Timers — run-loop timers on the RUNTIME thread's loop (this block

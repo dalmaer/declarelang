@@ -1,0 +1,182 @@
+/*
+## Pods and swarmers
+
+A wave's pods drift, each at its own pace and every other one the other way, so that they
+all pass one place on the planet at one moment: the pod convention, which the strip counts
+down to. A pod shot bursts into as many as seven swarmers (a smart bomb leaves none, and
+pays for them).
+
+Swarmers fly across at a steady pace, pulled up or down toward the ship's height and
+jostled at random, so that they weave about it; well past it they turn back. A swarmer
+shoots only while headed for the ship.
+
+    pod countdown   convention → countdown …
+    pod boom        boom …              (a bombed pod, exploding three times more)
+    swarmer         aim → weave …
+*/
+
+class Pods extends Rules [ kinds = ["pod", "swarmer", "pod countdown", "pod boom"],
+
+    picture(t: Thing) -> string { return t.kind },
+
+    // ── pods ──
+
+    send(count: number) {
+        const meet = game.chance.placeOnPlanet()
+        const time = game.chance.last % 2 * 256 + game.chance.second + 128           // frames to the convention
+        game.begin("pod countdown", "convention").count = time
+        for (let k = count; k > 0; k--) {
+            const pod = game.newThing("pod")
+            game.chance.draw()
+            pod.y = Math.floor(game.chance.third / 2) + 44 + pod.y % 1
+            const pace = k % 2 == 1 ? -(game.chance.last % 64) : game.chance.last % 64       // in 32nds of a pixel a frame
+            pod.vx = pace / 32
+            const way = Math.floor(Math.abs(pace) * time / 2)
+            pod.x = game.wrapX(signed8(game.chance.second) / 2 + meet + (pace >= 0 ? -1 : 1) * way / 16)
+            // (never level: up or down at least an eighth of a pixel a frame)
+            const drift = byte(game.chance.third % 128 - 64), eighth = Math.floor(drift / 32) % 2 == 1
+            pod.vy = (drift < 128 ? (eighth ? drift : drift + 32) : (eighth ? drift - 32 : drift) - 256) / 256
+            pod.stays = true
+            game.effects.appear(pod)
+            }
+        },
+
+    // The strip shows the seconds to the convention, then one fewer every 64 passes down to
+    // none; it gives up as soon as fewer than three pods are left.
+
+    convention(t: Turn) {
+        if (game.director.toCome.pods < 3) { game.end(t); return }
+        t.count = Math.floor(t.count! / 64)
+        game.messages.show("pod convention", t.count)
+        this.rest(t, 64, "countdown")
+        },
+    countdown(t: Turn) {
+        if (game.director.toCome.pods < 3 || t.count == 0) { game.end(t); return }
+        t.count = t.count! - 1
+        game.messages.show("pod countdown", t.count)
+        this.rest(t, 64, "countdown")
+        },
+
+    // A pod shot bursts, for 1000 points, into as many as seven swarmers. Smart-bombed, it
+    // pays 450 or 600 more for them instead, and explodes three times more.
+
+    burst(pod: Thing) {
+        game.leave(pod)
+        game.award(1000)
+        game.effects.explode("pod-burst", pod)
+        game.sound("pod hit")
+        game.director.count("pods", -1)
+        const inside = game.chance.upTo(6)
+        if (!game.bombed) { this.release(inside, pod.x, pod.y, true); return }
+        game.chance.draw()
+        game.award(game.chance.last % 2 == 0 ? 450 : 600)
+        game.memory.takeSlot(pod.id)           // its place in memory is kept until the last explosion
+        const boom = game.begin("pod boom", "boomFirst")
+        boom.wreck = pod; boom.picture = "pod-burst"
+        },
+    boomFirst(t: Turn) { t.count = 3; this.rest(t, 4, "boom") },
+    boom(t: Turn) {
+        game.effects.explode(t.picture!, t.wreck!)
+        t.picture = "fireball-burst"
+        t.count = t.count! - 1
+        if (t.count != 0) { t.wait = 3; return }
+        game.memory.giveSlot(t.wreck!.id, t.wreck!.y)
+        game.end(t)
+        },
+
+    // ── swarmers ──
+
+    // The swarmers a wave begins with come in groups of up to six, each group from one
+    // place ahead of the screen. The arcade marks the place with a thing of its own, which
+    // the group copies — the fraction of a row its memory held included — and then lets go.
+
+    sendSwarmers(count: number) {
+        for (let left = count; left != 0; ) {
+            const held = game.memory.holdSlot()        // (the group's centre, kept in the next free slot)
+            const y = Math.floor(game.chance.last / 2) + 44 + game.memory.fractionAt(held)
+            const x = game.wrapX((game.chance.draw() % 64 + 128) * 8 + 170 / 32 + game.scroll)
+            const group = Math.min(left, 6)
+            this.release(group, x, y, false)
+            game.memory.letGo(held, y)
+            left = left - group
+            }
+        },
+
+    // Swarmers leave a place in all directions, each waking after its own short while.
+    // There are never more than twenty. Out of a pod, the first takes the pod's own place in
+    // memory and the rest copy where it is, which a frame may already have moved on.
+
+    release(count: number, x: number, y: number, fromFirst: boolean) {
+        let first: Thing | null = null
+        for (let k = count; k > 0; k--) {
+            if (game.director.toCome.swarmers + 1 > 20) return
+            this.point("swarmer made")
+            const [turn, t] = game.spawn("swarmer", "aim")
+            game.director.count("swarmers", 1)
+            t.x = first?.x ?? x; t.y = first?.y ?? y
+            this.point("swarmer placed")
+            game.chance.draw()
+            t.vy = signed8(game.chance.last) / 128
+            t.vx = (game.chance.third % 64 - 32) / 32
+            t.pull = game.chance.third % (settings.swarmerSwerve + 1)
+            turn.wait = game.chance.second % 32
+            t.shotIn = game.chance.upTo(settings.swarmerShotTime)
+            game.enter(t)
+            if (fromFirst && first == null) first = t
+            }
+        },
+
+    // Every third pass a swarmer heads for the ship across; and, once it is about, it is
+    // pulled toward the ship's height (to two pixels a frame), slowed by about a 64th, and
+    // jostled.
+    // Within 150 pixels of the ship it counts down to a shot.
+
+    aim(turn: Turn, t: Thing) { this.headFor(turn, t) },
+    weave(turn: Turn, t: Thing) {
+        const ship = game.world.ship
+        let v = Math.max(-512, Math.min(512, signed8(ship.py <= Math.floor(t.y) ? -t.pull! : t.pull!) + t.vy * 256))
+        v = v + signed8(Math.floor(word(-4 * v - 4) / 256))
+        v = v + game.chance.last % 32 - 16
+        t.vy = v / 256
+        if (game.wrapX(ship.planetX - t.x + 150) <= 300) {
+            t.shotIn = countDown(t.shotIn!)
+            if (t.shotIn == 0) this.shoot(t)
+            this.rest(turn, 3, "weave")
+            return
+            }
+        this.headFor(turn, t)
+        },
+    headFor(turn: Turn, t: Thing) {
+        const speed = settings.swarmerSpeed
+        t.vx = signed8(game.world.ship.planetX < t.x ? -speed : speed) / 32
+        this.rest(turn, 3, "weave")
+        },
+
+    // Straight ahead at twice its own pace, and toward the ship's height.
+
+    shoot(t: Thing) {
+        const ship = game.world.ship
+        const ahead = (game.offset(ship.planetX, t.x) < 0) == (t.vx < 0)
+        const shot = ahead ? game.shooters.launch(t, "bomb") : null
+        if (shot != null) {
+            shot.vx = 2 * t.vx
+            game.sound("swarmer shot")
+            shot.vy = signed8(ship.py - Math.floor(shot.y)) / 32
+            }
+        t.shotIn = game.chance.upTo(settings.swarmerShotTime)
+        },
+
+    // ── shot ──
+
+    hit(t: Thing, byShip: boolean) -> boolean {
+        if (t.kind == "pod") { this.burst(t); return true }
+        game.director.count("swarmers", -1)
+        game.leave(t)
+        const turn = game.turnOf(t.turn)
+        if (turn != null) game.end(turn)
+        game.award(150)
+        game.sound("swarmer hit")
+        game.effects.explode("swarmer-burst", { x: game.wrapX(t.x - 2), y: game.wrapY(t.y - 2) })
+        return true
+        }
+    ]

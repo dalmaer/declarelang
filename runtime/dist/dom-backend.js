@@ -752,6 +752,9 @@ function ensureClipBoxFor(el) {
         el.appendChild(box);
     return box;
 }
+/** Each drawing's canvas → the surface that rasters it: a `scaling` change on an
+ *  ancestor re-rasters the drawings inside (setScaling). */
+const DRAWING_OF = new WeakMap();
 export class DomSurface {
     element;
     textEl = null;
@@ -1127,6 +1130,32 @@ export class DomSurface {
         this.element.style.transformOrigin = "0 0";
         this.element.style.transform = "translate(" + this.posX + "px," + this.posY + "px) " + (t3?.css ?? "") + cssMatrix(this.xform);
     }
+    /** `scaling` (backend.ts). CSS's `image-rendering` is INHERITED, so one
+     *  declaration here reaches every <img>, tint mask and drawing canvas in the
+     *  subtree — the platform's own cascade, as a transform's is. A drawing's
+     *  density is this backend's to choose, so the subtree's drawings re-raster:
+     *  under `pixelated` at one pixel per view unit (rasterize), enlarged whole
+     *  by the transforms above. The mark is what a drawing looks up. */
+    setScaling(mode) {
+        const pixelated = mode === "pixelated";
+        this.element.style.imageRendering = pixelated ? "pixelated" : "";
+        if (pixelated)
+            this.element.dataset.declareScaling = "pixelated";
+        else
+            delete this.element.dataset.declareScaling;
+        this.element.querySelectorAll("canvas").forEach((c) => {
+            const s = DRAWING_OF.get(c);
+            if (s !== undefined && s.drawing !== null && s.drawing.bounds !== null) {
+                if (s.shown)
+                    s.rasterize();
+                else
+                    s.drawOwed = true;
+            }
+        });
+    }
+    /** Under a `pixelated` view (this one or an ancestor): the drawing is held at
+     *  one pixel per unit. */
+    pixelated() { return this.element.closest("[data-declare-scaling]") !== null; }
     setBlend(mode) {
         // The schema's camelCase token → CSS's hyphenated spelling (colorDodge →
         // color-dodge). mix-blend-mode is the whole §4.1 ruling natively: the
@@ -2468,6 +2497,7 @@ export class DomSurface {
             c.style.pointerEvents = "none"; // content is inert — hits are box-geometry
             this.placeContent(c, this.imgEl);
             this.drawEl = c;
+            DRAWING_OF.set(c, this);
             this.watchDpr();
         }
         // hidden: owe the raster rather than make one nobody can see (setVisible)
@@ -2513,7 +2543,8 @@ export class DomSurface {
         const pad = rasterPad(this.drawing);
         const b = pad === 0 ? b0 : { x: b0.x - pad, y: b0.y - pad, w: b0.w + 2 * pad, h: b0.h + 2 * pad };
         const dpr = window.devicePixelRatio || 1;
-        let kk = k ?? this.composedScale * dpr;
+        // pixelated (setScaling): one pixel per unit, whatever the scale it is seen at
+        let kk = this.pixelated() ? 1 : k ?? this.composedScale * dpr;
         const cap = rasterEntryCap(Math.max(1, window.innerWidth * dpr) * Math.max(1, window.innerHeight * dpr) * 4);
         const bytesAt = (q) => Math.ceil(b.w * q) * Math.ceil(b.h * q) * 4;
         if (kk > dpr && (bytesAt(kk) > cap || Math.ceil(b.w * kk) > RASTER_MAX_DIM || Math.ceil(b.h * kk) > RASTER_MAX_DIM
@@ -2644,6 +2675,11 @@ export class DomSurface {
             this.drawOwed = true;
             return;
         }
+        if (this.pixelated()) {
+            if (this.rasterK !== 1)
+                this.rasterize();
+            return;
+        } // (its density does not follow the scale)
         if (Math.abs(this.rasterK - scale) > 1e-3 * Math.max(1, scale))
             this.rasterize(scale);
     }

@@ -1,0 +1,173 @@
+/*
+## What the pages draw
+
+What the pages between games draw that a game does not: the word STARGATE, the operator's
+lines, the notices, the secrets and the enemies' names. All of it is words in the arcade's
+own lettering (panel.declare) but the title, whose letters are in art/title.json: for each
+letter its pixel columns, each a list of rows skipped and rows lit from the top.
+
+The views read the pages' state (pages.declare) and the inks as the screen shows them.
+*/
+
+schema TitlePlace [ letter: string, ink: number, at: number ]
+schema TitleArt [ word[]: TitlePlace, letters: any ]
+
+// The word STARGATE: its first `columns` pixel columns, each letter in an ink of its own,
+// and, as far as `outlined` has gone, its outline — the top and bottom two pixels of every
+// upright run of the letters, a pair of pixel columns a step, then the first and last two
+// of every run across, half a row a step. (Drawn, as it is lit, a pixel at a time.)
+
+class TitleWord [ width = 100%, height = 100%,
+    row: number = 88,
+    columns: number = 0,
+    outlined: number = 0,
+    colours: number[] = { app.game.colours },
+    art: DataSource [ url = "art/title.json", auto = true, schema = TitleArt ],
+    left: number = 28,                  // the pixel the word starts at
+
+    // every lit pixel of the word, in the order the columns are drawn: [column drawn, x, y, ink]
+
+    pixels: number[][] = { this.lay(art.value) },
+    lay(a: TitleArt?) -> number[][] {
+        const out: number[][] = []
+        if (a == null) return out
+        let drawn = 0
+        for (const w of a.word) {
+            let x = left + w.at
+            for (const [times, runs] of (a.letters as { [k: string]: [number, number[]][] })[w.letter]) {
+                for (let k = 0; k < times; k++) {
+                    let y = row, lit = false
+                    for (const run of runs) {
+                        if (lit) for (let r = 0; r < run; r++) out.push([drawn, x, y + r, w.ink])
+                        y = y + run; lit = !lit
+                        }
+                    drawn = drawn + 1; x = x + 1
+                    }
+                }
+            }
+        return out
+        },
+
+    // the outline's pixels: [x, y, found by an upright run (1 or 0), found by a run across (1 or 0)]
+
+    edges: number[][] = { this.edgesOf(pixels) },
+    edgesOf(lit: number[][]) -> number[][] {
+        if (lit.length == 0) return []
+        const at = (x: number, y: number) => `${x},${y}`
+        const on = new Set(lit.map((p) => at(p[1], p[2])))
+        const marks = new Map<string, number[]>()
+        const mark = (x: number, y: number, upright: boolean) => {
+            if (!on.has(at(x, y))) return
+            const m = marks.get(at(x, y)) ?? [x, y, 0, 0]
+            m[upright ? 2 : 3] = 1
+            marks.set(at(x, y), m)
+            }
+        const xs = lit.map((p) => p[1]), ys = lit.map((p) => p[2])
+        const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys)
+        for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+            if (!on.has(at(x, y))) continue
+            if (!on.has(at(x, y - 1))) { mark(x, y, true); mark(x, y + 1, true) }
+            if (!on.has(at(x, y + 1))) { mark(x, y, true); mark(x, y - 1, true) }
+            if (!on.has(at(x - 1, y))) { mark(x, y, false); mark(x + 1, y, false) }
+            if (!on.has(at(x + 1, y))) { mark(x, y, false); mark(x - 1, y, false) }
+            }
+        return [...marks.values()]
+        },
+    traced(x: number, y: number, upright: number, across: number) -> boolean {
+        const pairs = Math.min(outlined, 136), halfRows = Math.max(0, outlined - 136)
+        if (upright == 1 && Math.floor(x / 2) < Math.floor(left / 2) + pairs) return true
+        if (across == 0) return false
+        const rows = Math.floor(halfRows / 2)
+        return y - row < rows || (y - row == rows && halfRows % 2 == 1 && Math.floor(x / 2) < 75)
+        },
+    draw(d: Draw) {
+        for (const p of pixels) {
+            if (p[0] >= columns) break
+            d.fillStyle = arcadeColour(colours[p[3]])
+            d.fillRect(p[1], p[2], 1, 1)
+            }
+        if (outlined == 0) return
+        d.fillStyle = arcadeColour(colours[app.game.ink.outline])
+        for (const e of edges) if (this.traced(e[0], e[1], e[2], e[3])) d.fillRect(e[0], e[1], 1, 1)
+        }
+    ]
+
+
+// A phrase put up by the pages, over what is there.
+
+class Notice extends Phrase [ opaque = false ]
+
+// The pages' words, over the playfield.
+
+class PageWords [ width = 100%, height = 100%,
+    pages: Pages = { app.game.pages },
+    inks: number[] = { app.game.colours },             // (for the star gate)
+    rings: number[] = [1, 4, 7],
+
+    // the title page
+
+    word: TitleWord [ visible = { classroot.pages.titleColumns > 0 }, row = { classroot.pages.titleRow },
+        columns = { classroot.pages.titleColumns }, outlined = { classroot.pages.outlined } ],
+    typing: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "title" && classroot.pages.typed > 0 },
+        Lettering [ font = "large", ink = 10, px = 74, py = 32, opaque = false,
+            text = { "WILLIAMS ELECTRONICS INC.".slice(0, classroot.pages.typed) } ],
+        Lettering [ font = "large", ink = 10, px = 74, py = 48, opaque = false,
+            text = { "           PRESENTS:     ".slice(0, Math.max(0, classroot.pages.typed - 25)) } ]
+        ],
+
+    // the notices under the title (in its own ink unless one is given), and the secrets
+    // (the warp's line placing itself)
+
+    titleNotices: Dataset { { "lines": [
+        { "id": 0, "says": "COPYRIGHT 1981", "font": "large", "px": 104, "py": 152 },
+        { "id": 1, "says": "WILLIAMS ELECTRONICS INC.", "font": "large", "ink": 10, "px": 74, "py": 168 },
+        { "id": 2, "says": "CREDITS: ##", "font": "large", "px": 116, "py": 188 },
+        { "id": 3, "says": "HIGH SCORE DISPLAY:PRESS HYPERSPACE", "px": 80, "py": 204 },
+        { "id": 4, "says": "GAME SECRETS:PRESS REVERSE", "ink": 8, "px": 96, "py": 212 } ] } },
+    secretLines: Dataset { { "lines": [
+        { "id": 0, "says": "SECRETS", "font": "large", "px": 128, "py": 68 },
+        { "id": 1, "says": "WARP: RESCUE #### HUMANOIDS", "font": "large", "number": 10, "long": 4, "zeros": "dropped" },
+        { "id": 2, "says": "EXTRA SHIP, SMART BOMB, INVISO TIME AWARDED EVERY ##000 POINTS", "number": 10, "px": 40, "py": 202 },
+        { "id": 3, "says": "CREDITS: ##", "font": "large", "px": 124, "py": 224 } ] } },
+
+    notices: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "title" && classroot.pages.noticed },
+        datapath = { classroot.titleNotices.value },
+        Notice [ datapath = :lines[], says = :says, font = :font, ink = :ink, px = :px, py = :py ]
+        ],
+    secrets: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "secrets" && classroot.pages.told },
+        datapath = { classroot.secretLines.value },
+        Notice [ datapath = :lines[], says = :says, font = :font, px = :px, py = :py, number = :number, long = :long, zeros = :zeros ],
+        GateView [ px = 102, py = 139 ]
+        ],
+
+    // In the demonstration the top of the screen also shows a second player's score: two
+    // noughts, in the score's figures.
+
+    secondScore: View [ x = 258, y = 35, visible = { classroot.pages.panelShown && classroot.pages.shown != "" },
+        layout: SimpleLayout [ axis = x, spacing = 2 ],
+        Sprite [ picture = "digit-0", fill = null, mono = 1 ],
+        Sprite [ picture = "digit-0", fill = null, mono = 1 ]
+        ],
+
+    // a fight's caption, in the strip under the scanner
+
+    caption: Notice [ visible = { classroot.pages.shown == "fights" && classroot.pages.caption != "" },
+        says = { classroot.pages.caption }, px = { classroot.pages.stripAt }, py = 39 ],
+
+    // the enemies' names, one every four passes, in this order, and last the page's heading
+
+    enemyNames: Dataset { { "names": [
+        { "id": 0, "says": "YLLABIAN SPACE GUPPY-200", "px": 24, "py": 88 },
+        { "id": 1, "says": "LANDER-150", "px": 192, "py": 88 },
+        { "id": 2, "says": "BOMBER-250", "px": 24, "py": 126 },
+        { "id": 3, "says": "PHRED-200 BIG RED-200 MUNCHIES-50", "px": 90, "py": 200 },
+        { "id": 4, "says": "MUTANT-150", "px": 236, "py": 126 },
+        { "id": 5, "says": "FIREBOMBER-250   FIREBALL-100", "px": 96, "py": 48 },
+        { "id": 6, "says": "POD-1000   SWARMER-150", "px": 192, "py": 162 },
+        { "id": 7, "says": "DYNAMO-200   SPACE HUM-100", "px": 24, "py": 162 },
+        { "id": 8, "says": "BAITER-200", "px": 240, "py": 88 },
+        { "id": 9, "says": "STARGATE   ENEMIES", "px": 94, "py": 120 } ] } },
+    names: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "enemies" }, datapath = { classroot.enemyNames.value },
+        Notice [ datapath = :names[], visible = { :id < classroot.pages.captions }, says = :says, px = :px, py = :py ]
+        ]
+    ]

@@ -48,6 +48,7 @@ export const PREWARMED = [
   { main: "apps/weather/weather.declare", props: { render: "dom" } },
   { main: "apps/marketmap/marketmap.declare", props: { render: "dom" } },
   { main: "apps/asteroids/asteroids.declare", props: { render: "dom" } },
+  { main: "apps/stargate/stargate.declare", props: { render: "dom" } },
   // off the menu, but the Desktop opens it as a window (a tenant resolves through
   // this same tier), so its first paint keeps the compiler-free path
   { main: "apps/birds/birds.declare", props: { render: "dom" } },

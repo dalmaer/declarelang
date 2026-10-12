@@ -1,0 +1,217 @@
+/*
+## Landers and mutants
+
+A lander cruises a little above the ground, crosses to a man, drops onto him and carries
+him up; at the top it draws him in and becomes a mutant, which hunts the ship. Shot on the
+way up, it drops him. With no men left, landers come as mutants from the start.
+
+Its turn goes through these steps:
+
+    cruise ⇄ cruiseOn   keeping above the ground, to over its man
+    seek                coming down onto him
+    flee                carrying him up
+    drawIn              drawing him into itself; then it is a mutant
+    hunt                (a mutant) going for the ship
+
+A lander whose man is gone before it has him picks another, or, with none left, becomes
+a mutant there and then.
+*/
+
+class Landers extends Rules [ kinds = ["lander", "mutant"],
+
+    out: number = 0,                    // landers on the planet
+
+    picture(t: Thing) -> string { return t.kind == "mutant" ? "mutant" : "lander-" + t.frame },
+    drop() -> number { return settings.landerDropHigh + settings.landerDropLow / 256 },      // rows a frame
+    mutantDrop() -> number { return settings.mutantDropHigh + settings.mutantDropLow / 256 },
+
+    // A squad appears along the top, anywhere round the planet, each lander coming down
+    // and across at a random pace with a man picked for it.
+
+    send(count: number) {
+        for (let k = 0; k < count; k++) {
+            if (game.men.left == 0) { this.sendMutants(count - k); return }
+            const [turn, t] = game.spawn("lander", "cruise")
+            game.chance.draw()
+            t.x = game.chance.placeOnPlanet()
+            t.y = 46 + t.y % 1
+            t.vy = this.drop()
+            t.state = "cruising"
+            t.shotIn = game.chance.upTo(settings.landerShotTime)
+            const pace = game.chance.upTo(settings.landerSpeed)
+            t.vx = pace % 2 == 1 ? game.reverseAcross(pace / 32) : pace / 32
+            game.effects.appear(t)
+            game.men.pick(t)
+            out = out + 1
+            }
+        },
+
+    // ── a lander's turn ──
+
+    // Cruising, a lander keeps fifty rows above the ground, give or take, and shoots; over
+    // its man it stops and goes down.
+
+    cruise(turn: Turn, t: Thing) {
+        const man = game.men.stillThere(t)
+        if (man == null) { this.lost(turn, t); return }
+        this.point("over its man?")
+        if (Math.floor(t.x / 32) != Math.floor(man.x / 32)) { this.glide(turn, t); return }
+        t.stays = true
+        t.vx = 0; t.vy = 0
+        this.seek(turn, t)
+        },
+    cruiseOn(turn: Turn, t: Thing) { this.nextFrame(t); this.rest(turn, 3, "cruise") },
+    glide(turn: Turn, t: Thing) {
+        const level = byte(game.scenery.under(t.x) - 50), y = Math.floor(t.y)
+        if (level > y) t.vy = this.drop()
+        else t.vy = signed8(level - y) < -20 ? game.reverseUpDown(this.drop()) : 0
+        if (t.appearing || t.py == 0) { this.rest(turn, 6, "cruise"); return }
+        this.shoot(t)
+        this.nextFrame(t)
+        this.rest(turn, 3, "cruiseOn")
+        },
+    lost(turn: Turn, t: Thing) {
+        t.stays = false
+        if (game.men.pick(t)) this.glide(turn, t)
+        else this.becomeMutant(turn, t)
+        },
+    nextFrame(t: Thing) { t.frame = t.frame % 4 + 1 },
+
+    // Over its man, a lander closes on him a pixel a pass and comes down to twelve rows
+    // above; there it takes hold, and both go up.
+
+    seek(turn: Turn, t: Thing) {
+        const man = game.men.stillThere(t)
+        if (man == null) { this.lost(turn, t); return }
+        const mine = Math.floor(t.x), his = Math.floor(man.x)
+        if (mine != his) t.x = game.wrapX(t.x + (game.offset(mine, his) < 0 ? 1 : -1))
+        const level = Math.floor(man.y) - 12, y = Math.floor(t.y)
+        if (level == y && game.wrapX(t.x + 2 - man.x) <= 4) {
+            t.state = "carrying"
+            t.vy = game.reverseUpDown(this.drop()); man.vy = t.vy
+            game.sound("man taken")
+            man.state = "taken"
+            turn.step = "flee"
+            this.flee(turn, t)
+            return
+            }
+        if (level != y) t.y = t.y + (level >= y ? this.drop() : game.reverseUpDown(this.drop()))
+        this.shoot(t)
+        this.rest(turn, 1, "seek")
+        },
+    flee(turn: Turn, t: Thing) {
+        if (t.y < 53) { game.sound("man drawn in"); turn.step = "drawIn"; this.drawIn(turn, t); return }
+        if (t.py != 0) { this.shoot(t); this.nextFrame(t) }
+        this.rest(turn, 3, "flee")
+        },
+
+    // At the top the lander draws its man up a row a pass; when he reaches it he is lost,
+    // and it is a mutant. If he was shot on the way, the lander goes back to wait.
+
+    drawIn(turn: Turn, t: Thing) {
+        const man = game.thing(t.man!)
+        if (game.world.men[t.listed!] == 0 || man == null) {
+            game.leave(t)
+            out = out - 1
+            game.director.count("landers", 1)
+            game.end(turn)
+            return
+            }
+        t.vy = 0; man.vy = 0
+        if (Math.floor(man.y) > Math.floor(t.y)) {
+            man.y = man.y - 1
+            this.rest(turn, 1, "drawIn")
+            return
+            }
+        game.impact = { px: man.px + 2, py: man.py }
+        game.men.kill(man)
+        this.becomeMutant(turn, t)
+        },
+
+    // A lander shoots when its count runs out, and counts again from a random number.
+
+    shoot(t: Thing) {
+        t.shotIn = countDown(t.shotIn!)
+        if (t.shotIn != 0) return
+        t.shotIn = game.chance.upTo(settings.landerShotTime)
+        if (game.shooters.shoot(t)) game.sound("lander shot")
+        },
+
+    // Shot: 150 points, and a man it carries falls.
+
+    hit(t: Thing, byShip: boolean) -> boolean {
+        if (t.kind == "mutant") { game.director.count("mutants", -1); game.destroy(t, 150, "mutant hit"); return true }
+        if (t.state == "carrying" && game.world.men[t.listed!] != 0) game.men.drop(game.thing(t.man!)!)
+        this.gone()
+        game.destroy(t, 150, "lander hit")
+        return true
+        },
+
+    // ── mutants ──
+
+    // A lander gone, shot or turned mutant: with none out and none to come while men are left,
+    // the strip says so.
+
+    gone() {
+        out = out - 1
+        if (out == 0 && game.director.toCome.landers == 0 && !game.planetGone) game.messages.show("all landers gone", 0)
+        },
+
+    becomeMutant(turn: Turn, t: Thing) {
+        this.gone()
+        game.director.count("mutants", 1)
+        t.stays = false
+        t.kind = "mutant"; turn.kind = "mutant"
+        t.shotIn = settings.mutantShotTime
+        this.hunt(turn, t)
+        },
+
+    // Mutants sent as such appear well away from the ship; their first shot comes when the
+    // count left in their place in memory runs out.
+
+    sendMutants(count: number) {
+        for (let k = 0; k < count; k++) {
+            const [turn, t] = game.spawn("mutant", "hunt")
+            t.shotIn = game.memory.leftIn(turn)
+            game.chance.draw()
+            const edge = game.wrapX(game.scroll - game.screenWidth)
+            let away = game.wrapX(game.chance.placeOnPlanet() - edge)
+            if (away < 600) away = away + 1024
+            t.x = game.wrapX(away + edge)
+            t.y = Math.floor(game.chance.last / 2) + 44 + t.y % 1
+            game.effects.appear(t)
+            game.director.count("mutants", 1)
+            }
+        },
+
+    // A mutant always heads for the ship across the planet. Far off it keeps clear of the
+    // ship's height; close in it makes for it, hopping a row or two at random, and shoots.
+
+    hunt(turn: Turn, t: Thing) {
+        // (the arcade compares two places as signed numbers, so a mutant on the other half of
+        // the planet from the ship may go the long way round)
+        const ship = game.world.ship, speed = settings.mutantSpeed / 32, signed = (x: number) => x >= 1024 ? x - 2048 : x
+        t.vx = signed(ship.planetX) < signed(t.x) ? -speed : speed
+        const shipY = ship.py, y = Math.floor(t.y), down = this.mutantDrop(), up = game.reverseUpDown(down)
+        let hops = true
+        if (game.wrapX(ship.planetX - t.x + 380 / 32) > 56) {
+            const gap = byte(shipY - y)
+            if (shipY > y) t.vy = gap > 8 ? 0 : up
+            else t.vy = signed8(gap) > -8 ? down : 0
+            }
+        else {
+            t.vy = shipY >= y ? down : up
+            hops = t.py != 0
+            }
+        if (hops) {
+            const hop = game.wrapY(t.y + (game.chance.last >= 128 ? settings.mutantHop : -settings.mutantHop))
+            t.y = hop < game.top ? game.bottom + t.y % 1 : hop
+            t.shotIn = countDown(t.shotIn!)
+            if (t.shotIn == 0) {
+                t.shotIn = game.chance.upTo(settings.mutantShotTime)
+                if (game.shooters.shoot(t)) game.sound("mutant shot")
+                }
+            }
+        this.rest(turn, 3, "hunt")
+        }
+    ]

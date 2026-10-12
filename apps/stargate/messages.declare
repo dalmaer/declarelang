@@ -1,0 +1,57 @@
+/*
+## Messages
+
+Short messages go in the strip under the scanner for a number of passes ("SCANNER" when
+there is nothing else to say), and give way only to one that matters as much; some blink,
+in a colour of their own (director.declare has the blinking turn). Others are
+lettered across the playfield until it is wiped. Each is one of the arcade's phrases, by
+what it says (art/phrases.json; "##" stands for a number, and a bare "##" is the first
+phrase that is only that).
+*/
+
+class Messages extends Node [
+    game: Game,
+    table: MessageTable = { {
+        "new game": { says: "(C) 1981 WILLIAMS ELECTRONICS INC.", lasts: 120, matters: 52 },
+        "one man needed": { says: "WARP REQUIRES 1 ADDITIONAL MAN", lasts: 144, matters: 128 },
+        "men needed": { says: "WARP REQUIRES ## ADDITIONAL MEN", lasts: 144, matters: 128 },
+        "pod convention": { says: "POD INTERSECTION - 0:", lasts: 80, matters: 160 },
+        "pod countdown": { says: "##", lasts: 80, matters: 160, adds: true },
+        "few men": { says: " HUMANOIDS REMAINING: ##", lasts: 192, matters: 224 },
+        "all landers gone": { says: "ALL LANDERS DESTROYED!", lasts: 128, matters: 32, blinkEvery: 8, blinkColour: 255 },
+        "men in danger": { says: "PLANET SURFACE UNSTABLE!", lasts: 255, matters: 240, blinkEvery: 24, blinkColour: 255 },
+        "game over": { says: "GAME OVER", lasts: 0, matters: 0 },
+        "bonus": { says: "BONUS  X  ####", lasts: 0, matters: 0 },
+        "attack wave": { says: "ATTACK WAVE ## | COMPLETED", lasts: 0, matters: 0 },
+        "warp": { says: "...WARP TO WAVE ##", lasts: 0, matters: 0 },
+        "yllabian dogfight": { says: " WAVE ##: | YLLABIAN DOGFIGHT", lasts: 0, matters: 0 },
+        "firebomber showdown": { says: " WAVE ##: | FIREBOMBER SHOWDOWN", lasts: 0, matters: 0 },
+        "dogfight over": { says: "YLLABIAN STARFLEET TERMINATED... | 2500  BONUS", lasts: 0, matters: 0 }
+        } },
+    scanner: string = ">  SCANNER  >",
+    strip: string = { scanner },        // what the strip says
+    stripNumber: number = 0,
+    stripAdded: number = -1,            // a number printed after it, or -1
+    stripFor: number = 0,               // passes it has left
+    stripMatters: number = 0,
+    banners: Banner[] = [],
+    show(name: string, n: number) {
+        const m = table[name]
+        if (m.lasts == 0) { banners = [...banners, { id: banners.length, says: m.says, number: n }]; return }
+        if (stripFor != 0 && m.matters < stripMatters) return
+        stripFor = m.lasts; stripMatters = m.matters
+        if (m.adds) { stripAdded = n; return }
+        strip = m.says; stripNumber = n; stripAdded = -1
+        if (m.blinkEvery != null) game.begin("blink", "blinkOn").message = name
+        },
+    showing(name: string) -> boolean { return strip == table[name].says && stripFor != 0 },
+    clearStrip() { strip = scanner; stripNumber = 0; stripAdded = -1; stripFor = 0 },
+
+    // The strip's time runs only while play goes on.
+
+    tick() {
+        if (stripFor == 0 || game.frozen || game.shipDead || game.effectsOff) return
+        stripFor = stripFor - 1
+        if (stripFor == 0) { strip = scanner; stripAdded = -1 }
+        }
+    ]

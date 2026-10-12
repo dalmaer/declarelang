@@ -823,6 +823,31 @@ A blending view blends **as a unit**, children included; compositing is paint, n
 input — hit-testing and focus are unchanged. A token string in a `{ }` body, like
 `scrolls` — so a blend can be state: `blend = { active ? "multiply" : "normal" }`.
 
+## scaling
+How what is painted inside this view — its **images and drawings**, and everything inside
+it — looks when it is shown larger or smaller. `smooth` (the default) blends neighbouring
+pixels: right for photographs and for an ordinary interface under a zoom. `pixelated`
+shows **every pixel as a solid block**, so pixel art stays sharp: a bitmap's pixels, and a
+drawing's at one pixel to each unit of the view. Set it once on the view that holds the
+scene; its whole subtree follows, as it follows that view's `scale`.
+
+```declare
+App [ width = 300, height = 140, fill = black,
+    screen: View [ x = 20, y = 20, scale = 4, scaling = pixelated,
+        // a ten-pixel mark, drawn at one pixel per unit and shown in sharp 4×4 blocks
+        mark: View [ width = 10, height = 6,
+            draw(d: Draw) { d.fillStyle = "#ffcc00"; d.fillRect(0, 0, 10, 1); d.fillRect(4, 1, 2, 5) } ]
+        ]
+    ]
+```
+
+When the scale — together with the display's own pixel ratio — comes to a whole number of
+screen pixels, as at 2× or 3×, the blocks are all the same size. Otherwise they alternate
+between the two nearest sizes (at 2.5× on an ordinary display, two pixels and three in
+turn): uneven, but still sharp, never blurred — choose a whole-number scale for even
+blocks. A smooth curve drawn inside a pixelated view comes out in blocks too; that is the
+point. Paint only: hit testing, layout and focus are unchanged.
+
 ## scrollX
 **A fact, not a settable attribute.** The live horizontal offset of a `scrolls = x` (or `both`) view,
 mirrored from the platform's scroll — `scrollY`'s twin, with the same enforcement: the

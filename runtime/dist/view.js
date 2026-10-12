@@ -1141,6 +1141,8 @@ export class View extends Node {
             s.setPerspective?.(this.perspective);
         if (this.blend !== "normal")
             s.setBlend?.(this.blend);
+        if (this.scaling !== "smooth")
+            s.setScaling?.(this.scaling);
         if (this.backdrop !== null)
             s.setBackdrop?.(nullIfEmpty(filterList(this.backdrop)));
         if (this.filter !== null)
@@ -1761,6 +1763,7 @@ defineAttributes(View, {
     // optional-chained (the ignoreScroll pattern): backends adopt independently,
     // and the seam table (test/seam.test.mjs) says which have.
     blend: { def: "normal", push: (v, b) => v.$surface?.setBlend?.(b) },
+    scaling: { def: "smooth", push: (v, m) => v.$surface?.setScaling?.(m) },
     backdrop: { def: null, push: (v, b) => v.$surface?.setBackdrop?.(nullIfEmpty(filterList(b))), equal: backdropEqual },
     filter: { def: null, push: (v, f) => v.$surface?.setFilter?.(nullIfEmpty(filterList(f))), equal: filtersEqual },
     mask: { def: null, push: (v, m) => v.$applyMask(m) },

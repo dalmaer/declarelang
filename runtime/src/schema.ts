@@ -225,6 +225,13 @@ const ViewSchema: ClassSchema = {
       "darken", "lighten", "colorDodge", "colorBurn", "hardLight", "softLight",
       "difference", "exclusion", "hue", "saturation", "color", "luminosity",
       "plusLighter"),
+    // How what is painted INSIDE this view — its images and drawings, and
+    // its descendants' — looks when shown larger or smaller: `smooth` blends
+    // neighbouring pixels; `pixelated` shows every pixel as a solid block (one
+    // to each unit of the view), so pixel art stays sharp under any scale
+    // above it. The whole subtree follows, as it follows a transform. Paint
+    // only, never input.
+    scaling: enumType("Scaling", "smooth", "pixelated"),
     // The frost (compositing.md §3.2): sample what has already painted
     // beneath this view's own painted shape — box, cornerRadius, or shape
     // clip, over-scanned by the blur radius so edges do not bleed dry —

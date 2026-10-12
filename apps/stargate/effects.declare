@@ -1,0 +1,111 @@
+/*
+## Appearing and exploding
+
+A thing appears from its picture's blocks far apart, closing in over 47 passes; until then
+it is in the world with no picture. A thing destroyed explodes from where it was touched,
+its picture's blocks flying apart, faster while the arcade is behind. There is room for
+sixteen effects, each in a place of the arcade's memory (memory.declare), and a new one may
+push out the oldest explosion. Nothing appears or explodes while effects are halted.
+*/
+
+class Effects extends Node [
+    game: Game,
+    burstRate: number = 0,              // how fast explosions spread, in pairs of pixels a pass
+
+    blocks(o: Outline) -> number { return o.wide * Math.ceil(o.high / 2) },     // two pixels wide, two rows deep
+    showing() -> number {
+        const w = game.world
+        return [...w.appears, ...w.bursts].reduce((n, e) => n + this.blocks(game.shapeOf(e.picture)), 0)
+        },
+
+    appear(t: Thing) {
+        game.clock.changing(game.world); game.clock.reach(game.world, "appear")     // (the screen may scroll before the thing is found on it)
+        const shape = game.shapeOf(game.pictureOf(t))
+        const fits = shape.high <= 15 && this.blocks(shape) <= 25
+        if (!game.effectsOff && !game.spectacle && fits && game.across(t.x) <= 304 && this.room()) {
+            game.nextId = game.nextId + 1
+            game.sound("appear")
+            const place = game.memory.takeEffectPlace()
+            if (place == 0) game.memory.firstEffectWord = game.memory.addressOf(t.id)
+            game.world.appears.unshift({ id: game.nextId, picture: game.pictureOf(t), size: 47, cx: 0, cy: 0, xof: 0, yof: 0,
+                thing: t.id, drawn: false, place: place })
+            t.appearing = true
+            }
+        game.enter(t)
+        },
+
+    explode(picture: string, t: { x: number, y: number }) {
+        const shape = game.shapeOf(picture), across = game.across(t.x), impact = game.impact
+        if (game.effectsOff || shape.high > 15 || this.blocks(shape) > 25 || across >= 312) return
+        if (!this.room()) return
+        const left = Math.floor(across / 2), top = Math.floor(t.y)
+        let dx = Math.floor(impact.px / 2) - left, dy = impact.py - top
+        if (dx < 0 || dy < 0 || dx >= shape.wide || dy >= shape.high) { dx = Math.floor(shape.wide / 2); dy = Math.floor(shape.high / 2) }
+        game.nextId = game.nextId + 1
+        game.world.bursts.unshift({ id: game.nextId, picture: picture, size: 1, cx: left + dx, cy: top + Math.floor(dy / 2),
+            xof: dx, yof: Math.floor(dy / 2), thing: 0, drawn: false, place: game.memory.takeEffectPlace() })
+        },
+    room() -> boolean {
+        const m = game.memory, w = game.world
+        if (m.effectPlaces.length != 0) return true
+        if (w.bursts.length == 0) return false
+        m.giveEffectPlace(w.bursts.pop()!.place)
+        return true
+        },
+
+    // Each frame explosions spread, and things appearing close in; one that leaves the
+    // screen arrives at once.
+
+    update() {
+        const w = game.world, m = game.memory
+        game.effectsLate = game.midPassed
+        if (game.effectsOff) {
+            for (const e of w.appears) { this.arrive(e); m.giveEffectPlace(e.place) }
+            for (const e of w.bursts) m.giveEffectPlace(e.place)
+            w.appears = []; w.bursts = []
+            return
+            }
+        // (from nothing, slowing down wraps round to the fastest)
+        const rate = burstRate + (game.clock.behind() ? 1 : -1) / 32
+        burstRate = rate < 0 || rate > 1.25 ? 1.25 : rate < 0.6640625 ? 0.6640625 : rate
+        const slid = signed8(Math.floor(game.lastScroll / 2) - Math.floor(game.scroll / 2))
+        for (const e of w.bursts) {
+            this.rubOutBlocks(e)
+            e.size = e.size + burstRate
+            e.cx = e.cx + slid
+            e.drawn = true
+            this.rubOutBlocks(e)
+            }
+        for (const e of w.bursts) if (e.size >= 49) m.giveEffectPlace(e.place)
+        w.bursts = w.bursts.filter((e) => e.size < 49)
+        const still = []
+        for (const e of w.appears) {
+            const t = game.thing(e.thing)
+            e.size = e.size - 1
+            const across = t == null ? 0 : game.across(t.x)
+            // (it arrives early once it leaves the screen: more than 96 pixels behind it or 416 ahead)
+            if (t == null || e.size < 0 || game.wrapX(across + 96) >= 512) { this.arrive(e); m.giveEffectPlace(e.place); continue }
+            // (the middle block is the one as far across the picture as the picture is across
+            // the screen, counted in 256ths)
+            const shape = game.shapeOf(e.picture), column = Math.floor(across / 2) % 256
+            e.xof = Math.floor(Math.floor(column * 218 / 256) * 2 % 256 * shape.wide / 256)
+            e.yof = Math.floor(shape.high / 4)
+            e.cx = column + e.xof
+            e.cy = Math.floor(t.y) + Math.floor(shape.high / 2)
+            e.drawn = true
+            still.push(e)
+            }
+        w.appears = still
+        },
+    rubOutBlocks(e: Effect) {
+        if (!e.drawn || (game.world.trails.length == 0 && !game.frozen)) return
+        const shape = game.shapeOf(e.picture), gap = Math.floor(e.size)
+        for (let i = 0; i < shape.wide; i++)
+            for (let j = 0; j < shape.high / 2; j++)
+                game.rubOut(2 * (e.cx + gap * (i - e.xof)), e.cy + 2 * gap * (j - e.yof), 1, 2)
+        },
+    arrive(e: Effect) {
+        const t = game.thing(e.thing)
+        if (t != null) t.appearing = false
+        }
+    ]

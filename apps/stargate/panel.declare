@@ -1,0 +1,257 @@
+// Stargate — the lettering, and the panel across the top of the screen: the score, the ships
+// and smart bombs in reserve, the inviso bar, and the frame round the scanner.
+//
+// The arcade has two fonts: a small one, five rows high, whose letters stand on even pixels,
+// and a large one, seven rows high, that goes down pixel by pixel. Their shapes, the score's
+// digits and the panel's small pictures are in art/lettering.json, and the arcade's 153
+// phrases in art/phrases.json (both written by reference/tools/extract-fonts.mjs). Everything
+// here is drawn as whole arcade pixels in one of the sixteen colours, so it follows the
+// colours as they change.
+//
+// The App holds one `Letters` under the name `letters`; the views here read it.
+
+// A letter: its cell's place on the font's sheet, its width, how far it moves the cursor,
+// and for each pixel column a number whose bit r is row r, lit.
+
+schema Glyph [ at: number, wide: number, step: number, columns: number[] ]
+
+// A small picture is a string for each row: a pixel's colour is a hex digit.
+
+schema LetterShapes [ order: string,          // the characters, in the order of the letters below
+    small[]: Glyph, large[]: Glyph,
+    digits[]: Glyph,                    // the score's: 6 pixels by 8 rows
+    ship: string[], bigShip: string[], ten: string[],
+    bomb: string[], tenBombs: string[] ]
+
+// A piece of a phrase: what the arcade prints, or does to its printing, next.
+
+schema Piece [
+    text?: string,                      // letters: ">" is the arrow, "*" the adjustment mark
+    ink?: number,                       // from here on, this colour
+    scanner?: boolean,                  // … or the colour of the scanner's frame
+    at?: number[],                      // the cursor goes to this pixel and row
+    move?: number[],                    // … or this far across and down
+    font?: "small" | "large",           // the two fonts share a bottom line
+    zeros?: "shown" | "dropped" | "spaced",     // what becomes of a number's leading zeros from now on
+    figures?: 2 | 4,                    // the caller's number, in this many figures
+    digits?: string,                    // a number written into the phrase
+    line?: "new" | "return" | "feed",
+    margin?: boolean ]                  // new lines start here from now on
+
+schema PhraseText [ n: number, says: string, pieces[]: Piece ]
+
+class Letters extends Node [
+    shapes: DataSource [ url = "art/lettering.json", auto = true, schema = LetterShapes ],
+    book: DataSource [ url = "art/phrases.json", auto = true, schema = [ phrases[]: PhraseText ] ],
+    ready: boolean = { shapes.loaded && book.loaded },
+
+    // a phrase by what it says (or, for a long one, by how it begins)
+
+    phrase(says: string) -> Piece[] {
+        const all = book.value?.phrases ?? []
+        return (all.find((p) => p.says == says) ?? all.find((p) => says != "" && p.says.startsWith(says)))?.pieces ?? []
+        }
+    ]
+
+
+// Words on the arcade's screen: `text`, and after it `number` in `digits` digits if any are
+// asked for — or a list of `pieces`. The cursor starts at pixel (px, py), the top left corner
+// of the first letter, in the `font` and the colour `ink`.
+//
+// The arcade prints over whatever is there: a small letter blanks its whole cell, and a
+// large one, written a pair of pixels at a time, blanks the other pixel of a pair it only
+// half fills.
+
+class Lettering [ width = 100%, height = 100%,
+    text: string = "",
+    number: number = 0,
+    digits: number = 0,
+    long: number = -1,                  // the four-digit number, where a phrase prints two different ones
+    pieces: Piece[] = [],
+    font: "small" | "large" = "small",
+    px: number = 0,
+    py: number = 0,
+    ink: number = 1,
+    zeros: "shown" | "dropped" | "spaced" = "dropped",
+    frameInk: number = 0,
+    opaque: boolean = true,             // blanked pixels are painted, in the background's colour
+    colours: number[] = { app.game.colours },
+
+    said() -> Piece[] {
+        if (pieces.length > 0) return pieces
+        return digits > 0 ? [{ text: text }, { figures: digits == 4 ? 4 : 2 }] : [{ text: text }]
+        },
+
+    // The pixels the printing writes, in order: where (row × 512 + pixel) and in which colour,
+    // 0 for a blanked one.
+
+    printed(art: LetterShapes) -> number[][] {
+        const out = new Map<string, number[]>()
+        let x = px, y = py, big = font == "large", colour = ink, blanking = zeros, margin = px
+        const column = (at: number, rows: number, high: number) => {
+            for (let r = 0; r < high; r++) out.set(`${at},${y + r}`, [at, y + r, Math.floor(rows / 2 ** r) % 2 == 1 ? colour : 0])
+            }
+        const letter = (ch: string) => {
+            const i = art.order.indexOf(ch)
+            if (!big) {
+                if (i < 0) return
+                x = x + x % 2
+                art.small[i].columns.forEach((rows, k) => column(x + k, rows, 5))
+                x = x + art.small[i].step
+                return
+                }
+            const g = art.large[i < 0 ? 10 : i]
+            if (x % 2 == 1) column(x - 1, 0, 7)
+            g.columns.forEach((rows, k) => column(x + k, rows, 7))
+            if ((x + g.wide) % 2 == 1) column(x + g.wide, 0, 7)
+            x = x + g.step
+            }
+        // a number's digits: the last is always printed
+        const count = (figures: string) => {
+            let begun = false
+            for (let k = 0; k < figures.length; k++) {
+                if (figures[k] == "0" && !begun && blanking != "shown" && k < figures.length - 1) {
+                    if (blanking == "spaced") x = x + (big ? 6 : 4)
+                    continue
+                    }
+                begun = true
+                letter(figures[k])
+                }
+            }
+        for (const p of this.said()) {
+            if (p.ink != null) colour = p.ink
+            else if (p.scanner) colour = frameInk
+            else if (p.at != null) { x = p.at[0]; y = p.at[1] }
+            else if (p.move != null) { x = x + p.move[0]; y = y + p.move[1] }
+            else if (p.font != null) { if (big != (p.font == "large")) { big = !big; y = y + (big ? -2 : 2) } }
+            else if (p.zeros != null) blanking = p.zeros
+            else if (p.figures == 4) count(String((long >= 0 ? long : number) % 10000).padStart(4, "0"))
+            else if (p.figures == 2) count(String(number % 100).padStart(2, "0"))
+            else if (p.digits != null) count(p.digits)
+            else if (p.line != null) {
+                if (p.line != "return") y = y + (big ? 9 : 7)
+                if (p.line != "feed") x = margin
+                }
+            else if (p.margin) margin = x
+            else if (p.text != null) for (const ch of p.text) letter(ch)
+            }
+        return [...out.values()]
+        },
+
+    draw(d: Draw) {
+        const art = app.letters.shapes.value
+        if (art == null || !app.letters.ready) return
+        for (const [x, y, c] of this.printed(art)) {
+            if (c == 0 && !opaque) continue
+            d.fillStyle = arcadeColour(colours[c])
+            d.fillRect(x, y, 1, 1)
+            }
+        }
+    ]
+
+
+// One of the arcade's phrases, by what it says. A phrase that does not place itself starts at
+// (px, py); one that does not choose its colour is in `ink`.
+
+class Phrase extends Lettering [
+    says: string = "",
+    pieces = { app.letters.phrase(says) }
+    ]
+
+
+// A solid block of the arcade's pixels, in one of the sixteen inks.
+
+class Block [ width = 1, height = 1,
+    ink: number = 0,
+    fill = { arcadeColour(provided("inks")[ink]) }
+    ]
+
+
+// The lines under each side of the top of the screen and round the scanner, in the wave's
+// colour; and the marks in the middle of the scanner's top and bottom, with the four inside
+// them that show how much of the planet the screen takes in.
+
+class ScannerFrame [ width = 100%, height = 100%,
+    ink: number = 5,
+    marks: number = 9,
+    lines: number[][] = { [[0, 43, 88, 1], [216, 43, 96, 1], [87, 7, 1, 36], [216, 7, 1, 36],
+        [88, 7, 4, 1], [212, 7, 4, 1], [88, 36, 4, 1], [212, 36, 4, 1]] },
+    ticks: number[][] = { [[144, 6, 16, 2], [144, 36, 16, 2], [144, 8, 1, 2], [159, 8, 1, 2], [144, 34, 1, 2], [159, 34, 1, 2]] },
+    draw(d: Draw) {
+        const inks = provided("inks")
+        d.fillStyle = arcadeColour(inks[ink])
+        for (const [x, y, w, h] of lines) d.fillRect(x, y, w, h)
+        d.fillStyle = arcadeColour(inks[marks])
+        for (const [x, y, w, h] of ticks) d.fillRect(x, y, w, h)
+        }
+    ]
+
+
+// The top of the screen, as the arcade draws it when a ship starts: lines under each side
+// and round the scanner in the middle; on the left the ships in reserve, the smart bombs,
+// the inviso bar and the score; and in the strip under the scanner a phrase.
+
+class Panel [ width = 100%, height = 100%,
+    score: number = 0,
+    ships: number = 0,                  // in reserve
+    bombs: number = 0,
+    inviso: number = 0,                 // the time left: five to each pixel pair of the bar
+    playing: boolean = true,            // the score is in the changing colour while its player plays
+    frameInk: number = 5,
+    message: string = ">  SCANNER  >",
+    messageNumber: number = 0,
+    added: number = -1,                 // a number printed after the message (its phrase says where), or -1
+    inks: number[] = { app.game.colours },
+    marks: number = { app.game.ink.marks },
+
+    // the frame's ink in each wave, of sixteen
+
+    frameFor(wave: number) -> number { return [0, 11, 3, 2, 1, 4, 6, 7, 0, 9, 15, 8, 1, 7, 9, 4][wave % 16] },
+
+    // What the panel shows, as records: the ships and smart bombs in reserve (ten or more
+    // shown as one picture marked "10", and as many as seven more), and the score's seven
+    // figures (leading zeros hidden, but never the last two; the figures stay put as the
+    // score grows, so its row is never rebuilt).
+
+    shown: Dataset [ contents = { classroot.contents() } ],
+    contents() -> object {
+        const ones = (count: number) => {
+            const n = Math.min(count, 17)
+            return Array.from({ length: n >= 10 ? n - 10 : n }, (unused, i) => ({ id: i }))
+            }
+        const figures = String(score % 10000000).padStart(7, "0").split("")
+        const first = figures.findIndex((f) => f != "0"), leading = first < 0 ? 5 : Math.min(5, first)
+        return { ships: ones(ships), bombs: ones(bombs), leading: leading,
+            figures: figures.map((f, i) => ({ id: i, digit: f, shown: i >= leading })) }
+        },
+
+    frame: ScannerFrame [ ink = { classroot.frameInk }, marks = { classroot.marks } ],
+
+    // the ships and bombs in reserve, each a row from the left; the inviso bar (at most 36
+    // pixel pairs); and the score
+
+    reserve: View [ visible = { !app.game.panelCleared }, x = 14, y = 19, datapath = { classroot.shown.value },
+        ships: View [ layout: SimpleLayout [ axis = x ],
+            ten: View [ visible = { classroot.ships >= 10 },
+                Sprite [ picture = "ship-right", fill = null ],
+                Sprite [ y = 2, picture = "ten-ships", fill = null ]
+                ],
+            Sprite [ datapath = :ships[], y = { classroot.ships >= 10 ? 3 : 0 }, picture = "ship-small", fill = null ]
+            ],
+        bombs: View [ y = 7,
+            layout: SimpleLayout [ axis = x, spacing = 2 ],
+            Sprite [ visible = { classroot.bombs >= 10 }, picture = "ten-bombs", fill = null ],
+            Sprite [ datapath = :bombs[], y = { classroot.bombs >= 10 ? 2 : 0 }, picture = "smart-bomb", fill = null ]
+            ],
+        Block [ y = 13, width = { 2 * Math.ceil(Math.min(classroot.inviso, 180) / 5) }, height = 2, ink = 15 ],
+        figures: View [ x = { 8 * :leading }, y = 16,
+            layout: SimpleLayout [ axis = x, spacing = 2 ],
+            Sprite [ datapath = :figures[], visible = :shown, picture = { "digit-" + :digit }, fill = null, mono = { classroot.playing ? 12 : 1 } ]
+            ]
+        ],
+
+    strip: Phrase [ says = { classroot.message }, number = { classroot.messageNumber }, px = 92, py = 39,
+        ink = { classroot.frameInk }, frameInk = { classroot.frameInk }, colours = { classroot.inks } ],
+    addedNumber: Phrase [ visible = { classroot.added >= 0 }, says = "##", number = { classroot.added },
+        frameInk = { classroot.frameInk }, colours = { classroot.inks } ]
+    ]

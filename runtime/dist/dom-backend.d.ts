@@ -138,6 +138,16 @@ export declare class DomSurface implements Surface {
     setScale(scale: number, pivotX: number, pivotY: number): void;
     setRotation(deg: number, pivotX: number, pivotY: number): void;
     private applyTransform;
+    /** `scaling` (backend.ts). CSS's `image-rendering` is INHERITED, so one
+     *  declaration here reaches every <img>, tint mask and drawing canvas in the
+     *  subtree — the platform's own cascade, as a transform's is. A drawing's
+     *  density is this backend's to choose, so the subtree's drawings re-raster:
+     *  under `pixelated` at one pixel per view unit (rasterize), enlarged whole
+     *  by the transforms above. The mark is what a drawing looks up. */
+    setScaling(mode: string): void;
+    /** Under a `pixelated` view (this one or an ancestor): the drawing is held at
+     *  one pixel per unit. */
+    private pixelated;
     setBlend(mode: string): void;
     setBackdrop(spec: readonly Filter[] | null): void;
     /** The view's own painted subtree, filtered as a group (graphics-pass.md

@@ -1,0 +1,106 @@
+/*
+## Shots at the ship
+
+Enemies fire shots at the ship: a shot starts where its firer is drawn, moves each frame
+and with the planet as it scrolls, and lasts twenty scans of the scanner. There can be
+twenty at once. A shot that touches the ship is the ship's end; one the ship touches
+bursts, for 25 points.
+*/
+
+class Shots extends Rules [ kinds = [],
+
+    inFlight: number = 0,
+    look: number = 1,                   // which of its two pictures a bomb shows
+
+    reset() { inFlight = 0 },
+
+    // Every shot goes at once.
+
+    dropAll() {
+        for (const s of game.world.shots) game.memory.giveSlot(s.id, s.y)
+        game.world.shots = []
+        },
+
+    // Every eighth pass spent shots are cleared away, and the rest are a scan older.
+
+    clearSpent() {
+        const kept = []
+        for (const s of game.world.shots) {
+            if (s.alive) { s.life = s.life - 1; if (s.life != 0) { kept.push(s); continue } }
+            game.memory.giveSlot(s.id, s.y)
+            inFlight = inFlight - 1
+            }
+        game.world.shots = kept
+        },
+
+    // A shot starts at its firer, if that is on the screen below the top row and fewer than
+    // twenty are in flight.
+
+    launch(firer: Thing, kind: "bomb" | "mine" | "bar") -> Shot? {
+        this.point("shell begun")
+        const across = game.across(firer.x)
+        this.point("shell across")
+        const y = Math.floor(firer.y)
+        if (inFlight >= 20 || across >= game.screenWidth || y <= game.top || game.memory.slots.length == 0) return null
+        const pair = byte(Math.floor(across / 2))
+        game.nextId = game.nextId + 1
+        const shot = { id: game.nextId, kind: kind, x: 2 * pair + y / 128, y: y + pair / 256, vx: 0, vy: 0,
+            px: 2 * pair, py: y, life: 20, alive: true }
+        game.memory.takeSlot(shot.id)
+        this.point("shell placed")
+        game.world.shots.unshift(shot)
+        inFlight = inFlight + 1
+        return shot
+        },
+
+    // An ordinary shot heads for the ship give or take sixteen pixels each way — half the
+    // time allowing for the ship's speed.
+
+    shoot(firer: Thing) -> boolean {
+        this.point("aim")
+        const shot = this.launch(firer, "bomb")
+        if (shot == null) return false
+        const seed = game.chance.last
+        shot.vx = signed8(seed % 32 - 16 + Math.floor((game.world.ship.px - shot.px) / 2)) / 32
+        if (seed > 120) shot.vx = shot.vx + game.pilot.pace(game.world.ship)
+        shot.vy = signed8(game.chance.third % 32 - 16 + game.world.ship.py - shot.py) / 64
+        return true
+        },
+
+    // Shots move each frame; one that reaches the top or the right edge is spent — rubbed
+    // out, though until it is cleared away it can still be touched where it was.
+
+    move() {
+        if (game.frozen) return
+        const slid = game.offset(Math.floor(game.lastScroll), Math.floor(game.scroll))
+        for (const s of game.world.shots) {
+            const y = game.wrapY(s.y + s.vy)
+            if (y < game.top + 1) { s.alive = false; continue }
+            s.y = y
+            const x = game.wrapScreen(s.x + s.vx + slid)
+            if (x >= 302) { s.alive = false; continue }
+            s.x = x
+            s.px = Math.floor(x); s.py = Math.floor(y)
+            }
+        },
+
+    // The ship touching a shot: it bursts for 25 points.
+
+    touch(px: number, py: number, picture: string) -> boolean {
+        const mine = game.shapeOf(picture)
+        for (const s of game.world.shots) {
+            if (s.py == 0) continue
+            const where = game.overlap(px, py, mine, s.px, s.py, game.shapeOf(s.kind == "bar" ? "yllabian-bomb" : "bomb"))
+            if (where == null) continue
+            game.impact = where
+            game.award(25)
+            inFlight = inFlight - 1
+            game.world.shots = game.world.shots.filter((o) => o.id != s.id)
+            game.memory.giveSlot(s.id, s.y)
+            game.effects.explode("bomb-burst", { x: game.wrapX(s.x + game.scroll), y: game.wrapY(s.y - 2) })
+            game.sound("man hit")
+            return true
+            }
+        return false
+        }
+    ]

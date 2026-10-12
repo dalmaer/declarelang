@@ -1,0 +1,192 @@
+/*
+## Baiters, baiter masters and munchies
+
+When the player takes too long over a wave, a baiter comes — or, three times in four, a
+baiter master. Both make for the ship at a set pace on top of the ship's own, so they
+cannot be outrun. A baiter spins and shoots; a master lets go munchies, which chase the
+ship in straight lines, aiming afresh now and then. There are never more than twelve
+baiters, or twelve munchies.
+
+    baiter      seek → spin … → seek …
+    master      hunt …
+    munchy      chase …
+*/
+
+class Baiters extends Rules [ kinds = ["baiter", "master", "munchy"],
+
+    baitersOut: number = 0,
+    mastersOut: number = 0,
+    munchiesOut: number = 0,
+
+    // A master and a munchy each have three pictures for going right and three for going
+    // left, in a colour of their own, and show the next of them at every look.
+
+    picture(t: Thing) -> string {
+        return t.kind == "baiter" ? "baiter-" + t.frame : t.kind + "-" + t.look + "-" + [1, 2, 3, 1, 4, 5][t.frame]
+        },
+    face(t: Thing) {
+        let frame = t.frame + 1
+        if (t.vx >= 0) { if (frame > 2) frame = 0 }
+        else if (frame > 5 || frame < 3) frame = 3
+        t.frame = frame
+        },
+    clear() { baitersOut = 0; mastersOut = 0; munchiesOut = 0 },
+
+    // ── closing on the ship ──
+
+    // Across unless within twenty pixels of the ship, and up or down unless within ten rows,
+    // a master aiming four rows low. (A master's climb also takes in the low byte of what it
+    // last worked out across, in the arcade's units: so it is reckoned in them here.)
+
+    pursue(t: Thing, pace: number, low: number, clean: boolean) {
+        const ship = game.world.ship, off = game.wrapX(t.x - ship.planetX) * 32
+        let residue = word(off + 640)
+        if (residue > 1280) {
+            const vx = (off < 32768 ? -pace : pace) + game.pilot.pace(ship) * 32
+            t.vx = vx / 32
+            residue = word(vx)
+            }
+        const gap = byte(Math.floor(t.y) - ship.py - low)
+        if (byte(gap + 10) <= 20) return
+        const climb = (gap < 128 ? -256 : 256) + (clean ? 0 : residue % 256) + ship.climb * 256
+        t.vy = Math.floor(signed16(climb) / 2) / 256
+        },
+
+    // On the screen or a little past its right edge, at a height that goes with the place.
+
+    arriveNearby(t: Thing) {
+        t.x = game.wrapX(game.chance.last % 32 * 8 + game.chance.second / 32 + game.scroll)
+        t.y = Math.floor(t.x * 32 % 256 / 2) + 44 + t.y % 1
+        },
+
+    // ── baiters ──
+
+    send() {
+        if (baitersOut >= 12) return
+        if (game.chance.last <= 192) { this.sendMaster(); return }
+        const [turn, t] = game.spawn("baiter", "seek")
+        baitersOut = baitersOut + 1
+        t.steer = 3
+        this.arriveNearby(t)
+        t.shotIn = 8
+        this.pursue(t, 64, 0, true)
+        game.effects.appear(t)
+        },
+
+    // A baiter looks about every six passes: it shoots when its count runs out, and at
+    // every third look it may take a new course for the ship. On the screen it spins, a
+    // picture a pass.
+
+    spin(turn: Turn, t: Thing) {
+        t.frame = t.frame % 7 + 1
+        turn.count = turn.count! - 1
+        if (turn.count != 0) { this.rest(turn, 1, "spin"); return }
+        this.seek(turn, t)
+        },
+    seek(turn: Turn, t: Thing) {
+        if (t.appearing) { this.rest(turn, 6, "seek"); return }
+        t.shotIn = countDown(t.shotIn!)
+        if (t.shotIn == 0) {
+            t.shotIn = game.chance.upTo(settings.baiterShotTime)
+            if (game.shooters.shoot(t)) game.sound("baiter shot")
+            }
+        t.steer = countDown(t.steer!)
+        if (t.steer == 0) {
+            t.steer = 3
+            if (game.chance.last > settings.baiterSeek) this.pursue(t, 64, 0, true)
+            }
+        if (t.py == 0) { this.rest(turn, 6, "seek"); return }
+        turn.count = 6
+        this.rest(turn, 1, "spin")
+        },
+
+    // ── baiter masters ──
+
+    // A master is round or, one time in four, square.
+
+    sendMaster() {
+        const [turn, t] = game.spawn("master", "hunt")
+        mastersOut = mastersOut + 1
+        t.frame = 0
+        this.arriveNearby(t)
+        t.shotIn = game.chance.upTo(settings.masterShotTime)
+        t.look = game.chance.last % 4 == 0 ? "square" : "round"
+        this.pursue(t, 32, 4, false)
+        this.face(t)
+        game.effects.appear(t)
+        },
+
+    // Every six passes a master counts down to its next munchy — four times as fast while
+    // the ship is some way below it — and may take a new course for the ship. A square one
+    // lets munchies go twice as often.
+
+    hunt(turn: Turn, t: Thing) {
+        if (t.appearing) { this.rest(turn, 6, "hunt"); return }
+        const below = byte(game.world.ship.py - Math.floor(t.y) + 20)
+        let timer = byte(t.shotIn! - (below < 10 ? 4 : 1))
+        if (timer >= 252) {
+            this.letGoMunchy(t)
+            timer = game.chance.upTo(t.look == "square" ? Math.floor(settings.masterShotTime / 2) : settings.masterShotTime)
+            }
+        t.shotIn = timer
+        if (game.chance.last > settings.masterSeek) this.pursue(t, 32, 4, false)
+        this.face(t)
+        this.rest(turn, 6, "hunt")
+        },
+
+    // ── munchies ──
+
+    // A master on the screen lets a munchy go from where it is — green half the time, else
+    // red or yellow — across toward the ship and up or down at random.
+
+    letGoMunchy(master: Thing) {
+        if (byte(Math.floor(master.x / 8) - Math.floor(game.scroll / 8)) > 38) return
+        if (munchiesOut >= 12) return
+        const ship = game.world.ship
+        const [turn, t] = game.spawn("munchy", "chase")
+        munchiesOut = munchiesOut + 1
+        game.sound("master shot")
+        t.frame = 0
+        t.look = ["green", "green", "red", "yellow"][game.chance.last % 4]
+        game.chance.draw()
+        const shipLeft = byte(Math.floor(master.x / 8) - Math.floor(ship.planetX / 8)) < 128
+        t.vx = (shipLeft ? -2 : 2) + game.pilot.pace(ship)
+        t.steer = game.chance.upTo(Math.floor(settings.munchyRest / 2))
+        game.chance.draw()
+        t.vy = signed8(game.chance.second) / 256
+        t.x = master.x; t.y = master.y
+        this.face(t)
+        game.enter(t)
+        },
+
+    // A munchy looks every six passes, and after a random number of looks aims afresh: at a
+    // point a little off the ship, straight along the line to it, at the greatest pace that
+    // keeps within its limits across and down — on top of the ship's own pace across. (The
+    // line is halved until it fits, in the arcade's units.)
+
+    chase(turn: Turn, t: Thing) {
+        const ship = game.world.ship
+        t.steer = countDown(t.steer!)
+        if (t.steer == 0) {
+            const right = settings.munchySpeed, left = signed8(-settings.munchySpeed)
+            const down = 256 * settings.munchyDrop, up = signed16(256 * byte(-settings.munchyDrop))
+            let dx = signed16(game.chance.second % 2 * 256 + game.chance.third + ship.planetX * 32 - t.x * 32)
+            let dy = signed16(game.chance.last % 8 * 256 + game.chance.second + ship.y * 256 - t.y * 256)
+            do { dx = Math.floor(dx / 2); dy = Math.floor(dy / 2) } while ((dx >= 0 ? dx > right : dx < left) || (dy >= 0 ? dy > down : dy < up))
+            t.vy = dy / 256
+            t.vx = dx / 32 + game.pilot.pace(ship)
+            t.steer = game.chance.upTo(settings.munchyRest)
+            }
+        this.face(t)
+        this.rest(turn, 6, "chase")
+        },
+
+    // ── shot ──
+
+    hit(t: Thing, byShip: boolean) -> boolean {
+        if (t.kind == "baiter") { baitersOut = baitersOut - 1; game.destroy(t, 200, "baiter hit") }
+        else if (t.kind == "master") { mastersOut = mastersOut - 1; game.destroy(t, 200, "master hit") }
+        else { munchiesOut = munchiesOut - 1; game.destroy(t, 50, "munchy hit") }
+        return true
+        }
+    ]

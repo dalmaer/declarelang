@@ -1,0 +1,146 @@
+/*
+## The smart bomb, hyperspace and inviso
+
+A smart bomb destroys every enemy on the screen at once, and the screen flashes; the next
+will not go off until the button has been let go.
+
+Hyperspace takes the ship to a random place on the planet. It appears there after a
+quarter of a second in the dark, out of the ship's picture coming together — and, once
+the wave is under way, one time in four it is destroyed as it arrives.
+
+While the inviso button is held, and there is inviso time left, the ship cannot be seen or
+destroyed, and destroys what it touches. It vanishes in an explosion; the screen flashes
+red as the time runs out.
+
+    smart bomb  setOff → flash … → held … → over
+    hyperspace  jump → arrive → back
+    ghost       go → gone       (the ship's picture where it arrives)
+    inviso      on → count → check → count …
+*/
+
+class Powers extends Rules [ kinds = ["smart bomb", "hyperspace", "ghost", "inviso"],
+
+    bombing: boolean = false,           // a smart bomb is going off
+    scoring: boolean = false,           // the wave is under way
+    invisoSpent: boolean = false,       // the "none left" sound has been made for this press
+
+    picture(t: Thing) -> string { return t.facing > 0 ? "ship-right" : "ship-left" },
+    clear() { bombing = false; scoring = false },
+
+    // ── the smart bomb ──
+
+    setOff(t: Turn) {
+        if (bombing || game.smartBombs == 0) { game.end(t); return }
+        bombing = true
+        game.smartBombs = game.smartBombs - 1
+        game.sound("smart bomb")
+        game.bombed = true
+        const spared: number[] = []
+        for (;;) {
+            const enemy = game.world.near.find((o) => game.across(o.x) < 312 && !o.appearing && game.pictureOf(o) != "none"
+                && !["man", "score", "gate"].includes(o.kind) && !spared.includes(o.id))
+            if (enemy == null) break
+            if (!game.rulesFor(enemy.kind).hit(enemy, false)) spared.push(enemy.id)
+            }
+        game.bombed = false
+        t.count = 4
+        this.flash(t)
+        },
+    flash(t: Turn) {
+        t.step = "flash"
+        if (t.count == 0) { game.paint(game.ink.background, game.black); this.rest(t, 10, "held"); return }
+        game.paint(game.ink.background, game.opposite(game.palette[game.ink.background]))
+        t.count = t.count! - 1
+        t.wait = 2
+        },
+    held(t: Turn) { this.rest(t, 10, game.pilot.held.smartBomb ? "held" : "over") },
+    over(t: Turn) { bombing = false; game.end(t) },
+
+    // ── hyperspace ──
+
+    jump(t: Turn) {
+        if (game.gameOver || game.controlsOff || game.frozen || game.shipHidden || game.shipDead || game.effectsOff
+            || game.standby) { game.end(t); return }
+        t.kept = game.planetGone
+        game.halt(["controls", "motion", "ship", "effects", "planet", "touching"])
+        game.wipe()
+        this.rest(t, 15, "arrive")
+        },
+    arrive(t: Turn) {
+        const ship = game.world.ship
+        game.shooters.dropAll()
+        game.shooters.inFlight = 0
+        game.scroll = game.chance.last * 8 + game.chance.second / 32
+        game.lastScroll = game.scroll
+        ship.x = game.chance.second % 2 == 1 ? 64 : 224
+        ship.turnTo = game.chance.second % 2 == 1 ? 1 : -1
+        ship.y = Math.floor(game.chance.second / 2) + 44 + ship.y % 1
+        ship.nextPy = Math.floor(ship.y)
+        ship.speed = 0; ship.climb = 0
+        game.halt(["controls", "ship"], game.men.left == 0)
+        const ghost = game.newThing("ghost")
+        ghost.facing = ship.turnTo > 0 ? 1 : -1
+        ghost.y = ship.y
+        ghost.x = game.wrapX(ship.x + game.scroll)
+        ghost.turn = t.id; t.thing = ghost.id
+        game.effects.appear(ghost)
+        this.rest(t, 40, "back")
+        },
+    back(t: Turn) {
+        game.begin("ghost", "go").thing = t.thing
+        game.halt([], t.kept)
+        // (a jump that kills: the same process goes on as the ship's death, keeping its place)
+        if (game.chance.third > 192 && scoring) { t.kind = "death"; game.sound("ship destroyed"); game.director.die(t) }
+        else game.end(t)
+        },
+
+    // The picture gives way to the ship itself; its place in memory is held a little longer.
+
+    go(t: Turn, ghost: Thing?) {
+        if (ghost != null) game.leave(ghost)
+        game.memory.takeSlot(t.thing!)
+        this.rest(t, 10, "gone")
+        },
+    gone(t: Turn) {
+        game.memory.giveSlot(t.thing!, game.memory.fractionIn(t.thing!))
+        game.end(t)
+        },
+
+    // ── inviso ──
+
+    on(t: Turn) {
+        if (game.invisoLeft == 0) {
+            if (!invisoSpent) { invisoSpent = true; game.sound("inviso out") }
+            game.end(t)
+            return
+            }
+        const ship = game.world.ship
+        game.clock.changing(game.world)
+        game.pilot.invisible = true; game.shipHidden = true; game.shipShown = false
+        game.impact = { px: ship.px - ship.px % 2 + 8, py: ship.py + 3 }
+        if (game.memory.slots.length != 0) {        // (the explosion borrows the next free place in memory)
+            game.effects.explode(game.pilot.shipPicture(ship), { x: ship.planetX, y: ship.y })
+            game.memory.borrowSlot(ship.y)
+            }
+        this.count(t)
+        },
+    count(t: Turn) {
+        game.invisoLeft = game.invisoLeft - 1
+        if (game.invisoLeft != 0) {
+            if (game.invisoLeft <= 10) game.paint(game.ink.background, game.red)
+            this.rest(t, 3, "check")
+            return
+            }
+        this.visible(t)
+        },
+    check(t: Turn) {
+        game.paint(game.ink.background, game.black)
+        if (game.pilot.held.inviso) { this.rest(t, 3, "count"); return }
+        this.visible(t)
+        },
+    visible(t: Turn) {
+        game.clock.changing(game.world)
+        game.pilot.invisible = false; game.shipHidden = false
+        game.end(t)
+        }
+    ]

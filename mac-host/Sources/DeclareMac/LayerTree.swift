@@ -54,6 +54,9 @@ final class Node {
     var editable: EditableOverlay?
     var children: [Node] = []
     weak var parent: Node?
+    /// `scaling = pixelated` set on THIS node (case 50); the subtree follows
+    /// it — see LayerTree.isPixelated.
+    var pixelatedHere = false
 
     var box = CGRect.zero
     var radius: CGFloat = 0
@@ -456,6 +459,7 @@ final class LayerTree {
             c.parent = n
             restack(n)
             place(c)
+            if isPixelated(n) { applyScaling(c) }   // a subtree moved under a pixelated view takes it up
         case 4: // ROOT
             guard let n = nodes[id] else { return }
             let old = root
@@ -873,6 +877,15 @@ final class LayerTree {
             guard let n = nodes[id] else { return }
             n.perspective = num(a(0))
             applyPerspective(n)
+        case 50: // SCALING — "smooth" | "pixelated": how the subtree's images and
+            // drawings resample when shown at another size. Pixelated is Core
+            // Animation's nearest filter on each content layer below (the
+            // drawings themselves arrive remade at one pixel per unit — the
+            // runtime's drawRaster); the whole subtree follows, as CSS's
+            // inherited image-rendering does on the web.
+            guard let n = nodes[id] else { return }
+            n.pixelatedHere = str(a(0)) == "pixelated"
+            applyScaling(n)
         case 47: // IMAGEALIGN — start / center / end per axis
             guard let n = nodes[id] else { return }
             let f: (String?) -> CGFloat = { $0 == "start" ? 0 : $0 == "end" ? 1 : 0.5 }
@@ -1438,6 +1451,30 @@ final class LayerTree {
         return ctx.makeImage()
     }
 
+    /// Under `scaling = pixelated`: this node or an ancestor set it (case 50).
+    func isPixelated(_ n: Node) -> Bool {
+        var s: Node? = n
+        while let x = s { if x.pixelatedHere { return true }; s = x.parent }
+        return false
+    }
+    /// The content layers' filters, for a node and everything below it.
+    private func applyScaling(_ n: Node) {
+        let on = isPixelated(n)
+        func walk(_ x: Node, _ on: Bool) {
+            let here = on || x.pixelatedHere
+            if let l = x.image { setFilters(l, pixelated: here, drawing: false) }
+            if let l = x.draw { setFilters(l, pixelated: here, drawing: true) }
+            for c in x.children { walk(c, here) }
+        }
+        walk(n, on)
+    }
+    /// Nearest under pixelated; otherwise CA's linear, and trilinear for a
+    /// drawing's minification (land).
+    private func setFilters(_ l: CALayer, pixelated: Bool, drawing: Bool) {
+        l.magnificationFilter = pixelated ? .nearest : .linear
+        l.minificationFilter = pixelated ? .nearest : drawing ? .trilinear : .linear
+    }
+
     private func applyImage(_ n: Node) {
         guard let h = n.imageHandle, let img = bridge.image(h) else {
             n.image?.removeFromSuperlayer(); n.image = nil; restack(n); return
@@ -1448,6 +1485,7 @@ final class LayerTree {
             l.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
             n.image = l; restack(n)
         }
+        setFilters(l, pixelated: isPixelated(n), drawing: false)
         let shown = displayImage(n, img)
         l.contents = n.tint.flatMap { LayerTree.tinted(shown, $0) } ?? shown
         l.masksToBounds = true
@@ -1948,7 +1986,7 @@ final class LayerTree {
         // wallpaper is drawn in a 1920x1200 reference box and cover-scaled), and
         // CALayer's default minification is plain bilinear — it loses detail a
         // browser's downscale keeps. Trilinear mipmaps that path.
-        l.minificationFilter = .trilinear
+        setFilters(l, pixelated: isPixelated(n), drawing: true)
         l.contents = img
         l.bounds = CGRect(x: 0, y: 0, width: w, height: h)
         l.position = CGPoint(x: bx, y: n.box.height - by - h)   // the model's y, mirrored

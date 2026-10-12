@@ -1,0 +1,230 @@
+// Stargate — the sound.
+//
+// The arcade makes its sound on a board of its own, which knows 31 sounds by number. The
+// game sends it a number, and the board plays that sound until it ends or another number
+// arrives: there is one voice, and a new sound cuts off the last.
+//
+// The game does not send numbers as things happen. A rule asks for a sound by name; each
+// name stands for an entry in a table — how much the sound matters, and a short tune of
+// numbers to send, so many times, so many frames apart. One entry plays at a time, and a
+// request takes its place only if it matters at least as much. Once a frame the game sends
+// the next number that has come due. When no entry is playing, the thrust button has the
+// board: thrust on is a sound, and thrust off is another, the low hum behind the game.
+//
+// `SoundBoard` is both halves as the game needs them — the table and what is playing of
+// it, and which sound the board is making. It has no view and makes no sound itself:
+// `Speaker` holds the recordings and plays whichever the board says is sounding.
+//
+// The recordings in `sounds` are the arcade's board as MAME plays it, a file for each
+// number: `20.wav` is sound 20. Four of its sounds never end, and are loops: 15, 22, and
+// 14, which rises a step each time it is sent again (`14-1.wav` to `14-31.wav`). Sound 18
+// changes each time it is sent again, and the game only ever sends it in one run, which is
+// recorded whole (`18-warp.wav`).
+
+script {
+    // a sound: how much it matters, and its tune, a step at a time: [so many times, so many
+    // frames apart, a number]
+    type SoundEntry = { matters: number, steps: number[][] }
+    type SoundTable = { [name: string]: SoundEntry }
+    }
+
+
+class SoundBoard extends Node [
+
+    // ── the table ──
+
+    // For each name: how much it matters, and for each step of its tune how many times a
+    // number is sent, how many frames apart, and the number.
+
+    entries: SoundTable = { {
+        "extra ship":       { matters: 239, steps: [[1, 32, 30]] },
+        "ship destroyed":   { matters: 238, steps: [[2, 8, 17], [1, 32, 23]] },
+        "start 1":          { matters: 240, steps: [[1, 64, 10]] },
+        "smart bomb":       { matters: 232, steps: [[6, 4, 17], [1, 16, 23]] },
+        "man caught":       { matters: 224, steps: [[3, 10, 8]] },
+        "man landed":       { matters: 224, steps: [[1, 24, 31]] },
+        "man hit":          { matters: 224, steps: [[1, 24, 17]] },
+        "fire hit":         { matters: 224, steps: [[1, 24, 17]] },
+        "man falling":      { matters: 216, steps: [[1, 16, 26]] },
+        "appear":           { matters: 208, steps: [[1, 48, 21]] },
+        "pod hit":          { matters: 208, steps: [[1, 16, 5]] },
+        "mutant hit":       { matters: 208, steps: [[1, 8, 23]] },
+        "baiter hit":       { matters: 208, steps: [[1, 8, 7]] },
+        "dynamo hit":       { matters: 208, steps: [[1, 10, 1]] },
+        "lander hit":       { matters: 208, steps: [[1, 10, 6]] },
+        "man taken":        { matters: 225, steps: [[1, 16, 11]] },
+        "man drawn in":     { matters: 200, steps: [[10, 1, 14]] },
+        "swarmer hit":      { matters: 192, steps: [[1, 8, 7]] },
+        "laser":            { matters: 192, steps: [[1, 48, 20]] },
+        "lander shot":      { matters: 192, steps: [[1, 8, 3]] },
+        "mutant shot":      { matters: 192, steps: [[1, 48, 9]] },
+        "fireball":         { matters: 192, steps: [[1, 48, 9]] },
+        "baiter shot":      { matters: 192, steps: [[1, 8, 3]] },
+        "swarmer shot":     { matters: 192, steps: [[1, 24, 12]] },
+        // entries kept with the rules that use them
+        "inviso out":       { matters: 236, steps: [[1, 16, 8]] },
+        "hum":              { matters: 192, steps: [[1, 64, 25], [1, 1, 22]] },
+        "yllabian shot":    { matters: 192, steps: [[3, 8, 2]] },
+        "master shot":      { matters: 208, steps: [[1, 16, 24]] },
+        "master hit":       { matters: 208, steps: [[1, 12, 1], [1, 8, 23]] },
+        "munchy hit":       { matters: 208, steps: [[1, 12, 26], [1, 8, 23]] },
+        // the stargate's warp, and the sounds drawn at random through it
+        "warp":             { matters: 255, steps: [[32, 2, 18], [96, 1, 18]] },
+        "warp mutant hit":  { matters: 232, steps: [[1, 8, 23]] },
+        "warp man hit":     { matters: 232, steps: [[1, 24, 17]] },
+        "warp lander hit":  { matters: 232, steps: [[1, 10, 6]] },
+        "warp laser":       { matters: 232, steps: [[1, 8, 20]] },
+        "warp tick":        { matters: 232, steps: [[1, 8, 1], [1, 1, 19]] }
+        } },
+
+    // ── what is playing of it ──
+
+    matters: number = 0,                // how much the entry playing matters; 0 when none is
+    tune: number[][] = [],              // the steps of the entry playing
+    place: number = 0,                  // the step in hand
+    wait: number = 0,                   // frames until its next number is sent; 0 when nothing is due
+    times: number = 0,                  // how many more times this step's number is sent
+    thrustOn: boolean = false,          // the thrust sound was the last thing sent
+
+    // A rule asks for a sound. Between games only the start button is heard.
+    // The new entry's first number goes out at the next frame. Asking at all, even for a
+    // sound that is turned down, makes the thrust sound be sent afresh when its turn comes.
+
+    request(name: string, gameOver: boolean) {
+        if (name == "silence") { this.silence(); return }
+        const entry = entries[name]
+        if (entry == null) return
+        thrustOn = false
+        if (gameOver && entry.matters < 240) return
+        if (entry.matters < matters) return
+        matters = entry.matters
+        tune = entry.steps
+        place = -1; wait = 1; times = 1
+        },
+
+    // Once a frame, before the buttons are read: `thrust` is the button as it was read a
+    // frame ago, and `flying` whether there is a ship in play to thrust.
+
+    frame(thrust: boolean, flying: boolean) {
+        if (wait != 0) {
+            wait = wait - 1
+            if (wait != 0) return
+            times = times - 1
+            if (times == 0) {
+                place = place + 1
+                times = place < tune.length ? tune[place][0] : 0
+                }
+            if (times != 0) {
+                wait = tune[place][1]
+                this.send(tune[place][2])
+                return
+                }
+            matters = 0
+            }
+        // nothing is due: the thrust button has the board
+        if (!thrust) {
+            if (thrustOn) { thrustOn = false; this.send(15) }
+            }
+        else if (!thrustOn && flying) { thrustOn = true; this.send(22) }
+        },
+
+    // The ship's last explosion over, the game stops the entry where it is and quiets the
+    // board. (What the entry mattered still stands, as in the arcade; by then it has
+    // always run out.)
+
+    silence() {
+        wait = 0
+        this.send(19)
+        },
+
+    // ── the board ──
+
+    sounding: number = 0,               // the sound being made, or 0
+    step: number = 0,                   // sound 14's step, 1 to 31
+    hum: boolean = false,               // the low hum is switched on: it comes back when a sound ends
+    warping: boolean = false,           // the last number was 18
+    starts: number = 0,                 // numbers taken so far: a sound sent again starts again
+    last: number = 0,                   // the last number taken
+
+    // A number arrives. The board reads five bits of it, and never hears a 0. Whatever was
+    // sounding is cut off. 15 is the hum, and switches it on; 19 is silence, and switches
+    // it off. 14 goes on until something else is sent, a step higher each time it is sent
+    // again with nothing else between. An 18 straight after an 18 lets the warp run on.
+    // (4, 16 and 29 are sounds the game never sends, and 27 and 28 make none.)
+
+    send(code: number) {
+        const number = code % 32           // (the board reads five bits)
+        if (number == 0) return
+        last = number
+        step = number == 14 ? step % 31 + 1 : 0
+        const runsOn = number == 18 && warping
+        warping = number == 18
+        if (runsOn) return
+        if (number == 15) hum = true
+        if (number == 19) hum = false
+        const silent = [4, 16, 19, 27, 28, 29].includes(number)
+        sounding = silent ? (hum ? 15 : 0) : number
+        starts = starts + 1
+        },
+
+    // A sound has played to its end: silence, or the hum again.
+
+    ended(number: number) {
+        if (sounding != number) return
+        sounding = hum ? 15 : 0
+        starts = starts + 1
+        }
+    ]
+
+
+// One of the board's sounds, recorded. It is held whole in memory, so it starts on the
+// frame it is asked for. `take` is 0 while it is not the sound being made, and otherwise
+// counts the numbers the board has taken: each change stops it, and starts it again from
+// the beginning if it is now the one.
+
+class Clip extends Audio [ inMemory = true,
+    number: number = 0,
+    step: number = 0,                   // for sound 14, which step this is
+    file: string = "",
+    source = { "sounds/" + file + ".wav" },
+    take: number = 0,
+    trackChanges = ["take"],
+    onChange() {
+        playing = false
+        if (take != 0) this.play()
+        },
+    over() { },
+    onEnded() { this.over() }
+    ]
+
+
+// The board's voice: every recording, and the one the board says is sounding plays. There
+// is nothing to see. While `quiet`, as when the game is paused, nothing plays.
+//
+// A browser lets a page make no sound until a key or the pointer has been pressed; a sound
+// asked for before then is not heard.
+
+class Speaker [ width = 0, height = 0,
+    board: SoundBoard,
+    quiet: boolean = false,
+    sounding: number = { quiet ? 0 : board.sounding },
+
+    clips: Dataset { { "once": [1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 20, 21, 23, 24, 25, 26, 30, 31],
+        "loops": [15, 22],
+        "steps": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+            29, 30, 31] } },
+    datapath = { clips.value },
+
+    Clip [ datapath = :once[], number = :@, file = { "" + :@ },
+        take = { classroot.sounding == number ? classroot.board.starts : 0 },
+        over() { classroot.board.ended(number) }
+        ],
+    Clip [ datapath = :loops[], number = :@, file = { "" + :@ }, loop = true,
+        take = { classroot.sounding == number ? classroot.board.starts : 0 } ],
+    Clip [ datapath = :steps[], number = 14, step = :@, file = { "14-" + :@ }, loop = true,
+        take = { classroot.sounding == 14 && classroot.board.step == this.step ? classroot.board.starts : 0 } ],
+    warp: Clip [ number = 18, file = "18-warp",
+        take = { classroot.sounding == 18 ? classroot.board.starts : 0 },
+        over() { classroot.board.ended(18) }
+        ]
+    ]

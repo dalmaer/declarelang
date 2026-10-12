@@ -313,6 +313,15 @@ export interface Surface {
    *  (headless) omits it, with its seam-table row saying so. */
   setBlend?(mode: string): void;
 
+  /** How this surface's subtree resamples its images and drawings when
+   *  shown at another size: "smooth" (the platform's blending, as before) or
+   *  "pixelated" — every pixel a solid block, a drawing held at one pixel per
+   *  view unit, so pixel art stays sharp under any scale above it. Inherited
+   *  by the whole subtree, as a transform is: a backend resolves it from the
+   *  nearest ancestor that set it. Paint only, never input. Optional — a
+   *  backend that paints nothing (headless) omits it. */
+  setScaling?(mode: string): void;
+
   /** The frost (compositing.md §3.2): sample everything already painted
    *  beneath this surface's own painted shape at the moment it paints,
    *  blur by `blur` px (over-scanning the sample by the same radius so

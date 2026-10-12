@@ -1,0 +1,88 @@
+/*
+## Bombers
+
+Bombers cross the planet in squads of up to four, leaving mines behind them. A squad
+starts on the far side of the planet from the ship, strung out twelve pixels apart at one
+height, all crossing at the wave's pace, the squads setting off right and left by turns.
+One turn flies the whole squad:
+
+    bombers     fly …       a bomber picked at random each pass
+*/
+
+class Bombers extends Rules [ kinds = ["bomber", "bombers"],
+
+    picture(t: Thing) -> string { return "bomber-" + t.frame },
+    goingRight: boolean = false,
+
+    send(count: number) {
+        goingRight = !goingRight
+        const pace = goingRight ? settings.bomberSpeed : -settings.bomberSpeed
+        const squad = game.begin("bombers", "fly")
+        squad.count = count
+        squad.height = 80
+        const members = [0, 0, 0, 0]
+        for (let k = count; k > 0; k--) {
+            const t = game.newThing("bomber")
+            t.vx = signed8(pace) / 32
+            t.x = game.wrapX(game.world.ship.planetX + 1024 + 12 * k)
+            t.y = 80 + t.y % 1
+            t.turn = squad.id
+            game.enter(t)
+            members[k - 1] = t.id
+            }
+        squad.squad = members
+        },
+
+    // Each pass the squad's turn sees to one bomber, picked at random, or to none if that
+    // one is gone. The bomber tumbles a picture one way or the other and is jolted up or
+    // down, its climb always dying away. Off the screen it makes its way back to the
+    // squad's height, which itself wanders between rows 64 and 104. On the screen it
+    // closes on the ship from far above or below and shies away when near; and one pass
+    // in eight it leaves a mine.
+
+    fly(squad: Turn) {
+        squad.wait = 1
+        const t = game.thing(squad.squad![Math.floor(game.chance.last % 8 / 2)])
+        if (t == null) return
+        const jolt = signed8(game.chance.last % 64 + 224)         // in 256ths of a pixel a frame
+        t.frame = Math.max(1, Math.min(4, t.frame + (jolt < 0 ? 1 : -1)))
+        const climb = word(t.vy * 256 + jolt)              // (dying away by a 32nd, as the arcade works it)
+        t.vy = signed16(climb + signed8(-Math.floor(climb / 32))) / 256
+        this.point("steering")
+        if (t.py == 0) {
+            if (game.chance.last <= 64) squad.height = Math.max(64, Math.min(104, byte(game.chance.last % 4 - 2 + squad.height!)))
+            const off = byte(squad.height! - Math.floor(t.y) + 16)
+            if (off <= 32) return
+            t.vy = t.vy + (off >= 144 ? 16 : -16) / 256
+            return
+            }
+        const under = signed8(t.py - game.world.ship.py)   // rows below the ship
+        if (under >= 32 || (under < 0 && under >= -16)) t.vy = t.vy - 16 / 256
+        else if (under <= -32 || (under >= 0 && under <= 16)) t.vy = t.vy + 16 / 256
+        if (game.chance.third % 8 == 0) this.layMine(t)
+        },
+
+    // A mine is a shot that stays where it is left, for anything up to 32 scans of the
+    // scanner. None is laid while ten shots or more are in flight.
+
+    layMine(bomber: Thing) {
+        if (game.shooters.inFlight >= 10) return
+        const mine = game.shooters.launch(bomber, "mine")
+        if (mine != null) mine.life = game.chance.last % 32 + 1
+        },
+
+    // A bomber shot is worth 250; the squad's turn ends with its last bomber.
+
+    hit(t: Thing, byShip: boolean) -> boolean {
+        game.leave(t)
+        game.award(250)
+        game.effects.explode(this.picture(t), t)
+        game.sound("dynamo hit")
+        game.director.count("bombers", -1)
+        const squad = game.turnOf(t.turn)!
+        squad.squad = squad.squad!.map((id) => id == t.id ? 0 : id)
+        squad.count = squad.count! - 1
+        if (squad.count == 0) game.end(squad)
+        return true
+        }
+    ]

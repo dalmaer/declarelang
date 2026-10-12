@@ -67,6 +67,12 @@ const TABLE = {
     dom: true, canvas: true, mac: true,
     headless: NOT_APPLICABLE,
   },
+  // `scaling` (2026-10-11): how a subtree's images and drawings resample when
+  // shown at another size — `pixelated` keeps pixel art sharp under a scale.
+  setScaling: {
+    dom: true, canvas: true, mac: true,
+    headless: NOT_APPLICABLE,
+  },
   // The Mac arm FILLED 2026-08-06, same day, phase 4 — NOT with the planned
   // NSVisualEffectView: an AppKit subview always draws above the whole CALayer
   // tree (the RichOverlay lesson), so the material would have painted over the
@@ -421,7 +427,8 @@ for (const member of members) {
 // interaction.ts's, shared, so input honesty never depends on this row.
 await test("the size of the silent-failure surface is stated, not drifting", () => {
   const total = [...src("backend.ts").matchAll(/^ {2}[a-zA-Z][a-zA-Z0-9]*\??\(/gm)].length;
-  assert.equal(members.length, 35,   // +setContentExtent (2026-10-04): a padded scroller's extent, for the DOM's strut — canvas/mac compute it in the shared scene walk
+  assert.equal(members.length, 36,   // +setContentExtent (2026-10-04): a padded scroller's extent, for the DOM's strut — canvas/mac compute it in the shared scene walk
+                                // +setScaling (2026-10-11): a subtree's resampling, `scaling = pixelated`
                                      // +scrollbarHeld (2026-10-02): a held thumb maps the pointer onto the range, so a windowed list holds its range still   // +userScrollByTouch (2026-09-30): a browser-driven scroll says a finger holds it, so anchoring waits   // +richMetrics (2026-09-26, the document flow): baseline + widest off the renderer's layout — DOM reports, canvas/mac use the manual flow's arithmetic
                                      // +setPadding (2026-09-19, padding moves to the view): the TRAILING inset a padded scroller must still show — the origin shift rides the children's own setX/setY and needs no row
                                      // +setRichClamp (2026-09-13, the truncation round): maxLines on a flow — DOM/mac clamp in the host, canvas spends the budget model-side

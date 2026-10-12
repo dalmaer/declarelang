@@ -70,6 +70,8 @@ export const OP = {
     TRANSFORM3D: 48,
     /** This node is the eye for its children: perspective px (0 = none) (case 49). */
     PERSPECTIVE: 49,
+    /** How the node's subtree resamples its images and drawings: "smooth" or "pixelated" (case 50). */
+    SCALING: 50,
 };
 /** A Declare motion token as the cubic bezier the host animates with — the
  *  platform's motion honoring the program's curve (scrolling.md: "where a
@@ -663,8 +665,36 @@ class MacSurface {
      *  rasters into a bitmap at the backing scale, and that bitmap was stretched
      *  under a view scale. This hands the host the density to raster that
      *  remainder at, the same fix the DOM backend makes for the same softness. */
+    /** `scaling` (backend.ts). The host shows a pixelated subtree's image and
+     *  drawing layers through the nearest-pixel filter (LayerTree case 50); the
+     *  drawings below are remade, at one pixel per unit or back at the scale. */
+    scalingMode = "";
+    setScaling(mode) {
+        this.scalingMode = mode === "pixelated" ? "pixelated" : "";
+        emit(OP.SCALING, this.id, this.scalingMode === "" ? "smooth" : "pixelated");
+        const remake = (s) => {
+            if (s.drawing !== null) {
+                if (s.shownAnywhere())
+                    s.finishDrawing();
+                else
+                    owedDrawings.add(s);
+            }
+            for (const c of s.children)
+                remake(c);
+        };
+        remake(this);
+    }
+    /** Under a `pixelated` view: this one or an ancestor. */
+    pixelated() {
+        for (let s = this; s !== null; s = s.parent)
+            if (s.scalingMode !== "")
+                return true;
+        return false;
+    }
     setRasterScale(k) {
         this.rasterScale = k;
+        if (this.pixelated())
+            return; // (a pixelated drawing's density does not follow the scale)
         // a described drawing is exact at any scale; only a bitmap is remade
         if (this.drawing === null || this.bitmapK === 0 || Math.abs(this.bitmapK - k) <= 1e-3 * Math.max(1, k))
             return;
@@ -965,7 +995,9 @@ class MacSurface {
         if (list === null || list.bounds === null)
             return;
         const h = host();
-        const density = this.rasterScale > 0 ? this.rasterScale : (typeof devicePixelRatio === "number" ? devicePixelRatio : 2);
+        // pixelated (setScaling): a bitmap at one pixel per unit, never described
+        const pixelated = this.pixelated();
+        const density = pixelated ? 1 : this.rasterScale > 0 ? this.rasterScale : (typeof devicePixelRatio === "number" ? devicePixelRatio : 2);
         // A bound the recording could not compute (NaN from arithmetic on an unset
         // value) takes the host's defaults — the origin, the view's own size — as it
         // always has: a non-finite number reaches Core Animation as a thrown exception.
@@ -973,7 +1005,7 @@ class MacSurface {
         let made = 0;
         if (h.drawRaster) {
             const r = encodeRecording(list);
-            made = h.drawRaster(this.id, r.nums, r.at, r.strs, fin(b.x, 0), fin(b.y, 0), fin(b.w, this.width), fin(b.h, this.height), density);
+            made = h.drawRaster(this.id, r.nums, r.at, r.strs, fin(b.x, 0), fin(b.y, 0), fin(b.w, this.width), fin(b.h, this.height), density, pixelated ? 1 : 0);
         }
         this.bitmapK = made > 0 ? density : 0;
         emit(OP.DRAW, this.id, made === 0 ? null : { h: made });

@@ -1606,6 +1606,53 @@ class CanvasSurface {
     frostReach(dpr) {
         return this.backdrop === null ? 0 : Math.ceil(3.5 * filterBlur(this.backdrop) * dpr) + 4;
     }
+    /** `scaling` (backend.ts): this surface's own setting; the subtree's is the
+     *  nearest ancestor's that set one (pixelated()). Images then draw unsmoothed
+     *  and drawings rasterize at one pixel per unit, enlarged unsmoothed
+     *  (paintDrawingPixelated) — the DOM backend's picture, made by hand. */
+    scalingMode = "";
+    setScaling(mode) {
+        this.scalingMode = mode === "pixelated" ? "pixelated" : "";
+        this.compositor.invalidate(this);
+        // the subtree below repaints with it
+        const walk = (s) => { for (const c of s.children) {
+            if (c.drawing !== null)
+                c.compositor.invalidate(c);
+            walk(c);
+        } };
+        walk(this);
+    }
+    pixelated() {
+        for (let s = this; s !== null; s = s.parent)
+            if (s.scalingMode !== "")
+                return true;
+        return false;
+    }
+    /** A pixelated drawing: its recording rasterized at one pixel per unit
+     *  (once per recording), drawn through the live transform unsmoothed. */
+    pixelRaster = null;
+    paintDrawingPixelated(ctx, list, b) {
+        const x = Math.floor(b.x), y = Math.floor(b.y), w = Math.max(1, Math.ceil(b.x + b.w) - x), h = Math.max(1, Math.ceil(b.y + b.h) - y);
+        let r = this.pixelRaster;
+        if (r === null || r.list !== list || r.canvas.width !== w || r.canvas.height !== h) {
+            const cv = r !== null && r.canvas.width === w && r.canvas.height === h ? r.canvas : document.createElement("canvas");
+            cv.width = w;
+            cv.height = h;
+            const c2 = cv.getContext("2d");
+            if (c2 === null) {
+                replayOnScene(ctx, list);
+                return;
+            }
+            c2.setTransform(1, 0, 0, 1, -x, -y);
+            replay(c2, list);
+            r = this.pixelRaster = { list, canvas: cv };
+        }
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        DREW_RASTER = true;
+        ctx.drawImage(r.canvas, x, y, w, h);
+        ctx.restore();
+    }
     setBlend(mode) {
         // The schema's camelCase token → the canvas operator. The single-surface
         // painter's model realizes §4.1 directly: at the moment this surface
@@ -1756,6 +1803,10 @@ class CanvasSurface {
         const b = list.bounds;
         if (b === null)
             return;
+        if (this.pixelated()) {
+            this.paintDrawingPixelated(ctx, list, b);
+            return;
+        }
         const m = ctx.getTransform();
         // rotation/skew keeps pure vectors (a resampled blit would soften — rare,
         // and the memo is an optimization, never a semantic); the same axis test
@@ -3438,6 +3489,9 @@ class CanvasSurface {
             // resampled as the browser resamples an <img>, not canvas's default
             const smooth = ctx.imageSmoothingQuality;
             ctx.imageSmoothingQuality = "high";
+            const pixelated = this.pixelated();
+            if (pixelated)
+                ctx.imageSmoothingEnabled = false; // scaling = pixelated: every pixel a solid block
             if (st === "cover" || st === "contain") {
                 // Aspect-preserving: one scale for both axes — max fills-and-crops
                 // (cover), min letterboxes (contain) — centered either way; cover
@@ -3463,6 +3517,8 @@ class CanvasSurface {
                 ctx.drawImage(bmp, 0, 0, w, h);
             }
             ctx.imageSmoothingQuality = smooth;
+            if (pixelated)
+                ctx.imageSmoothingEnabled = true;
             // a running video changes pixels with no write to the graph: ask for the
             // next frame here, or the picture would freeze on its first one
             if (this.videoRunning())

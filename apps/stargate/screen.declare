@@ -1,0 +1,352 @@
+/*
+## The screen
+
+What the arcade's monitor shows, as views of the game's records. Everything here is placed
+and drawn in the arcade's own pixels: the App scales the whole picture up to the display
+(stargate.declare). Colours are the arcade's sixteen inks, which every view reads from its
+playfield as `provided("inks")`.
+
+Pictures are the arcade's, all on one sheet, art/pictures.png (written by export-art.mjs
+in the reference folder): each picture is a row of white plates, one for every ink it uses,
+and each is tinted with what that ink is now. What is genuinely lines and dots — the
+ground, the stars, shots, the laser, the star gate, the scanner — is drawn.
+*/
+
+script {
+    // One of the arcade's colours: three bits of red, three of green and two of blue, each
+    // through a ladder of resistors.
+    function arcadeColour(byte: number): number {
+        const ladder = (level: number, ohms: number[]) => {
+            const g = ohms.map((r) => 1 / r), all = g.reduce((a, b) => a + b, 0)
+            return Math.round(255 * g.reduce((a, gi, i) => a + (Math.floor(level / 2 ** i) % 2) * gi, 0) / all)
+        }
+        const red = byte % 8, green = Math.floor(byte / 8) % 8, blue = Math.floor(byte / 64)
+        return ladder(red, [1200, 560, 330]) * 65536 + ladder(green, [1200, 560, 330]) * 256 + ladder(blue, [560, 330])
+    }
+    }
+
+
+// A view drawn a pixel at a time, in the sixteen inks. `pair` draws two pixels side by
+// side whose inks are the two halves of one byte, as the arcade writes them.
+
+class Dots [ width = 100%, height = 100%,
+    dot(d: Draw, x: number, y: number, ink: number) {
+        if (ink == 0) return
+        d.fillStyle = arcadeColour(provided("inks")[ink])
+        d.fillRect(x, y, 1, 1)
+        },
+    pair(d: Draw, x: number, y: number, two: number) {
+        this.dot(d, x, y, Math.floor(two / 16))
+        this.dot(d, x + 1, y, two % 16)
+        }
+    ]
+
+
+// ── pictures ──
+
+// One ink of a picture: the sheet, seen through the picture's box where that ink's plate
+// is, tinted with what the ink is now.
+
+class Plate [ width = 100%, height = 100%, clip = true,
+    picture: string = "none",
+    odd: boolean = false,
+    ink: number = 0,
+    slot: number = 0,
+    shape: Outline = { app.game.shapeOf(picture) },
+    Image [ source = "art/pictures.png",
+        x = { -2 * classroot.slot * classroot.shape.wide },
+        y = { -(classroot.shape.top + (classroot.odd ? classroot.shape.high : 0)) },
+        tint = { arcadeColour(provided("inks")[classroot.ink]) } ]
+    ]
+
+
+// One of the arcade's pictures, in the block it fills. The block is opaque: its unlit
+// pixels show the background, as the arcade draws them. The arcade draws two pixels at a
+// time, and keeps each picture twice, the second a pixel to the right: one at an odd pixel
+// is that second drawing, from the pixel before.
+
+class Sprite [
+    picture: string = "none",
+    odd: boolean = false,
+    mono: number = -1,                  // an ink to draw it all in, or -1
+    shape: Outline = { app.game.shapeOf(picture) },
+    width = { 2 * shape.wide },
+    height = { shape.high },
+    fill = { arcadeColour(provided("inks")[0]) },
+    plates: Dataset [ contents = { { inks: classroot.shape.inks.map((ink, slot) => ({ id: ink, slot: slot })) } } ],
+    View [ width = 100%, height = 100%, datapath = { classroot.plates.value },
+        Plate [ datapath = :inks[], picture = { classroot.picture }, odd = { classroot.odd }, slot = :slot,
+            ink = { classroot.mono >= 0 ? classroot.mono : :id } ]
+        ]
+    ]
+
+
+// A picture placed at a pixel of the screen.
+
+class Picture extends Sprite [
+    px: number = 0,
+    py: number = 0,
+    odd = { px % 2 == 1 },
+    x = { px - px % 2 },
+    y = { py }
+    ]
+
+
+// A thing on the planet, drawn where it last was drawn.
+
+class ThingView extends Picture [ picture = :shown, px = :px, py = :py ]
+
+// The star gate: three rings, one inside another, the inner ones sliding across as the
+// gate crosses the screen.
+
+class GateView [ px: number = { :px },
+    py: number = { :py - 4 },
+    x = { px }, y = { py }, width = 16, height = 12,      // (its rings' top, four rows above where it is)
+    fill = { arcadeColour(provided("inks")[0]) },
+    draw(d: Draw) {
+        const inks = provided("inks"), rings = provided("rings"), along = Math.floor(px / 32)
+        const inner = [8, 8, 7, 6, 5, 4, 3, 2, 1][along] ?? 0
+        const centre = inner + ([5, 5, 5, 4, 3, 3, 2][along] ?? 1)
+        const ring = (ink: number, x: number, y: number, w: number, h: number) => {
+            d.fillStyle = arcadeColour(inks[ink])
+            d.fillRect(x, y, w, 1); d.fillRect(x, y + h - 1, w, 1)
+            d.fillRect(x, y, 1, h); d.fillRect(x + w - 1, y, 1, h)
+            }
+        ring(rings[0], 0, 0, 15, 12)
+        ring(rings[1], inner, 3, 7, 6)
+        d.fillStyle = arcadeColour(inks[rings[2]])
+        d.fillRect(centre, 5, 1, 2)
+        }
+    ]
+
+
+// ── appearing and exploding ──
+
+// Every appearing and exploding picture, drawn together: each picture's blocks of two
+// pixels by two rows, spaced apart around its middle block (left dark), each pixel in its
+// own ink; the appearing first, then the exploding, in the order the world lists them.
+// (A picture of an odd number of rows ends each column's last block with the top of the
+// next column, as the arcade's drawing takes the byte that follows.)
+
+class EffectLayer [ width = 100%, height = 100%,
+    appears: Effect[] = [],
+    bursts: Effect[] = [],
+    draw(d: Draw) {
+        const inks = provided("inks"), top = app.game.top
+        for (const e of [...appears, ...bursts]) {
+            if (!e.drawn) continue
+            const shape = app.game.shapeOf(e.picture), gap = Math.floor(e.size)
+            if (shape.pixels.length == 0) continue
+            for (let i = 0; i < shape.wide; i++) {
+                const pair = e.cx + gap * (i - e.xof)
+                if (pair < 0 || pair > 152) continue
+                for (let j = 0; j < shape.high / 2; j++) {
+                    const y = e.cy + 2 * gap * (j - e.yof)
+                    if (y < top || y > 255 || (i == e.xof && j == e.yof)) continue
+                    for (let r = 0; r < 2; r++)
+                        for (let c = 0; c < 2; c++) {
+                            const ink = this.inkAt(shape, 2 * i + c, 2 * j + r)
+                            if (ink == 0) continue
+                            d.fillStyle = arcadeColour(inks[ink])
+                            d.fillRect(2 * pair + c, y + r, 1, 1)
+                            }
+                    }
+                }
+            }
+        },
+    inkAt(shape: Outline, column: number, row: number) -> number {
+        const across = 2 * shape.wide
+        if (row < shape.high) return parseInt(shape.pixels[row * across + column], 16)
+        return column + 2 < across ? parseInt(shape.pixels[column + 2], 16) : 0
+        }
+    ]
+
+
+// ── the playfield's parts ──
+
+// A block of pixels in one ink.
+
+class Dot [ px: number = 0,
+    py: number = 0,
+    ink: number = 0,
+    visible = { ink != 0 },
+    x = { px }, y = { py }, width = 1, height = 1,
+    fill = { arcadeColour(provided("inks")[ink]) }
+    ]
+
+
+// The stars that are lit, a pixel each, in the half of their pair of pixels the scroll has
+// reached.
+
+class StarDot extends Dot [ visible = :lit, px = { :px + (Math.floor(provided("seen").scroll / 2) % 2 == 1 ? 0 : 1) }, py = :py,
+    ink = :colour
+    ]
+
+
+// The volcano's rocks, two pixels by two.
+
+class RockDot extends Dot [ visible = :shown, px = :px, py = { Math.floor(:y) }, width = 2, height = 2, ink = 4 ]
+
+// The planet's ground: a pixel in each column of the screen but the four at each side.
+
+class Ground extends Dots [
+    draw(d: Draw) {
+        const rows = app.game.scenery.rows, at = Math.floor(provided("seen").groundAt) + 2048 - app.game.pages.groundLag
+        for (let x = 4; x < 300; x++) this.dot(d, x, rows[(at + x) % 2048], app.game.ink.ground)
+        for (const line of (:holes ?? []) as Holes[]) for (const pair of line.pairs) d.clearRect(2 * pair, line.id, 2, 1)
+        }
+    ]
+
+
+// What the lasers have left, row by row: each pixel's ink.
+
+class Trails extends Dots [
+    draw(d: Draw) {
+        for (const trail of :trails as Trail[]) trail.inks.forEach((ink, x) => this.dot(d, x, trail.id, ink))
+        }
+    ]
+
+
+// A shot at the ship: a cross of five pixels, or a bar of four.
+
+class ShotMark [ visible = { :alive && :py != 0 },
+    x = :px, y = :py, width = 4, height = 3,
+    ink: Color = { arcadeColour(provided("inks")[app.game.ink.marks]) },
+    bar: View [ visible = { :kind == "bar" }, width = 100%, height = 1, fill = { classroot.ink } ],
+    cross: View [ visible = { :kind != "bar" }, width = 100%, height = 100%,
+        View [ x = 1, width = 1, height = 100%, fill = { classroot.ink } ],
+        View [ y = 1, width = 3, height = 1, fill = { classroot.ink } ]
+        ]
+    ]
+
+
+// The ship, and its flame: pairs of pixels behind it, four pairs deep, their inks from a
+// table of random bytes.
+
+class ShipView [ width = 100%, height = 100%, datapath = :ship,
+    visible = { provided("seen").shipShown || provided("seen").shipGlows },
+    Picture [ px = :px, py = :py, picture = { :facing > 0 ? "ship-right" : "ship-left" },
+        mono = { provided("seen").shipGlows ? app.game.ink.glow : -1 } ],
+    Dots [ visible = { provided("seen").shipShown },
+        draw(d: Draw) {
+            const back = [1, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4], down = [1, 2, 3, 4, 5, 2, 3, 4, 2, 3, 4, 3]
+            const left = :px - :px % 2
+            ;(:flame as number[]).forEach((two, i) =>
+                this.pair(d, left + 2 * (:facing > 0 ? -back[i] : 7 + back[i]), :py + down[i], two))
+            }
+        ]
+    ]
+
+
+// The scanner: the whole planet at an eighth of the size — a small ground, each thing as
+// four pixels (a star gate as a hollow square), and the ship as a cross.
+
+class Mark [ x = :px, y = :py ]
+
+class Blip extends Mark [ width = 2, height = 2,
+    Dot [ px = 0, py = 0, ink = { :inks[0] } ],
+    Dot [ px = 1, py = 0, ink = { :inks[1] } ],
+    Dot [ px = 0, py = 1, ink = { :inks[2] } ],
+    Dot [ px = 1, py = 1, ink = { :inks[3] } ]
+    ]
+
+
+class GateBlip extends Mark [ x = { Math.min(:px, 212) }, width = 3, height = 3,
+    ink: Color = { arcadeColour(provided("inks")[app.game.ink.gateMark]) },
+    View [ width = 100%, height = 1, fill = { classroot.ink } ],
+    View [ y = 2, width = 100%, height = 1, fill = { classroot.ink } ],
+    View [ width = 1, height = 100%, fill = { classroot.ink } ],
+    View [ x = 2, width = 1, height = 100%, fill = { classroot.ink } ]
+    ]
+
+
+class Scanner extends Dots [ datapath = :scan,
+    draw(d: Draw) {
+        const small = app.game.scenery.smallGround, ground = :ground as number
+        if (ground < 0) return
+        for (let k = 0; k < 64; k++) {
+            const g = small[(ground + k) % 64]
+            this.pair(d, 88 + 2 * k, g.row, g.top)
+            this.pair(d, 88 + 2 * k, g.row + 1, g.bottom)
+            }
+        },
+    Mark [ datapath = :blips[], classFor = { :gate ? GateBlip : Blip } ],
+    ship: View [ visible = { :shipPy != 0 }, x = :shipPx, y = :shipPy, width = 3, height = 3,
+        View [ x = 1, width = 1, height = 100%, fill = { arcadeColour(provided("inks")[app.game.ink.marks]) } ],
+        View [ y = 1, width = 100%, height = 1, fill = { arcadeColour(provided("inks")[app.game.ink.marks]) } ]
+        ]
+    ]
+
+
+// A set piece's blocks, as its last walk left them: in the order they moved, each rubbed out
+// where it was and drawn where it now is, and those that left the screen rubbed out in their
+// turn — so that one block may rub out part of another, as on the arcade's screen.
+
+class Shards [ width = 100%, height = 100%,
+    draw(d: Draw) {
+        const inks = provided("inks"), shards = :shards as Shard[], lost = :lost as Lost[]
+        const block = (x: number, y: number, ink: number) => {
+            d.fillStyle = arcadeColour(inks[ink])
+            d.fillRect(x, y, 2, 2)
+            }
+        let gone = 0
+        shards.forEach((s, i) => {
+            for (; gone < lost.length && lost[gone].slot <= i; gone++) block(lost[gone].px, lost[gone].py, 0)
+            if (!s.moved) return
+            block(s.wasPx, s.wasPy, 0)
+            block(s.px, s.py, s.ink)
+            })
+        for (; gone < lost.length; gone++) block(lost[gone].px, lost[gone].py, 0)
+        }
+    ]
+
+
+// ── the monitor ──
+
+// What the arcade's monitor shows of the world. The arcade draws the top band of the
+// playfield while the beam is in the bottom one, so the top shows the world as it was a
+// frame ago; and the explosions it shows in either band are a frame older again when they
+// moved on after the beam had passed half way down.
+
+class Monitor extends Node [
+    game: Game,
+    upper: Dataset [ schema = World, contents = { classroot.game.earlier ?? classroot.game.value } ],
+    older: Dataset [ schema = World, contents = { classroot.game.longer ?? classroot.game.earlier ?? classroot.game.value } ],
+    upperBursts: Dataset = { upper.value.seen.effectsLate ? older : upper },
+    lowerBursts: Dataset = { game.value.seen.effectsLate ? upper : game }
+    ]
+
+
+// ── the playfield ──
+
+// The playfield as one record of the world shows it, in the inks the monitor took up as
+// this picture began.
+
+class Playfield [ width = 304, height = 256,
+    seen: Seen = { :seen },
+    inks: number[] = { app.game.colours },
+    rings: number[] = { seen.rings },
+    fill = { arcadeColour(inks[0]) },
+    stars: View [ width = 100%, height = 100%, visible = { !classroot.seen.wiped },
+        StarDot [ datapath = :stars[] ]
+        ],
+    Ground [ visible = { classroot.seen.groundShown } ],
+    Trails [ datapath = { app.game.value } ],      // the beams draw as they go: always the latest
+    things: View [ width = 100%, height = 100%, visible = { !classroot.seen.wiped },
+        RockDot [ datapath = :rocks[] ],
+        View [ datapath = :near[], visible = { :py != 0 && :shown != "none" },
+            classFor = { :shown == "gate" ? GateView : ThingView } ],
+        ShotMark [ datapath = :shots[] ]
+        ],
+    explosions: Dataset = { app.monitor.upper },     // the world whose appearing and exploding pictures show
+    effects: EffectLayer [ visible = { !classroot.seen.wiped }, datapath = { classroot.explosions.value },
+        appears = { :appears }, bursts = { :bursts } ],
+    Shards [ ],
+    ShipView [ ],
+
+    // the playfield being cleared, from the right
+
+    cleared: View [ visible = { (classroot.seen.wipeFrom ?? 304) < 304 }, x = { classroot.seen.wipeFrom ?? 304 }, y = { app.game.top },
+        width = { 304 - (classroot.seen.wipeFrom ?? 304) }, height = { 256 - app.game.top }, fill = { arcadeColour(classroot.inks[0]) } ],
+    Scanner [ visible = { app.game.pages.panelShown } ]
+    ]

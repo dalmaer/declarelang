@@ -1,0 +1,57 @@
+/*
+## Rules
+
+The rules for one kind of thing, or for one kind of turn-taker: a part of the game that
+knows what its kinds look like, what each does on its turn, and what becomes of one when
+it is hit. Each kind's file fills these in.
+
+A turn does a little, then waits a number of passes; `rest` says how many, and the step
+it takes up again at. A step is the name of one of the rules' methods, which takes the
+turn and its thing, if it has one; a kind whose turns are not yet written that way says
+what to do itself.
+*/
+
+class Rules extends Node [
+    game: Game,
+    kinds: (ThingKind | TurnKind)[] = [],     // the kinds of thing and turn it rules
+    settings: Paces = { game.director.pace },      // how hard the wave's enemies are
+
+    picture(t: Thing) -> string { return "none" },
+    turn(t: Turn) { this[t.step](t, game.thing(t.thing ?? 0)) },
+    hit(t: Thing, byShip: boolean) -> boolean { return false },
+
+    // A point inside a turn where the arcade's interrupt can fall: what the rule has read of
+    // the world so far, it has read (see clock.declare)
+
+    point(name: string) { game.clock.reach(game.world, name) },
+
+    rest(t: Turn, passes: number, step: string) { t.wait = passes; t.step = step },
+
+    // … or go straight on at `step`, in the same pass, as the arcade's code runs on without
+    // sleeping: the time each step takes lets the screen be drawn between them.
+
+    goOn(t: Turn, step: string) { t.step = step; game.clock.goesOn = true },
+
+    // A turn can fade the screen to black in eight steps, or bring it back in seven, a step
+    // every `pace` passes, and then go straight on at the step `after`.
+
+    fadeOut(t: Turn, pace: number, after: string) { game.litInks = game.palette; this.beginFade(t, pace, after, "dim") },
+    fadeIn(t: Turn, pace: number, after: string) { this.beginFade(t, pace, after, "brighten") },
+    beginFade(t: Turn, pace: number, after: string, step: string) { t.level = 7; t.pace = pace; t.after = after; this.rest(t, pace, step) },
+    dim(t: Turn, thing: Thing?) {
+        game.dimInks(t.level!)
+        t.level = t.level! - 1
+        this.faded(t, thing, t.level < 0)
+        },
+    brighten(t: Turn, thing: Thing?) {
+        game.brightenInks(t.level!)
+        t.level = t.level! - 1
+        this.faded(t, thing, t.level == 0)
+        },
+    faded(t: Turn, thing: Thing?, done: boolean) {
+        if (!done) { t.wait = t.pace!; return }
+        this.point("faded")
+        t.step = t.after!
+        this[t.step](t, thing)
+        }
+    ]

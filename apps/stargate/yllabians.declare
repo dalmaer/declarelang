@@ -1,0 +1,119 @@
+/*
+## Yllabians
+
+Yllabian space guppies appear in shoals of two or three on the far side of the planet from
+the ship: a shoal's members within thirty-two pixels of one another, all crossing at one
+random pace, each four rows higher above the ground than the one before. They follow the
+ground until the ship first has one on the screen; then, after a moment, it dives at the
+ship again and again, shooting, for good.
+
+    yllabian    appear → follow … → dive → diving … → dive …
+*/
+
+class Yllabians extends Rules [ kinds = ["yllabian"],
+
+    // One of five pictures by how fast it is climbing or falling, in a set for each way it
+    // goes across. (It changes only when the rules say, not as the speed does.)
+
+    picture(t: Thing) -> string { return (t.facing > 0 ? "yllabian-right-" : "yllabian-left-") + t.frame },
+    face(t: Thing) {
+        const tilt = byte(Math.floor(word(t.vy * 256) * 2 / 256) + 2)
+        t.facing = t.vx < 0 ? 1 : -1
+        t.frame = tilt >= 128 ? 1 : Math.min(tilt, 4) + 1
+        },
+
+    send(count: number) {
+        const ship = game.world.ship
+        for (let left = count; left > 0; ) {
+            const shoal = left <= 2 ? left : game.chance.draw() % 2 == 1 ? 3 : 2
+            const middle = game.wrapX(byte(Math.floor(signed8(game.chance.second) / 4)) * 8 + game.chance.third / 32 + ship.planetX + 1024)
+            const pace = game.chance.upTo(settings.yllabianSpeed - Math.floor(settings.yllabianSpeed / 4))
+            let height = Math.floor(game.chance.third / 2)
+            for (let k = 0; k < shoal; k++) {
+                const [turn, t] = game.spawn("yllabian", "appear")
+                game.chance.draw()
+                t.x = game.wrapX(game.chance.second % 4 * 8 + game.chance.third / 32 + middle)
+                t.y = byte(game.scenery.under(t.x) - height) + t.y % 1
+                height = byte(height + 4)
+                turn.height = height
+                t.vx = signed8(pace % 2 == 1 ? -pace : pace) / 32
+                this.face(t)
+                game.effects.appear(t)
+                game.director.count("yllabians", 1)
+                }
+            left = left - shoal
+            }
+        },
+
+    // Following: every ten passes it keeps its height above the ground, until it is seen.
+
+    appear(turn: Turn, t: Thing) {
+        if (t.appearing) { this.rest(turn, 6, "appear"); return }
+        this.follow(turn, t)
+        },
+    follow(turn: Turn, t: Thing) {
+        if (t.py != 0) { this.rest(turn, game.chance.upTo(15), "dive"); return }
+        const off = signed8(game.scenery.under(t.x) - Math.floor(t.y) - turn.height!)
+        t.vy = off <= -10 ? -1 : off >= 10 ? 1 : 0
+        this.rest(turn, 10, "follow")
+        },
+
+    // A dive is two to seventeen looks long, four passes apart. For each, the yllabian picks
+    // a height a little above or below the ship's to make for, how hard to pull toward it,
+    // and a random pace across toward the ship. At each look it pulls, its climb or fall
+    // always dying away by an eighth, and counts down to its next shot.
+
+    dive(turn: Turn, t: Thing) {
+        const ship = game.world.ship
+        t.aim = game.chance.last % 32 - 15
+        turn.count = game.chance.third % 16 + 2
+        t.shotIn = settings.yllabianShotTime
+        t.pull = game.chance.upTo(settings.yllabianSwerve)
+        this.point("pull drawn")
+        const shipRight = ship.planetX >= t.x
+        const pace = game.chance.upTo(settings.yllabianSpeed)
+        this.point("pace drawn")
+        t.vx = signed8(shipRight ? pace : -pace) / 32
+        this.diving(turn, t)
+        },
+    diving(turn: Turn, t: Thing) {
+        turn.step = "diving"
+        const down = byte(game.world.ship.py + t.aim!) > Math.floor(t.y)
+        const pulled = t.vy * 256 + signed8(down ? t.pull! : -t.pull!)       // in 256ths of a pixel a frame
+        t.vy = (pulled + Math.floor((-pulled - 1) / 8)) / 256      // (an eighth less, as the arcade rounds it)
+        t.shotIn = countDown(t.shotIn!)
+        if (t.shotIn == 0) this.shoot(t)
+        turn.count = countDown(turn.count!)
+        if (turn.count == 0) { this.dive(turn, t); return }
+        this.face(t)
+        turn.wait = 4
+        },
+
+    // A yllabian shoots only while it is closing on the ship both across and up or down;
+    // otherwise its next chance is 255 looks off. Its shot is aimed like any other, give or
+    // take sixteen pixels, but carries the yllabian's own pace across and half the ship's
+    // climb; and it holds its fire while more than fifteen shots are in flight.
+
+    shoot(t: Thing) {
+        this.point("aim")
+        const ship = game.world.ship
+        if ((game.offset(ship.planetX, t.x) < 0) != (t.vx < 0)) return
+        if ((signed8(ship.py - Math.floor(t.y)) < 0) != (t.vy < 0)) return
+        t.shotIn = game.chance.upTo(settings.yllabianShotTime)
+        this.point("shot timed")
+        if (game.shooters.inFlight > 15) return
+        const shot = game.shooters.launch(t, "bar")
+        if (shot == null) return
+        const dx = signed8(game.chance.last % 32 - 16 + Math.floor(ship.px / 2) - Math.floor(shot.px / 2))
+        shot.vx = dx / 32 + t.vx
+        const dy = signed8(game.chance.third % 32 - 16 + ship.py - shot.py)
+        shot.vy = Math.floor((4 * dy + ship.climb * 256) / 2) / 256
+        game.sound("yllabian shot")
+        },
+
+    hit(t: Thing, byShip: boolean) -> boolean {
+        game.director.count("yllabians", -1)
+        game.destroy(t, 200, "baiter hit")
+        return true
+        }
+    ]

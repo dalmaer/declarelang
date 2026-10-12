@@ -1,0 +1,65 @@
+/*
+## Chance
+
+The arcade's random numbers: three bytes, from 0 to 255, stirred at each draw. `last` is
+the number last drawn, and `second` and `third` are the generator's other two bytes. The
+rules read all three between draws, as numbers of the moment: `last % 16` is a number under
+sixteen, `placeOnPlanet()` a place somewhere round the planet. Who draws and who reads, and
+in what order, is the arcade's, so the game comes out as it did.
+*/
+
+class Chance extends Node [
+    clock: Clock,
+
+    last: number = 0,
+    second: number = 165,
+    third: number = 90,
+
+    // A draw: `second` and `third`, read as one 16-bit number, shift down a place, and what
+    // comes in at the top is whether bits 3 and 0 of `third` differed; the new number is three
+    // times the last plus 17, plus both, plus 1 if the first sum ran past 255 — kept to a byte.
+
+    draw() -> number {
+        const mixed = byte(last * 3 + 17)
+        const comingIn = (Math.floor(third / 8) + third) % 2
+        const pair = Math.floor((second * 256 + third) / 2) + comingIn * 32768
+        second = Math.floor(pair / 256); third = pair % 256
+        const sum = mixed + third
+        last = byte(sum + second + (sum > 255 ? 1 : 0))
+        return last
+        },
+
+    // a draw from 1 to one more than the most asked for
+
+    upTo(most: number) -> number {
+        let r = this.draw()
+        while (r > most) r = Math.floor(r / 2)
+        return (r + 1) % 256
+        },
+
+    // a place round the planet (in pixels, to a 32nd)
+
+    placeOnPlanet() -> number { return second * 8 + third / 32 },
+
+    // The pass's own draw is the one an interrupt can fall inside, and the interrupt draws
+    // numbers of its own (the volcano's): so the same steps, with the points between them
+    // where the arcade has read or written each byte.
+
+    passDraw(w: World) {
+        const mixed = byte(last * 3 + 17)
+        clock.reach(w, "seed read")
+        const comingIn = (Math.floor(third / 8) + third) % 2
+        clock.reach(w, "low read")
+        const goingOut = second % 2
+        second = Math.floor(second / 2) + comingIn * 128
+        clock.reach(w, "high turned")
+        third = Math.floor(third / 2) + goingOut * 128
+        clock.reach(w, "low turned")
+        const sum = mixed + third
+        last = byte(sum + second + (sum > 255 ? 1 : 0))
+        },
+
+    // as at power-on
+
+    reset() { last = 0; second = 165; third = 90 }
+    ]

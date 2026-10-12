@@ -546,6 +546,13 @@ export class View extends Node {
     | "lighten" | "colorDodge" | "colorBurn" | "hardLight" | "softLight"
     | "difference" | "exclusion" | "hue" | "saturation" | "color"
     | "luminosity" | "plusLighter";
+  /** How what is painted inside this view — its images and drawings, and its
+   *  descendants' — looks when shown larger or smaller. `smooth` blends
+   *  neighbouring pixels; `pixelated` shows every pixel as a solid block, a
+   *  drawing's pixels being one to each unit of the view, so pixel art stays
+   *  sharp under any scale above it. The whole subtree follows, as it follows
+   *  a transform; paint only — hit testing and focus never change. */
+  declare scaling: "smooth" | "pixelated";
   /** The frost (`frost(radius, saturation?)`; null = none): what has already
    *  painted beneath this view, sampled through a blur within the view's own
    *  painted shape — the view's `fill` then paints OVER the frosted sample,
@@ -1369,6 +1376,7 @@ export class View extends Node {
         || this.scaleX !== 1 || this.scaleY !== 1 || this.skewX !== 0 || this.skewY !== 0 || this.$is3D()) pushTransform(this);
     if (this.perspective !== 0) s.setPerspective?.(this.perspective);
     if (this.blend !== "normal") s.setBlend?.(this.blend);
+    if (this.scaling !== "smooth") s.setScaling?.(this.scaling);
     if (this.backdrop !== null) s.setBackdrop?.(nullIfEmpty(filterList(this.backdrop)));
     if (this.filter !== null) s.setFilter?.(nullIfEmpty(filterList(this.filter)));
     if (this.mask !== null) this.$applyMask(this.mask);
@@ -1947,6 +1955,7 @@ defineAttributes(View, {
   // optional-chained (the ignoreScroll pattern): backends adopt independently,
   // and the seam table (test/seam.test.mjs) says which have.
   blend: { def: "normal", push: (v, b: string) => v.$surface?.setBlend?.(b) },
+  scaling: { def: "smooth", push: (v, m: string) => v.$surface?.setScaling?.(m) },
   backdrop: { def: null, push: (v, b: FilterValue) => v.$surface?.setBackdrop?.(nullIfEmpty(filterList(b))), equal: backdropEqual },
   filter: { def: null, push: (v, f: FilterValue) => v.$surface?.setFilter?.(nullIfEmpty(filterList(f))), equal: filtersEqual },
   mask: { def: null, push: (v, m: Mask | null) => v.$applyMask(m) },
