@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { test, summarize } from "./harness.mjs";
-import { hitWalk, wheelWalk, contentExtentOf, insideRoundedBox } from "../runtime/dist/scene-walk.js";
+import { hitWalk, wheelWalk, contentExtentOf, insideRoundedBox, cursorAt } from "../runtime/dist/scene-walk.js";
 
 /** A surface with the walks' defaults; `kids` are parented to it. */
 function surf(o = {}, kids = []) {
@@ -60,7 +60,23 @@ await test("the cursor follows the hit target; a zone with no sink shows its cur
   const root = surf({ width: 400, sink: sink() }, [target, inert]);
   assert.equal(hitWalk(root, 10, 10).cursor, "ew-resize");
   assert.equal(hitWalk(root, 60, 60).cursor, "pointer");
-  assert.equal(hitWalk(root, 250, 50).cursor, undefined, "pointerEvents none never shows its own cursor");
+  assert.equal(hitWalk(root, 250, 50).cursor, "", "pointerEvents none never shows its own cursor");
+});
+
+await test("a cursor is inherited as CSS inherits it: a view without one shows its nearest ancestor's, with or without anything to press", () => {
+  // the App names the cursor; the view under the pointer takes presses and names none
+  const button = surf({ x: 20, y: 20, width: 40, height: 40, sink: sink() });
+  const app = surf({ width: 400, height: 300, cursorStyle: "none", sink: sink() }, [button]);
+  assert.equal(hitWalk(app, 30, 30).cursor, "none", "the press target inherits the App's cursor");
+  assert.equal(cursorAt(app, 30, 30), "none");
+  // nothing anywhere takes a press: the cursor still shows
+  const field = surf({ width: 400, height: 300, cursorStyle: "none" }, [surf({ x: 20, y: 20, width: 40, height: 40 })]);
+  assert.equal(cursorAt(field, 30, 30), "none", "a view that only shows a cursor shows it");
+  // the nearer ancestor wins, and "" names none
+  const panel = surf({ width: 200, height: 200, cursorStyle: "pointer" }, [surf({ width: 50, height: 50, sink: sink() })]);
+  const top = surf({ width: 400, height: 300, cursorStyle: "none", sink: sink() }, [panel]);
+  assert.equal(cursorAt(top, 10, 10), "pointer");
+  assert.equal(cursorAt(surf({ width: 100, height: 100, sink: sink() }), 10, 10), "");
 });
 
 await test("a wheel goes to the nearest claimant unless a nearer scroller owns it; the page's own wheel is the browser's", () => {

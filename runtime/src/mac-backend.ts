@@ -30,7 +30,7 @@ import type { DisplayList, DrawOp } from "./draw.js";
 import { effectiveFamily, type TextStyle } from "./measure.js";
 import { colorToCss, insetSides, isGradient, radiusFit, strokeUniform, type BoxStroke, type Fill, type Filter, type Gradient, type Inset, type Radius, type Shadow } from "./value.js";
 import { routeInput, type HitTarget } from "./input.js";
-import { hitWalk, wheelWalk, traceWalk, contentExtentOf, insideRoundedBox, type SceneSurface } from "./scene-walk.js";
+import { hitWalk, wheelWalk, traceWalk, contentExtentOf, insideRoundedBox, cursorAt, type SceneSurface } from "./scene-walk.js";
 import { strokeSides } from "./stroke-sides.js";
 
 
@@ -562,7 +562,9 @@ class MacSurface implements Surface, SceneSurface {
     emit(OP.MASK, this.id, "view", st.id, spec.stencil.x + spec.stencil.$positionLead("x"),
       spec.stencil.y + spec.stencil.$positionLead("y"), spec.stencil.width, spec.stencil.height);
   }
-  setCursor(c: string): void { this.cursorStyle = c; emit(OP.CURSOR, this.id, c); }
+  // The host shows one cursor, the one under the pointer (showCursor below):
+  // a change here is asked again there once its settle is done.
+  setCursor(c: string): void { if (c === this.cursorStyle) return; this.cursorStyle = c; cursorChanged(); }
   /** No CSS pointer-events natively: the hit walk is ours, so an inert
    *  surface simply drops its sink (setInput(null)) — this is a no-op kept
    *  for protocol completeness. The carved-sink rule needs nothing here
@@ -1426,10 +1428,7 @@ export class MacBackend implements RenderBackend {
       (e) => {
         const ee = e as unknown as { clientX: number; clientY: number; type: string };
         const t = r.hit(ee.clientX, ee.clientY);
-        if (ee.type === "pointermove") {
-          const cur = t?.cursor ?? "";
-          if (cur !== lastCursor) { lastCursor = cur; emit(OP.CURSOR, 0, cur); }
-        }
+        if (ee.type === "pointermove") { pointerAt = { x: ee.clientX, y: ee.clientY }; showCursor(); }
         if ((globalThis as unknown as { __declareHitDebug?: boolean }).__declareHitDebug === true
             && ee.type !== "pointermove") {
           console.log("[hit] " + ee.type + " @" + ee.clientX.toFixed(0) + "," + ee.clientY.toFixed(0)
@@ -1439,9 +1438,8 @@ export class MacBackend implements RenderBackend {
       },
       (e) => ({ x: (e as unknown as { clientX: number }).clientX, y: (e as unknown as { clientY: number }).clientY }),
       (t) => {
-        // The cursor is set from the hit target on every move (see above);
-        // hover changes only need to keep it in step when the target changes
-        // without the pointer moving.
+        // The cursor is set on every move (see above), and when a cursor
+        // changes under a still pointer (cursorChanged).
         void t;
         if ((globalThis as unknown as { __declareHitDebug?: boolean }).__declareHitDebug === true) {
           console.log("[hit] hover -> " + (t === null ? "null"
@@ -1454,6 +1452,24 @@ export class MacBackend implements RenderBackend {
 
 let macRoot: MacSurface | null = null;
 let lastCursor = "";
+/** Where the pointer last moved, in root coordinates (null before it has). */
+let pointerAt: { x: number; y: number } | null = null;
+let cursorQueued = false;
+
+/** Show the cursor under the pointer (scene-walk cursorAt): the host applies
+ *  only a change. */
+function showCursor(): void {
+  const cur = pointerAt !== null && macRoot !== null ? cursorAt(macRoot, pointerAt.x, pointerAt.y) : "";
+  if (cur !== lastCursor) { lastCursor = cur; emit(OP.CURSOR, 0, cur); }
+}
+/** A surface's cursor changed: once its settle is done, show the cursor now
+ *  under the pointer — a key that hides it, a pause that shows it, with the
+ *  pointer still. */
+function cursorChanged(): void {
+  if (cursorQueued || pointerAt === null) return;
+  cursorQueued = true;
+  queueMicrotask(() => { cursorQueued = false; showCursor(); });
+}
 
 // ── smooth reveal ───────────────────────────────────────────────────────────
 //

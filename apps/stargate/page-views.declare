@@ -97,6 +97,16 @@ class TitleWord [ width = 100%, height = 100%,
 
 class Notice extends Phrase [ opaque = false ]
 
+// A row of the title page's keys: two actions, each with its key beside it.
+
+class KeyRow [ width = 100%, height = 100%,
+    Lettering [ ink = 8, opaque = false, px = 78, py = :py, text = :a ],
+    Lettering [ ink = 8, opaque = false, px = 110, py = :py, text = :k ],
+    Lettering [ ink = 8, opaque = false, px = 158, py = :py, text = :b ],
+    Lettering [ ink = 8, opaque = false, px = 206, py = :py, text = :l ]
+    ]
+
+
 // The pages' words, over the playfield.
 
 class PageWords [ width = 100%, height = 100%,
@@ -109,21 +119,21 @@ class PageWords [ width = 100%, height = 100%,
     word: TitleWord [ visible = { classroot.pages.titleColumns > 0 }, row = { classroot.pages.titleRow },
         columns = { classroot.pages.titleColumns }, outlined = { classroot.pages.outlined } ],
     typing: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "title" && classroot.pages.typed > 0 },
-        Lettering [ font = "large", ink = 10, px = 74, py = 32, opaque = false,
-            text = { "WILLIAMS ELECTRONICS INC.".slice(0, classroot.pages.typed) } ],
-        Lettering [ font = "large", ink = 10, px = 74, py = 48, opaque = false,
-            text = { "           PRESENTS:     ".slice(0, Math.max(0, classroot.pages.typed - 25)) } ]
+        Lettering [ font = "large", ink = 10, px = 60, py = 14, opaque = false,
+            text = { "WILLIAMS ELECTRONICS PRESENTS".slice(0, classroot.pages.typed) } ]
         ],
 
-    // the notices under the title (in its own ink unless one is given), and the secrets
-    // (the warp's line placing itself)
+    // Under the title, where the arcade asks for coins and points to its high scores and
+    // secrets: how to start, in the credits' ink, and the keys in the small letters and the
+    // secrets' ink, two columns of four, centred under the title; and at the foot of the
+    // screen the copyright, on one line, in its ink. The secrets follow (the warp's line
+    // placing itself).
 
-    titleNotices: Dataset { { "lines": [
-        { "id": 0, "says": "COPYRIGHT 1981", "font": "large", "px": 104, "py": 152 },
-        { "id": 1, "says": "WILLIAMS ELECTRONICS INC.", "font": "large", "ink": 10, "px": 74, "py": 168 },
-        { "id": 2, "says": "CREDITS: ##", "font": "large", "px": 116, "py": 188 },
-        { "id": 3, "says": "HIGH SCORE DISPLAY:PRESS HYPERSPACE", "px": 80, "py": 204 },
-        { "id": 4, "says": "GAME SECRETS:PRESS REVERSE", "ink": 8, "px": 96, "py": 212 } ] } },
+    keyRows: Dataset { { "rows": [
+        { "id": 0, "py": 144, "a": "UP", "k": "Q", "b": "REVERSE", "l": "Z" },
+        { "id": 1, "py": 152, "a": "DOWN", "k": "A", "b": "HYPERSPACE", "l": "SPACE" },
+        { "id": 2, "py": 160, "a": "THRUST", "k": "'", "b": "SMART BOMB", "l": "/" },
+        { "id": 3, "py": 168, "a": "FIRE", "k": "RETURN", "b": "INVISO", "l": ";" } ] } },
     secretLines: Dataset { { "lines": [
         { "id": 0, "says": "SECRETS", "font": "large", "px": 128, "py": 68 },
         { "id": 1, "says": "WARP: RESCUE #### HUMANOIDS", "font": "large", "number": 10, "long": 4, "zeros": "dropped" },
@@ -131,8 +141,12 @@ class PageWords [ width = 100%, height = 100%,
         { "id": 3, "says": "CREDITS: ##", "font": "large", "px": 124, "py": 224 } ] } },
 
     notices: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "title" && classroot.pages.noticed },
-        datapath = { classroot.titleNotices.value },
-        Notice [ datapath = :lines[], says = :says, font = :font, ink = :ink, px = :px, py = :py ]
+        Lettering [ font = "large", ink = 1, px = 84, py = 120, opaque = false, text = "PRESS RETURN TO START" ],
+        View [ width = 100%, height = 100%, datapath = { classroot.keyRows.value },
+            KeyRow [ datapath = :rows[] ]
+            ],
+        Lettering [ ink = 8, px = 112, py = 184, opaque = false, text = "GAME SECRETS: PRESS Z" ],
+        Lettering [ font = "large", ink = 10, px = 27, py = 228, opaque = false, text = "COPYRIGHT © 1981 WILLIAMS ELECTRONICS INC." ]
         ],
     secrets: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "secrets" && classroot.pages.told },
         datapath = { classroot.secretLines.value },

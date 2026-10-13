@@ -4,7 +4,7 @@ import { Node } from "./node.js";
  *  is `unknown` at this seam by necessity — the handler on the other side is a
  *  compiled Declare body, typed by the checker, not by TypeScript here. */
 type Handler = (arg: unknown) => void;
-type Channel = readonly [member: string, subscribe: (fn: Handler) => () => void];
+type Channel = readonly [member: string, subscribe: (fn: Handler, owner: Node) => () => void];
 /** The shared half of every source class: at init, wire each channel whose
  *  handler this instance actually declares; at discard, drop them all. Nothing
  *  subscribes for a handler nobody wrote — pay-per-use, like every other member
@@ -21,7 +21,8 @@ declare abstract class Source extends Node {
 /** The keyboard, as a member: `Keys [ onKeyDown(e) { … }, onKeyUp(e) { … } ]`.
  *  The RAW stream — it fires even while a text field has focus, so gate
  *  app-level shortcuts on app state where that matters. (A focused view's own
- *  `onKeyDown`/`onKeyUp` are the other half: keys belonging to one widget.) */
+ *  `onKeyDown`/`onKeyUp` are the other half: keys belonging to one widget.)
+ *  A member hears its own program's keys, while that program has the keyboard. */
 export declare class KeysSource extends Source {
     protected $channels(): readonly Channel[];
 }

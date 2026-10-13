@@ -16,6 +16,8 @@
   "use strict";
   const H = g.__declareMacHost;
   if (!H) throw new Error("mac-env: host bridge missing");
+  // the host's name, as a script's `host` mark names it (instantiate.ts)
+  g.__declareHostName = "mac";
 
   // ── console + clocks ──────────────────────────────────────────────────────
   const fmt = (args) => args.map((a) => {
@@ -30,6 +32,37 @@
   g.performance = { now: () => H.now() };
   if (typeof g.queueMicrotask !== "function") {
     g.queueMicrotask = (fn) => { Promise.resolve().then(fn); };
+  }
+
+  // structuredClone — a host chore the prelude declares (compiler scaffold.ts
+  // HOST_GLOBALS), so a body may call it on every host. The browser's copies
+  // data: plain objects and arrays, Date, RegExp, Map, Set, ArrayBuffer and
+  // typed arrays, with shared and circular references kept; a function (or
+  // anything with no data shape) is refused, as there.
+  if (typeof g.structuredClone !== "function") {
+    g.structuredClone = (value) => {
+      const seen = new Map();
+      const copy = (v) => {
+        if (v === null || typeof v !== "object") {
+          if (typeof v === "function" || typeof v === "symbol") throw new TypeError("structuredClone: " + typeof v + " could not be cloned");
+          return v;
+        }
+        if (seen.has(v)) return seen.get(v);
+        let out;
+        if (Array.isArray(v)) { out = new Array(v.length); seen.set(v, out); for (let i = 0; i < v.length; i++) if (i in v) out[i] = copy(v[i]); return out; }
+        if (v instanceof Date) { out = new Date(v.getTime()); seen.set(v, out); return out; }
+        if (v instanceof RegExp) { out = new RegExp(v.source, v.flags); seen.set(v, out); return out; }
+        if (v instanceof Map) { out = new Map(); seen.set(v, out); for (const [k, x] of v) out.set(copy(k), copy(x)); return out; }
+        if (v instanceof Set) { out = new Set(); seen.set(v, out); for (const x of v) out.add(copy(x)); return out; }
+        if (v instanceof ArrayBuffer) { out = v.slice(0); seen.set(v, out); return out; }
+        if (ArrayBuffer.isView(v)) { out = new v.constructor(v); seen.set(v, out); return out; }
+        out = {};
+        seen.set(v, out);
+        for (const k of Object.keys(v)) out[k] = copy(v[k]);
+        return out;
+      };
+      return copy(value);
+    };
   }
 
   // ── timers (host-driven; Swift fires __declareTimerFire) ──────────────────
@@ -319,31 +352,402 @@
     for (const mq of mediaQueries) mq.dispatchEvent({ type: "change", matches: mq.matches, media: mq.media });
   };
 
-  // ── fetch over URLSession (host-driven completion) ────────────────────────
+  // ── fetch, and the classes that come with it ──────────────────────────────
+  //
+  // The fetch family the prelude declares portable (compiler scaffold.ts
+  // HOST_GLOBALS): fetch, Response, Headers, Blob, FormData, AbortController,
+  // AbortSignal — the web's shapes, over URLSession. Swift sends the request
+  // with its headers and bytes, and answers in three calls: the head (status
+  // and every header), the body chunk by chunk as it arrives (base64), and the
+  // end — so a reply reads whole (text/json/arrayBuffer/blob) or as a stream
+  // (body.getReader(), how an event stream reads one). abort() cancels the
+  // request. Bytes cross the bridge as base64; text is UTF-8.
+
+  const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const B64_AT = new Uint8Array(128);
+  for (let i = 0; i < 64; i++) B64_AT[B64.charCodeAt(i)] = i;
+  const fromBase64 = (s) => {
+    let n = s.length;
+    while (n > 0 && s[n - 1] === "=") n--;
+    const out = new Uint8Array((n * 3) >> 2);
+    let o = 0;
+    for (let i = 0; i < n; i += 4) {
+      const a = B64_AT[s.charCodeAt(i)], b = B64_AT[s.charCodeAt(i + 1)];
+      const c = i + 2 < n ? B64_AT[s.charCodeAt(i + 2)] : 0, d = i + 3 < n ? B64_AT[s.charCodeAt(i + 3)] : 0;
+      out[o++] = (a << 2) | (b >> 4);
+      if (i + 2 < n) out[o++] = ((b & 15) << 4) | (c >> 2);
+      if (i + 3 < n) out[o++] = ((c & 3) << 6) | d;
+    }
+    return out;
+  };
+  const toBase64 = (u8) => {
+    let s = "";
+    for (let i = 0; i < u8.length; i += 3) {
+      const a = u8[i], b = i + 1 < u8.length ? u8[i + 1] : 0, c = i + 2 < u8.length ? u8[i + 2] : 0;
+      s += B64[a >> 2] + B64[((a & 3) << 4) | (b >> 4)]
+        + (i + 1 < u8.length ? B64[((b & 15) << 2) | (c >> 6)] : "=") + (i + 2 < u8.length ? B64[c & 63] : "=");
+    }
+    return s;
+  };
+
+  // UTF-8, both ways; decode keeps a sequence split across chunks for the next
+  // ({ stream: true }), as the web's does
+  if (typeof g.TextEncoder !== "function") {
+    g.TextEncoder = class TextEncoder {
+      get encoding() { return "utf-8"; }
+      encode(str = "") {
+        const s = String(str), out = [];
+        for (let i = 0; i < s.length; i++) {
+          let c = s.charCodeAt(i);
+          if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length) {
+            const d = s.charCodeAt(i + 1);
+            if (d >= 0xdc00 && d < 0xe000) { c = 0x10000 + ((c - 0xd800) << 10) + (d - 0xdc00); i++; }
+          }
+          if (c < 0x80) out.push(c);
+          else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+          else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+          else out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+        }
+        return new Uint8Array(out);
+      }
+    };
+  }
+  if (typeof g.TextDecoder !== "function") {
+    g.TextDecoder = class TextDecoder {
+      constructor() { this._rest = new Uint8Array(0); }
+      get encoding() { return "utf-8"; }
+      decode(input, opts) {
+        let u8 = input == null ? new Uint8Array(0) : input instanceof Uint8Array ? input
+          : ArrayBuffer.isView(input) ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength) : new Uint8Array(input);
+        if (this._rest.length > 0) { const j = new Uint8Array(this._rest.length + u8.length); j.set(this._rest); j.set(u8, this._rest.length); u8 = j; }
+        let end = u8.length;
+        if (opts && opts.stream) {
+          // hold back a sequence the chunk cut off
+          let k = end - 1, back = 0;
+          while (k >= 0 && back < 3 && (u8[k] & 0xc0) === 0x80) { k--; back++; }
+          if (k >= 0) {
+            const lead = u8[k], need = lead >= 0xf0 ? 4 : lead >= 0xe0 ? 3 : lead >= 0xc0 ? 2 : 1;
+            if (end - k < need) end = k;
+          }
+        }
+        this._rest = u8.slice(end);
+        let s = "";
+        for (let i = 0; i < end;) {
+          const a = u8[i];
+          let c, n;
+          if (a < 0x80) { c = a; n = 1; }
+          else if (a >= 0xf0) { c = ((a & 7) << 18) | ((u8[i + 1] & 63) << 12) | ((u8[i + 2] & 63) << 6) | (u8[i + 3] & 63); n = 4; }
+          else if (a >= 0xe0) { c = ((a & 15) << 12) | ((u8[i + 1] & 63) << 6) | (u8[i + 2] & 63); n = 3; }
+          else if (a >= 0xc0) { c = ((a & 31) << 6) | (u8[i + 1] & 63); n = 2; }
+          else { c = 0xfffd; n = 1; }
+          s += String.fromCodePoint(c);
+          i += n;
+        }
+        return s;
+      }
+    };
+  }
+  const utf8 = new g.TextEncoder();
+  const bytesOf = (v) => v instanceof Uint8Array ? v : v instanceof ArrayBuffer ? new Uint8Array(v)
+    : ArrayBuffer.isView(v) ? new Uint8Array(v.buffer, v.byteOffset, v.byteLength) : utf8.encode(String(v));
+  const join = (parts) => {
+    let n = 0;
+    for (const p of parts) n += p.length;
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const p of parts) { out.set(p, o); o += p.length; }
+    return out;
+  };
+
+  class Headers {
+    constructor(init) {
+      this._h = new Map();          // lowercased name → [name as given, value]
+      if (init instanceof Headers) init.forEach((v, k) => this.append(k, v));
+      else if (Array.isArray(init)) for (const [k, v] of init) this.append(k, v);
+      else if (init && typeof init === "object") for (const k of Object.keys(init)) this.append(k, init[k]);
+    }
+    append(k, v) { const n = String(k).toLowerCase(), had = this._h.get(n); this._h.set(n, [String(k), had ? had[1] + ", " + String(v) : String(v)]); }
+    set(k, v) { this._h.set(String(k).toLowerCase(), [String(k), String(v)]); }
+    get(k) { const e = this._h.get(String(k).toLowerCase()); return e ? e[1] : null; }
+    has(k) { return this._h.has(String(k).toLowerCase()); }
+    delete(k) { this._h.delete(String(k).toLowerCase()); }
+    forEach(fn, self) { for (const [n, [, v]] of [...this._h].sort()) fn.call(self, v, n, this); }
+    *entries() { for (const [n, [, v]] of [...this._h].sort()) yield [n, v]; }
+    *keys() { for (const [n] of this.entries()) yield n; }
+    *values() { for (const [, v] of this.entries()) yield v; }
+    [Symbol.iterator]() { return this.entries(); }
+  }
+
+  class Blob {
+    constructor(parts = [], opts = {}) {
+      this._bytes = join(parts.map((p) => p instanceof Blob ? p._bytes : bytesOf(p)));
+      this.type = opts.type ? String(opts.type).toLowerCase() : "";
+    }
+    get size() { return this._bytes.length; }
+    slice(start = 0, end = this._bytes.length, type = "") { const b = new Blob([], { type }); b._bytes = this._bytes.slice(start, end); return b; }
+    arrayBuffer() { return Promise.resolve(this._bytes.slice().buffer); }
+    bytes() { return Promise.resolve(this._bytes.slice()); }
+    text() { return Promise.resolve(new g.TextDecoder().decode(this._bytes)); }
+  }
+
+  class FormData {
+    constructor() { this._e = []; }
+    append(k, v, filename) { this._e.push([String(k), v instanceof Blob ? v : String(v), v instanceof Blob ? (filename ?? v.name ?? "blob") : undefined]); }
+    set(k, v, filename) { this.delete(k); this.append(k, v, filename); }
+    get(k) { const e = this._e.find((x) => x[0] === String(k)); return e ? e[1] : null; }
+    getAll(k) { return this._e.filter((x) => x[0] === String(k)).map((x) => x[1]); }
+    has(k) { return this._e.some((x) => x[0] === String(k)); }
+    delete(k) { this._e = this._e.filter((x) => x[0] !== String(k)); }
+    forEach(fn, self) { for (const [k, v] of this._e) fn.call(self, v, k, this); }
+    *entries() { for (const [k, v] of this._e) yield [k, v]; }
+    *keys() { for (const [k] of this._e) yield k; }
+    *values() { for (const [, v] of this._e) yield v; }
+    [Symbol.iterator]() { return this.entries(); }
+    // multipart/form-data, as a request body
+    _encode() {
+      const boundary = "----DeclareFormBoundary" + Math.random().toString(36).slice(2);
+      const parts = [];
+      for (const [k, v, filename] of this._e) {
+        const name = k.replace(/"/g, "%22");
+        if (v instanceof Blob) {
+          parts.push(utf8.encode(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="${String(filename).replace(/"/g, "%22")}"\r\nContent-Type: ${v.type || "application/octet-stream"}\r\n\r\n`), v._bytes, utf8.encode("\r\n"));
+        } else {
+          parts.push(utf8.encode(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${v}\r\n`));
+        }
+      }
+      parts.push(utf8.encode(`--${boundary}--\r\n`));
+      return { bytes: join(parts), type: "multipart/form-data; boundary=" + boundary };
+    }
+  }
+
+  const abortError = (reason) => {
+    if (reason !== undefined) return reason;
+    const e = new Error("The operation was aborted."); e.name = "AbortError"; return e;
+  };
+  class AbortSignal {
+    constructor() { this.aborted = false; this.reason = undefined; this.onabort = null; this._fns = new Set(); }
+    addEventListener(type, fn) { if (type === "abort") this._fns.add(fn); }
+    removeEventListener(type, fn) { if (type === "abort") this._fns.delete(fn); }
+    throwIfAborted() { if (this.aborted) throw this.reason; }
+    _abort(reason) {
+      if (this.aborted) return;
+      this.aborted = true; this.reason = abortError(reason);
+      const ev = { type: "abort", target: this };
+      if (typeof this.onabort === "function") this.onabort(ev);
+      for (const fn of [...this._fns]) fn(ev);
+    }
+    static abort(reason) { const s = new AbortSignal(); s._abort(reason); return s; }
+    static timeout(ms) { const s = new AbortSignal(); g.setTimeout(() => { const e = new Error("The operation timed out."); e.name = "TimeoutError"; s._abort(e); }, ms); return s; }
+  }
+  class AbortController {
+    constructor() { this.signal = new AbortSignal(); }
+    abort(reason) { this.signal._abort(reason); }
+  }
+
+  // A reply's body: the chunks as they arrive, read whole or through a reader.
+  class Body {
+    constructor() { this._chunks = []; this._done = false; this._error = null; this._wait = null; this._used = false; }
+    _push(u8) { this._chunks.push(u8); this._wake(); }
+    _end(error) { this._done = true; this._error = error; this._wake(); }
+    _wake() { const w = this._wait; this._wait = null; if (w) w(); }
+    _next() { return new Promise((r) => { this._wait = r; }); }
+    getReader() {
+      this._used = true;
+      return {
+        read: async () => {
+          for (;;) {
+            if (this._chunks.length > 0) return { done: false, value: this._chunks.shift() };
+            if (this._error) throw this._error;
+            if (this._done) return { done: true, value: undefined };
+            await this._next();
+          }
+        },
+        cancel: async () => { this._chunks = []; this._end(null); if (this._cancel) this._cancel(); },
+        releaseLock: () => {},
+      };
+    }
+    async _all() {
+      if (this._used) throw new TypeError("the body has already been read");
+      const r = this.getReader(), parts = [];
+      for (;;) { const { done, value } = await r.read(); if (done) break; parts.push(value); }
+      return join(parts);
+    }
+    [Symbol.asyncIterator]() { const r = this.getReader(); return { next: () => r.read() }; }
+  }
+
+  class Response {
+    constructor(body = null, init = {}) {
+      this.status = init.status ?? 200;
+      this.statusText = init.statusText ?? "";
+      this.headers = init.headers instanceof Headers ? init.headers : new Headers(init.headers);
+      this.url = "";
+      this.type = "default";
+      this.redirected = false;
+      if (body instanceof Body || body === null) this.body = body;
+      else {
+        const b = new Body();
+        const bytes = body instanceof Blob ? body._bytes : bytesOf(body);
+        if (typeof body === "string" && !this.headers.has("content-type")) this.headers.set("content-type", "text/plain;charset=UTF-8");
+        b._push(bytes); b._end(null);
+        this.body = b;
+      }
+    }
+    get ok() { return this.status >= 200 && this.status < 300; }
+    get bodyUsed() { return this.body !== null && this.body._used; }
+    async arrayBuffer() { return (this.body === null ? new Uint8Array(0) : await this.body._all()).slice().buffer; }
+    async bytes() { return this.body === null ? new Uint8Array(0) : await this.body._all(); }
+    async text() { return new g.TextDecoder().decode(await this.bytes()); }
+    async json() { return JSON.parse(await this.text()); }
+    async blob() { return new Blob([await this.bytes()], { type: this.headers.get("content-type") || "" }); }
+    clone() {
+      if (this.bodyUsed) throw new TypeError("the body has already been read");
+      const r = new Response(null, { status: this.status, statusText: this.statusText, headers: new Headers(this.headers) });
+      r.url = this.url;
+      if (this.body !== null) {
+        // both copies see every chunk
+        const a = new Body(), b = new Body(), src = this.body;
+        const pump = async () => {
+          const rd = src.getReader();
+          try { for (;;) { const { done, value } = await rd.read(); if (done) break; a._push(value); b._push(value); } a._end(null); b._end(null); }
+          catch (e) { a._end(e); b._end(e); }
+        };
+        pump();
+        this.body = a; r.body = b;
+      }
+      return r;
+    }
+    static json(data, init = {}) { const h = new Headers(init.headers); h.set("content-type", "application/json"); return new Response(JSON.stringify(data), { ...init, headers: h }); }
+    static error() { const r = new Response(null, { status: 0 }); r.type = "error"; return r; }
+  }
+
+  Object.assign(g, { Headers, Blob, FormData, AbortSignal, AbortController, Response });
+
   let fetchSeq = 1;
-  const pending = new Map();
-  g.fetch = (input, init) => new Promise((resolve, reject) => {
-    const id = fetchSeq++;
+  const pending = new Map();      // id → { resolve, reject, url, body, settled }
+  g.fetch = (input, init = {}) => new Promise((resolve, reject) => {
     const url = typeof input === "string" ? input : String(input.url ?? input);
-    const method = (init && init.method) || "GET";
-    const body = (init && init.body) || "";
-    pending.set(id, { resolve, reject, url });
-    try { H.fetch(id, method, url, typeof body === "string" ? body : String(body)); }
+    const method = String(init.method || "GET").toUpperCase();
+    const headers = new Headers(init.headers);
+    let bytes = null;
+    const b = init.body;
+    if (b != null) {
+      if (b instanceof FormData) { const f = b._encode(); bytes = f.bytes; if (!headers.has("content-type")) headers.set("content-type", f.type); }
+      else if (b instanceof Blob) { bytes = b._bytes; if (b.type && !headers.has("content-type")) headers.set("content-type", b.type); }
+      else if (b instanceof g.URLSearchParams) { bytes = utf8.encode(b.toString()); if (!headers.has("content-type")) headers.set("content-type", "application/x-www-form-urlencoded;charset=UTF-8"); }
+      else { bytes = bytesOf(b); if (typeof b === "string" && !headers.has("content-type")) headers.set("content-type", "text/plain;charset=UTF-8"); }
+    }
+    const signal = init.signal;
+    if (signal && signal.aborted) { reject(signal.reason); return; }
+    const id = fetchSeq++;
+    const body = new Body();
+    const p = { resolve, reject, url, body, settled: false };
+    pending.set(id, p);
+    body._cancel = () => { pending.delete(id); H.fetchCancel(id); };
+    if (signal) signal.addEventListener("abort", () => {
+      if (!pending.has(id)) return;
+      pending.delete(id);
+      H.fetchCancel(id);
+      if (!p.settled) { p.settled = true; reject(signal.reason); }
+      else body._end(signal.reason);
+    });
+    const hdrs = {};
+    headers.forEach((v, k) => { hdrs[k] = v; });
+    try { H.fetchStart(id, method, url, JSON.stringify(hdrs), bytes === null ? "" : toBase64(bytes)); }
     catch (e) { pending.delete(id); reject(e); }
   });
-  g.__declareFetchDone = (id, status, text, contentType) => {
+  g.__declareFetchHead = (id, status, headersJSON) => {
+    const p = pending.get(id);
+    if (!p || p.settled) return;
+    p.settled = true;
+    let h = {};
+    try { h = JSON.parse(headersJSON); } catch { h = {}; }
+    const res = new Response(p.body, { status, headers: h });
+    res.url = p.url;
+    p.resolve(res);
+  };
+  g.__declareFetchChunk = (id, b64) => {
+    const p = pending.get(id);
+    if (p) p.body._push(fromBase64(b64));
+  };
+  g.__declareFetchEnd = (id, error) => {
     const p = pending.get(id);
     if (!p) return;
     pending.delete(id);
-    if (status < 0) { p.reject(new Error("network error: " + p.url)); return; }
-    p.resolve({
-      ok: status >= 200 && status < 300,
-      status,
-      url: p.url,
-      headers: { get: (k) => (String(k).toLowerCase() === "content-type" ? contentType : null) },
-      text: () => Promise.resolve(text),
-      json: () => Promise.resolve(JSON.parse(text)),
-    });
+    const e = error ? new TypeError("network error: " + error + " (" + p.url + ")") : null;
+    if (!p.settled) { p.settled = true; if (e) p.reject(e); else { const r = new Response(p.body, { status: 200 }); r.url = p.url; p.resolve(r); } }
+    p.body._end(e);
+  };
+
+  // ── WebSocket, over URLSessionWebSocketTask ───────────────────────────────
+  //
+  // The web's WebSocket: the protocol (the HTTP upgrade handshake, frames,
+  // ping/pong, the closing handshake) is URLSession's; this is the browser's
+  // shape over it, so the runtime's Socket source runs here unchanged. Text
+  // frames arrive as strings, binary ones as an ArrayBuffer (binaryType
+  // "arraybuffer"; "blob" gives a Blob).
+  let wsSeq = 1;
+  const sockets = new Map();
+  class WebSocket {
+    constructor(url, protocols) {
+      this.url = String(url);
+      this.readyState = 0;
+      this.protocol = "";
+      this.extensions = "";
+      this.binaryType = "blob";
+      this.bufferedAmount = 0;
+      this.onopen = this.onmessage = this.onclose = this.onerror = null;
+      this._fns = new Map();
+      this._closing = null;
+      this._id = wsSeq++;
+      sockets.set(this._id, this);
+      const list = protocols == null ? [] : Array.isArray(protocols) ? protocols.map(String) : [String(protocols)];
+      H.wsOpen(this._id, this.url, JSON.stringify(list));
+    }
+    addEventListener(type, fn) { if (!this._fns.has(type)) this._fns.set(type, new Set()); this._fns.get(type).add(fn); }
+    removeEventListener(type, fn) { this._fns.get(type)?.delete(fn); }
+    _emit(type, ev) {
+      ev.type = type; ev.target = this;
+      const h = this["on" + type];
+      if (typeof h === "function") { try { h.call(this, ev); } catch (e) { g.console.error("WebSocket on" + type + ": " + (e && e.message || e)); } }
+      for (const fn of [...(this._fns.get(type) ?? [])]) { try { fn.call(this, ev); } catch (e) { g.console.error("WebSocket " + type + ": " + (e && e.message || e)); } }
+    }
+    send(data) {
+      if (this.readyState === 0) throw new Error("InvalidStateError: the socket is still connecting");
+      if (this.readyState !== 1) return;
+      if (typeof data === "string") H.wsSend(this._id, data, false);
+      else H.wsSend(this._id, toBase64(data instanceof Blob ? data._bytes : bytesOf(data)), true);
+    }
+    close(code = 1000, reason = "") {
+      if (this.readyState >= 2) return;
+      this.readyState = 2;
+      this._closing = { code, reason: String(reason) };
+      H.wsClose(this._id, code, String(reason));
+    }
+  }
+  WebSocket.CONNECTING = 0; WebSocket.OPEN = 1; WebSocket.CLOSING = 2; WebSocket.CLOSED = 3;
+  g.WebSocket = WebSocket;
+  g.__declareWsOpen = (id, protocol) => {
+    const ws = sockets.get(id);
+    if (!ws || ws.readyState !== 0) return;
+    ws.readyState = 1; ws.protocol = protocol;
+    ws._emit("open", {});
+  };
+  g.__declareWsMessage = (id, payload, binary) => {
+    const ws = sockets.get(id);
+    if (!ws || ws.readyState !== 1) return;
+    let data = payload;
+    if (binary) { const u8 = fromBase64(payload); data = ws.binaryType === "arraybuffer" ? u8.buffer : new Blob([u8]); }
+    ws._emit("message", { data, origin: ws.url, lastEventId: "" });
+  };
+  g.__declareWsClose = (id, code, reason, wasClean) => {
+    const ws = sockets.get(id);
+    if (!ws) return;
+    sockets.delete(id);
+    // closed by this page: the close it asked for, as a browser reports it
+    const mine = ws._closing;
+    ws.readyState = 3;
+    if (!wasClean && mine === null) ws._emit("error", {});
+    ws._emit("close", mine !== null ? { code: mine.code, reason: mine.reason, wasClean: true } : { code, reason, wasClean });
   };
 
   // ── images (ImageIO on the far side; the handle is what the backend sends) ─

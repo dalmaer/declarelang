@@ -29,6 +29,7 @@
 import { phasesOn, phased } from "./phase-timer.js"; // dependency-free: the measurement timer, dev builds only
 import { rewriteDatapaths } from "./datapath.js";
 import { diag } from "./errors.js";
+import { keysCaller } from "./keys.js";
 import { colorWithAlpha, gradient, outline, shadow, stop, stroke } from "./value.js";
 import { blur, brightness, conicGradient, contrast, frost, grayscale, hueRotate, invert, radialGradient, saturate, sepia, colorize } from "./effects.js";
 // The ruled value constructors, in scope inside every `{ }` body — the "one
@@ -59,10 +60,29 @@ export function setBodyServices(services) {
 export function bodyScopeNames() { return Object.keys(SCOPE); }
 let PRE_MAKE = null;
 let PRE_SCRIPTS = [];
+let PRE_KEYED = new Set();
 const PRE_BUILT = new WeakMap();
-export function providePrecompiled(make, scripts) {
+/** `keyed` — the slots whose body names `Keys`, which a minified bundle no
+ *  longer shows by name (see askingKeys). */
+export function providePrecompiled(make, scripts, keyed = []) {
     PRE_MAKE = make;
     PRE_SCRIPTS = scripts;
+    PRE_KEYED = new Set(keyed);
+}
+/** A body that names `Keys` runs as the keyboard's CALLER: while it runs,
+ *  `Keys.isDown` knows which node is asking — the program it answers for, and
+ *  the view that claims the key (keys.ts). Only these bodies pay for it. */
+const NAMES_KEYS = /\bKeys\b/;
+function askingKeys(fn) {
+    return function (...args) {
+        const prev = keysCaller(this !== null && typeof this === "object" ? this : null);
+        try {
+            return fn.apply(this, args);
+        }
+        finally {
+            keysCaller(prev);
+        }
+    };
 }
 /** The function a token names, or null when `src` is ordinary text. */
 function precompiled(src) {
@@ -70,7 +90,7 @@ function precompiled(src) {
         return null;
     let fns = PRE_BUILT.get(SCRIPT_SCOPE);
     if (fns === undefined) {
-        fns = PRE_MAKE(SCOPE, SCRIPT_SCOPE);
+        fns = PRE_MAKE(SCOPE, SCRIPT_SCOPE).map((f, i) => PRE_KEYED.has(i) ? askingKeys(f) : f);
         PRE_BUILT.set(SCRIPT_SCOPE, fns);
     }
     return fns[parseInt(src.slice(1), 10)] ?? null;
@@ -234,18 +254,17 @@ export function compileExpr(src) {
     const out = (() => {
         const path = pathFn(src);
         if (path !== null)
-            return { fn: path };
+            return { fn: NAMES_KEYS.test(src) ? askingKeys(path) : path };
         const r = rewriteDatapaths(src);
         if ("error" in r)
             return r;
         try {
             const build = () => new Function("$d", "$s", "parent", "classroot", `"use strict"; ${PRELUDE} ${scriptPrelude(scripts)} return (${r.src});`);
             const raw = (typeof __DECLARE_DEV_SWITCHES__ !== "undefined" && __DECLARE_DEV_SWITCHES__ && phasesOn ? phased("compile bodies", build) : build());
-            return {
-                fn: function (parent, classroot) {
-                    return raw.call(this, SCOPE, scripts, parent, classroot);
-                },
+            const fn = function (parent, classroot) {
+                return raw.call(this, SCOPE, scripts, parent, classroot);
             };
+            return { fn: NAMES_KEYS.test(r.src) ? askingKeys(fn) : fn };
         }
         catch (e) {
             return { error: `is not a valid expression — ${e.message}` };
@@ -387,11 +406,10 @@ export function compileBody(params, src) {
             // constructor name (`const stop = …`) without a redeclaration error;
             // `var` still hoists to the function and `return` works unchanged.
             const raw = new Function("$d", "$s", "parent", "classroot", "$base", ...params, `"use strict"; ${PRELUDE} ${scriptPrelude(scripts)} { ${r.src} }`);
-            return {
-                fn: function (parent, classroot, base, ...args) {
-                    return raw.call(this, SCOPE, scripts, parent, classroot, base, ...args);
-                },
+            const fn = function (parent, classroot, base, ...args) {
+                return raw.call(this, SCOPE, scripts, parent, classroot, base, ...args);
             };
+            return { fn: NAMES_KEYS.test(r.src) ? askingKeys(fn) : fn };
         }
         catch (e) {
             return { error: `is not a valid method body — ${e.message}` };

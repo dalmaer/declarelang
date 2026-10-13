@@ -14,6 +14,17 @@
 
 import AVFoundation
 
+/// Whether the host is heard. Under automation (DECLARE_CONTROL) it is not: a test drives
+/// its windows behind whatever the person is doing, and a game it plays must not sound
+/// through their speakers. `sound on` on the control channel turns it back on for a test
+/// that listens. Programs never see it — their sounds play, silently.
+enum HostSound {
+    static var muted = ProcessInfo.processInfo.environment["DECLARE_CONTROL"] != nil {
+        didSet { NotificationCenter.default.post(name: changed, object: nil) }
+    }
+    static let changed = Notification.Name("DeclareHostSoundChanged")
+}
+
 final class ClipEngine {
     private unowned let bridge: Bridge
     private let engine = AVAudioEngine()
@@ -21,6 +32,7 @@ final class ClipEngine {
     private var sinks: [Int: AVAudioMixerNode] = [:]
     private var voices: [Int: Voice] = [:]
     private var configObs: NSObjectProtocol?
+    private var soundObs: NSObjectProtocol?
 
     private final class Voice {
         let player = AVAudioPlayerNode()
@@ -33,6 +45,10 @@ final class ClipEngine {
 
     init(bridge: Bridge) {
         self.bridge = bridge
+        engine.mainMixerNode.outputVolume = HostSound.muted ? 0 : 1
+        soundObs = NotificationCenter.default.addObserver(forName: HostSound.changed, object: nil, queue: .main) { [weak self] _ in
+            self?.engine.mainMixerNode.outputVolume = HostSound.muted ? 0 : 1
+        }
         // A change of output device stops the engine; start it again on the new one.
         configObs = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main

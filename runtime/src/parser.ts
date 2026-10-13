@@ -288,7 +288,14 @@ export interface SchemaDecl {
 export interface IncludeRef {
   path: string;
   pos: Pos;
+  /** A script file's hosts (`script [ "camera.ts", host = browser ]`). */
+  hosts?: string[];
 }
+
+/** The hosts a script can be marked for (`script [ host = browser ] { … }`):
+ *  code that reaches past what every host provides names the hosts it runs
+ *  on. A new host is a new name here. */
+export const SCRIPT_HOSTS: readonly string[] = ["browser", "mac"];
 
 /** The half-open source span `[start, end)` of one whole `include [ … ]`
  *  directive — from the `include` keyword through the closing `]`. The
@@ -323,6 +330,9 @@ export interface ScriptBlock {
    *  evaluates alone (instantiate). Read from the compiler's bindings marker
    *  when a compiled source is parsed. */
   compiled?: boolean;
+  /** The hosts this block runs on, when it is marked (`script [ host = browser ]`);
+   *  absent = every host, so it may use only what every host provides. */
+  hosts?: string[];
 }
 
 /** A whole source: `include` directives, top-level declarations (classes,
@@ -1476,23 +1486,67 @@ class Parser {
     return t.kind === "ident" && t.text === "script" && u.kind === "lbracket";
   }
 
-  /** `'script' '[' STRING ( ',' STRING )* ','? ']'` — the include-shaped list
-   *  of script files, each a quoted path relative to this file's directory. */
-  parseScriptFiles(): { refs: IncludeRef[]; span: Span } {
+  /** `'script' '[' ( STRING | 'host' '=' HOSTS ) ( ',' … )* ','? ']' ( '{' … '}' )?`
+   *  — script files, each a quoted path relative to this file's directory, or,
+   *  followed by braces, the script itself with its attributes. `host` marks
+   *  code for the hosts it runs on: a name (`host = browser`) or a list
+   *  (`host = [browser, mac]`). */
+  parseScriptFiles(): { refs: IncludeRef[]; span: Span; inline?: ScriptBlock } {
     const kw = this.expect("ident", "'script'");
     this.expect("lbracket", "'['");
     const refs: IncludeRef[] = [];
+    let hosts: string[] | undefined;
+    const hostName = (): string => {
+      const t = this.expect("ident", "a host name");
+      if (!SCRIPT_HOSTS.includes(t.text)) {
+        throw new DeclareError(`'${t.text}' is not a host — a script runs on ${SCRIPT_HOSTS.join(" or ")}`, t.pos);
+      }
+      return t.text;
+    };
     while (this.peek().kind !== "rbracket" && this.peek().kind !== "eof") {
       const t = this.peek();
-      if (t.kind !== "string") {
-        throw new DeclareError("a script file path is a quoted string — script [ \"helpers.ts\" ]; for inline code, braces hold the script itself: script { … }", t.pos);
+      if (t.kind === "string") {
+        this.next();
+        refs.push({ path: t.str!, pos: t.pos });
+      } else if (t.kind === "ident" && t.text === "host") {
+        this.next();
+        this.expect("eq", "'='");
+        if (this.peek().kind === "lbracket") {
+          this.next();
+          const list: string[] = [];
+          while (this.peek().kind !== "rbracket" && this.peek().kind !== "eof") {
+            list.push(hostName());
+            if (this.peek().kind === "comma") this.next();
+            else break;
+          }
+          this.expect("rbracket", "']'");
+          if (list.length === 0) throw new DeclareError("host = [ ] names no host — list the hosts this script runs on, or drop host to run on every host", t.pos);
+          hosts = list;
+        } else {
+          hosts = [hostName()];
+        }
+      } else {
+        throw new DeclareError("a script takes file paths and host — script [ \"helpers.ts\" ], script [ host = browser ] { … }; for inline code on every host, braces alone: script { … }", t.pos);
       }
-      this.next();
-      refs.push({ path: t.str!, pos: t.pos });
       if (this.peek().kind === "comma") this.next();
       else break;
     }
     const rb = this.expect("rbracket", "']'");
+    if (this.peek().kind === "code") {
+      if (refs.length > 0) {
+        throw new DeclareError("a script is from files or written here, not both — script [ \"a.ts\", host = browser ] or script [ host = browser ] { … }", refs[0].pos);
+      }
+      const body = this.next();
+      const end = body.pos.offset + body.str!.length + 2;
+      return {
+        refs, span: { start: kw.pos.offset, end },
+        inline: { src: body.str!, pos: kw.pos, span: { start: kw.pos.offset, end }, ...(body.str!.includes(BINDINGS_MARK) ? { compiled: true } : {}), ...(hosts ? { hosts } : {}) },
+      };
+    }
+    if (refs.length === 0) {
+      throw new DeclareError("script [ ] names no file — script [ \"helpers.ts\" ], or follow it with the code: script [ host = browser ] { … }", kw.pos);
+    }
+    if (hosts) for (const r of refs) r.hosts = hosts;
     return { refs, span: { start: kw.pos.offset, end: rb.pos.offset + rb.text.length } };
   }
 
@@ -1688,9 +1742,12 @@ function parseTopDecls(p: Parser): {
     else if (p.atUse()) uses.push(...p.parseUseDirective());
     else if (p.atShip()) ship = mergeShip(ship, p.parseShip());
     else if (p.atScriptFiles()) {
-      const { refs, span } = p.parseScriptFiles();
-      scriptFiles.push(...refs);
-      scriptFileSpans.push(span);
+      const { refs, span, inline } = p.parseScriptFiles();
+      if (inline) scripts.push(inline);
+      else {
+        scriptFiles.push(...refs);
+        scriptFileSpans.push(span);
+      }
     }
     else if (p.atScript()) scripts.push(p.parseScript());
     else if (p.atClass()) classes.push(p.parseClass());

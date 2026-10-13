@@ -18,6 +18,7 @@ import type { RenderBackend } from "./backend.js";
 import { DeclareError, notAboard } from "./errors.js";
 import { Keys } from "./keys.js";
 import { Focus, deliverKeys } from "./focus.js";
+import { wireFiles } from "./files.js";
 import { bridgeFor } from "./inspect.js";
 import { localPoint, watchScrolling, setPageScrollWatch } from "./dom-backend.js";
 import { kernelReady, observe } from "./reactive.js";
@@ -92,6 +93,9 @@ export function wireInput(app: App, host: HTMLElement, chrome = false): void {
   // beneath stays usable, and an element that takes no pointer events never sees
   // pointermove, which would freeze app.pointerX and break every drag it owns.
   wireEnvironment(app, host, chrome ? false : embedded);
+  // files dragged onto this app's own box (files.ts — a stand-in when the
+  // program takes none); an embedded app answers for its box before its host
+  if (!chrome) wireFiles(app, host);
   if (chrome || embedded) return;
   Focus.setRoot(app);
   Keys.listen(() => app.$surface !== null);

@@ -64,6 +64,14 @@ export declare class FocusService {
     /** The tree root, for traversal when nothing is focused (set at attach). */
     setRoot(view: View | null): void;
     getFocus(): View | null;
+    /** The top-level program's root — the program that has the keyboard while
+     *  nothing is focused (null before one is mounted). */
+    getRoot(): View | null;
+    /** The program the keyboard goes to (keyboard-follows-focus.md, Rule 1):
+     *  focus on an island hands it to the island's tenant; focus anywhere else,
+     *  to the program whose tree holds the focused view; no focus, to the
+     *  top-level program. */
+    keyboardProgram(): View | null;
     /** True when the current focus arrived by KEYBOARD (Tab/Shift-Tab) — the
      *  focus-visible modality gate an indicator reads: show for keyboard focus,
      *  stay hidden for pointer/programmatic focus. */

@@ -343,9 +343,11 @@ Four facts make this work without choreography:
   data. A `body` that is an object is sent as JSON.
 - **`fetch()` never throws.** A refusal lands in `failed` and `error`, with the status in
   `statusCode` and whatever the server said in `errorBody` — its JSON parsed, if it sent
-  JSON, so a validation message can be shown next to the field it names. `fetch()` does
-  return a promise, but the flags and `onLoad` are the idiom; a later `fetch()` on the
-  same source supersedes an earlier one, whose reply is dropped.
+  JSON, so a validation message can be shown next to the field it names. The reply's
+  headers are in [`responseHeaders`](declare-docs:DataSource.responseHeaders), refusals' included — a paging link, a rate limit's
+  `retry-after`. `fetch()` does return a promise, but the flags and `onLoad` are the
+  idiom; a later `fetch()` on the same source supersedes an earlier one, which is stopped,
+  and `clear()` stops one in flight.
 - **A source's value is the server's.** Each successful `fetch()` replaces it. When the
   user edits what was loaded and the source fetches again — on a timer, a changing `url`,
   `auto` — copy it into a `Dataset` in `onLoad` and edit that — the working copy — so a
@@ -369,6 +371,10 @@ remove: DataSource [ url = { "/api/tasks/" + app.target }, method = "DELETE",
 
 A row aims and sends in one handler — `onClick() { app.target = :id; app.remove.fetch() }`
 — and because `fetch()` settles first, the request carries this row's id.
+
+**Bytes.** `format = "bytes"` reads a reply as raw bytes, a `Uint8Array` in `value` — a
+level file, a recording's samples, anything the program reads itself. (Pictures, sounds and
+video are not this: `Image`, `Audio` and `Video` load their own.)
 
 **Several sources, one screen.** A screen that needs two sources derives from both:
 `ready: boolean = { app.people.loaded && app.rooms.loaded }`. There is no join to write
@@ -419,8 +425,48 @@ complete ticker. [`status`](declare-docs:Stream.status) reports the connection (
 will not repair — the whole policy is that one number. A stream that labels its events
 (most AI APIs do) must list them: `listenTo = ["delta", "done"]`.
 
+A stream can also be the reply to a request — an AI model's answer, arriving as it is
+written. Declare the request as a `DataSource` does, with [`method`](declare-docs:EventStream.method), `body` and
+`headers`; the stream sends it once, reads the reply as it comes, and closes when the
+reply ends:
+
+```declare-fragment
+answer: string = "",
+reply: EventStream [ url = "/api/chat", method = "POST", active = { app.asked != "" },
+    body = { { prompt: app.asked } }, headers = { { Authorization: "Bearer " + app.token } },
+    listenTo = ["delta"],
+    onMessage(e: StreamMessage) { if (e.type == "delta") app.answer = app.answer + e.data }
+    ]
+```
+
 To keep streamed records, parse each message in the handler and write it into a dataset;
 everything downstream follows.
+
+## Files
+
+The person's own files come in two ways. `Files.pick` opens the file dialog — call it
+from a press, as a browser allows a dialog only then — and resolves to the files chosen:
+`Files.pick({ accept: ["image/*"], multiple: true })`, or `{ folder: true }` for a whole
+folder. And a view that declares [`onFilesDrop`](declare-docs:View.event.filesDrop) takes files dragged onto it — the view under
+the drag, as with a press — with `onFilesOver` and `onFilesOut` to light it while they are
+over it.
+
+Either way a file is a [record](declare-docs:type:File) — `name`, `size`, `type`, `modified`, its `path` within a
+chosen or dropped folder (a folder arrives as every file in it), and a `url`. The url is how
+it is used, through what this chapter already has: an `Image` shows it, a `DataSource` reads
+it, and a `DataSource` body that holds it uploads it, sent as a form:
+
+```declare-fragment
+chosen: File[] = [],
+well: View [ width = 300, height = 160, onFilesDrop(e: FilesDrop) { app.chosen = e.files } ],
+upload: DataSource [ url = "/api/photos", method = "POST",
+    body = { { album: app.album, photo: app.chosen[0] } } ],
+Button [ label = "Upload", disabled = { app.chosen.length == 0 }, onClick() { app.upload.fetch() } ]
+```
+
+Nothing is sent until the program sends it, so it can show what arrived, let the person
+choose, read a file first (`url = { f.url }, format = "text"`), and upload a subset in its
+own order — one request per file, chained in `onLoad`, or a list of files in one field.
 
 ## Editing text, and forms
 

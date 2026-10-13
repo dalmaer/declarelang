@@ -100,6 +100,10 @@ const SUITE = [
   "test/draw-redraw.test.mjs",
   "test/audio-in-memory.test.mjs",
   "test/island.test.mjs",
+  "test/keyboard-focus.test.mjs",
+  "test/fetch-family.test.mjs",
+  "test/script-host.test.mjs",
+  "test/files-browser.test.mjs",
   "test/island-browser.test.mjs",
   "test/two-way.test.mjs",         // the apps/two-way showcase: the whole embedder surface on one page
   "test/verify-apps.test.mjs",

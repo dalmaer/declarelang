@@ -57,7 +57,9 @@ script {
     // epsilon would call the arrival early and cut the tail off.
 
     const SLOW: number = (() => {
-        if (typeof location == "undefined") return 1
+        // the page's address, where there is one (a browser; not the Mac app)
+        const location = (globalThis as { location?: { search: string } }).location
+        if (location == undefined) return 1
         // the lookahead matters: without it `?slowland` matches this too, and
         // the spring silently runs ten times slower than the reader asked for
         const m = location.search.match(/[?&]slow(?:=(\d+))?(?![a-z])/)

@@ -227,6 +227,10 @@ final class ControlChannel {
             return "ok"
         case "automation":
             return automation.describe()
+        case "sound":
+            // `sound [on|off]` — whether the host is heard (HostSound: off under automation)
+            if a.count > 1 { HostSound.muted = a[1] != "on" }
+            return "sound=\(HostSound.muted ? "off" : "on")"
         default:
             let appLevel = lane == nil && ["windows", "newwindow", "closewindow", "lane"].contains(verb)
             if let refusal = automation.note(words: a, target: target(), appLevel: appLevel) { return refusal }

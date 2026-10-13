@@ -29,6 +29,9 @@ export declare class Island extends View {
     provides: readonly string[];
     /** @internal the linked tenant's delivery sink (null = nothing linked). */
     tenantSink: TenantSink | null;
+    /** @internal the linked Declare tenant — the program focus on this island
+     *  hands the keyboard to (null = none linked). */
+    $tenant: View | null;
     /** @internal the values the hosted side exposes, by name (`exposed` reads). */
     readonly exposedValues: BoundaryValues;
     /** The host's read of a value the hosted side EXPOSES — a Declare tenant's

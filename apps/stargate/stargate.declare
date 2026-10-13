@@ -86,6 +86,7 @@ App [ fill = black,
     heldBack: string = "",
     keys: Keys [
         onKeyDown(e: KeyEvent) {
+            app.restCursor()
             if (e.repeat || e.meta || e.ctrl || e.alt) return
             if (app.paused && !app.game.gameOver) { app.paused = false; app.heldBack = e.code; return }
             if (e.code == "Escape" && !app.game.gameOver) { app.paused = true; return }
@@ -94,6 +95,19 @@ App [ fill = black,
             },
         onKeyUp(e: KeyEvent) { if (e.code == app.heldBack) app.heldBack = "" }
         ],
+
+    // In a game the cursor is hidden over the screen, and comes back when the game ends, when
+    // it is paused, or when the mouse moves more than 10 pixels. A key hides it again.
+
+    cursor = { !app.game.gameOver && !app.paused && !app.mouseMoved ? "none" : "" },
+    mouseMoved: boolean = false,
+    restX: number = 0,                  // where the pointer was at the last key
+    restY: number = 0,
+    restCursor() { mouseMoved = false; restX = pointerX; restY = pointerY },
+    trackChanges = ["pointerX", "pointerY"],
+    onChange(e: ChangeEvent) {
+        if (Math.abs(pointerX - restX) > 10 || Math.abs(pointerY - restY) > 10) mouseMoved = true
+        },
 
     // The arcade moves the game on a frame every 16.64 ms. Where a whole number of the
     // display's frames comes within 5% of that, as at 60 Hz and its multiples, the game moves
@@ -160,13 +174,21 @@ App [ fill = black,
                 Phrase [ datapath = :banners[], says = :says, number = :number, font = "large" ]
                 ],
             bonusMen: View [ x = 112, y = 160, datapath = { app.lettered.value },
+                inks: number[] = { app.game.colours },          // what the men's pictures are drawn in, as on the playfield
                 layout: SimpleLayout [ axis = x, spacing = 4 ],
                 Sprite [ datapath = :men[], picture = "man-right-1", fill = null ]
                 ],
 
             // the pages between games (pages.declare, page-views.declare)
 
-            pageWords: PageWords [ visible = { app.game.pages.page != "" } ]
+            pageWords: PageWords [ visible = { app.game.pages.page != "" } ],
+
+            // paused: the screen dimmed, and the word in the large letters, white, above the
+            // middle of the playfield
+
+            View [ width = 100%, height = 100%, fill = black, opacity = 0.6, visible = { app.paused } ],
+            Lettering [ visible = { app.paused }, text = "PAUSED", font = "large", px = 132, py = 118,
+                colours = { [app.game.black, app.game.white] }, ink = 1, opaque = false ]
             ]
         ],
     lettered: Dataset [ contents = { { banners: app.game.messages.banners,

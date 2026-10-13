@@ -674,7 +674,10 @@ App [ fill = { provided("theme").background },
         run: AppIsland [ x = 0, y = { parent.editorH + 6 + (app.liveReport != "" ? parent.report.height : 0) },
             width = 100%,
             height = { parent.height - this.y },
-            program = { app.mode == "edit" ? "__raw__" : "" } ],
+            program = { app.mode == "edit" ? "__raw__" : "" },
+            focusable = true,
+            onPointerDown() { Focus.focus(this) }   // a press hands the running program the keyboard
+            ],
 
         // the drag shield — last child, so it sits over everything while a
         // divider drag is on. The router already captures the drag to the grip;

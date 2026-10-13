@@ -472,10 +472,44 @@ final class Bridge {
             if let url = URL(string: u) { DispatchQueue.main.async { NSWorkspace.shared.open(url) } }
         } as @convention(block) (String) -> Void, forKeyedSubscript: "openExternal")
 
-        // Networking: URLSession is the whole stack (TLS, cookies, cache).
-        host.setObject({ [weak self] (id: Int, method: String, urlStr: String, body: String) in
-            self?.fetch(id: id, method: method, urlStr: urlStr, body: body)
-        } as @convention(block) (Int, String, String, String) -> Void, forKeyedSubscript: "fetch")
+        // Networking: URLSession is the whole stack (TLS, cookies, cache). The
+        // env's fetch (mac-env.js) drives these two; the reply comes back as
+        // __declareFetchHead / __declareFetchChunk / __declareFetchEnd.
+        host.setObject({ [weak self] (id: Int, method: String, urlStr: String, headersJSON: String, bodyB64: String) in
+            self?.fetchStart(id: id, method: method, urlStr: urlStr, headersJSON: headersJSON, bodyB64: bodyB64)
+        } as @convention(block) (Int, String, String, String, String) -> Void, forKeyedSubscript: "fetchStart")
+        host.setObject({ (id: Int) in
+            NetStream.shared.cancel(id: id)
+        } as @convention(block) (Int) -> Void, forKeyedSubscript: "fetchCancel")
+
+        // Files.pick: the open panel, as a sheet on this window; answered with
+        // the chosen files' records (Files.swift) on __declareFilesPicked
+        host.setObject({ [weak self] (id: Int, optionsJSON: String) in
+            DispatchQueue.main.async {
+                FileRecords.pick(optionsJSON: optionsJSON, in: self?.view?.window) { urls in
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        let records = FileRecords.of(urls)
+                        self?.call("__declareFilesPicked", [id, FileRecords.json(records)])
+                        self?.needsFrame()
+                    }
+                }
+            }
+        } as @convention(block) (Int, String) -> Void, forKeyedSubscript: "pickFiles")
+
+        // WebSocket (the env's WebSocket class): URLSessionWebSocketTask does
+        // the protocol — the HTTP upgrade handshake, framing, ping/pong, the
+        // closing handshake; the reply comes back as __declareWsOpen /
+        // __declareWsMessage / __declareWsClose.
+        host.setObject({ [weak self] (id: Int, urlStr: String, protocolsJSON: String) in
+            guard let self else { return }
+            SocketHub.shared.open(id: id, urlStr: urlStr, protocolsJSON: protocolsJSON, bridge: self)
+        } as @convention(block) (Int, String, String) -> Void, forKeyedSubscript: "wsOpen")
+        host.setObject({ (id: Int, payload: String, binary: Bool) in
+            SocketHub.shared.send(id: id, payload: payload, binary: binary)
+        } as @convention(block) (Int, String, Bool) -> Void, forKeyedSubscript: "wsSend")
+        host.setObject({ (id: Int, code: Int, reason: String) in
+            SocketHub.shared.close(id: id, code: code, reason: reason)
+        } as @convention(block) (Int, Int, String) -> Void, forKeyedSubscript: "wsClose")
 
         host.setObject({ [weak self] (handle: Int, urlStr: String) in
             self?.loadImage(handle: handle, urlStr: urlStr)
@@ -1177,23 +1211,28 @@ final class Bridge {
 
     // ── networking + images ─────────────────────────────────────────────────
 
-    private func fetch(id: Int, method: String, urlStr: String, body: String) {
+    /// fetch(), as the web has it (mac-env.js builds Response and the rest on
+    /// this): the request goes out with its headers and its bytes (base64 over
+    /// the bridge); the reply comes back as its head — status and every header
+    /// — then its body chunk by chunk as it arrives, then its end, so a reply
+    /// can be read whole or as a stream; NetStream.cancel stops it.
+    private func fetchStart(id: Int, method: String, urlStr: String, headersJSON: String, bodyB64: String) {
         guard let url = URL(string: urlStr) else {
-            call("__declareFetchDone", [id, -1, "", ""]); return
+            call("__declareFetchEnd", [id, "not a url: \(urlStr)"]); return
         }
         if url.isFileURL {
             let r0 = CFAbsoluteTimeGetCurrent()
-            let text = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-            let ok = !text.isEmpty || FileManager.default.fileExists(atPath: url.path)
+            let data = try? Data(contentsOf: url)
             let readMs = (CFAbsoluteTimeGetCurrent() - r0) * 1000
             onRuntime { [weak self] in
-                self?.mark("file \(ok ? 200 : 404)", String(format: "%4d KB read %.0fms  %@",
-                                                            text.utf8.count / 1024, readMs,
-                                                            (urlStr as NSString).lastPathComponent))
-                let c0 = CFAbsoluteTimeGetCurrent()
-                self?.call("__declareFetchDone", [id, ok ? 200 : 404, text, ""])
-                self?.mark("  └ JS handled it", String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - c0) * 1000))
-                self?.needsFrame()
+                guard let self else { return }
+                self.mark("file \(data != nil ? 200 : 404)", String(format: "%4d KB read %.0fms  %@",
+                                                                   (data?.count ?? 0) / 1024, readMs,
+                                                                   (urlStr as NSString).lastPathComponent))
+                self.call("__declareFetchHead", [id, data != nil ? 200 : 404, "{}"])
+                if let data, !data.isEmpty { self.call("__declareFetchChunk", [id, data.base64EncodedString()]) }
+                self.call("__declareFetchEnd", [id, ""])
+                self.needsFrame()
             }
             return
         }
@@ -1206,28 +1245,13 @@ final class Bridge {
         // the same URL answered current. One cache, owned where the etag is.
         req.cachePolicy = .reloadIgnoringLocalCacheData
         req.httpMethod = method
-        if !body.isEmpty { req.httpBody = body.data(using: .utf8) }
-        // Header pass-through for the cache revalidation tier.
-        if let hdrs = pendingHeaders[id] { for (k, v) in hdrs { req.setValue(v, forHTTPHeaderField: k) } }
-        pendingHeaders[id] = nil
-        let fetchT0 = CFAbsoluteTimeGetCurrent()
-        Self.net.dataTask(with: req) { [weak self] data, resp, _ in
-            let http = resp as? HTTPURLResponse
-            let status = http?.statusCode ?? -1
-            let text = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
-            let ctype = http?.value(forHTTPHeaderField: "content-type") ?? ""
-            let ms = (CFAbsoluteTimeGetCurrent() - fetchT0) * 1000
-            self?.onRuntime {
-                self?.mark("fetch \(status)", String(format: "%4d KB in %.0fms  %@",
-                                                     text.utf8.count / 1024, ms, urlStr))
-                let c0 = CFAbsoluteTimeGetCurrent()
-                self?.call("__declareFetchDone", [id, status, text, ctype])
-                self?.mark("  └ JS handled it", String(format: "%.0fms", (CFAbsoluteTimeGetCurrent() - c0) * 1000))
-                self?.needsFrame()
-            }
-        }.resume()
+        if let d = headersJSON.data(using: .utf8),
+           let h = (try? JSONSerialization.jsonObject(with: d)) as? [String: String] {
+            for (k, v) in h { req.setValue(v, forHTTPHeaderField: k) }
+        }
+        if !bodyB64.isEmpty { req.httpBody = Data(base64Encoded: bodyB64) }
+        NetStream.shared.start(req, id: id, bridge: self)
     }
-    var pendingHeaders: [Int: [String: String]] = [:]
 
     /// One web face: fetch the bytes, hand them to FontRegistry, answer the
     /// waiting promise. `ok = false` means the env should try the next source
@@ -1379,5 +1403,200 @@ final class Bridge {
         if pathCache.count > 256 { pathCache.removeAll() }
         pathCache[d] = p
         return p
+    }
+}
+
+
+/// The streaming half of fetch(): one session whose delegate hands each reply
+/// to the runtime as it arrives — head, chunks, end — and lets a request be
+/// cancelled by the id the env gave it. Cache-less, like Bridge.net (the boot
+/// layer owns caching where the etag is).
+final class NetStream: NSObject, URLSessionDataDelegate {
+    static let shared = NetStream()
+    private let lock = NSLock()
+    private var byTask: [Int: (id: Int, bridge: Bridge, t0: CFAbsoluteTime, bytes: Int)] = [:]
+    private var byId: [Int: URLSessionDataTask] = [:]
+    private lazy var session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.urlCache = nil
+        c.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: c, delegate: self, delegateQueue: nil)
+    }()
+
+    func start(_ req: URLRequest, id: Int, bridge: Bridge) {
+        let task = session.dataTask(with: req)
+        lock.lock()
+        byTask[task.taskIdentifier] = (id, bridge, CFAbsoluteTimeGetCurrent(), 0)
+        byId[id] = task
+        lock.unlock()
+        task.resume()
+    }
+
+    func cancel(id: Int) {
+        lock.lock()
+        let task = byId.removeValue(forKey: id)
+        if let task { byTask.removeValue(forKey: task.taskIdentifier) }
+        lock.unlock()
+        task?.cancel()
+    }
+
+    private func entry(_ task: URLSessionTask) -> (id: Int, bridge: Bridge, t0: CFAbsoluteTime, bytes: Int)? {
+        lock.lock(); defer { lock.unlock() }
+        return byTask[task.taskIdentifier]
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+        if let e = entry(dataTask) {
+            let http = response as? HTTPURLResponse
+            var headers: [String: String] = [:]
+            for (k, v) in http?.allHeaderFields ?? [:] { headers["\(k)".lowercased()] = "\(v)" }
+            let json = (try? JSONSerialization.data(withJSONObject: headers)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            e.bridge.call("__declareFetchHead", [e.id, http?.statusCode ?? 200, json])
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        lock.lock()
+        let e = byTask[dataTask.taskIdentifier]
+        if let e { byTask[dataTask.taskIdentifier] = (e.id, e.bridge, e.t0, e.bytes + data.count) }
+        lock.unlock()
+        guard let e else { return }
+        e.bridge.call("__declareFetchChunk", [e.id, data.base64EncodedString()])
+        e.bridge.needsFrame()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        lock.lock()
+        let e = byTask.removeValue(forKey: task.taskIdentifier)
+        if let e { byId.removeValue(forKey: e.id) }
+        lock.unlock()
+        guard let e else { return }
+        let status = (task.response as? HTTPURLResponse)?.statusCode ?? -1
+        let ms = (CFAbsoluteTimeGetCurrent() - e.t0) * 1000
+        let url = task.originalRequest?.url?.absoluteString ?? ""
+        e.bridge.onRuntime {
+            e.bridge.mark("fetch \(status)", String(format: "%4d KB in %.0fms  %@", e.bytes / 1024, ms, url))
+        }
+        e.bridge.call("__declareFetchEnd", [e.id, error?.localizedDescription ?? ""])
+        e.bridge.needsFrame()
+    }
+}
+
+
+/// WebSocket over URLSessionWebSocketTask, which speaks the whole protocol: the
+/// HTTP upgrade handshake (`Upgrade: websocket`, the key and its accept), the
+/// frames, ping/pong and the closing handshake. One socket per id the env
+/// gave it; text frames cross as strings, binary as base64.
+final class SocketHub: NSObject, URLSessionWebSocketDelegate {
+    static let shared = SocketHub()
+    private let lock = NSLock()
+    private var byId: [Int: (task: URLSessionWebSocketTask, bridge: Bridge)] = [:]
+    private var idOf: [Int: Int] = [:]                 // taskIdentifier → id
+    private lazy var session: URLSession = {
+        let c = URLSessionConfiguration.ephemeral
+        c.urlCache = nil
+        return URLSession(configuration: c, delegate: self, delegateQueue: nil)
+    }()
+
+    func open(id: Int, urlStr: String, protocolsJSON: String, bridge: Bridge) {
+        guard let url = URL(string: urlStr) else {
+            bridge.call("__declareWsClose", [id, 1006, "not a url: \(urlStr)", false]); return
+        }
+        let protocols = (protocolsJSON.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String]) ?? []
+        // no subprotocols: the plain task — an empty list sends an empty
+        // Sec-WebSocket-Protocol header, which a server refuses
+        let task = protocols.isEmpty ? session.webSocketTask(with: url) : session.webSocketTask(with: url, protocols: protocols)
+        lock.lock()
+        byId[id] = (task, bridge)
+        idOf[task.taskIdentifier] = id
+        lock.unlock()
+        task.resume()
+        receive(id: id, task: task, bridge: bridge)
+    }
+
+    private func receive(id: Int, task: URLSessionWebSocketTask, bridge: Bridge) {
+        task.receive { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let message):
+                switch message {
+                case .string(let s): bridge.call("__declareWsMessage", [id, s, false])
+                case .data(let d): bridge.call("__declareWsMessage", [id, d.base64EncodedString(), true])
+                @unknown default: break
+                }
+                bridge.needsFrame()
+                self.receive(id: id, task: task, bridge: bridge)
+            case .failure(let error):
+                // a receive fails once the socket is down; report it unless the
+                // close was already reported (the delegate's didCloseWith). A
+                // close frame from the server leaves its code and reason on the
+                // task, and is a clean close, not a failure.
+                if self.forget(id: id) {
+                    if task.closeCode != .invalid {
+                        let text = task.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                        bridge.call("__declareWsClose", [id, task.closeCode.rawValue, text, true])
+                    } else {
+                        bridge.call("__declareWsClose", [id, 1006, error.localizedDescription, false])
+                    }
+                    bridge.needsFrame()
+                }
+            }
+        }
+    }
+
+    /// Drop the id; true if it was still open (so its close is not yet reported).
+    private func forget(id: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard let e = byId.removeValue(forKey: id) else { return false }
+        idOf.removeValue(forKey: e.task.taskIdentifier)
+        return true
+    }
+
+    private func entry(_ task: URLSessionTask) -> (id: Int, bridge: Bridge)? {
+        lock.lock(); defer { lock.unlock() }
+        guard let id = idOf[task.taskIdentifier], let e = byId[id] else { return nil }
+        return (id, e.bridge)
+    }
+
+    func send(id: Int, payload: String, binary: Bool) {
+        lock.lock(); let e = byId[id]; lock.unlock()
+        guard let e else { return }
+        let message: URLSessionWebSocketTask.Message = binary ? .data(Data(base64Encoded: payload) ?? Data()) : .string(payload)
+        e.task.send(message) { [weak self] error in
+            if let error, self?.forget(id: id) == true {
+                e.bridge.call("__declareWsClose", [id, 1006, error.localizedDescription, false])
+                e.bridge.needsFrame()
+            }
+        }
+    }
+
+    func close(id: Int, code: Int, reason: String) {
+        lock.lock(); let e = byId[id]; lock.unlock()
+        guard let e else { return }
+        let c = URLSessionWebSocketTask.CloseCode(rawValue: code) ?? .normalClosure
+        e.task.cancel(with: c, reason: reason.isEmpty ? nil : reason.data(using: .utf8))
+    }
+
+    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        guard let e = entry(webSocketTask) else { return }
+        e.bridge.call("__declareWsOpen", [e.id, `protocol` ?? ""])
+        e.bridge.needsFrame()
+    }
+
+    func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask,
+                    didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        guard let e = entry(webSocketTask), forget(id: e.id) else { return }
+        let text = reason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        e.bridge.call("__declareWsClose", [e.id, closeCode.rawValue, text, true])
+        e.bridge.needsFrame()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        // the upgrade itself refused, or the connection lost before a close frame
+        guard let e = entry(task), forget(id: e.id) else { return }
+        e.bridge.call("__declareWsClose", [e.id, 1006, error?.localizedDescription ?? "the connection closed", false])
+        e.bridge.needsFrame()
     }
 }

@@ -38,11 +38,26 @@ const local = (s, px, py) => s.invertTransform(px - s.x, py - s.y);
 // intervening scroller keeps its wheel; the page's own scroller is the
 // browser's, never this walk's.
 const PRESS = (s) => (s.sink === null ? "passed over — holds no input" : s.pe === "none" ? "passed over — pointerEvents = \"none\"" : null);
-const CURSOR = (s) => (s.cursorStyle !== "" && s.pe !== "none" ? null : "no cursor of its own");
+/** Under the pointer at all, as the browser's hit-testing sees a view on the
+ *  DOM: it takes a press, or shows a cursor of its own (the DOM gives such a
+ *  view `pointer-events: auto` for its cursor alone). */
+const POINTABLE = (s) => s.pe === "none" ? "passed over — pointerEvents = \"none\"" : s.sink !== null || s.cursorStyle !== "" ? null : "neither takes a press nor shows a cursor";
 const WHEEL = (s) => (s.wants?.wantsWheel === true && s.sink !== null) || (scroller(s) && s.pageRoot !== true) ? null : "neither claims the wheel nor scrolls";
-/** The press target under a point in `s`'s parent frame. Its cursor is the
- *  deepest cursor in its subtree under the point — a surface with no sink shows
- *  its cursor while its press passes to the sink beneath it — else its own. */
+/** The cursor shown at a point in `s`'s parent frame, as CSS shows it on the
+ *  DOM: the topmost view there that takes a press or shows a cursor of its own
+ *  shows its own, else the nearest ancestor's — `""` inherits. A view with no
+ *  handler that shows a cursor (a resize edge over a window frame) is that
+ *  topmost view while its press passes to the sink beneath. "" when nothing
+ *  under the point names one. */
+export function cursorAt(s, px, py) {
+    const [lx, ly] = local(s, px, py);
+    for (let u = walkHit(s, lx, ly, SURFACES, POINTABLE); u !== null; u = u.parent)
+        if (u.cursorStyle !== "")
+            return u.cursorStyle;
+    return "";
+}
+/** The press target under a point in `s`'s parent frame, with the cursor
+ *  shown there (cursorAt). */
 export function hitWalk(s, px, py) {
     const [lx, ly] = local(s, px, py);
     const t = walkHit(s, lx, ly, SURFACES, PRESS);
@@ -58,9 +73,7 @@ export function hitWalk(s, px, py) {
             break;
         }
     }
-    const zone = walkHit(t, x, y, SURFACES, CURSOR);
-    const cursor = zone !== null ? zone.cursorStyle : undefined;
-    return { key: t, sink: t.sink, ...t.wants, pinch, x, y, cursor };
+    return { key: t, sink: t.sink, ...t.wants, pinch, x, y, cursor: cursorAt(s, px, py) };
 }
 /** Where a wheel goes, from a point in `s`'s parent frame: delivered to a
  *  claimant ("claimed"), left to a scroller that owns it ("scroller"), or

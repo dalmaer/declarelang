@@ -87,6 +87,9 @@ export class Island extends View {
   declare provides: readonly string[];
   /** @internal the linked tenant's delivery sink (null = nothing linked). */
   tenantSink: TenantSink | null = null;
+  /** @internal the linked Declare tenant — the program focus on this island
+   *  hands the keyboard to (null = none linked). */
+  $tenant: View | null = null;
   /** @internal the values the hosted side exposes, by name (`exposed` reads). */
   readonly exposedValues = new BoundaryValues("exposed");
 
@@ -287,7 +290,9 @@ export function linkIslandTenant(island: Island, tenant: App, box: IslandBox | n
     message: (topic, payload) => fireEvent(tenant, "post", { topic, payload }),
   };
   tenant.hostSink = { message: (topic, payload) => island.$receiveMessage(topic, payload) };
-  undo.push(() => { island.tenantSink = null; tenant.hostSink = null; });
+  island.$tenant = tenant;
+  tenant.$hostIsland = island;
+  undo.push(() => { island.tenantSink = null; tenant.hostSink = null; island.$tenant = null; tenant.$hostIsland = null; });
   return () => { for (const fn of undo.splice(0)) { try { fn(); } catch { /* torn down */ } } };
 }
 

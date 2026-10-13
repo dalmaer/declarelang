@@ -117,6 +117,18 @@ try {
     assert.match(line ?? "", /^JIT: compiling/, `the engine is not compiling — ${line}`);
   });
 
+  // THE REGRESSION THIS PINS: the prelude declared structuredClone for every
+  // host, and the Mac's environment (browser/mac-env.js) did not install it, so
+  // a program that called it ran in the browser and stopped half-booted here —
+  // Stargate's power-on, 2026-10-12. Every value the prelude promises must be
+  // on the host.
+  await test("every host function the prelude promises is here", async () => {
+    const { HOST_VALUE_GLOBALS } = await import("../compiler/dist/scaffold.js");
+    const names = [...HOST_VALUE_GLOBALS];
+    const out = await ctl(`eval JSON.stringify(${JSON.stringify(names)}.filter((n) => typeof globalThis[n] === "undefined"))`);
+    assert.deepEqual(JSON.parse(out ?? "null"), [], "missing on the Mac host — install them in browser/mac-env.js");
+  });
+
   await test("a bundled app carries the JIT entitlement", async () => {
     const apps = [`/Applications/${APP_NAME}.app`, `${process.env.HOME}/Applications/${APP_NAME}.app`,
                   path.join(ROOT, `mac-host/${APP_NAME}.app`)].filter((p) => existsSync(p));

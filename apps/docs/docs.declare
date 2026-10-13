@@ -652,7 +652,10 @@ class Example [ width = 100%,
         card: View [ x = 18, y = 14, width = { parent.width - 30 }, height = { parent.height - 28 },
             cornerRadius = 8, fill = { provided("theme").surface },
             run: AppIsland [ x = 12, y = 12, width = { parent.width - 24 }, height = { parent.height - 24 },
-                program = { classroot.live ? classroot.demo : "" } ]
+                program = { classroot.live ? classroot.demo : "" },
+                focusable = true,
+                onPointerDown() { Focus.focus(this) }   // a press hands the running example the keyboard
+                ]
             ],
 
         // a blue rule (a darker shade of the chipBg box tint) divides the code above from the
@@ -747,7 +750,10 @@ class RunIsland [ width = 100%,
         card: View [ x = 18, y = 14, width = { parent.width - 30 }, height = { parent.height - 28 },
             cornerRadius = 8, fill = { provided("theme").surface },
             run: AppIsland [ x = 12, y = 12, width = { parent.width - 24 }, height = { parent.height - 24 },
-                program = { classroot.live ? classroot.demo : "" } ]
+                program = { classroot.live ? classroot.demo : "" },
+                focusable = true,
+                onPointerDown() { Focus.focus(this) }   // a press hands the running example the keyboard
+                ]
             ],
         divider: View [ x = 0, y = 0, width = 100%, height = 2, fill = { provided("theme").rule } ],
         spine:   View [ x = 0, y = 0, width = 3, height = 100%, fill = { provided("theme").live } ]

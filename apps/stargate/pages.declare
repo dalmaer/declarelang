@@ -2,7 +2,7 @@
 ## The pages between games
 
 When nobody is playing the arcade shows its pages in turn until a game is started: the title
-page (the operator's two lines typed out, the word STARGATE wiped in a column at a time and
+page (the operator's line typed out, the word STARGATE wiped in a column at a time and
 then outlined), a scripted demonstration of catching falling men, four fights flown by
 random numbers, and a page of the enemies. Holding reverse brings up the page of the
 game's secrets. (The arcade's high-score page, its coin page and the power-up tests are
@@ -33,9 +33,9 @@ class Pages extends Rules [ kinds = ["page", "buttons", "notice colour", "title 
 
     page: string = "",                  // "" in a game; or "title", "catch", "fights", "enemies", "secrets"
     shown: string = "",                 // the page the screen holds: the last one drawn on it since it was cleared
-    typed: number = 0,                  // letters of the operator's two lines typed so far
+    typed: number = 0,                  // letters of the operator's line typed so far
     titleColumns: number = 0,           // pixel columns of the word STARGATE drawn so far, of 197
-    titleRow: number = 88,              // its top row
+    titleRow: number = 54,              // its top row
     outlined: number = 0,               // steps of its outlining done: 136 columns, then 72 half rows
     noticed: boolean = false,           // the notices under the title are up
     told: boolean = false,              // the secrets are up
@@ -168,11 +168,12 @@ class Pages extends Rules [ kinds = ["page", "buttons", "notice colour", "title 
     // ── the title page ──
 
     // After a game the lights go down, step by step; coming round again, they go out at
-    // once. Then the screen is cleared; the operator's two lines are typed, a letter every
-    // three passes; the word is wiped in, black on a flashing background; forty passes
-    // later the background goes black, the letters take their colours and the notices go
-    // up; forty after that the word is outlined in red, a pair of pixel columns a pass and
-    // then half a row a pass; and 255 passes later the demonstration begins.
+    // once. Then the screen is cleared; the operator's line is typed, a letter every three
+    // passes, in the time the arcade takes for its two; the word is wiped in, black on a
+    // flashing background; forty passes later the background goes black, the letters take
+    // their colours and the notices go up; forty after that the word is outlined in red, a
+    // pair of pixel columns a pass and then half a row a pass; and then the title is held
+    // (titleHeld) before the demonstration begins.
 
     title(t: Turn) {
         this.allOff()
@@ -197,7 +198,7 @@ class Pages extends Rules [ kinds = ["page", "buttons", "notice colour", "title 
         typed = typed + 1
         if (typed < 50) { t.wait = 3; return }
         game.begin("shake", "shakeFlash")
-        this.beginWipeIn(t, 88, 2, 2, "titleIn")
+        this.beginWipeIn(t, 54, 2, 2, "titleIn")
         },
     titleIn(t: Turn) { this.rest(t, 40, "sign") },
     sign(t: Turn) {
@@ -215,7 +216,19 @@ class Pages extends Rules [ kinds = ["page", "buttons", "notice colour", "title 
         },
     outlining(t: Turn) {
         if (outlined < 208) { outlined = outlined + 1; t.wait = 1; return }
-        this.rest(t, 255, "catch")
+        held = 0
+        this.rest(t, 255, "titleHeld")
+        },
+
+    // The arcade holds the outlined title for one wait of 255 passes, the longest a turn can
+    // wait; the app holds it for four, for the keys lettered under it to be read.
+
+    titleHolds: number = 4,
+    held: number = 0,
+    titleHeld(t: Turn) {
+        held = held + 1
+        if (held < titleHolds) { t.wait = 255; return }
+        this.goOn(t, "catch")
         },
 
     // ── the demonstration: catching men ──

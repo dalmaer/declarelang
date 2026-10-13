@@ -57,6 +57,21 @@ export class FocusService {
     getFocus() {
         return this.current;
     }
+    /** The top-level program's root — the program that has the keyboard while
+     *  nothing is focused (null before one is mounted). */
+    getRoot() {
+        return this.rootView;
+    }
+    /** The program the keyboard goes to (keyboard-follows-focus.md, Rule 1):
+     *  focus on an island hands it to the island's tenant; focus anywhere else,
+     *  to the program whose tree holds the focused view; no focus, to the
+     *  top-level program. */
+    keyboardProgram() {
+        const f = this.current;
+        if (f === null)
+            return this.rootView;
+        return f.$tenant ?? rootOf(f);
+    }
     /** True when the current focus arrived by KEYBOARD (Tab/Shift-Tab) — the
      *  focus-visible modality gate an indicator reads: show for keyboard focus,
      *  stay hidden for pointer/programmatic focus. */
@@ -92,6 +107,11 @@ export class FocusService {
             return;
         }
         if (view === this.current)
+            return;
+        // Focusing an island whose program already holds focus — its tenant's, or
+        // a program nested in that — leaves focus where it is, as focusing an
+        // iframe keeps the focus inside it.
+        if (view !== null && this.current !== null && within(this.current, view))
             return;
         this.changing = true;
         const old = this.current;
@@ -276,6 +296,18 @@ function rootOf(view) {
     while (v.parent instanceof View)
         v = v.parent;
     return v;
+}
+/** Is `node` in a program embedded, at any depth, by `island`? */
+function within(node, island) {
+    for (let p = rootOf(node); p !== null;) {
+        const host = p.$hostIsland ?? null;
+        if (host === null)
+            return false;
+        if (host === island)
+            return true;
+        p = rootOf(host);
+    }
+    return false;
 }
 function isInSubtree(node, ancestor) {
     for (let v = node; v !== null; v = v.parent instanceof View ? v.parent : null) {

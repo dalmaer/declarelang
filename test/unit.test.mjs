@@ -4007,11 +4007,13 @@ await test("DataSource A9: a non-GET method sends body (object→JSON, string ve
     assert.equal(captured.init.method, "PUT");
     assert.equal(captured.init.body, "already-encoded");
     assert.equal(captured.init.headers, undefined);
-    // the default GET sends no RequestInit — a bare url, unchanged
+    // the default GET sends nothing but the signal that lets a newer fetch stop it
     const get = new DataSource();
     get.url = "/data.json";
     await get.fetch();
-    assert.equal(captured.init, undefined, "GET passes no RequestInit");
+    const { signal, ...rest } = captured.init;
+    assert.ok(signal instanceof AbortSignal, "every request can be stopped");
+    assert.deepEqual(rest, {}, "GET passes no method, body or headers");
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -7494,6 +7496,10 @@ async function compileAndBoot(src) {
   assert.notEqual(r.source, null, "compiles: " + r.errors.map((e) => e.message).join("; "));
   const app = instantiate(parseProgram(r.source));
   settle();
+  // the page's program, as a browser mounts it: the keyboard goes to the
+  // top-level program while nothing is focused
+  const { Focus } = await import("../runtime/dist/index.js");
+  Focus.setRoot(app);
   return app;
 }
 

@@ -189,10 +189,32 @@ asks whether a key is held right now — how a click decides whether it extends 
 selection. Several `Keys` members all hear the keyboard; each lives with its owner.
 Keyboard focus itself is in [Controls](declare-docs:guide:controls@keyboard-focus).
 
+A key a view polls with `Keys.isDown` is the program's while that view is shown: the
+browser's own use of the key stands down — Space and the arrows don't scroll the page, a
+letter doesn't start the browser's find — unless Command, Control or Option is held, or a
+text field has focus. A game reads its keys with `Keys.isDown` and gets exactly this.
+
+When a page runs more than one program — another program in an
+[`AppIsland`](declare-docs:AppIsland), as a desktop runs one in each window — the
+keyboard goes where focus is. Focus on a view gives it to that view's program; focus on
+an island gives it to the program inside; with nothing focused, the outer program has it.
+Only that program's `Keys` members hear keys, and its `Keys.isDown` alone answers yes. A
+host hands a program the keyboard by focusing its island (a focusable island, and
+`onPointerDown() { Focus.focus(this) }`), and a program can take it by focusing one of
+its own views. A key held as the keyboard moves on is released, for the program that
+had it.
+
+## Files dropped on a view
+
+A view that declares [`onFilesDrop`](declare-docs:View.event.filesDrop) takes the person's files dragged onto it — the
+deepest such view under the drag, as with a press — with `onFilesOver` and `onFilesOut` to
+light it while they are over it. What a file is, and what to do with one, is in
+[Data](declare-docs:guide:data@files).
+
 ---
 
 **What you can now do:** style from hover and press, route behavior by calling methods,
 choose between the raw and resolved layers, let one view carry a drag and a click, find
-what is under the pointer, and handle keys.
+what is under the pointer, handle keys, and take the person's files.
 
 [Next: **Touch and gestures** →](declare-docs:guide:touch)

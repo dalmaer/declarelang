@@ -31,6 +31,10 @@ article: DataSource [ url = "guide.md", format = "text" ],
 doc: Markdown [ visible = { article.loaded }, text = { article.value || "" } ]
 ```
 
+`"bytes"` delivers the body as a `Uint8Array` — data the program reads itself, a level
+file or a recording's samples. Pictures, sounds and video are not this: `Image`, `Audio`
+and `Video` load their own.
+
 ## url
 The resource URL — a literal or a `{ }` constraint, so the source **re-points reactively**:
 change a dependency (a zip, a filter) and the *next* `fetch()` hits the new URL. Setting
@@ -43,7 +47,7 @@ to you, so you decide *when* (usually in `onInit`, or on a user action). Calling
 re-fetches — `loading` for the duration, `loaded` and `value` untouched until the new
 data lands. It settles before it sends, so a handler that changes what `url` or `body`
 derives from and then calls `fetch()` sends the new request. A later call supersedes an
-earlier one, whose reply is dropped. It returns a `Promise` that never rejects — a failure
+earlier one: that request is stopped, and its reply never arrives. It returns a `Promise` that never rejects — a failure
 lands in `failed` and `error` — but the flags and `onLoad` are the idiomatic path.
 
 ## auto
@@ -121,8 +125,9 @@ focusing the first result, chaining a follow-up fetch, announcing to a screen re
 
 ## clear()
 Returns the source to never-fetched — drops `value` (so `loaded` falls), `error`, and the
-request flags. For resetting a search field's results, or releasing a large response you
-no longer need.
+request flags, and stops a request in flight. For resetting a search field's results,
+cancelling a load the person no longer wants, or releasing a large response you no longer
+need.
 
 ## loaded
 Data is present: `value` is not null. True from the first arrival on and **stays
@@ -158,3 +163,10 @@ What the server said when it refused — parsed if it was JSON, the raw text oth
 `null` if the body was empty. This is the part that names *which* field failed or *when*
 the rate limit resets; a refusal reported as a status number alone throws it away.
 `value` is untouched by a failure, so the last good data is still there.
+
+## responseHeaders
+The headers of the last reply, as a record with lowercased names —
+`data.responseHeaders["etag"]`, `["link"]` for the next page, `["retry-after"]` on a refusal.
+Set with `statusCode` on every reply, a refusal's included; `null` before one, and after
+`clear()`. Which headers a browser lets a page read from another origin is that server's
+to say (its `Access-Control-Expose-Headers`).

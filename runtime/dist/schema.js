@@ -369,7 +369,9 @@ const ViewSchema = {
     events: ["click", "dblClick", "hold", "pointerDown", "pointerUp", "pointerMove", "pointerOver", "pointerOut",
         "touchStart", "touchMove", "touchEnd", "touchCancel", "wheel",
         "pinchStart", "pinch", "pinchEnd",
-        "retire", "contextMenu", "focus", "blur", "escapeFocus", "keyDown", "keyUp"],
+        "retire", "contextMenu", "focus", "blur", "escapeFocus", "keyDown", "keyUp",
+        // files dragged over the view, leaving it, dropped on it (files.ts)
+        "filesOver", "filesOut", "filesDrop"],
     // (`init` is INHERITED from Node now — the faceless tier's lifecycle,
     // 2026-08-20; re-listing it here doubled it in the handlers-it-knows error)
 };
@@ -994,8 +996,8 @@ const DataSourceSchema = {
     base: DatasetSchema,
     attrs: {
         url: { kind: "string" },
-        // "json" (default) or "text" — what the fetched bytes are (data.ts).
-        format: literalUnion("json", "text"),
+        // "json" (default), "text" or "bytes" — what the fetched bytes are (data.ts).
+        format: literalUnion("json", "text", "bytes"),
         // "GET" (default) or a body-carrying verb — a non-GET sends `body` (A9).
         method: literalUnion("GET", "POST", "PUT", "PATCH", "DELETE"),
         // the non-GET request payload: an object/array (JSON-encoded) or a string.
@@ -1031,8 +1033,10 @@ const DataSourceSchema = {
         error: { kind: "string" },
         statusCode: { kind: "number" },
         errorBody: { kind: "object" },
+        // the reply's headers, names lowercased; null before a reply
+        responseHeaders: { kind: "object" },
     },
-    readOnly: ["loaded", "loading", "failed", "error", "statusCode", "errorBody"],
+    readOnly: ["loaded", "loading", "failed", "error", "statusCode", "errorBody", "responseHeaders"],
     // fired when a fetch lands, after value+flags settle — the imperative
     // arrival hook (constraints keep deriving from .loaded)
     events: ["load"],
@@ -1203,6 +1207,14 @@ const EventStreamSchema = {
         // the contract: you hear what you listen to. Unnamed (default) messages
         // always arrive.
         listenTo: { kind: "array", of: "string" },
+        // the request, when the stream is the reply to one (an AI model's answer
+        // streamed back from a POST): the verb, headers, body and credentials
+        // mode, as a DataSource sends them. A plain GET with none of these is the
+        // platform's EventSource.
+        method: literalUnion("GET", "POST", "PUT", "PATCH", "DELETE"),
+        headers: { kind: "object" },
+        body: { kind: "object" },
+        credentials: enumType("Credentials", "omit", "sameOrigin", "include"),
     },
 };
 const SocketSchema = {
@@ -1374,6 +1386,8 @@ export const EVENT_PAYLOAD = {
     geometry: "FocusGeometry",
     tooltip: "TooltipEvent",
     message: "StreamMessage", // Stream: data/type/id (streams.ts)
+    filesOver: "FilesOver", // View: files dragged over it — how many, where (files.ts)
+    filesDrop: "FilesDrop", // View: the files dropped on it, and where
     post: "IslandPost", // Island bridge: { topic, payload } (view.ts)
     navigate: "IslandNavigation", // Island: a hosted program's navigation (island.ts)
     // payload-free: focus, blur, escapeFocus, init, enter, load, ready,

@@ -40,6 +40,12 @@ The window frame, activation, and titling belong to the caller — a desktop win
 adds an `onPointerDown` that raises itself and reads `childName` for its title; the
 homepage and the viewer just size the box. This primitive is only the embedding.
 
+**The keyboard goes where focus is.** The program inside hears keys while focus is on the
+island or on one of its own views, and the host hears none then. Make the island
+`focusable` and focus it on a press (`onPointerDown() { Focus.focus(this) }`) to hand the
+program the keyboard; focusing an island whose program already holds focus leaves that
+focus where it is.
+
 ## program
 What to run: the program's path without its `.declare`, relative to the program that
 names it like any address in a program (`"player"` is `player.declare` beside it, and

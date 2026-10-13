@@ -38,6 +38,7 @@
 // datapointer objects, and string-event plumbing are exactly what this
 // module's plain-JSON + region-cells design sheds (APPROACH §2/§6).
 
+import { formBody } from "./files.js";
 import { mapUrl } from "./asset-base.js";
 import { Node, authoredName } from "./node.js";
 import { Cell, isTracking, noteOrigin, settle } from "./reactive.js";
@@ -736,11 +737,12 @@ const FETCH_CREDENTIALS: Record<string, RequestCredentials> = {
 
 export class DataSource extends Dataset {
   declare url: string;
-  /** What the bytes ARE: "json" (the default — parsed, `:path` navigable) or
-   *  "text" (the raw string as `value` — a Markdown article, a source file).
-   *  Text is a first-class material: an authored .md is fetched directly, no
-   *  JSON-wrapping projection beside it. */
-  declare format: "json" | "text";
+  /** What the bytes ARE: "json" (the default — parsed, `:path` navigable),
+   *  "text" (the raw string as `value` — a Markdown article, a source file), or
+   *  "bytes" (the raw bytes as a Uint8Array — data the program reads itself;
+   *  pictures and sounds have their own views). Text is a first-class material:
+   *  an authored .md is fetched directly, no JSON-wrapping projection beside it. */
+  declare format: "json" | "text" | "bytes";
   /** The HTTP method — "GET" (the default) or a body-carrying verb. A non-GET
    *  request sends `body`, so a Declare app can POST to a real REST API without
    *  a backend-for-frontend shim (field report A9). */
@@ -793,6 +795,10 @@ export class DataSource extends Dataset {
    *  decision can read the code without any of the three fighting. */
   declare statusCode: number;
   declare errorBody: unknown;
+  /** The reply's headers, names lowercased — `{ "content-type": …, "etag": … }`
+   *  — the paging link, the rate limit, the version tag. Set with `statusCode`
+   *  on every reply, a refusal's included; null before one. */
+  declare responseHeaders: Record<string, string> | null;
 
   /** A document is present. True from the first arrival on, through every
    *  later fetch (a refetch never drops it — `value` keeps the last good
@@ -828,6 +834,9 @@ export class DataSource extends Dataset {
   /** Discards a superseded request: only the latest fetch/clear may land
    *  (the Image loader's sequence discipline). */
   private seq = 0;
+  /** The request in flight, to stop when a newer one supersedes it or clear()
+   *  drops it — so a stale reply is not merely ignored but never downloaded. */
+  private inFlight: AbortController | null = null;
 
   /** The fetch init from `method`/`body`/`credentials`. A GET with
    *  `credentials` unset (or `sameOrigin`, its own default) sends neither —
@@ -891,9 +900,30 @@ export class DataSource extends Dataset {
     setBound(this, "error", null);
     setBound(this, "statusCode", 0);
     setBound(this, "errorBody", null);
+    setBound(this, "responseHeaders", null);
+    this.inFlight?.abort();
+    const ctl = typeof AbortController === "function" ? new AbortController() : null;
+    this.inFlight = ctl;
+    const init = this.$requestInit();
     try {
-      const res = await transport(url, this.$requestInit());
-      if (seq === this.seq) setBound(this, "statusCode", res.status);
+      // a body holding the person's files goes as a form, a file in each file
+      // part (files.ts); its multipart Content-Type is the platform's to set
+      if (init?.method !== undefined && this.body != null) {
+        const form = await formBody(this.body);
+        if (form !== null) {
+          init.body = form;
+          if (init.headers !== undefined) {
+            const h = { ...(init.headers as Record<string, string>) };
+            for (const k of Object.keys(h)) if (k.toLowerCase() === "content-type") delete h[k];
+            init.headers = h;
+          }
+        }
+      }
+      const res = await transport(url, ctl === null ? init : { ...init, signal: ctl.signal });
+      if (seq === this.seq) {
+        setBound(this, "statusCode", res.status);
+        setBound(this, "responseHeaders", headerRecord(res.headers));
+      }
       if (!res.ok) {
         // The BODY of a refusal is the part that says why — the field that
         // failed, the rate-limit reset, the validation list. Throwing on the
@@ -908,8 +938,11 @@ export class DataSource extends Dataset {
         if (seq === this.seq) setBound(this, "errorBody", parseProblem(raw));
         throw new Error(`HTTP ${res.status} for ${url}`);
       }
-      const value: unknown = this.format === "text" ? await res.text() : await res.json();
+      const value: unknown = this.format === "text" ? await res.text()
+        : this.format === "bytes" ? new Uint8Array(await res.arrayBuffer())
+        : await res.json();
       if (seq !== this.seq) return; // superseded
+      if (this.inFlight === ctl) this.inFlight = null;
       // Validate on receipt (B4, language §9): malformed data lands in
       // `.failed`/`.error` with the pointed path — never `undefined` three
       // layers into a binding. Schema presence is the only switch.
@@ -935,7 +968,8 @@ export class DataSource extends Dataset {
         }
       }
     } catch (e) {
-      if (seq !== this.seq) return;
+      if (seq !== this.seq) return; // superseded (or stopped by clear()): nothing to report
+      if (this.inFlight === ctl) this.inFlight = null;
       noteOrigin(`${sourceLabel(this)} failed`, this);
       setBound(this, "error", e instanceof Error ? e.message : String(e));
       setBound(this, "failed", true);
@@ -947,13 +981,25 @@ export class DataSource extends Dataset {
    *  declaratively"): no document, so `loaded` drops; no request, no failure. */
   clear(): void {
     this.seq++;
+    this.inFlight?.abort();
+    this.inFlight = null;
     setBound(this, "value", null);
     setBound(this, "error", null);
     setBound(this, "statusCode", 0);
     setBound(this, "errorBody", null);
+    setBound(this, "responseHeaders", null);
     setBound(this, "loading", false);
     setBound(this, "failed", false);
   }
+}
+
+/** A reply's headers as a plain record, names lowercased — what
+ *  `responseHeaders` reads. null when the transport gave none (a test stub). */
+function headerRecord(h: unknown): Record<string, string> | null {
+  if (h == null || typeof (h as { forEach?: unknown }).forEach !== "function") return null;
+  const out: Record<string, string> = {};
+  (h as { forEach(fn: (v: string, k: string) => void): void }).forEach((v, k) => { out[String(k).toLowerCase()] = String(v); });
+  return out;
 }
 
 /** "DataSource 'weather'" — the source as a trace or a report names it. */
@@ -978,6 +1024,7 @@ defineAttributes(DataSource, {
   // code, so a constraint can tell "not asked" from "asked and refused".
   statusCode: { def: 0 },
   errorBody: { def: null },
+  responseHeaders: { def: null },
 });
 
 /** Turn a `datapath = { expr }` result into a place. The value must be a

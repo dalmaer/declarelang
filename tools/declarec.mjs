@@ -343,6 +343,7 @@ async function precompileBodies(program) {
   const slots = new Map();
   const slot = (key, fn) => { let i = slots.get(key); if (i === undefined) { i = fns.length; fns.push(fn); slots.set(key, i); } return i; };
   const seen = new Set();
+  const keyed = new Set();   // slots whose body names Keys (expr.ts askingKeys)
   const walk = (v) => {
     if (v === null || typeof v !== "object" || seen.has(v)) return;
     seen.add(v);
@@ -350,7 +351,11 @@ async function precompileBodies(program) {
     if (v.kind === "code" && typeof v.src === "string" && v.src.charCodeAt(0) !== 0) {
       const r = rewriteDatapaths(v.src);
       const body = "error" in r ? null : `return (${r.src}\n);`;
-      if (body !== null && parses(["parent", "classroot"], body)) v.src = "\u0000" + slot("e\u0000" + v.src, `function(parent, classroot) { ${body} }`);
+      if (body !== null && parses(["parent", "classroot"], body)) {
+        const src = v.src;
+        v.src = "\u0000" + slot("e\u0000" + src, `function(parent, classroot) { ${body} }`);
+        if (/\bKeys\b/.test(r.src)) keyed.add(parseInt(v.src.slice(1), 10));
+      }
     }
     if (Array.isArray(v.methods)) for (const m of v.methods) {
       if (m === null || typeof m !== "object" || typeof m.body !== "string" || m.body.charCodeAt(0) === 0) continue;
@@ -359,6 +364,7 @@ async function precompileBodies(program) {
       const body = "error" in r ? null : `{ ${r.src}\n }`;
       if (body !== null && parses(["parent", "classroot", "$base", ...params], body)) {
         m.body = "\u0000" + slot("m\u0000" + params.join("\u001f") + "\u0000" + m.body, `function(parent, classroot, $base${params.map((q) => ", " + q).join("")}) { ${body} }`);
+        if (/\bKeys\b/.test(r.src)) keyed.add(parseInt(m.body.slice(1), 10));
       }
     }
     for (const k of Object.keys(v)) walk(v[k]);
@@ -368,7 +374,7 @@ async function precompileBodies(program) {
   scripts.forEach((sc, i) => { sc.src = "\u0000" + i; sc.compiled = true; });   // each token evaluates alone
   return `function $makeBodies($d, $s) {\n${prelude}\nreturn [\n${fns.join(",\n")}\n];\n}\n` +
     `const $scripts = [${scriptFns.join(",\n")}];\n` +
-    `providePrecompiled($makeBodies, $scripts);\n`;
+    `providePrecompiled($makeBodies, $scripts, ${JSON.stringify([...keyed].sort((a, b) => a - b))});\n`;
 }
 
 

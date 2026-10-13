@@ -128,7 +128,7 @@ App [ width=1, height=1, t: Text [ text = { "" + two(5) } ] ]`);
 await test("the delimiter crossings name their rewrite — braces hold the code, brackets hold the files", async () => {
   const say = async (src) => (await compile(src + "\nApp [ width=1, height=1 ]")).errors[0]?.message ?? "clean";
   assert.match(await say(`script { "helpers.ts" }`), /holds one string and no code — braces hold the script ITSELF; for script from a file write script \[ "helpers\.ts" \]/);
-  assert.match(await say(`script [ helpers ]`), /a script file path is a quoted string — script \[ "helpers\.ts" \]; for inline code, braces hold the script itself/);
+  assert.match(await say(`script [ helpers ]`), /a script takes file paths and host — script \[ "helpers\.ts" \], script \[ host = browser \] \{ … \}; for inline code on every host, braces alone: script \{ … \}/);
   assert.match(await say(`script { "not a path" }`), /a lone string does nothing/);
 });
 

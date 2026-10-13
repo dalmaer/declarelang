@@ -44,9 +44,31 @@ export type EventSourceFactory = (
 ) => StreamHandle;
 export type SocketFactory = (url: string, cb: StreamCallbacks) => StreamHandle;
 
+/** What an EventStream asks of its request when it is more than a plain GET:
+ *  the verb, the headers, the body (already encoded) and the credentials mode
+ *  — the same four a DataSource sends. */
+export interface StreamRequest {
+  method: string;
+  headers: Record<string, string>;
+  body: string | null;
+  credentials?: "omit" | "same-origin" | "include";
+}
+
+/** One request whose reply is an event stream, read as it arrives: open when
+ *  the reply's head is good, a message per event, and a final end when the
+ *  reply ends (a request is not replayed — `retry` is the author's to declare). */
+export type RequestStreamFactory = (
+  url: string,
+  req: StreamRequest,
+  listen: readonly string[],
+  cb: StreamCallbacks
+) => StreamHandle;
+
 export interface StreamFactories {
   eventSource: EventSourceFactory;
   socket: SocketFactory;
+  /** Absent = the platform fetch (streams.ts requestStreamOverFetch). */
+  request?: RequestStreamFactory;
 }
 
 // ── The browser defaults ─────────────────────────────────────────────────────
@@ -94,6 +116,8 @@ function browserSocket(url: string, cb: StreamCallbacks): StreamHandle {
   return { close: () => ws.close(), send: (t) => ws.send(t) };
 }
 
+// No default `request`: the fetch-based reader lives with the classes
+// (streams.ts), so an app that declares no stream ships none of it.
 let factories: StreamFactories = { eventSource: browserEventSource, socket: browserSocket };
 
 /** Swap the connection factories (headless installs refusers; tests install
@@ -103,6 +127,13 @@ export function provideStreams(f: StreamFactories): StreamFactories {
   const prev = factories;
   factories = f;
   return prev;
+}
+
+/** Is `eventSource` still the browser default (not a host's or a test's)? —
+ *  where there is no EventSource to back it, a plain GET stream reads over
+ *  fetch instead (streams.ts). */
+export function defaultEventSource(): boolean {
+  return factories.eventSource === browserEventSource;
 }
 
 /** The pair in force — what a Stream dials through (streams.ts). */

@@ -33,7 +33,7 @@
 
 import { Node, onDiscard } from "./node.js";
 import { defineAttributes, setBound } from "./attributes.js";
-import { currentStreams, type StreamCallbacks, type StreamHandle } from "./stream-seam.js";
+import { currentStreams, defaultEventSource, type StreamCallbacks, type StreamHandle, type StreamRequest } from "./stream-seam.js";
 
 // ── The classes ───────────────────────────────────────────────────────────
 
@@ -228,26 +228,67 @@ defineAttributes(Stream as never, {
   last: { def: "" },
 } as never);
 
-/** SSE (`text/event-stream`), receive-only. The platform's EventSource is
- *  kept verbatim — its retry (the server's `retry:` hint) and Last-Event-ID
- *  resume are the best implementation of its own behavior. */
+/** SSE (`text/event-stream`), receive-only. A plain GET keeps the platform's
+ *  EventSource verbatim — its retry (the server's `retry:` hint) and
+ *  Last-Event-ID resume are the best implementation of its own behavior. A
+ *  stream that is the reply to a REQUEST — another verb, headers, a body, a
+ *  credentials mode: the four a DataSource sends — is one request read as its
+ *  reply arrives (stream-seam.ts browserRequestStream), which EventSource
+ *  cannot make: it sends a bare GET with no headers. A request is not replayed
+ *  when its reply ends; `retry` says whether to ask again. */
 export class EventStream extends Stream {
   /** The named SSE event types to deliver (`listenTo = ["progress",
    *  "done"]`) — EventSource physically cannot hear a named `event:`
    *  it was not asked for (streams.md §2). Unnamed messages always arrive. */
   declare listenTo: readonly string[];
+  declare method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  declare headers: Record<string, unknown> | null;
+  declare body: unknown;
+  declare credentials: "omit" | "sameOrigin" | "include";
 
   protected $dial(cb: StreamCallbacks): StreamHandle {
     // a data-borne list could carry non-strings; dial only what is dialable
     const listen = this.listenTo.filter((s) => typeof s === "string" && s !== "");
-    return currentStreams().eventSource(this.url, listen, cb);
+    const f = currentStreams();
+    let req = this.$request();
+    // a host with fetch but no EventSource (the native host) reads a plain GET
+    // stream as the reply to one — without EventSource's own retry and resume
+    if (req === null && typeof EventSource !== "function" && defaultEventSource()) req = { method: "GET", headers: {}, body: null };
+    if (req === null) return f.eventSource(this.url, listen, cb);
+    return (f.request ?? requestStreamOverFetch)(this.url, req, listen, cb);
+  }
+
+  /** The request, when this stream is more than a plain GET; null when it is
+   *  one. Encoded as a DataSource encodes its own: an object body as JSON with
+   *  a JSON Content-Type, a string verbatim; an empty header value drops it. */
+  private $request(): StreamRequest | null {
+    const method = (this.method || "GET").toUpperCase();
+    const headers: Record<string, string> = {};
+    let body: string | null = null;
+    if (method !== "GET" && this.body != null) {
+      if (typeof this.body === "string") body = this.body;
+      else { body = JSON.stringify(this.body); headers["Content-Type"] = "application/json"; }
+    }
+    const authored = this.headers;
+    if (authored !== null && typeof authored === "object") {
+      for (const [k, v] of Object.entries(authored)) if (v != null && v !== "") headers[k] = String(v);
+    }
+    const credentials = this.credentials === "omit" ? "omit" : this.credentials === "include" ? "include" : undefined;
+    if (method === "GET" && Object.keys(headers).length === 0 && credentials === undefined) return null;
+    return { method, headers, body, ...(credentials !== undefined ? { credentials } : {}) };
   }
 }
 
+const readdress = (s: unknown): void => (s as unknown as { $readdressed(): void }).$readdressed();
 defineAttributes(EventStream as never, {
   // listeners attach at construction, so changing what you listen to is a
   // readdress: close and reopen with the new set
-  listenTo: { def: Object.freeze([]), push: (s: unknown) => (s as unknown as { $readdressed(): void }).$readdressed() },
+  listenTo: { def: Object.freeze([]), push: readdress },
+  // the request: a change asks again, as a new url does
+  method: { def: "GET", push: readdress },
+  headers: { def: null, push: readdress },
+  body: { def: null, push: readdress },
+  credentials: { def: "sameOrigin", push: readdress },
 } as never);
 
 /** WebSocket: the same surface plus `send`. Text frames only in v1 (ruled;
@@ -267,4 +308,67 @@ export class Socket extends Stream {
     setBound(this, "error", "send(…) on a socket that is not open — nothing was sent (gate on .open, or send from onOpen)");
     this.$fire("onError");
   }
+}
+
+/** The request stream over fetch (the seam's `request` when a host gives none): the reply's body read chunk by chunk and
+ *  parsed as server-sent events (the WHATWG event-stream format: `data:` lines
+ *  joined, `event:` names the type, `id:` the last-event-id, a blank line
+ *  dispatches; an event cut off by the end of the reply is dropped, as the
+ *  format says). A named event is delivered only when listened to, as with
+ *  EventSource. A refusal ends the stream with its status and what it said. */
+function requestStreamOverFetch(url: string, req: StreamRequest, listen: readonly string[], cb: StreamCallbacks): StreamHandle {
+  const ctl = new AbortController();
+  let closed = false;
+  const init: RequestInit = { method: req.method, headers: req.headers, signal: ctl.signal };
+  if (req.body !== null) init.body = req.body;
+  if (req.credentials !== undefined) init.credentials = req.credentials;
+  (async () => {
+    const res = await globalThis.fetch(url, init);
+    if (!res.ok) {
+      let said = "";
+      try { said = (await res.text()).trim().slice(0, 300); } catch { said = ""; }
+      cb.end(`HTTP ${res.status} for ${url}${said !== "" ? ` — ${said}` : ""}`, true);
+      return;
+    }
+    if (res.body === null) { cb.end(`no reply body from ${url}`, true); return; }
+    cb.open();
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "", data: string[] = [], type = "", id = "";
+    const line = (l: string): void => {
+      if (l === "") {
+        if (data.length > 0) {
+          const t = type === "" ? "message" : type;
+          if (t === "message" || listen.includes(t)) cb.message({ data: data.join("\n"), type: t, id });
+        }
+        data = []; type = "";
+        return;
+      }
+      if (l.startsWith(":")) return;                                // a comment
+      const colon = l.indexOf(":");
+      const field = colon < 0 ? l : l.slice(0, colon);
+      let value = colon < 0 ? "" : l.slice(colon + 1);
+      if (value.startsWith(" ")) value = value.slice(1);
+      if (field === "data") data.push(value);
+      else if (field === "event") type = value;
+      else if (field === "id" && !value.includes("\0")) id = value;
+    };
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let nl: number;
+      while ((nl = buf.search(/\r\n|\r|\n/)) >= 0) {
+        if (nl === buf.length - 1 && buf[nl] === "\r") break;     // its \n may be in the next chunk
+        const sep = buf.startsWith("\r\n", nl) ? 2 : 1;
+        line(buf.slice(0, nl));
+        buf = buf.slice(nl + sep);
+      }
+    }
+    if (!closed) cb.end("", true);
+  })().catch((e: unknown) => {
+    if (closed) return;
+    cb.end(e instanceof Error ? e.message : String(e), true);
+  });
+  return { close: () => { closed = true; ctl.abort(); } };
 }

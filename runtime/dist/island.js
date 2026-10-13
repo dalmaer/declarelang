@@ -46,6 +46,9 @@ export class Island extends View {
     $eagerSurface() { return true; }
     /** @internal the linked tenant's delivery sink (null = nothing linked). */
     tenantSink = null;
+    /** @internal the linked Declare tenant — the program focus on this island
+     *  hands the keyboard to (null = none linked). */
+    $tenant = null;
     /** @internal the values the hosted side exposes, by name (`exposed` reads). */
     exposedValues = new BoundaryValues("exposed");
     /** The host's read of a value the hosted side EXPOSES — a Declare tenant's
@@ -248,7 +251,9 @@ export function linkIslandTenant(island, tenant, box = null) {
         message: (topic, payload) => fireEvent(tenant, "post", { topic, payload }),
     };
     tenant.hostSink = { message: (topic, payload) => island.$receiveMessage(topic, payload) };
-    undo.push(() => { island.tenantSink = null; tenant.hostSink = null; });
+    island.$tenant = tenant;
+    tenant.$hostIsland = island;
+    undo.push(() => { island.tenantSink = null; tenant.hostSink = null; island.$tenant = null; tenant.$hostIsland = null; });
     return () => { for (const fn of undo.splice(0)) {
         try {
             fn();

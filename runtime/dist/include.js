@@ -54,7 +54,7 @@ export async function spliceScriptFiles(source, refs, spans, fromDir, host, erro
     // One directive may name several files; its span is replaced by their blocks
     // in order. Group refs to spans by position: a ref belongs to the last span
     // that starts before it.
-    const bySpan = (spans ?? []).map((s) => ({ span: s, texts: [], files: [] }));
+    const bySpan = (spans ?? []).map((s) => ({ span: s, texts: [], files: [], opens: [] }));
     for (const ref of refs ?? []) {
         let home = bySpan[0];
         for (const b of bySpan)
@@ -75,8 +75,12 @@ export async function spliceScriptFiles(source, refs, spans, fromDir, host, erro
         // against the program's directory. Rewrite each relative specifier onto
         // the file's dir so the bundle reads the file the author meant.
         body = body.replace(/(\bfrom\s+|\bimport\s*\(\s*)(["'])(\.{1,2}\/[^"']*)\2/g, (_m, lead, q, spec) => `${lead}${q}${joinPath(resolved.dir, spec)}${q}`);
-        home.texts.push(`script {\n${body}\n}`);
+        // a marked file keeps its mark on the block it becomes
+        const open = ref.hosts !== undefined && ref.hosts.length > 0
+            ? `script [ host = ${ref.hosts.length === 1 ? ref.hosts[0] : `[${ref.hosts.join(", ")}]`} ] {\n` : "script {\n";
+        home.texts.push(`${open}${body}\n}`);
         home.files.push(resolved.canonical);
+        home.opens.push(open.length);
     }
     // ONE back-to-front pass over splices and excisions together: every span is
     // in the ORIGINAL text's coordinates, and applying either kind first would
@@ -84,7 +88,7 @@ export async function spliceScriptFiles(source, refs, spans, fromDir, host, erro
     const edits = [
         ...bySpan.map((b) => {
             let at = 0;
-            const files = b.texts.map((t, i) => { const f = { at, file: b.files[i] }; at += t.length + 2; return f; });
+            const files = b.texts.map((t, i) => { const f = { at, file: b.files[i], open: b.opens[i] }; at += t.length + 2; return f; });
             return { start: b.span.start, end: b.span.end, was: source.slice(b.span.start, b.span.end), text: b.texts.join("\n\n"), files };
         }),
         ...excise.map((s) => ({ start: s.start, end: s.end, was: source.slice(s.start, s.end), text: "", files: [] })),

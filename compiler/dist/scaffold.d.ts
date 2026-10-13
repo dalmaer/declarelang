@@ -19,6 +19,11 @@ export declare const PRELUDE_NAMES: ReadonlySet<string>;
  *  is what makes a NEW language-owned name fail the gate instead of shipping
  *  undocumented. Add a name here only when the host owns it. */
 export declare const HOST_GLOBALS: ReadonlySet<string>;
+/** The host names a program can CALL or construct — those the prelude declares as
+ *  a value (function, class, const, var), not only as a type. Every host must
+ *  provide each one; the Mac host's smoke test holds it to that
+ *  (test/mac-shell.test.mjs), so a name added here cannot ship without it. */
+export declare const HOST_VALUE_GLOBALS: ReadonlySet<string>;
 /** One AttrType (value.ts) → its TypeScript type, mirroring the value model.
  *  Enum and record arms reference a NAMED type (`type Stretch = …`, `Theme`)
  *  emitted in the prelude / near-use; class references the peer

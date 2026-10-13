@@ -61,15 +61,28 @@ export declare abstract class Stream extends Node {
      *  declared — pay-per-use, like every source. */
     protected $fire(name: string, arg?: unknown): void;
 }
-/** SSE (`text/event-stream`), receive-only. The platform's EventSource is
- *  kept verbatim — its retry (the server's `retry:` hint) and Last-Event-ID
- *  resume are the best implementation of its own behavior. */
+/** SSE (`text/event-stream`), receive-only. A plain GET keeps the platform's
+ *  EventSource verbatim — its retry (the server's `retry:` hint) and
+ *  Last-Event-ID resume are the best implementation of its own behavior. A
+ *  stream that is the reply to a REQUEST — another verb, headers, a body, a
+ *  credentials mode: the four a DataSource sends — is one request read as its
+ *  reply arrives (stream-seam.ts browserRequestStream), which EventSource
+ *  cannot make: it sends a bare GET with no headers. A request is not replayed
+ *  when its reply ends; `retry` says whether to ask again. */
 export declare class EventStream extends Stream {
     /** The named SSE event types to deliver (`listenTo = ["progress",
      *  "done"]`) — EventSource physically cannot hear a named `event:`
      *  it was not asked for (streams.md §2). Unnamed messages always arrive. */
     listenTo: readonly string[];
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+    headers: Record<string, unknown> | null;
+    body: unknown;
+    credentials: "omit" | "sameOrigin" | "include";
     protected $dial(cb: StreamCallbacks): StreamHandle;
+    /** The request, when this stream is more than a plain GET; null when it is
+     *  one. Encoded as a DataSource encodes its own: an object body as JSON with
+     *  a JSON Content-Type, a string verbatim; an empty header value drops it. */
+    private $request;
 }
 /** WebSocket: the same surface plus `send`. Text frames only in v1 (ruled;
  *  binary is a later attribute if a real project needs it). */

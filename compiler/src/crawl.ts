@@ -165,7 +165,7 @@ async function bootAt(program: Program, opts: CrawlOptions, location: string, re
   const refuseStream = (url: string): never => {
     throw new Error(`crawl refused stream connection — ${url} (streams are never indexed)`);
   };
-  const prevStreams = provideStreams({ eventSource: refuseStream, socket: refuseStream });
+  const prevStreams = provideStreams({ eventSource: refuseStream, socket: refuseStream, request: refuseStream });
   try {
     const app = buildProgram(program, { provides: opts.provides });
     app.$attach(new HeadlessBackend(), null);
@@ -291,7 +291,7 @@ async function warmSession(program: Program, opts: CrawlOptions, refusals: Map<s
   const refuseStream = (url: string): never => {
     throw new Error(`crawl refused stream connection — ${url} (streams are never indexed)`);
   };
-  const prevStreams = provideStreams({ eventSource: refuseStream, socket: refuseStream });
+  const prevStreams = provideStreams({ eventSource: refuseStream, socket: refuseStream, request: refuseStream });
   const app = buildProgram(program, { provides: opts.provides });
   app.$attach(new HeadlessBackend(), null);
   app.hostWidth = env.hostWidth;

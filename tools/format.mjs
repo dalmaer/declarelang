@@ -521,13 +521,21 @@ function analyze(tokens) {
     const members = [];
     while (tok().kind !== "rb" && tok().kind !== "eof") {
       if (tok().kind !== "string" && tok().kind !== "ident") fail(`a ${entry} entry`);
-      members.push({ kind: "attr", start: idx(), end: idx() });
+      const start = idx();
+      // a script's `host = browser` / `host = [browser, mac]`: one member, kept on its line
+      if (entry === "script" && tok().kind === "ident" && tok(1).raw === "=") {
+        p += 2;
+        if (tok().kind === "lb") while (tok().kind !== "rb" && tok().kind !== "eof") p++;
+      }
+      members.push({ kind: "attr", start, end: idx() });
       p++;
       if (tok().kind === "comma") p++; else break;
     }
     tokens[idx()].role = "body";
     const close = expect("rb", "']'");
     bodies.push({ open, close, members, topLevel: true, directive: true });
+    // `script [ host = browser ] { … }` — the body follows, opaque TS as ever
+    if (entry === "script" && tok().kind === "code") p++;
     return close;
   }
 

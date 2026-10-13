@@ -41,6 +41,12 @@ uninstantiable base):
   inherit it checkably), absent from the tag registry (so it cannot be
   instantiated) — exactly as `TextInput extends Editor`.
 - **`EventStream extends Stream`** — SSE (`text/event-stream`). Receive-only.
+  A plain GET is the platform's `EventSource`; a stream that is the **reply to
+  a request** declares the request as a `DataSource` does (`method`, `body`,
+  `headers`, `credentials`) and is read over fetch as the reply arrives — one
+  request, not replayed when it ends (§4's `request` factory). That is the
+  shape of an AI model's streamed answer, which `EventSource` cannot make: it
+  sends a bare GET with no headers.
 - **`Socket extends Stream`** — WebSocket. Adds `send(text)`.
 
 The `Stream` surface:
@@ -116,7 +122,7 @@ can never initiate a request (capabilities: network is "fixtures, or honestly
 absent"). Streams get the same seam:
 
 ```ts
-provideStreams({ eventSource, socket })   // factories, injected
+provideStreams({ eventSource, socket, request })   // factories, injected
 ```
 
 The seam lives in its own side-effect-free module (`stream-seam.ts`), split
@@ -127,12 +133,16 @@ the `Stream`/`EventStream`/`Socket` classes are reachable **only through
 declares no stream ships none of the machinery; only its schema-table row
 rides along (as every component's does).
 
-- Browser default: `EventSource` / `WebSocket`.
+- Browser default: `EventSource` / `WebSocket`, and for `request` the
+  platform `fetch` with the reply's body read as it arrives and parsed as
+  server-sent events. A host with `fetch` and no `EventSource` (the native
+  host) reads a plain GET stream the same way.
 - Headless: refusers — a stream source under extraction lands in `onError`
   with the reason, by construction.
-- **The mac host injects its native implementations here** — this seam is a
-  row in native-host.md's host-services inventory, which is why
-  implementation waits for that merge to land rather than racing it.
+- The mac host's environment provides `fetch` with a streamed body and a
+  `WebSocket`, both over URLSession (browser/mac-env.js; URLSessionWebSocketTask
+  speaks the protocol — the HTTP upgrade handshake, frames, the closing
+  handshake), so all three factories run there as in a browser.
 - Tests: stub factories drive deterministic message sequences (the unit
   tier); the dev server grows a tiny SSE fixture route for the browser tier;
   the sim rig replays the real project's shape over LAN on a device.

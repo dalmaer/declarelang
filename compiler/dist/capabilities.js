@@ -35,11 +35,12 @@ import { SCHEMAS, descendsFrom } from "../../runtime/dist/schema.js";
 // ── the manifest ───────────────────────────────────────────────────────────
 const FOCUS_OBJECT = { members: {
         setRoot: "noop", focus: "noop", blur: "noop", next: "noop", prev: "noop",
-        byKeyboard: "false", getFocus: "null", onFocusChange: "unsubscribe", onGeometry: "unsubscribe", noteDiscarded: "noop",
+        byKeyboard: "false", getFocus: "null", getRoot: "null", keyboardProgram: "null",
+        onFocusChange: "unsubscribe", onGeometry: "unsubscribe", noteDiscarded: "noop",
     } };
 const KEYS_OBJECT = { members: {
         listen: "noop", isDown: "false", held: "array", onKeyDown: "unsubscribe", onKeyUp: "unsubscribe",
-        keyDown: "noop", keyUp: "noop", chord: "unsubscribe",
+        keyDown: "noop", keyUp: "noop", chord: "unsubscribe", keyboardMoved: "noop", claimed: "false",
     } };
 /** The effect constructors a literal slot or a body can name (effects.ts). */
 const EFFECT_CALLS = ["blur", "brightness", "contrast", "saturate", "grayscale", "invert",
@@ -85,7 +86,11 @@ export const CAPABILITIES = [
         when: [{ classes: ["Keys", "Focus", "TextInput"], methods: ["onKeyDown", "onKeyUp", "onFocus", "onBlur", "onEscapeFocus"],
                 attributes: ["focusable"], attributesUnless: { focusable: "false" }, mentions: ["Keys", "Focus"] }],
         inert: { Focus: FOCUS_OBJECT, deliverKeys: "unsubscribe", FocusService: "class",
-            Keys: KEYS_OBJECT, setKeysFocusProbe: "noop", KeysService: "class", normalize: "null" } },
+            Keys: KEYS_OBJECT, setKeysFocusProbe: "noop", setKeysPrograms: "noop", keysCaller: "null", KeysService: "class", normalize: "null" } },
+    { id: "files", describe: "the person's files: the file dialog, drops, uploads", modules: ["files"], hostsKeep: true, refusal: "unused",
+        when: [{ mentions: ["Files"], methods: ["onFilesDrop", "onFilesOver", "onFilesOut"] }],
+        inert: { Files: { members: { pick: "rejects" } }, provideFilesHost: "noop", wireFiles: "noop", deliverFiles: "false",
+            formBody: { resolves: "null" } } },
     { id: "tips", describe: "tooltips", modules: ["tooltips"], hostsKeep: true, refusal: "unused",
         when: [{ classes: ["Tooltips"], attributes: ["tooltipLabel"], mentions: ["Tooltips"] }],
         inert: { Tooltips: { members: { over: "noop", out: "noop", hide: "noop", show: "noop", onTooltip: "unsubscribe" } } } },

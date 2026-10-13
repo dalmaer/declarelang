@@ -104,7 +104,10 @@ class SourcePanel [
 class PreviewFrame [ cornerRadius = 12, clip = true, fill = { provided("theme").stage },
     stroke = { stroke(1, provided("theme").line) },
     runName: string = "",
-    run: AppIsland [ width = 100%, height = 100%, program = { classroot.runName } ]
+    run: AppIsland [ width = 100%, height = 100%, program = { classroot.runName },
+        focusable = true,
+        onPointerDown() { Focus.focus(this) }   // a press hands the running demo the keyboard
+        ]
     ]
 
 

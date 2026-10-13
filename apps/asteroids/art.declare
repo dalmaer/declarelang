@@ -168,11 +168,12 @@ class Shrapnel extends FieldFigure [ width = 72, height = 72,
 
 
 // A line of text in the arcade's font, its origin at the lower-left corner of the first
-// letter; letters are 12 shape units apart.
+// letter; letters are 12 shape units apart. The arcade has no keyboard, so its font has no
+// arrows or the keys' punctuation: those six, last, are drawn in its strokes on its grid.
 
 class ArcadeText extends Figure [
     text: string = "",
-    letters: string = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    letters: string = " 0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'/←→↑↓",
     glyphs: number[][][] = { [
         [],
         [[0, 0, 0, 12, 8, 12, 8, 0, 0, 0]],
@@ -210,7 +211,13 @@ class ArcadeText extends Figure [
         [[0, 12, 0, 0, 4, 4, 8, 0, 8, 12]],
         [[0, 0, 8, 12], [0, 12, 8, 0]],
         [[4, 0, 4, 8, 0, 12], [8, 12, 4, 8]],
-        [[0, 12, 8, 12, 0, 0, 8, 0]]
+        [[0, 12, 8, 12, 0, 0, 8, 0]],
+        [[4, 12, 4, 8]],
+        [[0, 0, 8, 12]],
+        [[0, 6, 8, 6], [4, 10, 0, 6, 4, 2]],
+        [[0, 6, 8, 6], [4, 10, 8, 6, 4, 2]],
+        [[4, 2, 4, 10], [0, 6, 4, 10, 8, 6]],
+        [[4, 10, 4, 2], [0, 6, 4, 2, 8, 6]]
         ] },
     width = { 12 * text.length * magnify + 2 },        // with a unit to spare round the beam
     height = { 12 * magnify + 2 },
@@ -221,6 +228,20 @@ class ArcadeText extends Figure [
         return Array.from(s).flatMap((c, i) =>
             glyphs[letters.indexOf(c)].map((g) => g.map((v, k) => k % 2 == 0 ? v + 12 * i : v)))
         }
+    ]
+
+
+// A line of a two-column list in the small letters: the action set to end, and the keys to
+// begin, a letter and a half either side of a gutter at 472 across. That centers the list on
+// the copyright's middle (490): its widest keys, RETURN OR SPACE, are three letters longer
+// than its widest action.
+
+class KeyLine extends View [ width = 100%, height = 100%,
+    action: string = "",
+    keys: string = "",
+    cy: number = 0,
+    ArcadeText [ cx = { 458 - 12 * classroot.action.length }, cy = { classroot.cy }, text = { classroot.action } ],
+    ArcadeText [ cx = 490, cy = { classroot.cy }, text = { classroot.keys } ]
     ]
 
 

@@ -35,9 +35,15 @@ export interface SceneSurface {
     /** The content inset (padding) at the end of an axis: bottom for y, right for x. */
     trailingInset(axis: "x" | "y"): number;
 }
-/** The press target under a point in `s`'s parent frame. Its cursor is the
- *  deepest cursor in its subtree under the point — a surface with no sink shows
- *  its cursor while its press passes to the sink beneath it — else its own. */
+/** The cursor shown at a point in `s`'s parent frame, as CSS shows it on the
+ *  DOM: the topmost view there that takes a press or shows a cursor of its own
+ *  shows its own, else the nearest ancestor's — `""` inherits. A view with no
+ *  handler that shows a cursor (a resize edge over a window frame) is that
+ *  topmost view while its press passes to the sink beneath. "" when nothing
+ *  under the point names one. */
+export declare function cursorAt(s: SceneSurface, px: number, py: number): string;
+/** The press target under a point in `s`'s parent frame, with the cursor
+ *  shown there (cursorAt). */
 export declare function hitWalk(s: SceneSurface, px: number, py: number): HitTarget | null;
 /** Where a wheel goes, from a point in `s`'s parent frame: delivered to a
  *  claimant ("claimed"), left to a scroller that owns it ("scroller"), or

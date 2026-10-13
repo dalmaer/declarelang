@@ -671,6 +671,34 @@ shortcuts use a `Keys` subscription instead — this is for the focused view onl
 ## onKeyUp
 A key was released while the view holds focus — the partner of `keyDown`.
 
+## onFilesDrop
+Files dropped on the view — from the desktop, a Finder or Explorer window, another app.
+`e.files` is each `File`: its `name`, `size`, `type`, `modified`, its `path` within a
+dropped folder (a dropped folder is every file in it, at any depth; a file dropped on its
+own has none), and a `url` that reads it — an `Image`'s `source`, a `DataSource`'s `url` —
+or, in a `DataSource` body, uploads it. Declaring it is what makes the view take drops: a
+drag goes to the deepest view under it that declares `onFilesDrop`, or that view's nearest
+ancestor that does, by the same hit test a press uses; anywhere else in the program a drop
+is refused. Nothing uploads until the program sends it.
+
+```declare-fragment
+photos: File[] = [],
+well: View [ width = 300, height = 200, fill = { app.hot ? 0xddeeff : 0xffffff },
+    onFilesOver(e: FilesOver) { app.hot = true },
+    onFilesOut() { app.hot = false },
+    onFilesDrop(e: FilesDrop) { app.hot = false; app.photos = e.files }
+    ]
+```
+
+## onFilesOver
+Files are being dragged over the view (it declares `onFilesDrop`): `e.count` of them — 0
+when the browser does not say — at `e.x`, `e.y` in the view's own coordinates. Fires as
+the drag moves; the place to light a drop target.
+
+## onFilesOut
+The drag left the view, or ended — the partner of `filesOver`, and the place to put the
+light out.
+
 ## scrollIntoView()
 Scrolls this view into the visible region of its nearest `scrolls` ancestor (or the page),
 aligning its top to the viewport top — the imperative partner of the declarative jump-index

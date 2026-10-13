@@ -421,6 +421,23 @@ interface TooltipEvent { readonly text: string; readonly x: number; readonly y: 
 /** One message from an \`EventStream\` or \`Socket\`: its payload, its type, and its
  *  id. \`onMessage\` receives it, and \`last\` holds the most recent. */
 interface StreamMessage { readonly data: string; readonly type: string; readonly id: string }
+/** A file the person chose (\`Files.pick\`) or dropped (\`onFilesDrop\`): its name, size in
+ *  bytes, MIME type, when it last changed (ms since 1970), its path within a chosen or
+ *  dropped folder ("" for a file on its own), and a \`url\` that reads it — an \`Image\`'s
+ *  \`source\`, a \`DataSource\`'s \`url\` — or, in a \`DataSource\` body, uploads it. */
+interface File { readonly name: string; readonly size: number; readonly type: string; readonly modified: number; readonly path: string; readonly url: string }
+/** Files dragged over a view: how many (0 when the browser does not say), and where, in
+ *  the view's own coordinates. */
+interface FilesOver { readonly count: number; readonly x: number; readonly y: number }
+/** Files dropped on a view: the files — a dropped folder's, every file in it, each with
+ *  its path — and where, in the view's own coordinates. */
+interface FilesDrop { readonly files: File[]; readonly x: number; readonly y: number }
+/** What \`Files.pick\` offers: the types (MIME types or extensions), more than one file,
+ *  or a whole folder. */
+interface PickOptions { accept?: string[]; multiple?: boolean; folder?: boolean }
+/** The person's files: \`pick\` opens the file dialog — from a press, as a browser allows
+ *  one only then — and resolves to the files chosen, none if it was dismissed. */
+declare const Files: { pick(options?: PickOptions): Promise<File[]> };
 /** An easing curve, built by \`cubicBezier\`, \`back\`, \`steps\` or \`laszlo\` — what an
  *  \`Animator\`'s \`motion\` takes, alongside the named tokens. Opaque by design: a curve
  *  is a value you pass, not a shape you inspect. */
@@ -506,6 +523,7 @@ declare function fetch(input: string | URL, init?: RequestInit): Promise<Respons
 declare class URLSearchParams { constructor(init?: string | Record<string, string> | [string, string][]); get(name: string): string | null; getAll(name: string): string[]; has(name: string): boolean; set(name: string, value: string): void; append(name: string, value: string): void; delete(name: string): void; forEach(fn: (value: string, key: string) => void): void; toString(): string }
 declare class URL { constructor(url: string | URL, base?: string | URL); href: string; readonly origin: string; protocol: string; host: string; hostname: string; port: string; pathname: string; search: string; hash: string; readonly searchParams: URLSearchParams; toString(): string }
 declare function queueMicrotask(fn: () => void): void;
+declare const performance: { now(): number };
 declare function structuredClone<T>(value: T): T;
 declare function encodeURIComponent(s: string | number | boolean): string;
 declare function decodeURIComponent(s: string): string;
@@ -534,11 +552,19 @@ export const PRELUDE_NAMES: ReadonlySet<string> = new Set(
  *  undocumented. Add a name here only when the host owns it. */
 export const HOST_GLOBALS: ReadonlySet<string> = new Set([
   "setTimeout", "clearTimeout", "setInterval", "clearInterval", "console",
-  "queueMicrotask", "structuredClone",
+  "queueMicrotask", "structuredClone", "performance",
   "encodeURIComponent", "decodeURIComponent", "encodeURI", "decodeURI",
   "fetch", "Headers", "RequestInit", "Response", "Blob", "FormData",
   "AbortSignal", "AbortController", "URL", "URLSearchParams",
 ]);
+
+/** The host names a program can CALL or construct — those the prelude declares as
+ *  a value (function, class, const, var), not only as a type. Every host must
+ *  provide each one; the Mac host's smoke test holds it to that
+ *  (test/mac-shell.test.mjs), so a name added here cannot ship without it. */
+export const HOST_VALUE_GLOBALS: ReadonlySet<string> = new Set(
+  [...HOST_GLOBALS].filter((n) => new RegExp(`^declare\\s+(?:function|class|const|var|let)\\s+${n}\\b`, "m").test(PRELUDE))
+);
 
 /** Record types the PRELUDE already gives a shape. A record-typed attribute
  *  whose name is here is NOT given the generated open alias below — it has a
@@ -592,7 +618,7 @@ export function tsType(t: AttrType): string {
 /** The event-payload type names, writable in a handler's signature. Declared
  *  in the prelude above; the shapes live in the runtime (events.ts, keys.ts,
  *  tip.ts, focus.ts) and this list is what makes them nameable by an author. */
-const PAYLOAD_TYPES = new Set(["PointerEvent", "PointerUpEvent", "TouchEvent", "WheelEvent", "PinchEvent", "Touch", "KeyEvent", "FocusGeometry", "TooltipEvent", "StreamMessage", "Draw", "DrawGradient"]);
+const PAYLOAD_TYPES = new Set(["PointerEvent", "PointerUpEvent", "TouchEvent", "WheelEvent", "PinchEvent", "Touch", "KeyEvent", "FocusGeometry", "TooltipEvent", "StreamMessage", "File", "FilesOver", "FilesDrop", "PickOptions", "Draw", "DrawGradient"]);
 
 /** A WRITTEN signature type name (`f(w: Window) -> number`) → its TypeScript
  *  type. Two sources, the same two an attribute declaration draws on: the

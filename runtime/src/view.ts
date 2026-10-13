@@ -2374,6 +2374,10 @@ export class App extends View {
    *  send() says so instead of vanishing. */
   hostSink: { message(topic: string, payload: unknown): void } | null = null;
 
+  /** @internal an EMBEDDED tenant's host island (linkIslandTenant installs it):
+   *  where this program's tree joins its host's, for focus and the keyboard. */
+  $hostIsland: View | null = null;
+
   /** post(topic, payload) — the tenant's message VERB, this app → its host
    *  island's onPost. The other half of the bridge from the facts: consumed
    *  once, ordered, never re-readable — for "do this", not "this is so"

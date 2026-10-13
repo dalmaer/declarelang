@@ -97,11 +97,12 @@ export declare function provideTransport(fn: Transport): Transport;
 export declare function setAppDataBase(root: object, base: string | null): void;
 export declare class DataSource extends Dataset {
     url: string;
-    /** What the bytes ARE: "json" (the default — parsed, `:path` navigable) or
-     *  "text" (the raw string as `value` — a Markdown article, a source file).
-     *  Text is a first-class material: an authored .md is fetched directly, no
-     *  JSON-wrapping projection beside it. */
-    format: "json" | "text";
+    /** What the bytes ARE: "json" (the default — parsed, `:path` navigable),
+     *  "text" (the raw string as `value` — a Markdown article, a source file), or
+     *  "bytes" (the raw bytes as a Uint8Array — data the program reads itself;
+     *  pictures and sounds have their own views). Text is a first-class material:
+     *  an authored .md is fetched directly, no JSON-wrapping projection beside it. */
+    format: "json" | "text" | "bytes";
     /** The HTTP method — "GET" (the default) or a body-carrying verb. A non-GET
      *  request sends `body`, so a Declare app can POST to a real REST API without
      *  a backend-for-frontend shim (field report A9). */
@@ -154,6 +155,10 @@ export declare class DataSource extends Dataset {
      *  decision can read the code without any of the three fighting. */
     statusCode: number;
     errorBody: unknown;
+    /** The reply's headers, names lowercased — `{ "content-type": …, "etag": … }`
+     *  — the paging link, the rate limit, the version tag. Set with `statusCode`
+     *  on every reply, a refusal's included; null before one. */
+    responseHeaders: Record<string, string> | null;
     /** A document is present. True from the first arrival on, through every
      *  later fetch (a refetch never drops it — `value` keeps the last good
      *  document until the new one lands), until `clear()`. A tracked read of
@@ -171,6 +176,9 @@ export declare class DataSource extends Dataset {
     /** Discards a superseded request: only the latest fetch/clear may land
      *  (the Image loader's sequence discipline). */
     private seq;
+    /** The request in flight, to stop when a newer one supersedes it or clear()
+     *  drops it — so a stale reply is not merely ignored but never downloaded. */
+    private inFlight;
     /** The fetch init from `method`/`body`/`credentials`. A GET with
      *  `credentials` unset (or `sameOrigin`, its own default) sends neither —
      *  a bare url, unchanged from before `credentials` existed. A non-GET

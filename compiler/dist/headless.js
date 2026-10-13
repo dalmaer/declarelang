@@ -84,7 +84,7 @@ function settleWith(make, envOpt) {
     const refuse = (url) => {
         throw new Error(`network unavailable headless — ${url} (capabilities.md §3: supply fixtures)`);
     };
-    const prevStreams = provideStreams({ eventSource: refuse, socket: refuse });
+    const prevStreams = provideStreams({ eventSource: refuse, socket: refuse, request: refuse });
     try {
         const app = make();
         app.$attach(new HeadlessBackend(), null);

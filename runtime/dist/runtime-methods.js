@@ -74,7 +74,7 @@ export const RUNTIME_FIELDS = {
     Layout: ["authorSized", "bases", "discarded", "rearming", "reported", "stackReported", "undo", "view"],
     TweenLayout: ["from", "to", "tween"],
     Dataset: ["cursors"],
-    DataSource: ["autoUrl", "seq"],
+    DataSource: ["autoUrl", "inFlight", "seq"],
     Animator: ["autoStarted", "grouped", "perpetual", "run"],
     AnimatorGroup: ["active", "autoStarted", "cyclesLeft", "grouped", "live"],
     Spring: ["arriving", "primed", "springLastNow", "springRunning", "vel"],

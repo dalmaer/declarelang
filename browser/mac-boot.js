@@ -16,7 +16,8 @@
 
 import { buildProgram, mountApp, settle, observe, provideTransport, provideMeasurer, fontsReady, bridgeFor, kernelReadySync,
          Keys, Focus, deliverKeys, setInspectionTarget, linkIslandTenant, islandProvisions, setAppAssetBase,
-         scrollPlaces, holdScrollPlaces, dropScrollPlaces, islandNavigation, provideHostServices } from "../runtime/dist/index.js";
+         scrollPlaces, holdScrollPlaces, dropScrollPlaces, islandNavigation, provideHostServices,
+         provideFilesHost, deliverFiles } from "../runtime/dist/index.js";
 import { MacBackend, flushOps, provideHitPath, macScrollFacts, macWheel, macRichHeight, macRichLink,
          macEditInput, macEditFocus, macEditEnter, embedsPending, mountEmbed, clearEmbed, surfaceById,
          publishChildName, islandViewById, macScrollTo, surfaceOrigin, createOverlaySurface, rootBox,
@@ -31,6 +32,36 @@ provideHitPath((d, x, y) => H.pathHit(d, x, y));
 // Relative data URLs resolve against the PROGRAM's directory — the web
 // client's rule (boot-uniform's `new URL(url, mainDir)`), which is what makes
 // `url = "../../docs/declare-model.json"` mean the same thing in every host.
+// The person's files (runtime files.ts): Files.pick is the open panel, and
+// files dragged into the window go to the view under them, by the runtime's
+// own hit test. Both arrive as file records with file: URLs.
+{
+  let pickSeq = 1;
+  const picks = new Map();
+  provideFilesHost({
+    pick: (options) => new Promise((resolve) => {
+      const id = pickSeq++;
+      picks.set(id, resolve);
+      H.pickFiles(id, JSON.stringify(options ?? {}));
+    }),
+  });
+  globalThis.__declareFilesPicked = (id, json) => {
+    const resolve = picks.get(id);
+    if (resolve === undefined) return;
+    picks.delete(id);
+    let list = [];
+    try { list = JSON.parse(json); } catch { list = []; }
+    resolve(list);
+  };
+  globalThis.__declareFilesDrag = (kind, x, y, count, json) => {
+    if (currentApp === null) return;
+    let list = [];
+    try { list = JSON.parse(json); } catch { list = []; }
+    deliverFiles(currentApp, kind, x, y, count, list);
+    settle();
+  };
+}
+
 provideTransport((url, opts) => {
   const href = new URL(url, globalThis.__declareBase || "http://localhost/").href;
   return readerRequest(href) ?? fetch(href, opts);

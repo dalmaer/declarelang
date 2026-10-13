@@ -1397,6 +1397,8 @@ App [ tagline: string = "a UI language for you and your AI",
 
         island: AppIsland [ y = { 56 + app.safeTop }, width = { app.width },
             program = { app.location == "architecture" ? "../architecture/architecture" : "" },
+            focusable = true,
+            onPointerDown() { Focus.focus(this) },      // a press hands the article the keyboard
 
             // the site's appearance and type, provided to the tenant by name —
             // it reads each with hostProvided(name, default)

@@ -125,7 +125,7 @@ import { applyFilterFallback, ctxFilterSupported, parseFilter } from "./canvas-f
 import { rasterWorkerAvailable, rasterInWorker } from "./raster-client.js";
 import { onDprChange } from "./dpr.js";
 import { routeInput, holdCaptureActive } from "./input.js";
-import { hitWalk, wheelWalk, contentExtentOf } from "./scene-walk.js";
+import { hitWalk, wheelWalk, contentExtentOf, cursorAt } from "./scene-walk.js";
 /** The root-space point of the wheel being walked (set at the wheel entry,
  *  read where a claimant hears it): every pointer event carries both frames. */
 let WHEEL_ROOT = { x: 0, y: 0 };
@@ -529,6 +529,25 @@ class ScrollLoop {
 }
 class Compositor {
     canvas = null;
+    /** Where the pointer last was over the canvas (its own coordinates), or null
+     *  off it — where the cursor is asked again when one changes under a still
+     *  pointer (a key that hides it, a pause that shows it). */
+    pointerAt = null;
+    cursorQueued = false;
+    /** A surface's cursor changed: once the settle that changed it is done, show
+     *  the cursor now under the pointer — as the DOM does without being asked. */
+    cursorChanged() {
+        if (this.cursorQueued || this.pointerAt === null)
+            return;
+        this.cursorQueued = true;
+        queueMicrotask(() => { this.cursorQueued = false; this.showCursor(); });
+    }
+    showCursor() {
+        if (this.canvas === null)
+            return;
+        const p = this.pointerAt;
+        this.canvas.style.cursor = p !== null && this.root !== null ? cursorAt(this.root, p.x, p.y) : "";
+    }
     /** the sealed surface's element — the raster memo denominates its caps in
      *  viewports, and the viewport is this canvas */
     get rootCanvas() { return this.canvas; }
@@ -670,19 +689,25 @@ class Compositor {
             const r = this.canvas.getBoundingClientRect();
             const x = e.clientX - r.left;
             const y = e.clientY - r.top;
-            if (x < 0 || y < 0 || x >= r.width || y >= r.height)
+            if (x < 0 || y < 0 || x >= r.width || y >= r.height) {
+                this.pointerAt = null;
                 return null;
-            return this.root.hit(x, y);
+            }
+            this.pointerAt = { x, y };
+            const t = this.root.hit(x, y);
+            // nothing here takes a press, so no hover change reports the cursor: a
+            // view that only shows one (or an ancestor's) still shows it
+            if (t === null && e.type === "pointermove")
+                this.showCursor();
+            return t;
         }, (e) => {
             const r = this.canvas.getBoundingClientRect();
             return { x: e.clientX - r.left, y: e.clientY - r.top };
         }, 
         // One host element paints everything, so the per-view cursor is applied
-        // here as the hover target changes (the DOM backend brushes per element).
-        (t) => {
-            if (this.canvas !== null)
-                this.canvas.style.cursor = t !== null && t.cursor !== undefined ? t.cursor : "";
-        });
+        // here as the pointer moves (the DOM backend brushes per element), and
+        // again when a cursor changes under a still pointer (cursorChanged).
+        () => this.showCursor());
         // Tap-to-dismiss for native editable overlays: a pointerdown that lands on the
         // CANVAS is by definition outside every overlay (they are separate sibling
         // elements), so blur the focused field — mobile Safari won't drop it (and the
@@ -1675,9 +1700,10 @@ class CanvasSurface {
     /** Consulted by hit() below — the walk realizes what CSS realizes on DOM. */
     pe = "";
     setPointerEvents(m) { this.pe = m; }
-    // Paint-inert: the cursor rides the hover walk (hit() carries it to the
-    // router's onHover, which brushes the host element) — nothing to repaint.
-    setCursor(c) { this.cursorStyle = c; }
+    // Paint-inert: the cursor rides the hover walk (the router's onHover brushes
+    // the host element), and a change under a still pointer is shown at once.
+    setCursor(c) { if (c === this.cursorStyle)
+        return; this.cursorStyle = c; this.compositor.cursorChanged(); }
     setScale(scale, px, py) {
         this.scaleK = scale;
         this.pivotX = px;

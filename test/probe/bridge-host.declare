@@ -10,7 +10,7 @@ App [ width = 400, height = 300, fill = #101820,
     nav: string = "",
 
     player: AppIsland [ x = 10, y = 10, width = 200, height = 120,
-        program = "../bridge-tenant",
+        program = "bridge-tenant",
         provides = ["volume"],
         volume: number = { app.vol },
         onPost(m: IslandPost) { app.log = app.log + m.topic + ";" },

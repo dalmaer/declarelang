@@ -9,6 +9,12 @@ a particular widget. Lifetime is the node's: subscribed at init, dropped when th
 discarded, nothing to clean up. Fan-out is by instance — a menu, a dialog, and a menubar
 each holding a `Keys` member all hear the keyboard at once.
 
+A page can run more than one program: a desktop runs one in each window's
+[`AppIsland`](declare-docs:AppIsland). The keyboard goes to one of them at a time — the
+program holding the focused view, the program inside a focused island, or, with nothing
+focused, the outer program — and only that program's `Keys` members hear keys. A key
+held as the keyboard moves on gets its `onKeyUp` in the program that had it.
+
 ```declare
 App [ width = 240, height = 100, fill = white, textColor = black,
     n: number = 0,
@@ -40,8 +46,18 @@ onClick() { (parent as Table).rowClick(this.tableIndex(), this.item(),
     Keys.isDown("ShiftLeft")) }
 ```
 
+It answers for the program whose body asks: a key counts as down in a program only if it
+went down while that program had the keyboard. The modifiers — Shift, Control, Option,
+Command — are the keyboard's state and read the same in every program.
+
+Polling a key also **claims** it: while the asking view is shown and its program has the
+keyboard, the browser's own use of the key stands down — Space and the arrows don't scroll
+the page, a letter doesn't open the browser's find. A key pressed with Command, Control or
+Option held, or typed into a text field, stays the browser's. A game reads its keys this
+way and needs nothing else.
+
 ## held()
-Every key currently down, as `code` strings.
+Every key currently down in the asking program, as `code` strings.
 
 ## onNavClaim
 The navigation keys changed hands: `true` when something claimed them (an overlay opened

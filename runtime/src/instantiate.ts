@@ -339,6 +339,17 @@ export function instantiate(input: Element | Program): View {
   // direct-instantiate dev path) concatenate here for the same shared scope.
   // A COMPILED block has its own trailing return and evaluates ALONE —
   // concatenated, its return would end evaluation and drop every later block.
+  // A script marked for some hosts (`script [ host = browser ] { … }`) runs on
+  // those alone: on any other, the program is refused here, before any of it
+  // runs, saying which host it needs — never left to half-run until the first
+  // call that is not there. The host names itself (the native host's
+  // environment sets __declareHostName); a browser is the default.
+  const here = (globalThis as { __declareHostName?: string }).__declareHostName ?? "browser";
+  for (const s of program.scripts) {
+    if (s.hosts !== undefined && !s.hosts.includes(here)) {
+      throw new DeclareError(`this program has a script written for ${s.hosts.join(" or ")} (script [ host = ${s.hosts.length === 1 ? s.hosts[0] : `[${s.hosts.join(", ")}]`} ]) — it does not run on the ${here} host`, s.pos);
+    }
+  }
   const compiledBlocks = program.scripts.filter((s) => s.compiled === true);
   if (compiledBlocks.length > 0) {
     for (const s of program.scripts) Object.assign(scriptScope, evalScript(s.src));

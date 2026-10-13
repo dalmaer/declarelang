@@ -302,6 +302,21 @@ single later one — and the compiler refuses `fetch`, the timers and `globalThi
 script block is not a body: when a program needs a host API the language does not cover, a
 script function wraps it and a handler calls that.
 
+A script runs wherever the program does — in a browser, or in the Mac app — so on its own it
+may use only what every host provides: the JavaScript built-ins, `fetch`, the timers, `URL`,
+`console`, `performance`. A script written for the browser says so, and may then use
+anything the browser has:
+
+```declare-fragment
+script [ host = browser ] {
+    function copy(s: string) { navigator.clipboard.writeText(s) }
+    }
+```
+
+A file says it the same way, `script [ "camera.ts", host = browser ]`. Without the mark, the
+compiler refuses `navigator` and names the mark; with it, a host the script is not written
+for refuses the program when it opens, rather than running half of it.
+
 A program may have several blocks, inline or loaded from files with
 `script [ "helpers.ts" ]`; they share one scope, in source order. A block may `import` a
 relative file or an npm package when a Node host compiles the program (the dev server,

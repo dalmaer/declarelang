@@ -31,8 +31,43 @@ final class DeclareView: NSView {
         layerUsesCoreImageFilters = true
         layer?.isGeometryFlipped = true                 // manual sublayers: top-left
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        registerForDraggedTypes([.fileURL])             // files dragged in from the Finder (Files.swift)
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    // ── files dragged in ────────────────────────────────────────────────────
+    //
+    // The runtime decides which view takes them (files.ts deliverFiles, the
+    // same hit test a press uses); the drag is answered as a copy, and a drop
+    // where no view takes files does nothing.
+
+    private func dragPoint(_ info: NSDraggingInfo) -> NSPoint {
+        let v = convert(info.draggingLocation, from: nil)
+        return NSPoint(x: v.x, y: bounds.height - v.y)
+    }
+    private func dragOver(_ info: NSDraggingInfo) -> NSDragOperation {
+        let p = dragPoint(info)
+        bridge.call("__declareFilesDrag", ["over", Double(p.x), Double(p.y), FileRecords.dragged(info).count, "[]"])
+        bridge.needsFrame()
+        return .copy
+    }
+    override func draggingEntered(_ info: NSDraggingInfo) -> NSDragOperation { dragOver(info) }
+    override func draggingUpdated(_ info: NSDraggingInfo) -> NSDragOperation { dragOver(info) }
+    override func draggingExited(_ info: NSDraggingInfo?) {
+        bridge.call("__declareFilesDrag", ["out", 0.0, 0.0, 0, "[]"])
+        bridge.needsFrame()
+    }
+    override func performDragOperation(_ info: NSDraggingInfo) -> Bool {
+        let p = dragPoint(info)
+        let urls = FileRecords.dragged(info)
+        // a folder's files are found off the main thread, then delivered at once
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let records = FileRecords.of(urls)
+            self?.bridge.call("__declareFilesDrag", ["drop", Double(p.x), Double(p.y), records.count, FileRecords.json(records)])
+            self?.bridge.needsFrame()
+        }
+        return true
+    }
 
     func setRoot(_ l: CALayer) {
         rootLayer?.removeFromSuperlayer()

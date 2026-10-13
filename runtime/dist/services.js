@@ -22,9 +22,12 @@
 // graph — which is why the wiring lived in index.ts originally, and why it can
 // live here now without a cycle.
 import { setBodyServices } from "./expr.js";
-import { setKeysFocusProbe, Keys } from "./keys.js";
+import { setKeysFocusProbe, setKeysPrograms, Keys } from "./keys.js";
+import { Node, onDiscard } from "./node.js";
+import { View } from "./view.js";
 import { THEME_PRESETS, activeTone } from "./themes.js";
 import { Focus } from "./focus.js";
+import { Files } from "./files.js";
 import { Inspect } from "./inspect-service.js";
 import { afterSettle } from "./reactive.js";
 import { measureText } from "./text-measure.js";
@@ -46,6 +49,33 @@ function escapeHtml(s) {
 // "finish after your change has taken effect" (language §7). `measureText` is a
 // pure function of what it is given (text-measure.ts), and `escapeHtml` above is
 // another.
-setBodyServices({ Focus, Keys, Inspect, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
-setKeysFocusProbe(() => Focus.getFocus() !== null);
+setBodyServices({ Focus, Keys, Files, Inspect, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
+// A focused island is not a control: what its program claims, it claims itself.
+setKeysFocusProbe(() => { const f = Focus.getFocus(); return f !== null && !("$tenant" in f); });
+// The keyboard's view of the program tree (keys.ts KeysPrograms): which
+// program a node is in, which one has the keyboard, which view polls a key,
+// and when that view is shown. Focus moving may move the keyboard.
+setKeysPrograms({
+    programOf: (node) => {
+        let n = node;
+        while (n.parent !== null)
+            n = n.parent;
+        return n;
+    },
+    keyboardProgram: () => Focus.keyboardProgram(),
+    viewOf: (node) => {
+        for (let n = node; n !== null; n = n.parent)
+            if (n instanceof View)
+                return n;
+        return null;
+    },
+    shown: (view) => {
+        for (let v = view; v instanceof View; v = v.parent)
+            if (!v.visible)
+                return false;
+        return true;
+    },
+    onGone: (node, fn) => onDiscard(node, fn),
+});
+Focus.onFocusChange(() => Keys.keyboardMoved());
 //# sourceMappingURL=services.js.map

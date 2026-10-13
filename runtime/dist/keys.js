@@ -10,6 +10,27 @@
 // dispatches — so it unit-tests with synthetic events, no browser. `listen()`
 // is the thin DOM adapter that feeds the core from a host, self-retiring on the
 // `alive` gate exactly like routeInput (input.ts).
+let PROGRAMS = null;
+export function setKeysPrograms(p) {
+    PROGRAMS = p;
+}
+/** The node whose compiled body is running, while it runs a body that names
+ *  `Keys` (expr.ts sets it around exactly those bodies): who is asking
+ *  `Keys.isDown`. Returns the previous caller, for the body to restore. */
+let CALLER = null;
+export function keysCaller(node) {
+    const prev = CALLER;
+    CALLER = node;
+    return prev;
+}
+/** The modifier keys. A held modifier is the keyboard's state rather than a
+ *  press — what a click reads to extend a selection — so every program sees
+ *  it, the keyboard moving does not release it, and polling it claims nothing. */
+const MODIFIERS = new Set(["ShiftLeft", "ShiftRight", "ControlLeft", "ControlRight", "AltLeft", "AltRight", "MetaLeft", "MetaRight"]);
+/** A held key whose press no program can claim any more: the keyboard moved
+ *  to another program while it was down, and the program that had it was
+ *  told it went up. */
+const ORPHAN = {};
 /** The keyboard service. A singleton `Keys` is exported for the runtime; tests
  *  construct their own instance and drive `keyDown`/`keyUp` directly. */
 /** Injected by index.ts (keys.ts sits below focus.ts in the module graph):
@@ -20,8 +41,15 @@ export function setKeysFocusProbe(fn) {
     keysFocusProbe = fn;
 }
 export class KeysService {
-    /** The held-key set (LZX's downKeysHash) — what is pressed right now. */
-    heldKeys = new Set();
+    /** The held keys (LZX's downKeysHash) — what is pressed right now, each
+     *  with the program it was pressed in. */
+    heldKeys = new Map();
+    /** The program that had the keyboard at the last look, to see it move. */
+    lastProgram = null;
+    /** Polled keys → the views that poll them (Rule 2): a key a shown view of
+     *  the keyboard program polls is the program's, and the browser's own use
+     *  of it stands down. */
+    claims = new Map();
     /** Views currently claiming the NAVIGATION keys (arrows, Space, Home/End,
      *  PageUp/Down) from the browser's scroll defaults — an open Menu chain,
      *  any overlay that roves with arrows while nothing holds Declare focus.
@@ -69,26 +97,105 @@ export class KeysService {
         this.navHandlers.add(fn);
         return () => this.navHandlers.delete(fn);
     }
-    downHandlers = new Set();
-    upHandlers = new Set();
+    /** Handlers → the node that owns them (a `Keys` member), or null for the
+     *  runtime's own (focus delivery), which hear every key. */
+    downHandlers = new Map();
+    upHandlers = new Map();
     chords = [];
     /** Is this physical key (KeyboardEvent.code) down right now? The "key
-     *  bitmap" query. */
+     *  bitmap" query. Asked from a body (expr.ts names the caller), it answers
+     *  for the caller's program: a key is down for a program only if it went
+     *  down while that program had the keyboard (Rule 1) — and the asking view
+     *  claims the key from the browser (Rule 2). */
     isDown(code) {
-        return this.heldKeys.has(code);
+        const h = this.heldKeys.get(code);
+        const who = CALLER;
+        if (who === null || PROGRAMS === null || MODIFIERS.has(code))
+            return h !== undefined && h.program !== ORPHAN;
+        this.claim(who, code);
+        return h !== undefined && (h.program === null || h.program === PROGRAMS.programOf(who));
     }
-    /** Every currently-held code (a copy — callers may not mutate the set). */
+    /** Every currently-held code (a copy — callers may not mutate the set);
+     *  from a body, the ones held in the caller's program. */
     held() {
-        return [...this.heldKeys];
+        const who = CALLER;
+        const p = who !== null && PROGRAMS !== null ? PROGRAMS.programOf(who) : undefined;
+        const out = [];
+        for (const [code, h] of this.heldKeys) {
+            if (p === undefined || MODIFIERS.has(code) ? h.program !== ORPHAN : h.program === null || h.program === p)
+                out.push(code);
+        }
+        return out;
     }
-    /** Subscribe to key-down / key-up. Returns an unsubscribe thunk. */
-    onKeyDown(fn) {
-        this.downHandlers.add(fn);
+    /** Record that `node`'s view polls `code`. The claim lasts until the view
+     *  is discarded. */
+    claim(node, code) {
+        const view = PROGRAMS.viewOf(node);
+        if (view === null)
+            return;
+        let set = this.claims.get(code);
+        if (set === undefined)
+            this.claims.set(code, (set = new Set()));
+        if (set.has(view))
+            return;
+        set.add(view);
+        PROGRAMS.onGone(view, () => { set.delete(view); });
+    }
+    /** Does a shown view of the keyboard program poll `code`? */
+    claimed(code) {
+        const set = this.claims.get(code);
+        if (set === undefined || set.size === 0 || PROGRAMS === null)
+            return false;
+        const kp = PROGRAMS.keyboardProgram();
+        for (const v of set)
+            if (PROGRAMS.programOf(v) === kp && PROGRAMS.shown(v))
+                return true;
+        return false;
+    }
+    /** Subscribe to key-down / key-up. `owner` — the node a `Keys` member is —
+     *  hears only the keys of its own program while that program has the
+     *  keyboard (Rule 1); without one, every key. Returns an unsubscribe thunk. */
+    onKeyDown(fn, owner = null) {
+        this.downHandlers.set(fn, owner);
         return () => this.downHandlers.delete(fn);
     }
-    onKeyUp(fn) {
-        this.upHandlers.add(fn);
+    onKeyUp(fn, owner = null) {
+        this.upHandlers.set(fn, owner);
         return () => this.upHandlers.delete(fn);
+    }
+    /** The handlers a key pressed in `program` reaches. */
+    reached(handlers, program) {
+        const out = [];
+        for (const [fn, owner] of handlers) {
+            if (owner === null || program === null || PROGRAMS === null || PROGRAMS.programOf(owner) === program)
+                out.push(fn);
+        }
+        return out;
+    }
+    /** The keyboard may have moved to another program (focus moved): the one
+     *  that had it is told each key it holds went up, and those presses are no
+     *  program's any more — the program now holding the keyboard sees only
+     *  keys pressed from here on. */
+    keyboardMoved() {
+        if (PROGRAMS === null)
+            return;
+        const now = PROGRAMS.keyboardProgram();
+        if (now === this.lastProgram)
+            return;
+        this.lastProgram = now;
+        for (const [code, h] of this.heldKeys) {
+            if (h.program === null || h.program === ORPHAN || h.program === now || MODIFIERS.has(code))
+                continue;
+            const was = h.program;
+            h.program = ORPHAN;
+            const up = { ...h.e, repeat: false };
+            for (const fn of this.reached(this.upHandlers, was))
+                if (this.upHandlers.get(fn) !== null)
+                    fn(up);
+            for (const c of this.chords)
+                if (c.active && c.codes.has(code))
+                    c.active = false;
+        }
     }
     /** Fire `fn` once when every code in `codes` is simultaneously held (LZX's
      *  callOnKeyCombo). Re-arms once any of the keys releases. Returns an
@@ -107,9 +214,14 @@ export class KeysService {
     /** A key went down: record it, fire the down stream, then complete any chord
      *  whose keys are now all held. */
     keyDown(e) {
-        this.heldKeys.add(e.code);
+        const now = PROGRAMS !== null ? PROGRAMS.keyboardProgram() : null;
+        this.lastProgram = now;
+        // an auto-repeat belongs where its press went, not where the keyboard is now
+        const prev = this.heldKeys.get(e.code);
+        const program = e.repeat && prev !== undefined ? prev.program : now;
+        this.heldKeys.set(e.code, { e, program });
         this.claimedAtDispatch = this.navClaimed();
-        for (const h of [...this.downHandlers])
+        for (const h of this.reached(this.downHandlers, program))
             h(e);
         for (const c of this.chords) {
             if (!c.active && this.allHeld(c.codes)) {
@@ -120,9 +232,13 @@ export class KeysService {
     }
     /** A key went up: drop it, fire the up stream, then re-arm any chord it broke. */
     keyUp(e) {
+        const h0 = this.heldKeys.get(e.code);
         this.heldKeys.delete(e.code);
         this.claimedAtDispatch = this.navClaimed();
-        for (const h of [...this.upHandlers])
+        // the release goes where the press went; a press the keyboard moved away
+        // from was released to its program already, and reaches only the runtime
+        const program = h0 !== undefined ? h0.program : PROGRAMS !== null ? PROGRAMS.keyboardProgram() : null;
+        for (const h of this.reached(this.upHandlers, program))
             h(e);
         for (const c of this.chords) {
             if (c.active && !this.allHeld(c.codes))
@@ -194,6 +310,12 @@ export class KeysService {
                 if ((nav && (focusHolds() || this.navClaimed())) || (jump && this.navClaimed()))
                     ev.preventDefault();
             }
+            // A key a shown view of the keyboard program polls is the program's
+            // (Rule 2): the browser's own use of it — scrolling, Firefox's quick
+            // find, Safari showing a hidden cursor — stands down. A chord with a
+            // command modifier stays the browser's, and so does typing in a field.
+            if (ev.key !== "Tab" && !ev.metaKey && !ev.ctrlKey && !ev.altKey && !isField(document.activeElement) && this.claimed(ev.code))
+                ev.preventDefault();
             this.keyDown(normalize(ev));
         };
         const onUp = (ev) => {
@@ -210,6 +332,12 @@ export class KeysService {
         target.addEventListener("keyup", onUp);
         target.addEventListener("blur", onBlur);
     }
+}
+/** Is the element a native text field — where a key is typing? */
+function isField(el) {
+    if (el === null || typeof HTMLElement === "undefined" || !(el instanceof HTMLElement))
+        return false;
+    return el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT";
 }
 /** The keys an overlay holding a navigation claim owns outright. */
 const OVERLAY_KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Enter", " ", "Escape", "Home", "End", "PageUp", "PageDown"]);

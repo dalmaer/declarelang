@@ -134,16 +134,25 @@ export function typecheckBodies(text: string, program: Program): { errors: Decla
   // script into a module and every ambient name dies) — each import is
   // replaced by `declare const <name>: any` per binding: the imported surface
   // types as `any` here, and the bundler makes it real.
-  for (const b of program.scripts) scaffold += "\n" + ambientScript(b.src) + "\n";
+  // Each unmarked block's place in the scaffold, so a name it uses that no host
+  // promises can be reported at the block (portableNames below).
+  const regions: { start: number; end: number; block: (typeof program.scripts)[number]; ambient: string }[] = [];
+  for (const b of program.scripts) {
+    const ambient = ambientScript(b.src);
+    const start = scaffold.length + 1;
+    scaffold += "\n" + ambient + "\n";
+    if (b.hosts === undefined && b.compiled !== true) regions.push({ start, end: start + ambient.length, block: b, ambient });
+  }
   // Pass 2 — the check-blocks, typed by the instance types pass 1 assigned.
   for (const cls of rprog.classes) emitter.walkElement(cls.body, [], true);
   emitter.walkElement(rprog.root, [], false);
-  if (emitter.units.length === 0 && emitter.declTypePos.size === 0) return { errors: [], oracle: null };
+  if (emitter.units.length === 0 && emitter.declTypePos.size === 0 && regions.length === 0) return { errors: [], oracle: null };
 
   const { diags, program: tsProgram } = runTsc(scaffold, emitter.caseSrc);
   const starts = lineStarts(text);
   const synthTags = emitter.synthTags;
   const out: DeclareError[] = [];
+  out.push(...portableNames(tsProgram, regions, starts));
   // A declared type name the standard library already owns: said once, at the
   // declaration, before TypeScript's errors at each use.
   const globals = libGlobals(tsProgram);
@@ -204,6 +213,68 @@ export function typecheckBodies(text: string, program: Program): { errors: Decla
   // then TS code, then text — the loop-stability guarantee evals depend on).
   out.sort((a, b) => (a.pos?.offset ?? 0) - (b.pos?.offset ?? 0) || a.message.localeCompare(b.message));
   return { errors: out, oracle: buildOracle(tsProgram, emitter) };
+}
+
+/** A script with no `host` mark runs on every host, so it may use only what
+ *  every host provides: the ES built-ins and the prelude's host names. A name
+ *  it uses that neither declares — `document`, `navigator`, `window` — is
+ *  refused at the block, naming the mark that admits it. Asked only of the
+ *  scaffold's unmarked script regions (their checking costs nothing for a
+ *  program without one). */
+function portableNames(
+  tsProgram: import("typescript").Program,
+  regions: readonly { start: number; end: number; block: { src: string; span: { end: number } }; ambient: string }[],
+  starts: number[],
+): DeclareError[] {
+  if (regions.length === 0) return [];
+  const sf = tsProgram.getSourceFile("scaffold.ts");
+  if (sf === undefined) return [];
+  const checker = tsProgram.getTypeChecker();
+  const out: DeclareError[] = [];
+  const seen = new Set<string>();
+  // Only the blocks' own names are asked about — not the whole scaffold's
+  // diagnostics, which cost a full check of the generated declarations. A name
+  // in a value or type reference that resolves to nothing is one no host
+  // promises (the scaffold declares the ES built-ins, the prelude's host names,
+  // and every name the program declares).
+  const isReference = (id: import("typescript").Identifier): boolean => {
+    const p = id.parent;
+    if (ts.isPropertyAccessExpression(p) && p.name === id) return false;
+    if (ts.isQualifiedName(p) && p.right === id) return false;
+    if ((ts.isPropertyAssignment(p) || ts.isPropertyDeclaration(p) || ts.isPropertySignature(p) || ts.isMethodDeclaration(p)
+      || ts.isMethodSignature(p) || ts.isGetAccessor(p) || ts.isSetAccessor(p) || ts.isEnumMember(p)) && p.name === id) return false;
+    if ((ts.isVariableDeclaration(p) || ts.isFunctionDeclaration(p) || ts.isClassDeclaration(p) || ts.isInterfaceDeclaration(p)
+      || ts.isTypeAliasDeclaration(p) || ts.isEnumDeclaration(p) || ts.isParameter(p) || ts.isTypeParameterDeclaration(p)
+      || ts.isBindingElement(p) || ts.isFunctionExpression(p) || ts.isClassExpression(p) || ts.isImportSpecifier(p)
+      || ts.isNamespaceImport(p) || ts.isImportClause(p) || ts.isLabeledStatement(p) || ts.isBreakOrContinueStatement(p)
+      || ts.isJsxAttribute(p) || ts.isModuleDeclaration(p)) && (p as { name?: unknown }).name === id) return false;
+    if (ts.isBindingElement(p) && p.propertyName === id) return false;
+    if (ts.isShorthandPropertyAssignment(p)) return true;
+    return true;
+  };
+  for (const r of regions) {
+    const visit = (n: import("typescript").Node): void => {
+      if (ts.isIdentifier(n) && isReference(n) && n.text !== "undefined" && n.text !== "arguments"
+        && checker.getSymbolAtLocation(n) === undefined) {
+        const name = n.text;
+        const start = n.getStart(sf);
+        let at = r.ambient === r.block.src ? start - r.start : r.block.src.search(new RegExp(`\\b${name.replace(/[$]/g, "\\$")}\\b`));
+        if (at < 0) at = 0;
+        const bodyOpen = r.block.span.end - r.block.src.length - 1;
+        const key = `${name}@${bodyOpen}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push(Diag.typeError(
+            `'${name}' is not something every host provides — this script runs everywhere, so it may use only what all of them do (the ES built-ins, fetch, the timers, URL, console, …). If it is written for the browser, mark it: script [ host = browser ] { … } (a file: script [ "file.ts", host = browser ]); to use it only where a host has it, read it from globalThis and test for it`,
+            offsetPos(bodyOpen + at, starts), 2304));
+        }
+      }
+      ts.forEachChild(n, visit);
+    };
+    // the statements whose text lies in this block's region
+    for (const st of sf.statements) { const at = st.getStart(sf); if (at >= r.start && at < r.end) visit(st); }
+  }
+  return out;
 }
 
 /** The L-21 TYPE ORACLE (RULED 2026-09-01: method calls resolve with TS

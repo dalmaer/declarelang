@@ -188,7 +188,14 @@ await test("DataSource.credentials — a token surface, the Fetch API's spelling
 
   // and what actually reaches fetch(url, init)
   const seen = [];
-  const prev = provideTransport((url, init) => { seen.push(init); return jsonResponse({ ok: 1 }); });
+  // the signal that lets a newer fetch stop this one rides every request; what
+  // else reaches fetch is the point here
+  const prev = provideTransport((url, init) => {
+    assert.ok(init?.signal instanceof AbortSignal, "every request can be stopped");
+    const { signal, ...rest } = init;
+    seen.push(Object.keys(rest).length > 0 ? rest : undefined);
+    return jsonResponse({ ok: 1 });
+  });
   try {
     const cases = [
       ["", undefined],                                     // unset → bare url, as before credentials existed

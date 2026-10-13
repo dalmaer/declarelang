@@ -12,10 +12,37 @@ export interface KeyEvent {
     repeat: boolean;
 }
 type KeyHandler = (e: KeyEvent) => void;
+/** What the keyboard needs to know about the program tree, injected by
+ *  services.ts (keys.ts sits below the view layer and stays node-free). A
+ *  PROGRAM is a tree mounted as an app — the top-level one or an island's
+ *  tenant — named here by its root. */
+export interface KeysPrograms {
+    /** The program a node belongs to (the root of its tree). */
+    programOf(node: object): object;
+    /** The program the keyboard goes to now (keyboard-follows-focus.md, Rule 1):
+     *  the focused view's, the tenant of a focused island, else the top-level
+     *  one. Null when there is no top-level program to fall back on. */
+    keyboardProgram(): object | null;
+    /** The view a node's claim belongs to: the node itself, or its nearest view. */
+    viewOf(node: object): object | null;
+    /** Is the view shown — itself and every ancestor visible? */
+    shown(view: object): boolean;
+    /** Run `fn` when the node is discarded. */
+    onGone(node: object, fn: () => void): void;
+}
+export declare function setKeysPrograms(p: KeysPrograms | null): void;
+export declare function keysCaller(node: object | null): object | null;
 export declare function setKeysFocusProbe(fn: () => boolean): void;
 export declare class KeysService {
-    /** The held-key set (LZX's downKeysHash) — what is pressed right now. */
+    /** The held keys (LZX's downKeysHash) — what is pressed right now, each
+     *  with the program it was pressed in. */
     private readonly heldKeys;
+    /** The program that had the keyboard at the last look, to see it move. */
+    private lastProgram;
+    /** Polled keys → the views that poll them (Rule 2): a key a shown view of
+     *  the keyboard program polls is the program's, and the browser's own use
+     *  of it stands down. */
+    private readonly claims;
     /** Views currently claiming the NAVIGATION keys (arrows, Space, Home/End,
      *  PageUp/Down) from the browser's scroll defaults — an open Menu chain,
      *  any overlay that roves with arrows while nothing holds Declare focus.
@@ -46,17 +73,37 @@ export declare class KeysService {
     /** Subscribe to nav-claim TRANSITIONS (true = an overlay took the keys,
      *  false = the last claim released). Returns the unsubscribe thunk. */
     onNavClaim(fn: (on: boolean) => void): () => void;
+    /** Handlers → the node that owns them (a `Keys` member), or null for the
+     *  runtime's own (focus delivery), which hear every key. */
     private readonly downHandlers;
     private readonly upHandlers;
     private readonly chords;
     /** Is this physical key (KeyboardEvent.code) down right now? The "key
-     *  bitmap" query. */
+     *  bitmap" query. Asked from a body (expr.ts names the caller), it answers
+     *  for the caller's program: a key is down for a program only if it went
+     *  down while that program had the keyboard (Rule 1) — and the asking view
+     *  claims the key from the browser (Rule 2). */
     isDown(code: string): boolean;
-    /** Every currently-held code (a copy — callers may not mutate the set). */
+    /** Every currently-held code (a copy — callers may not mutate the set);
+     *  from a body, the ones held in the caller's program. */
     held(): string[];
-    /** Subscribe to key-down / key-up. Returns an unsubscribe thunk. */
-    onKeyDown(fn: KeyHandler): () => void;
-    onKeyUp(fn: KeyHandler): () => void;
+    /** Record that `node`'s view polls `code`. The claim lasts until the view
+     *  is discarded. */
+    private claim;
+    /** Does a shown view of the keyboard program poll `code`? */
+    claimed(code: string): boolean;
+    /** Subscribe to key-down / key-up. `owner` — the node a `Keys` member is —
+     *  hears only the keys of its own program while that program has the
+     *  keyboard (Rule 1); without one, every key. Returns an unsubscribe thunk. */
+    onKeyDown(fn: KeyHandler, owner?: object | null): () => void;
+    onKeyUp(fn: KeyHandler, owner?: object | null): () => void;
+    /** The handlers a key pressed in `program` reaches. */
+    private reached;
+    /** The keyboard may have moved to another program (focus moved): the one
+     *  that had it is told each key it holds went up, and those presses are no
+     *  program's any more — the program now holding the keyboard sees only
+     *  keys pressed from here on. */
+    keyboardMoved(): void;
     /** Fire `fn` once when every code in `codes` is simultaneously held (LZX's
      *  callOnKeyCombo). Re-arms once any of the keys releases. Returns an
      *  unsubscribe thunk. (v1 matches physical codes; modifier-normalized

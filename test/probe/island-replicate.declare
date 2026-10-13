@@ -26,7 +26,7 @@ App [ width = 900, height = 500, fill = #101820,
 class Cell extends View [ width = { parent.width }, height = 130,
     rowId: string = { "" + (:id ?? "") },
     isle: AppIsland [ x = 0, y = 0, width = 200, height = 120,
-        program = "../bridge-tenant",
+        program = "bridge-tenant",
         provides = ["volume"],
         volume: number = { Number(:vol ?? 0) },
         onPost(m: IslandPost) { app.log = app.log + classroot.rowId + ":" + m.topic + ";" }

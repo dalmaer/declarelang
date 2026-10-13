@@ -27,7 +27,7 @@ tools/internal/pointer
 my-apps/
 
 # Stargate's checked entry: the game plus the arcade recording its checks replay, written
-# beside the game by my-apps/stargate-reference/tools/make-checked.mjs
+# beside the game by my-apps/stargate/tools/make-checked.mjs
 apps/stargate/checked.declare
 
 # misc

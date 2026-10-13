@@ -5,6 +5,8 @@ import { DeclareError } from "./errors.js";
  *  `script {` block the text holds, at its offset in `text` — so a position in
  *  the spliced source can be carried back to the line the author wrote, in the
  *  program or in the script file. */
+/** One applied splice; each spliced file's block starts at `at` in `text`,
+ *  its body `open` characters in (the `script … {` header and its newline). */
 export interface Splice {
     start: number;
     end: number;
@@ -13,6 +15,7 @@ export interface Splice {
     files: {
         at: number;
         file: string;
+        open: number;
     }[];
 }
 export declare function spliceScriptFiles(source: string, refs: readonly IncludeRef[] | undefined, spans: readonly Span[] | undefined, fromDir: string, host: IncludeHost, errors: DeclareError[], excise?: readonly Span[], applied?: Splice[]): Promise<string>;

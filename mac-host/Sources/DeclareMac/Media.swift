@@ -19,6 +19,14 @@ final class MediaEngine {
     private unowned let bridge: Bridge
 
     private var players: [Int: AVPlayer] = [:]
+    /// What each player's program asked (`muted`); the host's own mute (HostSound) is on top.
+    private var asked: [Int: Bool] = [:]
+    private lazy var soundObs: NSObjectProtocol = NotificationCenter.default.addObserver(
+        forName: HostSound.changed, object: nil, queue: .main
+    ) { [weak self] _ in
+        guard let self else { return }
+        for (id, p) in self.players { p.isMuted = (self.asked[id] ?? false) || HostSound.muted }
+    }
     private var loops: [Int: Bool] = [:]
     private var rates: [Int: Float] = [:]
     private var timeObs: [Int: Any] = [:]
@@ -38,6 +46,8 @@ final class MediaEngine {
     func create(_ id: Int) {
         let p = AVPlayer()
         players[id] = p
+        _ = soundObs
+        p.isMuted = HostSound.muted
         // The playhead, ~4×/s while playing — media.ts's documented cadence.
         // AVPlayer suspends the observer while paused, so idle costs nothing.
         timeObs[id] = p.addPeriodicTimeObserver(
@@ -115,7 +125,7 @@ final class MediaEngine {
     func set(_ id: Int, _ key: String, _ value: Double) {
         guard let p = players[id] else { return }
         switch key {
-        case "muted":  p.isMuted = value != 0
+        case "muted":  asked[id] = value != 0; p.isMuted = value != 0 || HostSound.muted
         case "volume": p.volume = Float(value)
         case "loop":   loops[id] = value != 0
         case "rate":

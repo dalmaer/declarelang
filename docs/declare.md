@@ -251,7 +251,13 @@ blocks**, inline and files mixed; they share **one scope, in source order** — 
 function calls an earlier one's (or mutates its state) exactly as in a single module. The one
 spelling difference: a file is written module-style (`export` allowed, and optional), while an
 inline block refuses `export` — its top-level names are already visible to every `{ }`.
-Imports resolve at the build toolchain's bundler; the in-browser compile refuses them by name. **`include
+Imports resolve at the build toolchain's bundler; the in-browser compile refuses them by name. A script
+runs on every host — a browser, the Mac — so it may use only what all of them provide (the ES
+built-ins, `fetch`, the timers, `URL`, `console`, `performance`); one written for some hosts
+says so, **`script [ host = browser ] { … }`** or `script [ "camera.ts", host = browser ]`
+(`host = [browser, mac]` for several), and is then free to use what those hosts have — the
+compiler refuses an unmarked script's other names, and a host refuses a program carrying a
+script not marked for it, before any of it runs. **`include
 [ "path.declare" ]`** merges another file's top-level declarations, once. **`use [ Name ]`** keeps
 a class the build would otherwise drop, for when your code constructs it by name at runtime
 (`createView`, §7). **`ship [ … ]`** states what a

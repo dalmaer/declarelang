@@ -255,7 +255,13 @@ export interface SchemaDecl {
 export interface IncludeRef {
     path: string;
     pos: Pos;
+    /** A script file's hosts (`script [ "camera.ts", host = browser ]`). */
+    hosts?: string[];
 }
+/** The hosts a script can be marked for (`script [ host = browser ] { … }`):
+ *  code that reaches past what every host provides names the hosts it runs
+ *  on. A new host is a new name here. */
+export declare const SCRIPT_HOSTS: readonly string[];
 /** The half-open source span `[start, end)` of one whole `include [ … ]`
  *  directive — from the `include` keyword through the closing `]`. The
  *  source-merge (include.ts) excises these to splice included libraries into a
@@ -275,6 +281,9 @@ export interface ScriptBlock {
      *  evaluates alone (instantiate). Read from the compiler's bindings marker
      *  when a compiled source is parsed. */
     compiled?: boolean;
+    /** The hosts this block runs on, when it is marked (`script [ host = browser ]`);
+     *  absent = every host, so it may use only what every host provides. */
+    hosts?: string[];
 }
 /** A whole source: `include` directives, top-level declarations (classes,
  *  themes, style bundles — any order), then the root instance. (The

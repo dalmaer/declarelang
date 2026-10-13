@@ -4,8 +4,8 @@
 Atari's 1979 arcade game, with the same shapes, letters, sounds, motion and patterns.
 Given the same controls, it plays the arcade's game frame for frame from power-on to the
 end of the first game, checked against MAME's emulation: every value of the game's state
-on every frame, and the vector picture the beam draws. Keys: ← → or A S turn, ↑ or ' thrust, Space or Return fire, ↓, Shift or /
-hyperspace, Return or 1 start, Escape pause.
+on every frame, and the vector picture the beam draws. Keys: ← → or A S turn, ↑ or ' thrust, Space or Return fire, ↓ or / hyperspace,
+Return or Space start, Escape pause.
 
 The shape to notice:
 
@@ -51,9 +51,8 @@ App [ fill = black,
             right: Keys.isDown("ArrowRight") || Keys.isDown("KeyS"),
             thrust: Keys.isDown("ArrowUp") || Keys.isDown("Quote"),
             fire: Keys.isDown("Space") || Keys.isDown("Enter"),
-            hyperspace: Keys.isDown("ArrowDown") || Keys.isDown("ShiftLeft") || Keys.isDown("ShiftRight")
-                || Keys.isDown("Slash"),
-            start: Keys.isDown("Enter") || Keys.isDown("Digit1")
+            hyperspace: Keys.isDown("ArrowDown") || Keys.isDown("Slash"),
+            start: Keys.isDown("Enter") || Keys.isDown("Space")
             }
         },
 
@@ -61,6 +60,13 @@ App [ fill = black,
     // pressed, so a turn or thrust held to resume carries on at once.
 
     paused: boolean = false,
+
+    // The keyboard goes where focus is, so a press on the game takes it: on its own
+    // page, and in a host that runs it among other programs.
+
+    focusable = true,
+    onPointerDown() { Focus.focus(app) },
+
     keys: Keys [
         onKeyDown(e: KeyEvent) {
             app.restCursor()
@@ -71,7 +77,7 @@ App [ fill = black,
         ],
 
     // In play the cursor is hidden over the game, and comes back when the game stops, when it
-    // is paused, or when the mouse moves more than a few pixels. A key hides it again.
+    // is paused, or when the mouse moves more than 10 pixels. A key hides it again.
 
     cursor = { (app.game.mode == "starting" || app.game.mode == "playing") && !app.paused && !app.mouseMoved
         ? "none" : "" },
@@ -81,7 +87,7 @@ App [ fill = black,
     restCursor() { mouseMoved = false; restX = pointerX; restY = pointerY },
     trackChanges = ["pointerX", "pointerY"],
     onChange(e: ChangeEvent) {
-        if (Math.abs(pointerX - restX) > 4 || Math.abs(pointerY - restY) > 4) mouseMoved = true
+        if (Math.abs(pointerX - restX) > 10 || Math.abs(pointerY - restY) > 10) mouseMoved = true
         },
 
     // The arcade moves the game on a frame every 16 ms. Where a whole number of the display's
@@ -148,7 +154,22 @@ App [ fill = black,
         ReserveShips [ count = { app.game.shipsLeft } ],
         Score [ cx = 480, cy = 876, points = { app.game.highScore } ],
         Score [ cx = 768, cy = 876, magnify = 2, visible = { !app.game.playing } ],      // a second player's, between games
-        ArcadeText [ cx = 320, cy = 228, magnify = 2, text = "1 COIN 1 PLAY", visible = { !app.game.playing } ],
+
+        // Between games: "1 COIN 1 PLAY" at the top, then how to start, and the controls in the
+        // small letters of the high score, set as its list is, in two columns, the last line
+        // where the arcade puts "1 COIN 1 PLAY". All are centered on the copyright's middle (490
+        // across), the line the screen's own text keeps to.
+
+        ArcadeText [ cx = 338, cy = 792, magnify = 2, text = "1 COIN 1 PLAY", visible = { !app.game.playing } ],
+
+        View [ width = 100%, height = 100%, visible = { app.game.mode == "attract" },
+            ArcadeText [ cx = 242, cy = 372, magnify = 2, text = "PRESS RETURN TO START" ],
+            KeyLine [ cy = 324, action = "ROTATE LEFT", keys = "← OR A" ],
+            KeyLine [ cy = 300, action = "ROTATE RIGHT", keys = "→ OR S" ],
+            KeyLine [ cy = 276, action = "THRUST", keys = "↑ OR '" ],
+            KeyLine [ cy = 252, action = "FIRE", keys = "RETURN OR SPACE" ],
+            KeyLine [ cy = 228, action = "HYPERSPACE", keys = "↓ OR /" ]
+            ],
         ArcadeText [ cx = 400, cy = 728, magnify = 2, text = "PLAYER 1", visible = { app.game.mode == "starting" } ],
         ArcadeText [ cx = 400, cy = 628, magnify = 2, text = "GAME OVER", visible = { app.game.mode == "over" } ],
         Copyright [ ],

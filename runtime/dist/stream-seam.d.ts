@@ -25,13 +25,32 @@ export interface StreamCallbacks {
 }
 export type EventSourceFactory = (url: string, listen: readonly string[], cb: StreamCallbacks) => StreamHandle;
 export type SocketFactory = (url: string, cb: StreamCallbacks) => StreamHandle;
+/** What an EventStream asks of its request when it is more than a plain GET:
+ *  the verb, the headers, the body (already encoded) and the credentials mode
+ *  — the same four a DataSource sends. */
+export interface StreamRequest {
+    method: string;
+    headers: Record<string, string>;
+    body: string | null;
+    credentials?: "omit" | "same-origin" | "include";
+}
+/** One request whose reply is an event stream, read as it arrives: open when
+ *  the reply's head is good, a message per event, and a final end when the
+ *  reply ends (a request is not replayed — `retry` is the author's to declare). */
+export type RequestStreamFactory = (url: string, req: StreamRequest, listen: readonly string[], cb: StreamCallbacks) => StreamHandle;
 export interface StreamFactories {
     eventSource: EventSourceFactory;
     socket: SocketFactory;
+    /** Absent = the platform fetch (streams.ts requestStreamOverFetch). */
+    request?: RequestStreamFactory;
 }
 /** Swap the connection factories (headless installs refusers; tests install
  *  stubs; the mac host injects its native pair). Returns the PREVIOUS pair so
  *  a scoped caller can restore it — the provideTransport contract. */
 export declare function provideStreams(f: StreamFactories): StreamFactories;
+/** Is `eventSource` still the browser default (not a host's or a test's)? —
+ *  where there is no EventSource to back it, a plain GET stream reads over
+ *  fetch instead (streams.ts). */
+export declare function defaultEventSource(): boolean;
 /** The pair in force — what a Stream dials through (streams.ts). */
 export declare function currentStreams(): StreamFactories;

@@ -52,6 +52,8 @@ function browserSocket(url, cb) {
     ws.onclose = (e) => cb.end(e.wasClean ? "" : (e.reason !== "" ? e.reason : `connection lost (code ${e.code})`), true);
     return { close: () => ws.close(), send: (t) => ws.send(t) };
 }
+// No default `request`: the fetch-based reader lives with the classes
+// (streams.ts), so an app that declares no stream ships none of it.
 let factories = { eventSource: browserEventSource, socket: browserSocket };
 /** Swap the connection factories (headless installs refusers; tests install
  *  stubs; the mac host injects its native pair). Returns the PREVIOUS pair so
@@ -60,6 +62,12 @@ export function provideStreams(f) {
     const prev = factories;
     factories = f;
     return prev;
+}
+/** Is `eventSource` still the browser default (not a host's or a test's)? —
+ *  where there is no EventSource to back it, a plain GET stream reads over
+ *  fetch instead (streams.ts). */
+export function defaultEventSource() {
+    return factories.eventSource === browserEventSource;
 }
 /** The pair in force — what a Stream dials through (streams.ts). */
 export function currentStreams() {

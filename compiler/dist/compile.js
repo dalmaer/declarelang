@@ -618,7 +618,7 @@ const ES_GLOBALS = new Set([
 // in a handler is the service, never a member to resolve. `afterSettle` and
 // `tint` are the function-shaped entries; the built-in theme presets are in
 // scope by name (`SanFrancisco`, `CupertinoDark`, …), so a body names one.
-const RUNTIME_SERVICES = new Set(["Focus", "Keys", "Inspect", "afterSettle", "activeTone", ...THEME_PRESET_NAMES]);
+const RUNTIME_SERVICES = new Set(["Focus", "Keys", "Files", "Inspect", "afterSettle", "activeTone", ...THEME_PRESET_NAMES]);
 const isKnownGlobal = (name) => hostGlobalHint(name) === null && (ES_GLOBALS.has(name) || PRELUDE_NAMES.has(name) || RUNTIME_SERVICES.has(name));
 /** Compile a Declare source: full diagnostics (include resolve + check + scope
  *  resolution), and a SELF-CONTAINED resolved source the zero-dependency
@@ -1485,7 +1485,6 @@ function carryBack(spliced, splices, file, display) {
         }
         return { line: lo + 1, col: offset - lines[lo] + 1, offset, ...(file === undefined ? {} : { file }) };
     };
-    const OPEN = "script {\n";
     return (offset) => {
         let delta = 0;
         for (const sp of splices) {
@@ -1498,11 +1497,11 @@ function carryBack(spliced, splices, file, display) {
                 while (i >= 0 && sp.files[i].at > rel)
                     i--;
                 if (i >= 0) {
-                    // each block is `script {\n<body>\n}`, joined to the next by a blank line
+                    // each block is `script … {\n<body>\n}`, joined to the next by a blank line
                     const block = sp.files[i];
                     const end = i + 1 < sp.files.length ? sp.files[i + 1].at - 2 : sp.text.length;
-                    const body = sp.text.slice(block.at + OPEN.length, end - 2);
-                    const inBody = rel - block.at - OPEN.length;
+                    const body = sp.text.slice(block.at + block.open, end - 2);
+                    const inBody = rel - block.at - block.open;
                     if (inBody >= 0 && inBody <= body.length)
                         return posIn(inBody, lineStarts(body), display(block.file));
                 }

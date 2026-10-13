@@ -348,7 +348,20 @@ class Window [ width = 560, height = 400, clip = true,
     // activating any real window dismisses open About boxes — they're modals
     // in spirit: clicking anywhere else lets them go (the red light works too)
 
-    activate() { app.wm.frontId = this.recId; app.wm.raiseWin(this); if (!plain) app.launcher.dismissAbouts() },
+    activate() { app.wm.frontId = this.recId; app.wm.raiseWin(this); if (!plain) app.launcher.dismissAbouts(); this.takeKeyboard() },
+
+    // The keyboard follows focus, so the window in front takes it: focus left
+    // in another window, or in a program running in one, is let go. A window
+    // that runs a program hands it the keyboard instead (AppWindow).
+
+    takeKeyboard() {
+        const f = Focus.getFocus()
+        if (f != null && !this.holds(f)) Focus.blur()
+        },
+    holds(v: View) -> boolean {
+        for (let n: View | null = v; n != null; n = n.parent as View | null) if (n == this) return true
+        return false
+        },
 
     // Raising is split by pointer kind. A mouse raises the instant it touches
     // a window — the platform rule, and the one that makes press-dragging a
@@ -1360,7 +1373,13 @@ class AppWindow extends Window [ width = 880, height = 560,
     // embedded presses to the island — dom-backend), so clicking the child's
     // content raises this window exactly as clicking any window body does
 
+    // in front, the window's program has the keyboard: focus on the island
+    // hands it there, and leaves alone a focus the program already holds
+
+    takeKeyboard() { Focus.focus(this.island) },
+
     island: AppIsland [ x = 0, y = { classroot.barH }, width = 100%, height = { parent.height - classroot.barH },
+        focusable = true,
         onPointerDown() { classroot.activateOnPress() },
         onClick()       { classroot.activate() },
         onHold()        { classroot.activate() },
@@ -2212,6 +2231,15 @@ class WinManager extends Node [
 
     frontId: string = "",
     frontWin: Window = { this.winOf(this.frontId) },
+
+    // the keyboard goes with the front: however a window comes to the front, it
+    // takes the keyboard, and with none in front the desktop has it
+
+    trackChanges = ["frontWin"],
+    onChange(e: ChangeEvent) {
+        if (this.frontWin != null) this.frontWin.takeKeyboard()
+        else Focus.blur()
+        },
 
     // two counters, one job each: `idSeq` mints record identity, `winCount`
     // staggers spawn positions — the welcome jot takes an id but no stagger

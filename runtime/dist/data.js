@@ -37,6 +37,7 @@
 // read for intent only — what data binding feels like; its XML node model,
 // datapointer objects, and string-event plumbing are exactly what this
 // module's plain-JSON + region-cells design sheds (APPROACH §2/§6).
+import { formBody } from "./files.js";
 import { mapUrl } from "./asset-base.js";
 import { Node, authoredName } from "./node.js";
 import { Cell, isTracking, noteOrigin, settle } from "./reactive.js";
@@ -803,6 +804,9 @@ export class DataSource extends Dataset {
     /** Discards a superseded request: only the latest fetch/clear may land
      *  (the Image loader's sequence discipline). */
     seq = 0;
+    /** The request in flight, to stop when a newer one supersedes it or clear()
+     *  drops it — so a stale reply is not merely ignored but never downloaded. */
+    inFlight = null;
     /** The fetch init from `method`/`body`/`credentials`. A GET with
      *  `credentials` unset (or `sameOrigin`, its own default) sends neither —
      *  a bare url, unchanged from before `credentials` existed. A non-GET
@@ -872,10 +876,32 @@ export class DataSource extends Dataset {
         setBound(this, "error", null);
         setBound(this, "statusCode", 0);
         setBound(this, "errorBody", null);
+        setBound(this, "responseHeaders", null);
+        this.inFlight?.abort();
+        const ctl = typeof AbortController === "function" ? new AbortController() : null;
+        this.inFlight = ctl;
+        const init = this.$requestInit();
         try {
-            const res = await transport(url, this.$requestInit());
-            if (seq === this.seq)
+            // a body holding the person's files goes as a form, a file in each file
+            // part (files.ts); its multipart Content-Type is the platform's to set
+            if (init?.method !== undefined && this.body != null) {
+                const form = await formBody(this.body);
+                if (form !== null) {
+                    init.body = form;
+                    if (init.headers !== undefined) {
+                        const h = { ...init.headers };
+                        for (const k of Object.keys(h))
+                            if (k.toLowerCase() === "content-type")
+                                delete h[k];
+                        init.headers = h;
+                    }
+                }
+            }
+            const res = await transport(url, ctl === null ? init : { ...init, signal: ctl.signal });
+            if (seq === this.seq) {
                 setBound(this, "statusCode", res.status);
+                setBound(this, "responseHeaders", headerRecord(res.headers));
+            }
             if (!res.ok) {
                 // The BODY of a refusal is the part that says why — the field that
                 // failed, the rate-limit reset, the validation list. Throwing on the
@@ -896,9 +922,13 @@ export class DataSource extends Dataset {
                     setBound(this, "errorBody", parseProblem(raw));
                 throw new Error(`HTTP ${res.status} for ${url}`);
             }
-            const value = this.format === "text" ? await res.text() : await res.json();
+            const value = this.format === "text" ? await res.text()
+                : this.format === "bytes" ? new Uint8Array(await res.arrayBuffer())
+                    : await res.json();
             if (seq !== this.seq)
                 return; // superseded
+            if (this.inFlight === ctl)
+                this.inFlight = null;
             // Validate on receipt (B4, language §9): malformed data lands in
             // `.failed`/`.error` with the pointed path — never `undefined` three
             // layers into a binding. Schema presence is the only switch.
@@ -929,7 +959,9 @@ export class DataSource extends Dataset {
         }
         catch (e) {
             if (seq !== this.seq)
-                return;
+                return; // superseded (or stopped by clear()): nothing to report
+            if (this.inFlight === ctl)
+                this.inFlight = null;
             noteOrigin(`${sourceLabel(this)} failed`, this);
             setBound(this, "error", e instanceof Error ? e.message : String(e));
             setBound(this, "failed", true);
@@ -940,13 +972,25 @@ export class DataSource extends Dataset {
      *  declaratively"): no document, so `loaded` drops; no request, no failure. */
     clear() {
         this.seq++;
+        this.inFlight?.abort();
+        this.inFlight = null;
         setBound(this, "value", null);
         setBound(this, "error", null);
         setBound(this, "statusCode", 0);
         setBound(this, "errorBody", null);
+        setBound(this, "responseHeaders", null);
         setBound(this, "loading", false);
         setBound(this, "failed", false);
     }
+}
+/** A reply's headers as a plain record, names lowercased — what
+ *  `responseHeaders` reads. null when the transport gave none (a test stub). */
+function headerRecord(h) {
+    if (h == null || typeof h.forEach !== "function")
+        return null;
+    const out = {};
+    h.forEach((v, k) => { out[String(k).toLowerCase()] = String(v); });
+    return out;
 }
 /** "DataSource 'weather'" — the source as a trace or a report names it. */
 function sourceLabel(d) {
@@ -969,6 +1013,7 @@ defineAttributes(DataSource, {
     // code, so a constraint can tell "not asked" from "asked and refused".
     statusCode: { def: 0 },
     errorBody: { def: null },
+    responseHeaders: { def: null },
 });
 /** Turn a `datapath = { expr }` result into a place. The value must be a
  *  container that belongs to a dataset (its adoption tag says which, and

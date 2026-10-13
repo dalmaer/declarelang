@@ -36,7 +36,7 @@ import { Tooltips } from "./tooltips.js";
  *  is `unknown` at this seam by necessity — the handler on the other side is a
  *  compiled Declare body, typed by the checker, not by TypeScript here. */
 type Handler = (arg: unknown) => void;
-type Channel = readonly [member: string, subscribe: (fn: Handler) => () => void];
+type Channel = readonly [member: string, subscribe: (fn: Handler, owner: Node) => () => void];
 
 /** The shared half of every source class: at init, wire each channel whose
  *  handler this instance actually declares; at discard, drop them all. Nothing
@@ -60,7 +60,7 @@ abstract class Source extends Node {
       const fn = self[member];
       if (typeof fn !== "function") continue;
       const handler: Handler = (arg) => { (fn as (a: unknown) => void).call(this, arg); };
-      offs.push(subscribe(handler));
+      offs.push(subscribe(handler, this));
     }
     if (offs.length > 0) onDiscard(this, () => { for (const off of offs) off(); });
   }
@@ -69,15 +69,16 @@ abstract class Source extends Node {
 /** The keyboard, as a member: `Keys [ onKeyDown(e) { … }, onKeyUp(e) { … } ]`.
  *  The RAW stream — it fires even while a text field has focus, so gate
  *  app-level shortcuts on app state where that matters. (A focused view's own
- *  `onKeyDown`/`onKeyUp` are the other half: keys belonging to one widget.) */
+ *  `onKeyDown`/`onKeyUp` are the other half: keys belonging to one widget.)
+ *  A member hears its own program's keys, while that program has the keyboard. */
 export class KeysSource extends Source {
   protected $channels(): readonly Channel[] {
     return CHANNELS_KEYS;
   }
 }
 const CHANNELS_KEYS: readonly Channel[] = [
-  ["onKeyDown", (fn) => Keys.onKeyDown(fn)],
-  ["onKeyUp", (fn) => Keys.onKeyUp(fn)],
+  ["onKeyDown", (fn, owner) => Keys.onKeyDown(fn, owner)],
+  ["onKeyUp", (fn, owner) => Keys.onKeyUp(fn, owner)],
   ["onNavClaim", (fn) => Keys.onNavClaim(fn)],
 ];
 

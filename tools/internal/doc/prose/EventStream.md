@@ -1,12 +1,19 @@
 Server-Sent Events (`text/event-stream`) as a source: the server
 pushes, the app receives, an `onMessage` that concatenates is the whole consumer. See
 `Stream` for the shared surface (`url`/`active`/`retry`, the read-only
-`status`/`open`/`error`/`last`). Receive-only — there is no `send`; a request that needs a
-body is an ordinary `DataSource` POST, and the stream carries the reply. The platform's
-`EventSource` machinery is kept **verbatim**: it retries on its own (honoring the server's
-`retry:` hint) and resumes with `Last-Event-ID`, during which `status` reads `"retrying"`
-and no error is reported; `retry`/`onError` concern only **terminal** failure — the
-platform giving up.
+`status`/`open`/`error`/`last`). Receive-only — there is no `send`.
+
+A stream that is the **reply to a request** — an AI model's answer arriving word by word
+from a POST — declares the request as a `DataSource` does: `method`, `body`, `headers`,
+`credentials`. It is one request, and its reply is read as it arrives; the stream closes
+when the reply ends (`onClose`), and a refusal fails it with the status and what the
+server said. A request is not sent again on its own — declare `retry` to ask again after
+a loss.
+
+A plain GET — none of the four — keeps the platform's `EventSource` machinery
+**verbatim**: it retries on its own (honoring the server's `retry:` hint) and resumes with
+`Last-Event-ID`, during which `status` reads `"retrying"` and no error is reported;
+`retry`/`onError` concern only **terminal** failure — the platform giving up.
 
 A declared stream **holds a live connection** for as long as it is `active` and its node
 lives — every open tab is one held server connection (browsers cap ~6 per host over
@@ -21,6 +28,32 @@ progress: EventStream [ url = { `/api/jobs/${app.jobId}/events` },
     onMessage(e: StreamMessage) { app.output = app.output + e.data },
     ]
 ```
+
+```declare-fragment
+answer: string = "",
+asked: string = "",
+reply: EventStream [ url = "/api/chat", method = "POST", active = { app.asked != "" },
+    body = { { prompt: app.asked } }, headers = { { Authorization: "Bearer " + app.token } },
+    onMessage(e: StreamMessage) { app.answer = app.answer + e.data },
+    ]
+```
+
+## method
+`"GET"` (the default), `"POST"`, `"PUT"`, `"PATCH"` or `"DELETE"` — the request whose reply
+is the stream. Anything but a plain GET is read as the reply to one request (above).
+
+## body
+What the request sends, as a `DataSource`'s: an object or array is JSON-encoded with a
+JSON `Content-Type`, a string is sent as it is. Ignored for a GET.
+
+## headers
+The request's headers — a record, as a `DataSource`'s. An empty value drops the header,
+so `Authorization: app.token != "" ? "Bearer " + app.token : ""` sends one only when
+signed in. Changing them asks again.
+
+## credentials
+Whether the request carries the person's cookies and credentials — `sameOrigin` (the
+default), `include`, `omit` — as for a `DataSource`.
 
 ## listenTo
 The **named** SSE event types to deliver — `listenTo = ["progress",
