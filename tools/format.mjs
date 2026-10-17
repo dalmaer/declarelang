@@ -553,6 +553,7 @@ function analyze(tokens) {
       if (at("include", "lb")) parseDirective("include");
       else if (at("use", "lb")) parseDirective("use");
       else if (at("ship", "lb")) { p++; parseBody(true); } // `ship [ islands = [ … ], files = [ … ], compiler = true ]` — attr-shaped members
+      else if (at("defaultFlags", "lb")) { p++; parseBody(true); } // `defaultFlags [ render = canvas ]` — attr-shaped members
       else if (at("class", "ident")) {
         p++;
         expect("ident", "the class's name");

@@ -1005,7 +1005,7 @@ function comprehensiveModel(spine) {
   const EXTRACT = join(ROOT, ".derive/docs-extract.json");
   const docsModel = JSON.parse(readFileSync(existsSync(EXTRACT) ? EXTRACT : join(ROOT, "docs/declare-model.json"), "utf8"));
   const types = buildTypes(spine, docsModel);
-  const registry = buildRegistry(docsModel.reference, types.order);
+  const registry = buildRegistry(docsModel.reference, types.order, docsModel.forms?.order ?? []);
   const links = { ids: Object.fromEntries(Object.keys(registry).sort().map((k) => [k, registry[k]])), outgoing: scan(registry).outgoing };
   return JSON.stringify({
     meta: {

@@ -14,6 +14,7 @@
 // id, every reply is { id, result } or { id, error }):
 //   { type:"compileProgram", id, source, opts } → { program, diagnostics, report, closure }
 //   { type:"extract",    id, source, originDir, document } → { ok, html, title, doc?, report? }
+//   { type:"flags",      id, source, originDir } → the program's own flags, or undefined
 //   { type:"production", id, args }           → writeProduction's result, errors projected
 //   { type:"fresh",      id, closure, props } → boolean (isUpToDate over diskProbe)
 //   { type:"highlight",  id, src }            → segments
@@ -21,7 +22,7 @@
 
 import { parentPort } from "node:worker_threads";
 import path from "node:path";
-import { isUpToDate, diskProbe, crawlExtract, diskDataResolver, crawlerDocument } from "../compiler/dist/compile-node.js";
+import { isUpToDate, diskProbe, crawlExtract, diskDataResolver, crawlerDocument, programFlags } from "../compiler/dist/compile-node.js";
 // the PROGRAM-shaped compile (compiler/src/declarec.ts: the Node front over the
 // shared program tail) — what /compile answers with, so a page never parses
 import { compileProgram } from "../compiler/dist/declarec.js";
@@ -48,6 +49,8 @@ async function handle(m) {
       const title = ex.title || "";
       return { ok: true, html: ex.html, title, doc: m.document ? crawlerDocument(ex.html, title || m.fallbackTitle || path.basename(m.originDir)) : undefined };
     }
+    case "flags":
+      return programFlags(m.source, m.originDir);
     case "production": {
       const built = await writeProduction(m.args);
       // plain projection: the server reads .ok/.report/.errors[].message and the manifest fields

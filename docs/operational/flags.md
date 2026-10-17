@@ -8,14 +8,37 @@ compose onto a run or a build; `kernel` matters only to a build.
 <!-- generated:flags-table -->
 | modifier | what it does | CLI (`declarec`) | URL | default |
 |---|---|---|---|---|
-| **render** | render through managed DOM, a single <canvas>, or the native Mac host | `--render dom` / `--canvas` | `?render=dom` | `dom` |
-| **crawler** | embed the crawled document in the host page, for crawlers | `--crawler` | `?crawler` | `false` |
-| **kernel** | the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download) | `--kernel wasm` | `?kernel=wasm` | `wasm` |
+| **render** | render through managed DOM, a single <canvas>, or the native Mac host; unset, the program's flags decide | `--render dom` / `--canvas` | `?render=dom` | `dom` |
+| **crawler** | embed the crawled document in the host page, for crawlers; unset, the program's flags decide | `--crawler` | `?crawler` | `false` |
+| **kernel** | the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download); unset, the program's flags decide | `--kernel wasm` | `?kernel=wasm` | `wasm` |
 <!-- /generated:flags-table -->
 
 Every name is lowercase, and the same name works everywhere: `?render=canvas` on the server,
 `--canvas` on the CLI, and `?render=canvas` in the browser are one modifier. Booleans accept
 `?crawler`, `?crawler=1`, `?crawler=true` (on) and `?crawler=0`/`false` (off).
+
+## A program's own flags
+
+A program can set its own defaults for the three, in a top-level
+[`defaultFlags [ … ]`](declare-docs:language:defaultFlags) block:
+
+```
+defaultFlags [ render = canvas ]
+```
+
+A flag the request or the command names wins; one it leaves out, the program's block
+decides; one neither names takes the default in the table. So the games, which declare
+`render = canvas`, open on the canvas, and `?render=dom` or `declarec --render dom` still runs
+them on the DOM. The block takes `render = dom | canvas` (not `mac`, which is a host asking
+for the compiled program), `kernel = wasm | js` and `crawler = true | false`.
+
+Where each is read:
+
+- `render`: the page boot, the dev server's `/build` and `declarec`. A program running as an
+  `AppIsland` takes the outer program's renderer, and the Mac host renders natively.
+- `kernel`: production builds (`declarec`, `/build`).
+- `crawler`: production builds, and the dev server's run page. The static site's pages never
+  embed a crawl.
 
 ## Not flags (though they once looked like it)
 

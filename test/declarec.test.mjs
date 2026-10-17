@@ -383,8 +383,14 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // island was never a smaller build; it was a broken one. The distro's
   // resolver (boot-uniform, the service worker, the artifact ladder) stays out:
   // a deployed app has nothing to resolve.
+  //
+  // 121 → 123 KB (2026-10-14, region cells given back): a record or object
+  // value that leaves its place returns the kernel cells its readers made in
+  // it (reactive.ts retireCell, data.ts retireTree and RETIRE). Without it a
+  // program that replaces what it shows every frame ran the kernel out of
+  // memory; it took the build just past 121.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 121 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 123 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 

@@ -65,10 +65,10 @@ function titleOf(file) {
 /** `reference` (optional): the extract model's reference map, passed by assemble
  *  so the registry is built from the doc tree of THIS run rather than from the
  *  committed model of the last one. `typeNames` (optional) is the same for the
- *  TYPE pages assemble builds in that run. The CLI (`--check`) passes neither and
- *  reads the committed model — correct for a gate, which judges the committed
- *  corpus. */
-export function buildRegistry(reference, typeNames) {
+ *  TYPE pages assemble builds in that run, and `formNames` for the language FORM
+ *  pages. The CLI (`--check`) passes none and reads the committed model —
+ *  correct for a gate, which judges the committed corpus. */
+export function buildRegistry(reference, typeNames, formNames) {
   const ids = {};
   const add = (id, file, kind, title) => {
     // A duplicate id is an ERROR, never a silent last-write: two chapters whose
@@ -102,7 +102,7 @@ export function buildRegistry(reference, typeNames) {
   ids["essay:why-declare"] = { path: "apps/homepage/homepage.declare", title: "Why Declare", kind: "essay" };
 
   // Reference symbols: the model's node keys are already the IDs (`View.width`).
-  const committed = (reference === undefined || typeNames === undefined) && existsSync(MODEL)
+  const committed = (reference === undefined || typeNames === undefined || formNames === undefined) && existsSync(MODEL)
     ? JSON.parse(readFileSync(MODEL, "utf8")) : null;
   const ref = reference ?? committed?.reference ?? null;
   for (const key of Object.keys(ref ?? {})) {
@@ -114,6 +114,11 @@ export function buildRegistry(reference, typeNames) {
   // have. The docs app resolves it to the type's own page.
   for (const n of typeNames ?? Object.keys(committed?.types?.pages ?? {})) {
     ids[`type:${n}`] = { path: "docs/declare-model.json", title: n, kind: "type" };
+  }
+  // Forms: one id per language form page (`language:defaultFlags`), resolved by the
+  // docs app to the form's page.
+  for (const n of formNames ?? committed?.forms?.order ?? []) {
+    ids[`language:${n}`] = { path: "docs/declare-model.json", title: n, kind: "form" };
   }
   return ids;
 }

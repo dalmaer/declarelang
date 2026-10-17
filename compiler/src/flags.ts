@@ -12,6 +12,10 @@
 // The request TYPE (what artifact a URL returns) is orthogonal and lives in
 // reqtypes.ts. Everything is lowercase — no camelCase in the URL/CLI surface.
 //
+// A program states its own defaults for them in `defaultFlags [ … ]` (runtime/src/parser.ts
+// Flags, FLAG_WORDS — the same names, a program's choice of values): a flag a request
+// or the CLI does not name, the program's decides, and only then the default below.
+//
 // Deliberately NOT flags (see docs/system-design/requests.md §"Removed knobs"):
 //   • `prod` is a REQUEST (`?build`, reqtypes.ts REQ.BUILD), not a modifier.
 //   • `slim` / `stripPos` are what a build IS (always slimmed + position-stripped);
@@ -57,11 +61,11 @@ export type FlagSpec =
 
 export const FLAG_SPECS: readonly FlagSpec[] = [
   { name: "render", kind: "enum", values: ["dom", "canvas", "mac"], default: "dom",
-    description: "render through managed DOM, a single <canvas>, or the native Mac host" },
+    description: "render through managed DOM, a single <canvas>, or the native Mac host; unset, the program's flags decide" },
   { name: "crawler", kind: "bool", default: false,
-    description: "embed the crawled document in the host page, for crawlers" },
+    description: "embed the crawled document in the host page, for crawlers; unset, the program's flags decide" },
   { name: "kernel", kind: "enum", values: ["wasm", "js"], default: "wasm",
-    description: "the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download)" },
+    description: "the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download); unset, the program's flags decide" },
 ];
 
 /** Defaults, derived from the registry — never hand-maintained. */

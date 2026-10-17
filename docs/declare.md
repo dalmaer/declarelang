@@ -240,8 +240,8 @@ into `body`, in order; the base's own children never move. **A child can exist
 conditionally:** `exists = { … }` builds it while true and discards it while false, in its
 place (`visible` keeps a hidden view built — a focus sink, a definition read by its parent).
 
-Besides `class`, the top level holds `script`, `include`, `use`, `theme`, `style`, `schema`
-and `ship` — the complete set, **in any order**, before or after the root instance;
+Besides `class`, the top level holds `script`, `include`, `use`, `theme`, `style`, `schema`,
+`ship` and `defaultFlags` — the complete set, **in any order**, before or after the root instance;
 `extends` may name a class declared later in the file. **`script { … }`** holds free TypeScript — helpers,
 parsers, whole libraries — and may **`import`** ES modules (a file, or an npm package by bare
 specifier; bundled at compile). **`script [ "file.ts" ]`** is the same block loaded from a
@@ -265,7 +265,10 @@ self-contained package of the program must carry beyond what its source names �
 programs an `AppIsland` may mount when its `program` is computed; `files = [ "path", … ]`, files it reads that no
 literal names or that live outside its folder; `compiler = true`, it compiles source at run time; `inspector =
 true`, it answers questions about itself in production ([Packaging](declare-docs:guide:packaging)). A
-literal `program = "name"` or `url = "path"` needs no entry, and hosts that carry sources and a compiler read none of it. **`theme Name [ … ]`** and **`style Name [ … ]`** are named records of
+literal `program = "name"` or `url = "path"` needs no entry, and hosts that carry sources and a compiler read none of it.
+**`defaultFlags [ … ]`** gives the program's own defaults for the platform's flags — `render = canvas`,
+`kernel = js`, `crawler = true` — which a request's `?render=` or `declarec --render` overrides; a
+program has at most one, in any of its files ([Renderers](declare-docs:guide:renderers), [defaultFlags](declare-docs:language:defaultFlags)). **`theme Name [ … ]`** and **`style Name [ … ]`** are named records of
 literal values — a token record, and the style of a run of text with no view (§9).
 
 ### `classroot`

@@ -40,7 +40,7 @@ An app is correct when **a person sees and feels the same app — or a crisper, 
 The runtime supports **both** DOM and Canvas rendering.
 
 - A **View** is abstract over a **RenderBackend**; **DOM** and **Canvas** are two implementations.
-- The **LFC decides per view / per hierarchy, dynamically, at runtime** which backend to use — the optimizing-runtime idea made first-class. The application never chooses; it never names a substrate.
+- A host runs the **whole program on one backend**: the DOM by default in the browser, Canvas when the program's flags ask for it (`defaultFlags [ render = canvas ]`) or the request does (`?render=canvas`). The program's views never name a substrate; it runs the same on either.
 - **Drawing is first-class in both modes.** The API allows vector drawing (not just image placement) whether a view is DOM- or Canvas-backed: the Canvas backend draws to the shared surface; the DOM backend draws to a per-view `<canvas>`/SVG (and rides HTML-in-Canvas as it matures).
 
 *Why:* flexibility and substrate independence — the DOM's native features (text, input, accessibility, video) where they matter, own pixels where scale/animation win — and it rides the platform's DOM-in-canvas convergence rather than betting against it.

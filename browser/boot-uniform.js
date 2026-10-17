@@ -293,7 +293,10 @@ export default async function boot(cfg) {
 
   const mainUrl = new URL(cfg.main, location.href);
   const mainId = mainUrl.href;
-  const props = { render: cfg.backend === "CanvasBackend" ? "canvas" : "dom" };
+  // The renderer the REQUEST names (`?render=`), if it names one; otherwise the
+  // program's own default decides (its `defaultFlags [ render = … ]`, below) — known only once the
+  // program is in hand, so a request that names none compiles and caches as such.
+  const props = cfg.backend === undefined ? {} : { render: cfg.backend === "CanvasBackend" ? "canvas" : "dom" };
   const sVersion = perfStage("version");
   const build = await platformBuild();
   sVersion.end();
@@ -319,10 +322,10 @@ export default async function boot(cfg) {
   // the one place the two hosts genuinely differ, and they differ in WHICH REQUEST
   // IS MADE, not in what either request means.
   const relMain = relativize(mainUrl, ROOT);
-  const built = window.__declareServer ? null : prewarmedEntry(relMain, props);
+  const built = window.__declareServer ? null : prewarmedEntry(relMain, cfg.backend === undefined ? undefined : props);
   if (built !== null) {
     const sPrewarm = perfStage("prewarm");
-    const warm = await loadBuild({ root: ROOT, relMain, kind: "run", props, fetchImpl: fetch });
+    const warm = await loadBuild({ root: ROOT, relMain, kind: "run", props: built.props ?? {}, fetchImpl: fetch });
     sPrewarm.end();
     if (warm && warm.programJson) {
       programObj = hydrateProgram(warm.programJson);
@@ -409,10 +412,14 @@ export default async function boot(cfg) {
   // compile for a live edit on the dev server (the server's, not the browser's
   // bundle), islands from the builds it ships, and the error PAGE — a program,
   // booted through this same entry — in place of the bare panel.
+  // The renderer: the request's, else the program's own default, else the DOM.
+  const backend = cfg.backend ?? (programObj.flags?.render === "canvas" ? "CanvasBackend" : undefined);
+  currentCfg = { ...cfg, backend };
+
   let app;
   try {
     app = await bootPage({
-      ...cfg,
+      ...cfg, backend,
       program: programObj, pageSource, path,
       compile: window.__declareServer ? (src, origin) => serverCompile(origin, src) : undefined,
       // no build request on the dev server, for the same reason the page boot makes none

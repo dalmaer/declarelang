@@ -348,21 +348,25 @@ bootHost(cfg);
   // PARAMETERS serve-parity.test locks down — bootUrl and iconBase — now built
   // from the platform mount's prefix so a workspace app boots the platform from
   // /declare/ while its own resources resolve from /.
-  async function declareRunPage(urlPath, flags = DEFAULT_FLAGS) {
+  // `crawler` is the request's ?crawler, or undefined: then the program's own
+  // flags decide.
+  async function declareRunPage(urlPath, crawler) {
     let staticBlock = "";
     let title = "";
-    if (flags.crawler) {
+    let abs = null, source = null;
+    try {
+      const hit = mounts.resolve(urlPath);
+      if (hit && existsSync(hit.abs)) { abs = hit.abs; source = readFileSync(abs, "utf8"); }
+      if (crawler === undefined && source !== null) crawler = (await toolchain.flags(source, path.dirname(abs)))?.crawler;
+    } catch (e) { console.error("run page: could not read the program's flags:", e.message); }
+    if (crawler && source !== null) {
       try {
-        const hit = mounts.resolve(urlPath);
-        const abs = hit ? hit.abs : null;
-        if (abs && existsSync(abs)) {
-          const ex = await toolchain.extract(readFileSync(abs, "utf8"), path.dirname(abs));
-          // display:none INLINE — a following <script> hider is too late on a
-          // slow device (Safari can paint mid-parse, flashing the crawl text
-          // before the script runs); crawlers read text nodes regardless, and
-          // the <noscript> unhide keeps the block as the JS-off fallback.
-          if (ex.ok) { staticBlock = `<noscript><style>#declare-static{display:block !important}</style></noscript><div id="declare-static" style="display:none">\n${ex.html}\n</div>`; title = ex.title; }
-        }
+        const ex = await toolchain.extract(source, path.dirname(abs));
+        // display:none INLINE — a following <script> hider is too late on a
+        // slow device (Safari can paint mid-parse, flashing the crawl text
+        // before the script runs); crawlers read text nodes regardless, and
+        // the <noscript> unhide keeps the block as the JS-off fallback.
+        if (ex.ok) { staticBlock = `<noscript><style>#declare-static{display:block !important}</style></noscript><div id="declare-static" style="display:none">\n${ex.html}\n</div>`; title = ex.title; }
       } catch (e) { console.error("crawler embed failed:", e.message); }
     }
     return runWrapper({
@@ -410,22 +414,26 @@ bootHost(cfg);
   // the url (so distro mode's two aliases of one file share a single entry).
   // (embeddable-server.md §1, §5)
   const prodMem = new Map();
-  function buildKey(srcPath, backend, kernel, toolchain) {
+  function buildKey(srcPath, backend, kernel, crawler, toolchain) {
     return createHash("sha256")
-      .update([`main=${srcPath}`, `render=${backend}`, `kernel=${kernel}`, `slim=true`, `stripPos=true`, `typecheck=true`, `crawler=false`, `tc=${toolchain}`].join("\n"))
+      .update([`main=${srcPath}`, `render=${backend}`, `kernel=${kernel}`, `slim=true`, `stripPos=true`, `typecheck=true`, `crawler=${crawler}`, `tc=${toolchain}`].join("\n"))
       .digest("hex").slice(0, 16);
   }
 
-  async function ensureProdBuild(srcPath, backend = "dom", kernel = "wasm") {
+  // `backend`, `kernel` and `crawler` are the flags the request named, each
+  // undefined when it named none: then the program's own flags decide, which the
+  // build resolves (declarec buildProduction) and keys as "program".
+  async function ensureProdBuild(srcPath, backend, kernel, crawler) {
     if (!existsSync(srcPath)) return null;
     const source = readFileSync(srcPath, "utf8");
     const name = path.basename(srcPath).replace(/\.declare$/, "");
     const dir = path.dirname(srcPath);
     const tc = toolchain.fingerprint();
-    const key = buildKey(srcPath, backend, kernel, tc);
+    const crawled = crawler === undefined ? "program" : String(crawler);
+    const key = buildKey(srcPath, backend ?? "program", kernel ?? "program", crawled, tc);
     const outDir = path.join(buildCache, key);
     const manPath = path.join(outDir, "manifest.json");
-    const propsNow = { render: backend, slim: "true", stripPos: "true", typecheck: "true", crawler: "false", kernel, toolchain: tc };
+    const propsNow = { render: backend ?? "program", slim: "true", stripPos: "true", typecheck: "true", crawler: crawled, kernel: kernel ?? "program", toolchain: tc };
     const fresh = async (m) => {
       if (!m || !m.closure || !m.moduleName || !existsSync(path.join(outDir, m.moduleName))) return false;
       try { return await toolchain.fresh(m.closure, propsNow); } catch { return false; }
@@ -435,7 +443,7 @@ bootHost(cfg);
     if (existsSync(manPath)) {
       try { const d = JSON.parse(readFileSync(manPath, "utf8")); if (await fresh(d)) { prodMem.set(key, d); return d; } } catch { /* rebuild */ }
     }
-    const built = await toolchain.production({ source, name, srcDir: dir, outDir, render: backend, kernel, props: { toolchain: tc } });
+    const built = await toolchain.production({ source, name, srcDir: dir, outDir, render: backend, kernel, crawler, props: { toolchain: tc } });
     if (!built.ok) return { error: built.errors, report: built.report };
     man = { closure: built.closure, dir: outDir, moduleName: built.moduleName, sizes: built.sizes,
       assets: built.assets, used: built.usedClasses, source: srcPath, builtAt: null };
@@ -450,7 +458,7 @@ bootHost(cfg);
   // url in the mount space, so it composes with every mount identically.
   // `req` rides along because everything static now goes out through sendFile,
   // which answers byte ranges — and a range is a property of the REQUEST.
-  async function serveBuild(req, res, buildPath, urlPath, backend = "dom", kernel = "wasm") {
+  async function serveBuild(req, res, buildPath, urlPath, backend, kernel, crawler) {
     // buildPath = "/build/my-apps/lzx-weather/foo.js" → the PROGRAM directory is
     // the longest prefix holding its own <dir>/<dir>.declare (the directory-
     // program rule), and everything after it is the tail — which may be a
@@ -467,7 +475,20 @@ bootHost(cfg);
     }
     if (hit === null) return send(res, 404, "no such program under: " + afterBuild, "text/plain");
 
-    const man = await ensureProdBuild(hit.abs, backend, kernel);
+    // A file named by its contents (app.<hash>.js, programs/<hash>.json) is the
+    // same file in whichever build holds it, and a build's page imports it by a
+    // relative path, which leaves the page's ?render= or ?kernel= behind: look
+    // for it in every build of this program before building the default one.
+    const named = tail.replace(/^\/+/, "");
+    if (/(^|[./])[0-9a-f]{8,}\.[a-z]+$/.test(named)) {
+      for (const m of prodMem.values()) {
+        if (m.source !== hit.abs || m.dir === undefined) continue;
+        const gen = path.join(m.dir, named);
+        if (gen.startsWith(m.dir + path.sep) && existsSync(gen) && statSync(gen).isFile()) return serveFrom(req, res, m.dir, named);
+      }
+    }
+
+    const man = await ensureProdBuild(hit.abs, backend, kernel, crawler);
     if (man === null) return send(res, 404, "no such program", "text/plain");
     if (man.error) return send(res, 500, "declarec build failed:\n" + (man.report ?? man.error.map((e) => e.message).join("\n")), "text/plain");
     const t = tail.replace(/^\/+/, "");
@@ -679,8 +700,9 @@ bootHost(cfg);
       // /build/… → the cached declarec artifact, addressed by program url
       if (p === "/build" || p.startsWith("/build/")) {
         const q = new URL(req.url, "http://x").searchParams;
-        const flags = parseFlags(q, DEFAULT_FLAGS);
-        serveBuild(req, res, p, p, flags.render, flags.kernel).catch((e) => {
+        // a flag the request does not name, the program's own flags decide
+        const flags = parseFlags(q, { ...DEFAULT_FLAGS, render: undefined, kernel: undefined, crawler: undefined });
+        serveBuild(req, res, p, p, flags.render, flags.kernel, flags.crawler).catch((e) => {
           if (!res.headersSent) send(res, 500, String((e && e.stack) || e), "text/plain");
         });
         return;
@@ -729,7 +751,7 @@ bootHost(cfg);
           }
           const navigate = req.headers["sec-fetch-mode"] === "navigate" || (req.headers.accept ?? "").includes("text/html");
           if (rt === REQ.RUN && navigate) {
-            declareRunPage(p, parseFlags(params))
+            declareRunPage(p, parseFlags(params, { ...DEFAULT_FLAGS, crawler: undefined }).crawler)
               // probeTag: DIAG(probe), temporary — a no-op without `?probe`
               .then((page) => send(res, 200, probeTag(withServerMarker(page), req), "text/html;charset=utf-8"))
               .catch((e) => { if (!res.headersSent) send(res, 500, String((e && e.stack) || e), "text/plain"); });

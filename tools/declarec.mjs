@@ -406,15 +406,22 @@ export async function buildProduction(source, opts = {}) {
              report: why, closure: null, files: [], sizes: null };
   }
 
+  // Each flag: the value asked for (a --flag, a request's ?flag), else the
+  // program's own default (its `defaultFlags [ … ]`, known once it compiles), else the
+  // platform's. A build asked for none is keyed as such, so it never stands in
+  // for one that was.
+  const asked = opts.render === "canvas" || opts.render === "dom" ? opts.render : undefined;
+  const askedKernel = opts.kernel === "js" || opts.kernel === "wasm" ? opts.kernel : undefined;
+  const askedCrawler = typeof opts.crawler === "boolean" ? opts.crawler : undefined;
   const props = {
-    render: opts.render === "canvas" ? "canvas" : "dom",
+    render: asked ?? "program",
     slim: String(opts.slim !== false),
     // THE KERNEL THE BUILD CARRIES (reactive.ts kernelReady): "wasm", the default,
     // or "js" — the JavaScript kernel with the bundle and no WebAssembly at all
-    kernel: opts.kernel === "js" ? "js" : "wasm",
+    kernel: askedKernel ?? "program",
     stripPos: String(opts.stripPos ?? true),
     typecheck: "true",   // always on — a mandatory phase of the one compile (docs/system-design/requests.md)
-    crawler: String(!!opts.crawler),
+    crawler: askedCrawler === undefined ? "program" : String(askedCrawler),
     // the corpus gate's build: the `__declare` bridge aboard, nothing else changed
     ...(opts.bridge ? { bridge: "true" } : {}),
     ...(opts.keepAll ? { keepAll: "true" } : {}),
@@ -437,7 +444,11 @@ export async function buildProduction(source, opts = {}) {
   // clean for the minifier. The backend is a build choice: DOM (managed
   // elements) or Canvas (one <canvas>, the app painted by the runtime's own
   // display list). Only the chosen backend is bundled.
-  const canvas = opts.render === "canvas";
+  const flags = built.program.flags ?? {};
+  const render = asked ?? flags.render ?? "dom";
+  const kernel = askedKernel ?? flags.kernel ?? "wasm";
+  const crawler = askedCrawler ?? flags.crawler ?? false;
+  const canvas = render === "canvas";
   const backend = canvas
     ? { cls: "CanvasBackend", file: "canvas-backend.js" }
     : { cls: "DomBackend", file: "dom-backend.js" };
@@ -629,7 +640,7 @@ export async function buildProduction(source, opts = {}) {
       // One file, one request; the decode is measured in the boot stages.
       __DECLARE_INLINE_KERNEL__: "true",
       __DECLARE_JS_KERNEL__: "false",   // a production build carries no debug kernel, not even its switch
-      __DECLARE_KERNEL__: JSON.stringify(props.kernel),
+      __DECLARE_KERNEL__: JSON.stringify(kernel),
       // the developer's checks stay in a --debug build (build-flags.d.ts)
       __DECLARE_PRODUCTION__: opts.debug ? "false" : "true",
     },
@@ -647,7 +658,7 @@ export async function buildProduction(source, opts = {}) {
   let staticBlock = "";
   let pageTitle = name;
   let extract = null;
-  if (opts.crawler || opts.extract) {
+  if (crawler || opts.extract) {
     // The shipped program has dropped its navigation relation; the crawl gets
     // its own program, with links, from the same compile.
     const crawlBuild = await programFromCompiled({ ...built.compiled }, { links: true });
@@ -674,9 +685,9 @@ export async function buildProduction(source, opts = {}) {
       }),
     ]);
     if (opts.extract && ex) extract = { html: ex.html, title: ex.title };
-    if (opts.crawler && ex && ex.html) staticBlock = `<div id="declare-static">\n${ex.html}\n</div>`;
+    if (crawler && ex && ex.html) staticBlock = `<div id="declare-static">\n${ex.html}\n</div>`;
     // the settled appName names the deployed page — the <title> SEO reads
-    if (opts.crawler && ex && ex.title) pageTitle = ex.title;
+    if (crawler && ex && ex.title) pageTitle = ex.title;
   }
 
   // A crawler block (--crawler) is removed BEFORE first paint by a synchronous classic
@@ -713,7 +724,7 @@ export async function buildProduction(source, opts = {}) {
   return {
     ok: true, errors: [], warnings: built.warnings, diagnostics: built.diagnostics, report: built.report,
     closure: built.closure, program: built.program, sizes, metafile: result.metafile, extract,
-    usedClasses: built.usedClasses, slim, kernel: props.kernel,
+    usedClasses: built.usedClasses, slim, kernel, render,
     // what the build carries beyond its core, and why; what it left out
     // `absent`: left out, a stand-in in their place; `cut`: tables shipped with
     // only the entries the program names
@@ -767,7 +778,7 @@ async function copyAssets(srcDir, outDir) {
  *  copied assets). The shared emit used by the CLI and the dev server. Returns
  *  the buildProduction result plus `{ outDir, moduleName, assets }`. On a compile
  *  error, returns `{ ok:false, errors }` and writes nothing. */
-export async function writeProduction({ source, name = "app", srcDir = null, outDir, stripPos = true, render, slim = true, crawler = false, extract = false, kernel, props }) {
+export async function writeProduction({ source, name = "app", srcDir = null, outDir, stripPos = true, render, slim = true, crawler, extract = false, kernel, props }) {
   const out = await buildProduction(source, { name, originDir: srcDir, stripPos, render, slim, crawler, extract, kernel, props });
   if (!out.ok) return out;
   await rm(outDir, { recursive: true, force: true });
@@ -948,7 +959,8 @@ async function cli(argv) {
     }
     process.exit(await checkFiles(files, { json, quiet }));
   }
-  const { flags, rest } = parseArgvFlags(passthrough, DEFAULT_FLAGS); // declarec is always a build
+  // declarec is always a build; a flag it is not given, the program's own flags decide
+  const { flags, rest } = parseArgvFlags(passthrough, { ...DEFAULT_FLAGS, render: undefined, kernel: undefined, crawler: undefined });
   const input = rest.find((a) => !a.startsWith("-")) ?? null;
   if (input === null) {
     console.error("usage: declarec <app.declare> [-o dist] [--canvas] [--crawler] [--extract] [--kernel wasm|js] [--debug] [--why] [--quiet]");
@@ -1016,7 +1028,7 @@ async function cli(argv) {
     console.log(`    app bundle     ${kb(out.sizes.appRaw)} raw   ${kb(out.sizes.appGzip)} gzip`);
     console.log(`    index.html     ${kb(out.sizes.htmlRaw)} raw   ${kb(out.sizes.htmlGzip)} gzip`);
     console.log(`    ── total over the wire (gzip): ${kb(out.sizes.totalGzip)} ──`);
-    console.log(`    kernel: ${out.kernel === "js" ? "JavaScript (--kernel=js)" : "WebAssembly"}`);
+    console.log(`    kernel: ${out.kernel === "js" ? "JavaScript" : "WebAssembly"}`);
     if (out.slim) {
       // Count only the RUNTIME classes (the registry names) — the used-set also
       // carries the app's own classes (always bundled, never in the registry), so

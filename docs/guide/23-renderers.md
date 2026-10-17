@@ -22,6 +22,12 @@ port:
 declarec calendar.declare --render canvas     (CLI)
 ```
 
+A program can set the flag's default for itself, in a top-level
+[`defaultFlags [ render = canvas ]`](declare-docs:language:defaultFlags). A game whose screen is all drawing,
+redrawn every frame, does, and a request that names no renderer gets the canvas;
+`?render=` and `--render` still win over it. A program running as another's
+`AppIsland` runs on the outer program's renderer, whatever its own flags say.
+
 And then there is the claim that sounds impossible until you watch it: **Look
 ma, no browser!** The **Mac host** is a native macOS application — its own
 process, its own window, real menus — that runs the same program file on a

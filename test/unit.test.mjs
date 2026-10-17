@@ -6271,6 +6271,42 @@ await test("ship [ … ]: an included component's block folds into the program's
     "the component said what it reads; the program said it compiles; the merged program carries both");
 });
 
+await test("defaultFlags [ … ]: the registry's members, each a word, once per program", async () => {
+  assert.deepEqual(parseProgram("defaultFlags [ render = canvas ]\nApp [ ]").flags, { render: "canvas" });
+  assert.deepEqual(parseProgram("App [ ]\ndefaultFlags [ render = dom, kernel = js, crawler = true ]").flags, { render: "dom", kernel: "js", crawler: true },
+    "after the root too, and every member");
+  assert.equal(parseProgram("App [ ]").flags, undefined, "a program that declares none carries none");
+  assert.equal(parseProgram("App [ defaultFlags: View [ ] ]").root.children[0].name, "defaultFlags", "a member named defaultFlags is a member");
+  // the members are the registry's (compiler/src/flags.ts), and every value a program may choose is one of its values
+  const { FLAG_SPECS } = await import("../compiler/dist/flags.js");
+  const { FLAG_WORDS } = await import("../runtime/dist/parser.js");
+  assert.deepEqual(Object.keys(FLAG_WORDS).sort(), FLAG_SPECS.map((s) => s.name).sort(), "one member per flag");
+  for (const s of FLAG_SPECS) for (const w of FLAG_WORDS[s.name]) assert.ok(s.kind === "bool" ? ["true", "false"].includes(w) : s.values.includes(w), `${s.name} = ${w} is the flag's own value`);
+  const bad = (src, re) => {
+    let err = null;
+    try { parseProgram(src); } catch (e) { err = e; }
+    assert.ok(err !== null, "should refuse: " + src);
+    assert.match(err.errors ? err.errors.map((e) => e.message).join("\n") : err.message, re);
+  };
+  bad("defaultFlags [ density = 1 ]\nApp [ ]", /defaultFlags has no member 'density' — render, kernel, or crawler/);
+  bad("defaultFlags [ render = mac ]\nApp [ ]", /defaultFlags' render is dom or canvas/);
+  bad('defaultFlags [ render = { "canvas" } ]\nApp [ ]', /defaultFlags' render is dom or canvas/);
+  bad("defaultFlags [ crawler = yes ]\nApp [ ]", /defaultFlags' crawler is true or false/);
+  bad("defaultFlags [ render = dom, render = canvas ]\nApp [ ]", /defaultFlags names 'render' twice/);
+  bad("defaultFlags [ render = dom ]\ndefaultFlags [ kernel = js ]\nApp [ ]", /a program has one defaultFlags block, and this is a second/);
+  bad("defaultFlags [ render = dom ]\nApp [ ]\ndefaultFlags [ kernel = js ]", /a program has one defaultFlags block, and this is a second/);
+});
+
+await test("defaultFlags [ … ]: an included file may hold the program's block, but only one file", async () => {
+  const host = memHost({ "/games.declare": `defaultFlags [ render = canvas ]\nclass Board extends View [ ]` });
+  const r = await compile('include [ "games.declare" ]\nApp [ width=10, height=10, Board [ ] ]', { host, originDir: "/" });
+  assert.deepEqual(r.errors, []);
+  const { parseProgram: parse } = await import("../runtime/dist/parser.js");
+  assert.deepEqual(parse(r.source).flags, { render: "canvas" }, "the included file's block is the program's");
+  const two = await compile('defaultFlags [ kernel = js ]\ninclude [ "games.declare" ]\nApp [ width=10, height=10, Board [ ] ]', { host, originDir: "/" });
+  assert.match(two.errors.map((e) => e.message).join("\n"), /a program has one defaultFlags block, and this is a second — "games.declare" and "the app" each have one/);
+});
+
 // An error INSIDE an included file is positioned in that file, by name — not
 // at a line in the merged program labelled "included library source" (field
 // report 2026-08-21: five agents, five included rooms, every red run began

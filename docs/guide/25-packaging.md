@@ -55,6 +55,11 @@ On the dev server, `?build` on any program URL builds the same package and serve
 so you can try it before you deploy it. `--crawler` bakes the extracted document into
 `index.html`, for a page that should be indexed.
 
+A program can set any of these flags for itself, in a top-level
+[`defaultFlags [ … ]`](declare-docs:language:defaultFlags) block — `defaultFlags [ render = canvas ]` for a game
+drawn every frame, `defaultFlags [ crawler = true ]` for a page that should always be indexed. A
+switch given to `declarec`, or a `?render=` on the request, still wins.
+
 ## What your program says it needs: `ship`
 
 A build reads your source for everything a literal names: the classes the tree uses,

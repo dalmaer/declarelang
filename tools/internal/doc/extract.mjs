@@ -1057,7 +1057,10 @@ async function readForms() {
     const guide = (((rel.match(/^guide:\s*(.*)$/m) ?? [])[1] ?? "").split(/,\s*(?=\d\d-)/).map((x) => x.trim()).filter(Boolean))
       .map((g) => { const [chapter, title] = g.split("·").map((x) => x.trim()); return { chapter, title: title ?? chapter }; });
     const usage = [];
-    for (const id of field("usage").split(",").map((x) => x.trim()).filter(Boolean)) usage.push(...(await readExample(id)));
+    // `usage: none` — a form with no live demo: one that does nothing inside a
+    // demo, which runs as an island (flags)
+    const noDemo = field("usage") === "none";
+    if (!noDemo) for (const id of field("usage").split(",").map((x) => x.trim()).filter(Boolean)) usage.push(...(await readExample(id)));
     const gist = lead.split(/(?<=\.)\s/)[0].replace(/\n/g, " ");
     const page = { slug: sec.slug, name: field("name") || sec.slug, group: field("group") || "Other", family: field("family"), spec: field("spec"),
       terms: field("terms").split(",").map((x) => x.trim()).filter(Boolean),
@@ -1067,7 +1070,7 @@ async function readForms() {
     if (!g) { g = { name: page.group, forms: [] }; groups.push(g); }
     g.forms.push({ slug: sec.slug, name: page.name, short: field("short") || page.name, gist });
     // the gate
-    if (!usage.length) formsProblems.push(`forms.md '## ${sec.slug}': no usage demo (apps/docs/demos/${field("usage") || "form-" + sec.slug}.declare)`);
+    if (!usage.length && !noDemo) formsProblems.push(`forms.md '## ${sec.slug}': no usage demo (apps/docs/demos/${field("usage") || "form-" + sec.slug}.declare)`);
     if (!rules.length) formsProblems.push(`forms.md '## ${sec.slug}': no rules`);
     for (const g of guide) if (!existsSync(path.join(ROOT, "docs/guide", g.chapter + ".md"))) formsProblems.push(`forms.md '## ${sec.slug}': related chapter '${g.chapter}' does not exist`);
     for (const r of rules) {

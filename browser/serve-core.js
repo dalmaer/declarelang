@@ -106,7 +106,7 @@ export function runWrapper({ name, bootUrl, staticBlock = "", iconBase = null, m
   const script = `<script type="module">
   import boot from ${JSON.stringify(bootUrl)};
   const q = new URLSearchParams(location.search);
-  boot({ main: ${JSON.stringify(main)} ?? location.pathname, backend: q.get("render") === "canvas" ? "CanvasBackend" : undefined });
+  boot({ main: ${JSON.stringify(main)} ?? location.pathname, backend: { dom: "DomBackend", canvas: "CanvasBackend" }[q.get("render")] });
 </script>`;
   return shell({ name, staticBlock, iconBase, title, script, bootUrl, preloads });
 }
@@ -138,7 +138,7 @@ export function stubPage({ name, bootUrl, serveCoreUrl, iconBase = null, preload
   const q = new URLSearchParams(location.search);
   if (requestType(q) !== REQ.RUN && "serviceWorker" in navigator)
     navigator.serviceWorker.ready.then(() => location.reload());
-  boot({ main: directoryProgram(location.pathname) ?? location.pathname, backend: q.get("render") === "canvas" ? "CanvasBackend" : undefined });
+  boot({ main: directoryProgram(location.pathname) ?? location.pathname, backend: { dom: "DomBackend", canvas: "CanvasBackend" }[q.get("render")] });
 </script>`;
   return shell({ name, staticBlock: "", iconBase, title: "", script, bootUrl, preloads });
 }

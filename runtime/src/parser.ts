@@ -379,6 +379,10 @@ export interface Program {
    *  production bundle substitutes with a stub. Never set by the parser:
    *  parsing proves syntax, not types. */
   trusted?: boolean;
+  /** The `defaultFlags [ … ]` declaration: the program's own defaults for the
+   *  platform's flags, which a host reads before it builds the app. Absent
+   *  when the program declares none; one per program, across its `include`s. */
+  flags?: Flags;
   /** Stamped `true` once every attribute that its slot's type wires carries the
    *  decision (route.ts): the compiler routes the program it checked, and
    *  instantiate routes any other program before building it. */
@@ -419,6 +423,27 @@ export function mergeShip(a: Ship | undefined, b: Ship | undefined): Ship | unde
 
 const SHIP_MEMBERS = new Set(["islands", "files", "compiler", "inspector"]);
 
+/** `defaultFlags [ … ]` — the program's defaults for the platform's flags (the
+ *  registry in compiler/src/flags.ts): each is what the program gets when the
+ *  request, the `declarec` command or the outer program names no value of its
+ *  own. `render` is the renderer a web host mounts it on, `kernel` the
+ *  reactive kernel a build carries, `crawler` whether a build or a run page
+ *  embeds the crawled document. A program running as an island takes the
+ *  outer program's; the Mac host runs its own renderer and kernel. */
+export interface Flags {
+  render?: "dom" | "canvas";
+  kernel?: "wasm" | "js";
+  crawler?: boolean;
+}
+
+/** Each member's words — the registry's values a program may choose (`mac`
+ *  is a host asking for the compiled program, never a program's default). */
+export const FLAG_WORDS: { readonly [K in keyof Flags]-?: readonly string[] } = {
+  render: ["dom", "canvas"],
+  kernel: ["wasm", "js"],
+  crawler: ["true", "false"],
+};
+
 /** An included file (composition.md §1): a library of top-level declarations
  *  — classes, themes, styles, and its own `include`s — with NO root. It is
  *  not a Program: it never declares an App, so it has no `root`. */
@@ -439,6 +464,10 @@ export interface Library {
   /** …and its own `ship [ … ]`, folded the same way (a class that reads
    *  a file or mounts a program says so where it lives). */
   ship?: Ship;
+  /** …and the program's `defaultFlags [ … ]`, when this file is where it is stated,
+   *  with its position: a program states its flags once, in any of its files. */
+  flags?: Flags;
+  flagsPos?: Pos;
   /** A library may declare its own `script { … }` helpers; the source-merge
    *  folds these into the program's blocks, in include order. */
   scripts: ScriptBlock[];
@@ -1653,6 +1682,45 @@ class Parser {
     return ship;
   }
 
+  /** `defaultFlags [` at the current position — the flags declaration (see Flags).
+   *  `defaultFlags` followed by anything else is an ordinary name. */
+  atFlags(): boolean {
+    const t = this.tokens[this.i];
+    const u = this.tokens[this.i + 1];
+    return t.kind === "ident" && t.text === "defaultFlags" && u.kind === "lbracket";
+  }
+
+  /** `'defaultFlags' '[' ( NAME '=' WORD ),* ']'` — the registry's members, each a
+   *  word from its own set, validated HERE so a host reads plain data. */
+  parseFlags(): Flags {
+    this.expect("ident", "'defaultFlags'");
+    this.expect("lbracket", "'['");
+    const flags: Flags = {};
+    const names = Object.keys(FLAG_WORDS) as (keyof Flags)[];
+    while (this.peek().kind !== "rbracket" && this.peek().kind !== "eof") {
+      const t = this.peek();
+      if (t.kind !== "ident" || !names.includes(t.text as keyof Flags)) {
+        throw new DeclareError(`defaultFlags has no member '${t.text}' — render, kernel, or crawler`, t.pos);
+      }
+      this.next();
+      const name = t.text as keyof Flags;
+      if (flags[name] !== undefined) throw new DeclareError(`defaultFlags names '${name}' twice — one entry per member`, t.pos);
+      this.expect("eq", "'='");
+      const v = this.parseLiteral();
+      const words = FLAG_WORDS[name];
+      if (v.kind !== "ident" || !words.includes(v.name)) {
+        throw new DeclareError(`defaultFlags' ${name} is ${words.join(" or ")}`, v.pos);
+      }
+      if (name === "crawler") flags.crawler = v.name === "true";
+      else if (name === "render") flags.render = v.name as "dom" | "canvas";
+      else flags.kernel = v.name as "wasm" | "js";
+      if (this.peek().kind === "comma") this.next();
+      else break;
+    }
+    this.expect("rbracket", "']'");
+    return flags;
+  }
+
   /** `'include' '[' STRING ( ',' STRING )* ','? ']'` — a top-level directive
    *  whose body is Declare's list grammar restricted to quoted paths. Non-string
    *  entries are a positioned error (paths are quoted strings, no bare-token
@@ -1717,6 +1785,8 @@ function parseTopDecls(p: Parser): {
   includeSpans: Span[];
   uses: string[];
   ship: Ship | undefined;
+  flags?: Flags;
+  flagsPos?: Pos;
   scripts: ScriptBlock[];
   scriptFiles: IncludeRef[];
   scriptFileSpans: Span[];
@@ -1730,6 +1800,8 @@ function parseTopDecls(p: Parser): {
   const includeSpans: Span[] = [];
   const uses: string[] = [];
   let ship: Ship | undefined;
+  let flags: Flags | undefined;
+  let flagsPos: Pos | undefined;
   const scripts: ScriptBlock[] = [];
   const scriptFiles: IncludeRef[] = [];
   const scriptFileSpans: Span[] = [];
@@ -1741,6 +1813,12 @@ function parseTopDecls(p: Parser): {
     }
     else if (p.atUse()) uses.push(...p.parseUseDirective());
     else if (p.atShip()) ship = mergeShip(ship, p.parseShip());
+    else if (p.atFlags()) {
+      const at = p.peek().pos;
+      if (flags !== undefined) throw new DeclareError(ONE_FLAGS, at);
+      flags = p.parseFlags();
+      flagsPos = at;
+    }
     else if (p.atScriptFiles()) {
       const { refs, span, inline } = p.parseScriptFiles();
       if (inline) scripts.push(inline);
@@ -1757,8 +1835,11 @@ function parseTopDecls(p: Parser): {
     else if (p.atTop("font")) fonts.push(p.parseTopDecl("font"));
     else break;
   }
-  return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ship, scripts, scriptFiles, scriptFileSpans };
+  return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ship, ...(flags === undefined ? {} : { flags, flagsPos }), scripts, scriptFiles, scriptFileSpans };
 }
+
+/** A program states its flags once, in whichever of its files. */
+export const ONE_FLAGS = "a program has one defaultFlags block, and this is a second";
 
 /** Parse a whole Declare source: `include`s and top-level declarations
  *  (classes, themes, style bundles), the root instance, and — ruled
@@ -1812,6 +1893,8 @@ export function parseProgram(source: string): Program {
   const includeSpans = [...before.includeSpans, ...after.includeSpans];
   const uses = [...before.uses, ...after.uses];
   const ship = mergeShip(before.ship, after.ship);
+  if (before.flags !== undefined && after.flags !== undefined) throw new DeclareError(ONE_FLAGS, after.flagsPos!);
+  const flags = before.flags ?? after.flags;
   const scripts = [...before.scripts, ...after.scripts];
   const scriptFiles = [...(before.scriptFiles ?? []), ...(after.scriptFiles ?? [])];
   const scriptFileSpans = [...(before.scriptFileSpans ?? []), ...(after.scriptFileSpans ?? [])];
@@ -1820,7 +1903,7 @@ export function parseProgram(source: string): Program {
   if (p.errors.length > 0) throw new DeclareErrors(p.errors);
   for (const c of classes) lowerExists(c.body);
   lowerExists(root);
-  return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ...(ship === undefined ? {} : { ship }), scripts, scriptFiles, scriptFileSpans, root };
+  return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ...(ship === undefined ? {} : { ship }), ...(flags === undefined ? {} : { flags }), scripts, scriptFiles, scriptFileSpans, root };
 }
 
 /** `exists = { … }` on a child: the child is built while the value is true

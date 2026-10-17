@@ -26,11 +26,14 @@ selects what the URL returns; exactly one applies, and their absence runs the ap
 
 Three modifiers change *how* a program compiles, and compose onto a run or a build:
 
-- `?render=canvas` — render through a single `<canvas>` instead of managed DOM (`?render=dom`
-  is the default).
-- `?crawler` — embed the extracted static document in the run page (the client clears it at boot).
+- `?render=canvas` — render through a single `<canvas>` instead of managed DOM; `?render=dom`
+  the reverse. Without either, the program's own flags (`defaultFlags [ render = canvas ]`)
+  decide, and DOM when they say nothing.
+- `?crawler` — embed the extracted static document in the run page (the client clears it at boot);
+  without it, the program's own `defaultFlags [ crawler = true ]` asks for the same.
 - `?kernel=js` — with `?build`, carry the JavaScript kernel instead of the WebAssembly one: a
-  smaller download, the same results ([kernel.md](../system-design/kernel.md) §10).
+  smaller download, the same results ([kernel.md](../system-design/kernel.md) §10); without it,
+  the program's own `defaultFlags [ kernel = … ]` decides.
 
 Booleans accept `?crawler`, `?crawler=1`, `?crawler=true` (on) and `?crawler=0`/`false` (off).
 

@@ -28,8 +28,9 @@ for one. Five things keep it small:
   function — no `new Function` at startup, and no `eval` needed at all.
 - **Run-path only.** esbuild bundles the runtime's render path and tree-shakes the rest — the
   parser, checker, and typechecker never ship.
-- **One backend.** DOM by default, or `--canvas` for the single-`<canvas>` renderer; only the
-  chosen one is bundled.
+- **One backend.** The one `--render` names (`--canvas` for the single-`<canvas>` renderer),
+  else the program's own (`defaultFlags [ render = canvas ]`), else DOM; only the chosen one
+  is bundled.
 - **Slim registry.** Only the classes the app can actually instantiate are included. If a
   class appears *nowhere* statically (built by name from loaded data), keep it with a
   top-level `use [ Name ]` list, or slimming will drop it.
@@ -132,6 +133,10 @@ prose that remains is one sentence — the `.error` an app may show.
 | `--extract` | also write the static document standalone as `<name>.extract.html` |
 | `--debug` | a developer's build: the program verbatim, positions, prose, the Inspector, no slimming. For a program that needs some of that *in production*, declare it — `ship [ inspector = true ]` |
 | `--quiet` | suppress progress output |
+
+A program's own [`defaultFlags [ … ]`](declare-docs:language:defaultFlags) block sets its defaults for
+`--render`, `--crawler` and `--kernel`; a switch given here wins over it. `--no-crawler`
+turns off a crawl the program's block asks for.
 
 ## Two ways to deploy
 
