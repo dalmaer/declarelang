@@ -251,7 +251,7 @@ crawlers read real content from a static host with no server-side rendering
 ([Packaging for production](declare-docs:guide:packaging)).
 
 And it was designed for a time when much code is written by LLMs. The whole language
-fits in [one file](declare-docs:spec:core) of about <!--stat:spec.tokens-->12,000<!--/stat--> tokens, small enough
+fits in [one file](declare-docs:spec:core) of about <!--stat:spec.tokens-->13,000<!--/stat--> tokens, small enough
 to hand to an LLM whole, and the compiler's errors name the rule and the fix, so an
 LLM's write-check-revise loop converges. Every property that makes the language
 workable for a machine — small, regular, strictly checked — is a property you benefit
@@ -286,8 +286,8 @@ where that is taught.
 - **Continuity** is motion, time, and arrangements that move as one.
 - **Where it runs** covers renderers, hosts, and embedding.
 - **Shipping and working** covers packaging, working with an LLM, and a full reading
-  of the calendar app — <!--stat:calendar.code-->501<!--/stat--> lines of code, about
-  <!--stat:calendar.total-->885<!--/stat--> with its comments — which you will be able to read end to end.
+  of the calendar app — <!--stat:calendar.code-->524<!--/stat--> lines of code, about
+  <!--stat:calendar.total-->930<!--/stat--> with its comments — which you will be able to read end to end.
 - **The appendix** holds the formatting rules, a glossary, and
   [a phrasebook for readers coming from React, CSS, SwiftUI and others](declare-docs:guide:coming-from).
 

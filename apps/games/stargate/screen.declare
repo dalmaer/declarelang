@@ -314,8 +314,8 @@ class Shards [ width = 100%, height = 100%,
 class Monitor extends Node [
     game: Game,
     split: boolean = false,
-    upper: Dataset [ schema = World, contents = { classroot.game.earlier ?? classroot.game.value } ],
-    older: Dataset [ schema = World, contents = { classroot.game.longer ?? classroot.game.earlier ?? classroot.game.value } ],
+    upper: Dataset [ schema = World, contents = { classroot.game.earlier ?? { ...classroot.game.value } } ],
+    older: Dataset [ schema = World, contents = { classroot.game.longer ?? classroot.game.earlier ?? { ...classroot.game.value } } ],
     upperBursts: Dataset = { upper.value.seen.effectsLate ? older : upper },
     lowerBursts: Dataset = { game.value.seen.effectsLate ? upper : game }
     ]

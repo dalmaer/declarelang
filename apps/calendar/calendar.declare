@@ -208,6 +208,12 @@ Morphs between a stacked month-chip and a placed time-block as its day zooms
 class Ev [ clip = true,
 
     rowBlock: number = 0,       // how far its day has become a time view: the cell that places it says
+    inView: boolean = false,    // its day is in the view the focus rectangle is heading for: the cell says
+
+    // a keyboard stop only where the person can see it: its day in view and
+    // the chip inside the day, so the ring never travels off the surface
+
+    focusable = { inView && this.y + this.height <= parent.height },
 
     cornerRadius = { lerp(5, 1.5, app.yearZoom) },
     fill = { mix(app.catFill(:category), provided("theme").accent, app.yearZoom) },
@@ -236,7 +242,17 @@ class Ev [ clip = true,
     // lifts the ghost so the pickup is visible before the finger moves.
 
     onHold()       { app.drag.lift() },
-    onClick()      { app.selectEvent(:id, dayKey(:y, :m, :d)) }
+    onClick()      { app.selectEvent(:id, dayKey(:y, :m, :d)) },
+
+    // Return or Space opens it from the keyboard, and the title takes focus;
+    // closing the panel gives focus back here (closeDetail)
+
+    onKeyDown(e: KeyEvent) {
+        if (e.repeat || (e.key != "Enter" && e.key != " ")) return
+        app.openedFrom = this
+        app.selectEvent(:id, dayKey(:y, :m, :d))
+        afterSettle(() => Focus.focus(app.panel.ev.title))
+        }
     ]
 
 
@@ -252,6 +268,12 @@ scaling, keeping its text crisp.
 class Cell [ clip = true,
 
     rowBlock: number = { :row == app.anchorRow ? app.blockness : 0 },
+
+    // inside the rectangle the view is heading for (its targets, not the
+    // sprung values, so reachability does not flicker mid-transition)
+
+    inView: boolean = { app.mode != "year" && :row >= app.r0To && :row < app.r0To + app.nrTo
+                        && :col >= app.c0To && :col < app.c0To + app.ncTo },
 
     x = { lerp(app.pad + app.gutter + (:col - app.c0) * app.colW + app.gap / 2, app.slotX + 10 + :col * app.miniCellW, app.yearZoom) },
     y = { lerp(app.headH + (:row - app.r0) * app.rowH + app.gap / 2, app.slotY + 34 + :row * app.miniRowH, app.yearZoom) },
@@ -282,7 +304,7 @@ class Cell [ clip = true,
         text = { "" + :d } ],
     dow: Text [ x = 34, y = 8, fontSize = 11, wrap = false, opacity = { classroot.rowBlock },
         textColor = { :current ? provided("theme").currentDayText : provided("theme").textMuted }, text = { :dow } ],
-    Ev [ datapath = :events[], key = :id, rowBlock = { classroot.rowBlock } ],
+    Ev [ datapath = :events[], key = :id, rowBlock = { classroot.rowBlock }, inView = { classroot.inView } ],
 
     onClick() { app.pickDay(:key) }
     ]
@@ -353,6 +375,10 @@ class DetailSection [ clip = true, cornerRadius = 10, fill = { provided("theme")
     isOpen: boolean = { app.openSection == idx },
     width = 100%, height = 46,
     Spring [ attribute = height, to = { isOpen ? 156 : 46 }, stiffness = 210, damping = 24 ],
+
+    // collapsed, the field is clipped out of sight: Tab reaches the header only
+
+    tabOrder() { return isOpen ? this.tabDefault() : [this.hdr] },
 
     hdr: Control [ width = 100%, height = 46, padding = [0, 11, 0, 15],
         layout: SimpleLayout [ axis = x ],      // each child centers itself, as icons do
@@ -651,7 +677,19 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
         this.selectedId = id; this.openSection = 0
         if (key != null) this.navKey = key
         },
-    closeDetail() { this.selectedId = -1 },
+    openedFrom: View? = null,           // the event the keyboard opened the panel from
+
+    // Tab reads the bar first, though it is declared last to paint on top
+
+    tabOrder() { return [this.bar, ...this.tabDefault().filter((v) => v != this.bar)] },
+
+    closeDetail() {
+        const back = this.openedFrom
+        const inside = Focus.holds(this.panel)
+        this.selectedId = -1
+        this.openedFrom = null
+        if (back != null && inside) afterSettle(() => Focus.focus(back))
+        },
 
     /* ## Drag to reschedule
        Pointer capture, plus the runtime's click rule, give click-vs-drag for
@@ -688,8 +726,9 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
     keys: Keys [
         onKeyUp(e: KeyEvent) {
             if (e.key == "Escape") app.closeDetail()
-            else if (app.selectedId < 0 && e.key == "ArrowLeft") app.step(-1)
-            else if (app.selectedId < 0 && e.key == "ArrowRight") app.step(1)
+            // the arrows page the calendar — not while the view tabs rove with them
+            else if (app.selectedId < 0 && !Focus.holds(app.bar.top.tabs) && e.key == "ArrowLeft") app.step(-1)
+            else if (app.selectedId < 0 && !Focus.holds(app.bar.top.tabs) && e.key == "ArrowRight") app.step(1)
             }
         ],
 
@@ -740,6 +779,11 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
        straight to the record and reseeds when a different event opens. */
 
     panel: View [ width = { app.panelW }, height = { app.bodyH }, y = { app.barH }, x = { app.width - app.panelInset },
+        // shown while it is open or sliding; hidden once closed, so nothing in
+        // it is reachable — and its stops go the moment it starts to close
+
+        visible = { app.selectedId >= 0 || app.panelInset > 0.5 },
+        tabOrder() { return app.selectedId >= 0 ? this.tabDefault() : [] },
         fill = { provided("theme").surface }, stroke = { [null, null, null, stroke(1, provided("theme").line)] },
         padding = [24, 22, 24, 22],
         layout: SimpleLayout [ axis = y, spacing = 8 ],
@@ -759,8 +803,9 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
                 lbl: Text [ y = center, fontSize = 12, fontWeight = bold, wrap = false, letterSpacing = 1,
                     textColor = { provided("theme").textMuted }, text = "EVENT" ],
                 Spacer [ ],
-                close: CloseIcon [ iconSize = 15, ink = { provided("theme").textMuted },
-                    onClick() { app.closeDetail() }
+                close: Control [ width = 15, height = 15, y = center, cornerRadius = 4,
+                    press() { app.closeDetail() },
+                    CloseIcon [ iconSize = 15, ink = { provided("theme").textMuted } ]
                     ]
                 ],
             title: TextInput [ width = 100%, height = 32, fontSize = 16, fontWeight = bold,
@@ -821,8 +866,8 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
                 // the word "Declare" is the way home — navigate() resolves against the
                 // distro root, so this works on either host at any mount point
 
-                Text [ fontSize = 18, fontWeight = semibold, letterSpacing = { -0.02 * fontSize }, wrap = false, textFill = { gradient("90deg", provided("theme").accent, provided("theme").accentSecondary) }, text = "Declare",
-                    onClick() { app.navigate("apps/homepage/homepage.declare") }
+                Control [ press() { app.navigate("apps/homepage/homepage.declare") },
+                    Text [ fontSize = 18, fontWeight = semibold, letterSpacing = { -0.02 * fontSize }, wrap = false, textFill = { gradient("90deg", provided("theme").accent, provided("theme").accentSecondary) }, text = "Declare" ]
                     ],
                 Text [ fontSize = 18, fontWeight = semibold, letterSpacing = { -0.02 * fontSize }, wrap = false, textColor = { provided("theme").text }, text = "Calendar",
                     visible = { !app.brandCompact } ]

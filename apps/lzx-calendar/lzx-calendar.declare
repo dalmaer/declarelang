@@ -74,7 +74,7 @@ class EventBar [
 // drawn 14px disc with an italic-ish "i"; inherits the event cursor so its
 // click knows which event (:id) to open.
 
-class InfoButton [
+class InfoButton extends Control [
     width = 14, height = 14, cornerRadius = 7,
     fill = gradient(stop(0, 0xF4F4F4), stop(1, 0xAEB6BD)),
     stroke = stroke(1, #7C8A92),
@@ -82,7 +82,7 @@ class InfoButton [
     glyph: Text [ x = 5, y = 2, fontSize = 9, fontWeight = bold,
         textColor = #4B5D6C, text = "i" ],
 
-    onClick() { app.showInfo(:id) }
+    press() { app.showInfo(:id) }
     ]
 
 
@@ -445,7 +445,7 @@ class CalendarGrid extends TweenLayout [
 // CalButton — the pill button, drawn (SPEC §13: kills the button slices):
 // gradient face, rounded caps, white bold label; pressed = darker face.
 
-class CalButton [
+class CalButton extends Control [
     label: string = "",
     height = 17,
     cornerRadius = 8,
@@ -1087,7 +1087,7 @@ App [ width = 835, height = 600, fill = #1E3A49,
                 text = { app.month > 0 ? app.monthName(app.month) + " " + app.year : "" } ],
 
             addBtn: CalButton [ x = 496, y = 5, width = 76, label = "Add Event",
-                onClick() { app.addEvent() }
+                press() { app.addEvent() }
                 ]
             ]
         ],
@@ -1160,10 +1160,10 @@ App [ width = 835, height = 600, fill = #1E3A49,
         attSec:   AccordionSection [ x = 4, idx = 2, label = "Attendees", field = "attendees", datapath = { app.draft.value } ],
 
         applyBtn:  CalButton [ x = 8, y = 486, width = 82, label = "Apply",
-            onClick() { app.apply() }
+            press() { app.apply() }
             ],
         deleteBtn: CalButton [ x = 115, y = 486, width = 82, label = "Delete",
-            onClick() { app.deleteEvent(); app.closePanel() }
+            press() { app.deleteEvent(); app.closePanel() }
             ]
         ],
 

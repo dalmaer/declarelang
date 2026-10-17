@@ -381,7 +381,7 @@ App [ width = 1000, height = 710, fill = #80807E, appName = "Laszlo Dashboard",
                     ],
                 signBtn: DashButton [ x = 230, y = 64, width = 55, height = 20, label = "sign in",
                     face = #B25F45, edge = #4A2418,
-                    onClick() { app.signIn(parent.nameIn.text) }
+                    press() { app.signIn(parent.nameIn.text) }
                     ],
 
                 divA: View [ x = 8, y = 96, width = 280, height = 1, fill = #000000, opacity = 0.5 ],
@@ -390,7 +390,7 @@ App [ width = 1000, height = 710, fill = #80807E, appName = "Laszlo Dashboard",
                 guestLbl: Text [ x = 8, y = 108, fontFamily = { app.vera }, fontWeight = bold, text = "or enter as a guest." ],
                 guestBtn: DashButton [ x = 230, y = 105, width = 55, height = 20, label = "guest",
                     face = #B25F45, edge = #4A2418,
-                    onClick() { app.signIn("") }
+                    press() { app.signIn("") }
                     ]
                 ]
             ]

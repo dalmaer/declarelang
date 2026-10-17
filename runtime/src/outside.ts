@@ -84,7 +84,7 @@ export function inside(node: InteractionView | null, overlay: View): boolean {
 
 /** The view under a root point, walking on through an island into the program
  *  it hosts (an overlay may belong to a tenant). */
-function leafAcross(app: View, x: number, y: number): InteractionView | null {
+export function leafAcross(app: View, x: number, y: number): InteractionView | null {
   let leaf = leafAt(app as unknown as InteractionView, x, y);
   for (let guard = 0; leaf !== null && guard < 8; guard++) {
     const t = (leaf as unknown as { $tenant?: View | null }).$tenant;

@@ -426,4 +426,68 @@ await test("a constrained shown without an input override is a compile error tha
   assert.equal(good.errors.length, 0, good.errors.map((e) => e.message).join("; "));
 });
 
+await test("typing letters in an open menu moves its highlight: a prefix, then the same letter cycles; disabled rows are skipped", async () => {
+  const app = await boot(`App [ width = 500, height = 400,
+    b: Button [ x = 20, y = 20, label = "File" ],
+    m: Menu [ items = { [ ({ id: "save", label: "Save" }), ({ id: "saveas", label: "Save As…" }),
+        ({ divider: true }), ({ id: "share", label: "Share", enabled: false }),
+        ({ id: "export", label: "Export" }), ({ id: "print", label: "Print" }) ] } ] ]`);
+  deliverKeys(Keys, Focus);
+  Focus.focus(app.b); settle();
+  app.m.openFor(app.b); settle(); await turns();
+  const at = () => app.m.activeRow?.label;
+  press("e");
+  assert.equal(at(), "Export", "e lands on Export");
+  app.m.typedAt = 0;
+  press("s");
+  assert.equal(at(), "Save", "after a pause, s starts over and lands on Save");
+  press("s");
+  assert.equal(at(), "Save As…", "s again goes on to the next row starting with s — not the disabled Share");
+  app.m.typedAt = 0;
+  press("p"); press("r");
+  assert.equal(at(), "Print", "a typed prefix");
+  same(Focus.getFocus(), app.b, "focus stayed on the opener; only the highlight moved");
+  assert.equal(app.m.shown, true, "nothing was picked");
+  app.m.close(); settle();
+});
+
+await test("Tab with a menu open closes the menu and moves on; it never goes behind a menu left open", async () => {
+  const app = await boot(`App [ width = 500, height = 300,
+    b: Button [ x = 20, y = 20, label = "Menu" ], c: Button [ x = 120, y = 20, label = "Next" ],
+    m: Menu [ items = { [ ({ id: "x", label: "X" }) ] } ] ]`);
+  deliverKeys(Keys, Focus);
+  Focus.focus(app.b); settle();
+  app.m.openFor(app.b); settle(); await turns();
+  press("Tab");
+  await turns();
+  assert.equal(app.m.shown, false, "the menu closed");
+  same(Focus.getFocus(), app.c, "and focus moved on");
+});
+
+await test("an overlay holding nothing focusable takes focus itself, so Tab cannot reach what is behind it", async () => {
+  const app = await boot(`App [ width = 500, height = 300,
+    b: Button [ x = 20, y = 20, label = "Open" ], behind: Button [ x = 120, y = 20, label = "Behind" ],
+    pic: Dialog [ presentation = "full", View [ width = 100, height = 100, fill = #333333 ] ] ]`);
+  deliverKeys(Keys, Focus);
+  Focus.focus(app.b); settle();
+  app.pic.show(); settle(); await turns();
+  assert.ok(Focus.holds(app.pic), "focus is in the dialog");
+  press("Tab"); press("Tab"); await turns();
+  assert.ok(Focus.holds(app.pic), "Tab does not leave it");
+  press("Escape"); await turns(); await turns();
+  same(Focus.getFocus(), app.b, "Esc closes it and focus goes back");
+});
+
+await test("a combobox is one Tab stop: its entry", async () => {
+  const app = await boot(`App [ width = 500, height = 300,
+    a: Button [ x = 20, y = 20, label = "A" ],
+    c: Combobox [ x = 20, y = 80, items = { ["One", "Two"] } ],
+    z: Button [ x = 20, y = 160, label = "Z" ] ]`);
+  Focus.focus(app.a); settle();
+  Focus.next(); settle();
+  same(Focus.getFocus(), app.c.entry, "Tab from A lands in the entry");
+  Focus.next(); settle();
+  same(Focus.getFocus(), app.z, "and the next Tab leaves the combobox");
+});
+
 summarize("overlays");

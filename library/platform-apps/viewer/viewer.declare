@@ -121,12 +121,12 @@ class Block [ kind: string = "",
 
 // small / reset / large "A" — steps the reader font zoom (docs' SizeBtn).
 
-class SizeBtn [ width = 34, height = 30, cornerRadius = 6,
+class SizeBtn extends Control [ width = 34, height = 30, cornerRadius = 6,
 
     glyph: number = 14,
     delta: number = 0,
     fill = { hovered ? provided("theme").controlHovered : null },
-    onClick() { app.fontScale = classroot.delta == 0 ? 0.9
+    press() { app.fontScale = classroot.delta == 0 ? 0.9
         : Math.max(0.7, Math.min(1.6, Math.round((app.fontScale + classroot.delta) * 100) / 100)) },
 
     lbl: TextLabel [ fontWeight = semibold, fontSize = { classroot.glyph }, textColor = { provided("theme").textMuted },

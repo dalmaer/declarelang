@@ -66,14 +66,24 @@ export function hitWalk(s, px, py) {
     const x = hitPoint.x, y = hitPoint.y;
     // the nearest pinch owner up the chain, the target included — the claim
     // covers a subtree, so the gesture belongs to the declaring ancestor
+    // — and so do hold and the context menu: each gesture goes to the nearest
+    // view that declares it (a child's click does not take its bubble's hold)
     let pinch;
+    let hold;
+    let context;
     for (let p = t; p !== null; p = p.parent) {
-        if (p.wants?.wantsPinch === true && p.sink !== null) {
+        if (p.sink === null)
+            continue;
+        if (pinch === undefined && p.wants?.wantsPinch === true)
             pinch = { key: p, sink: p.sink };
+        if (hold === undefined && p.wants?.wantsHold === true)
+            hold = { key: p, sink: p.sink };
+        if (context === undefined && p.wants?.wantsContext === true)
+            context = { key: p, sink: p.sink };
+        if (pinch !== undefined && hold !== undefined && context !== undefined)
             break;
-        }
     }
-    return { key: t, sink: t.sink, ...t.wants, pinch, x, y, cursor: cursorAt(s, px, py) };
+    return { key: t, sink: t.sink, ...t.wants, pinch, hold, context, x, y, cursor: cursorAt(s, px, py) };
 }
 /** Where a wheel goes, from a point in `s`'s parent frame: delivered to a
  *  claimant ("claimed"), left to a scroller that owns it ("scroller"), or

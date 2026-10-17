@@ -48,32 +48,32 @@
 <p>01</p>
 <h2>Three applications, written in Declare.</h2>
 <p>Complete programs — open one, read it end to end, and edit it live in the browser you're using.</p>
-<a href="apps/calendar/calendar.declare"><p>1</p></a>
-<a href="apps/calendar/calendar.declare"><h5>Declare Calendar</h5></a>
+<a href="apps/calendar/calendar.declare"><p>1</p>
+<h5>Declare Calendar</h5></a>
 <p>It’s the kind of experience you’ll see in the best native apps — a view doesn’t switch so much as become the next one, where motion carries meaning, and everything is fast and interruptible.</p>
 <p>It runs on real data: open an event, drag it to another day, and it’s moved.</p>
-<p>501</p>
-<p>lines of code, plus 218 of comments — four views, zoom, drag and edit</p>
-<p>129 KB</p>
+<p>524</p>
+<p>lines of code, plus 228 of comments — four views, zoom, drag and edit</p>
+<p>131 KB</p>
 <p>over the wire, gzipped — app (structure, logic, styling) and runtime</p>
 <p>0</p>
 <p>lines written by hand — an LLM wrote it</p>
 <a href="apps/calendar/calendar.declare"><h6>Run Declare Calendar →</h6></a>
 <a href="apps/calendar/calendar.declare?viewer"><p>View &amp; edit source →</p></a>
 <a href="apps/calendar/calendar.declare"><img loading="lazy" src="apps/homepage/shots/calendar-dark.webp"></a>
-<a href="apps/tracker/tracker.declare"><p>2</p></a>
-<a href="apps/tracker/tracker.declare"><h5>Declare Tracker</h5></a>
-<a href="apps/tracker/tracker.declare"><p>→</p></a>
+<a href="apps/tracker/tracker.declare"><p>2</p>
+<h5>Declare Tracker</h5>
+<p>→</p></a>
 <a href="apps/tracker/tracker.declare"><img loading="lazy" src="apps/homepage/shots/tracker-dark.webp"></a>
 <p>1,000,000 issues · search as you type · edit in place, with undo · not one line of virtualization code</p>
-<p>1486 lines — 961 code, 254 comment · 146 KB over the wire, before its data · no dependencies · the same brief in idiomatic React: 2,703 lines, 9 dependencies</p>
+<p>1504 lines — 971 code, 258 comment · 147 KB over the wire, before its data · no dependencies · the same brief in idiomatic React: 2,703 lines, 9 dependencies</p>
 <a href="apps/tracker/tracker.declare?viewer"><p>View &amp; edit source →</p></a>
-<a href="apps/desktop/desktop.declare"><p>3</p></a>
-<a href="apps/desktop/desktop.declare"><h5>Declare Desktop</h5></a>
-<a href="apps/desktop/desktop.declare"><p>→</p></a>
+<a href="apps/desktop/desktop.declare"><p>3</p>
+<h5>Declare Desktop</h5>
+<p>→</p></a>
 <a href="apps/desktop/desktop.declare"><img loading="lazy" src="apps/homepage/shots/desktop-dark.webp"></a>
 <p>Windows that drag, resize, layer, and minimize into live dock thumbnails · a magnifying dock · menus that follow focus · the calendar running inside one of them</p>
-<p>3554 lines — 1991 code, 989 comment · 213 KB over the wire · every pixel drawn from shapes, no image assets</p>
+<p>3560 lines — 1990 code, 992 comment · 214 KB over the wire · every pixel drawn from shapes, no image assets</p>
 <a href="apps/desktop/desktop.declare?viewer"><p>View &amp; edit source →</p></a>
 <p>02</p>
 <h2>Declare it. It runs. It stays true.</h2>
@@ -284,7 +284,7 @@ true</code>, it answers questions about itself in production (<a href="declare-d
 layout: WrappingLayout [ spacing = 20, rowSpacing = 20 ]</code></pre>
 <p>The inset is the <strong>view's</strong>, not the arrangement's: <code>padding</code> — one number, or <code>[top,
 right, bottom, left]</code> clockwise from the top — gives a view a <strong>content box</strong>, and <code>x = 0</code> and <code>width = 100%</code> mean that box for every child, whether a layout placed it or it placed itself. <code>{ parent.width }</code> is the escape hatch that still names the parent's literal box, and paint never moves: <code>fill</code>, <code>stroke</code> and <code>cornerRadius</code> stay on it. A view's <code>stroke</code> takes that same one-or-four shape, with <code>null</code> for a bare side, which is how a single rule under a row is drawn.</p>
-<p><strong>Stacking order is declaration order</strong>; later siblings paint on top. There is no <code>z-index</code>, so chrome that must float above everything is declared last.</p>
+<p><strong>Stacking order is declaration order</strong>; later siblings paint on top. There is no <code>z-index</code>, so chrome that must float above everything is declared last (a menu, popover or dialog is a library overlay, which floats on its own).</p>
 <p>→ the layouts that ship: <code>library/</code> · their attributes: the reference (<code>npx declare-help &lt;name&gt;</code>)</p>
 <h2>5. Constraints</h2>
 <p>A <code>{ }</code> as an attribute's value is a <strong>constraint</strong>: re-evaluated when, and only when, its inputs change.</p>
@@ -545,7 +545,7 @@ Slider   [ value = { app.volume },
 <h2>Performance</h2>
 <h3>What should I expect in terms of performance — download size and interactive responsiveness?</h3>
 <p>Concretely, measured from the deployed production artifacts:</p>
-<ul><li><strong>Wire size</strong>: the entire Declare calendar — application <em>and</em> runtime — ships at about 129 KB gzipped (the homepage reports the live figure, measured from the deployed production artifacts on every commit, which is why it can vary by a kilobyte).</li><li><strong>Source size</strong>: the tracker — a million issues, search as you type, editing in place with undo — is 1,486 lines: 961 of code and 254 of comments, and no dependencies. It ships at 146 KB gzipped before its data, which a <code>DataSource</code> fetches at run time.</li><li><strong>Responsiveness</strong>: when you drag an event, the constraint graph updates exactly what changed and paints — there is no virtual-DOM pass between your gesture and the pixels. Animations ride compositor-native paths (CSS transforms and painted properties on the DOM renderer; direct paint on canvas), so they run at the display's full rate — 120 fps on a ProMotion screen.</li><li><strong>Startup</strong>: precompiled production builds start immediately. The live-compile pages (the editable samples) pay a one-time compiler download on a cold visit; warm visits start in around a tenth of a second. The one honest trade: a framework with no in-browser compiler wins the very first cold load — Declare's production path closes that gap by precompiling.</li></ul>
+<ul><li><strong>Wire size</strong>: the entire Declare calendar — application <em>and</em> runtime — ships at about 131 KB gzipped (the homepage reports the live figure, measured from the deployed production artifacts on every commit, which is why it can vary by a kilobyte).</li><li><strong>Source size</strong>: the tracker — a million issues, search as you type, editing in place with undo — is 1,504 lines: 971 of code and 258 of comments, and no dependencies. It ships at 147 KB gzipped before its data, which a <code>DataSource</code> fetches at run time.</li><li><strong>Responsiveness</strong>: when you drag an event, the constraint graph updates exactly what changed and paints — there is no virtual-DOM pass between your gesture and the pixels. Animations ride compositor-native paths (CSS transforms and painted properties on the DOM renderer; direct paint on canvas), so they run at the display's full rate — 120 fps on a ProMotion screen.</li><li><strong>Startup</strong>: precompiled production builds start immediately. The live-compile pages (the editable samples) pay a one-time compiler download on a cold visit; warm visits start in around a tenth of a second. The one honest trade: a framework with no in-browser compiler wins the very first cold load — Declare's production path closes that gap by precompiling.</li></ul>
 <p>Live numbers are on the homepage, measured from the deployed artifacts themselves.</p>
 <h2>Declare and LLMs</h2>
 <h3>What benefits does Declare bring for LLM coding, where a human may never read or write the code?</h3>
@@ -553,7 +553,7 @@ Slider   [ value = { app.volume },
 <h3>The calendar says "0 lines written by hand." What did that actually involve?</h3>
 <p>A person directed; a model wrote. The calendar was built by describing what was wanted and letting an LLM write the Declare — every line — with the compiler in the loop: each attempt was compiled and type-checked, the diagnostics steered the next revision, and the running app was the judge. The person's work was product work — deciding what the calendar should be, reviewing behavior, and pushing back — not typing code. That's the workflow the language is designed around: the human owns intent, the model owns the text, and the toolchain keeps the text honest.</p>
 <h3>How can Declare, with no training data to speak of, be useful to an LLM — or compete with billions of lines of training corpus?</h3>
-<p>Two ways. First, the language is small enough that its <em>entire definition</em> fits in a model's context window — one file, <a href="https://github.com/davidtemkin/declarelang/blob/main/docs/declare.md">docs/declare.md</a>, about 12,000 tokens: a small fraction of a modern context window. A model doesn't need to have trained on a language it can hold the complete spec of while writing; recent research (cited in the essay on this site) shows models write never-before-seen languages competently from a spec in context. Second, most of what an LLM writes in a Declare program <em>is</em> covered by billions of lines of training data — the logic is ordinary TypeScript. Only the small declarative shell is new, and it's regular enough to learn from the spec. For agent workflows, the repository ships the same knowledge as an installable agent skill (<a href="https://github.com/davidtemkin/declarelang/tree/main/skill">skill/</a> — auto-discovered by Claude Code, usable as plain instructions by any coding agent).</p>
+<p>Two ways. First, the language is small enough that its <em>entire definition</em> fits in a model's context window — one file, <a href="https://github.com/davidtemkin/declarelang/blob/main/docs/declare.md">docs/declare.md</a>, about 13,000 tokens: a small fraction of a modern context window. A model doesn't need to have trained on a language it can hold the complete spec of while writing; recent research (cited in the essay on this site) shows models write never-before-seen languages competently from a spec in context. Second, most of what an LLM writes in a Declare program <em>is</em> covered by billions of lines of training data — the logic is ordinary TypeScript. Only the small declarative shell is new, and it's regular enough to learn from the spec. For agent workflows, the repository ships the same knowledge as an installable agent skill (<a href="https://github.com/davidtemkin/declarelang/tree/main/skill">skill/</a> — auto-discovered by Claude Code, usable as plain instructions by any coding agent).</p>
 <h3>What does Declare do to optimize for reliability and correctness of LLM-generated code?</h3>
 <ul><li><strong>Mandatory type-checking</strong> — every <code>{ }</code> body, every compile, no opt-out; the checker is held to zero false positives across the repository's own corpus (every app, library class, and documentation example it ships), so an error always means something is actually wrong.</li><li><strong>Diagnostics that name the fix</strong> — messages are written to steer the <em>next</em> attempt, including "did you mean" guidance for common instincts from other frameworks (e.g., reaching for a CSS property).</li><li><strong>No magic</strong> — Declare consistently chooses predictability over cleverness: dependencies are extracted statically, events don't bubble, there's one way to say most things. Code that looks right <em>is</em> right more often, and code that's wrong fails loudly.</li><li><strong>Verification tooling</strong> — a <code>verify</code> command compiles, type-checks, and actually boots a program headlessly, so an agent can prove its output runs before handing it back.</li></ul>
 <h3>What has been done during Declare's development to optimize for LLM usage? What methodology ensures it works?</h3>
@@ -812,7 +812,7 @@ npm start</code></pre>
   // The deployed .declare source is the source of truth; the precompiled artifact
   // is a self-VALIDATING cache (re-probed against the source), never a thing to
   // hand-sync. Paths are relative to this file → the tree is subpath-portable.
-  import boot from "./bundles/declare-boot.js?v=0228630d9c03";
+  import boot from "./bundles/declare-boot.js?v=5cd13bb357a7";
   // `launcher: true` — a bare-path query on THIS entry page launches that program
   // (index.html?apps/calendar): install the SW first, then navigate, so the target
   // URL runs even on a cold static visit. See boot-uniform.js launchTarget().

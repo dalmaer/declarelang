@@ -130,7 +130,7 @@ The 12px each side is the view's own `padding`, so the label starts at the
 content origin and the pill's width is simply what it holds.
 */
 
-class NavLink [ height = 33, cornerRadius = 8, padding = [0, 12, 0, 12],
+class NavLink extends Control [ height = 33, cornerRadius = 8, padding = [0, 12, 0, 12],
     label:   string = "",
 
     // a pill WITH children opens the dropdown instead of following a link —
@@ -138,9 +138,9 @@ class NavLink [ height = 33, cornerRadius = 8, padding = [0, 12, 0, 12],
     // at the gesture (rootOrigin, converted to viewport space), the sanctioned
     // overlay pattern (Menu.openAt).
 
-    menu:    boolean = false,
-    onClick() {
-        if (!this.menu) return
+    dropdown: boolean = false,
+    press() {
+        if (!this.dropdown) return
         const o = this.rootOrigin()
         app.appsX = o.x - app.scrollX
         app.appsY = o.y - app.scrollY + this.height + 6
@@ -382,6 +382,9 @@ because it is a class each part reads the row's hover state as `classroot.hot`
 */
 
 class CardHead [ width = 100%, height = { this.contentHeight },
+    // one destination, one link: the number, the name and the arrow are one stop
+
+    link = { this.url },
     num:   string = "",
     title: string = "",
     url:   string = "",
@@ -389,20 +392,13 @@ class CardHead [ width = 100%, height = { this.contentHeight },
     arrow: boolean = false,
     layout: SimpleLayout [ axis = x, spacing = 10 ],
 
-    seq: AppNum [ n = { classroot.num }, hot = { classroot.hot }, link = { classroot.url } ],
+    seq: AppNum [ n = { classroot.num }, hot = { classroot.hot } ],
     name: Heading [ fontSize = 22, wrap = false, selectable = false,
         textColor = { classroot.hot ? provided("theme").accent : provided("theme").text },
-        text = { classroot.title },
-        link = { classroot.url } ],
-
-    // the arrow carries the reference only when it is shown: a hidden view with
-    // a `link` is still a real anchor, and a row that has no arrow should not
-    // leave a focusable, crawlable one behind it
-
+        text = { classroot.title } ],
     arr: Text [ visible = { classroot.arrow }, y = 3, fontSize = 16, fontWeight = semibold,
         wrap = false, selectable = false,
-        textColor = { classroot.hot ? provided("theme").accent : provided("theme").dim }, text = "→",
-        link = { classroot.arrow ? classroot.url : "" } ]
+        textColor = { classroot.hot ? provided("theme").accent : provided("theme").dim }, text = "→" ]
     ]
 
 
@@ -923,6 +919,10 @@ App [ tagline: string = "a UI language for you and your AI",
     // the front page's content — carried by the PAGE's own scroll (the App
     // scrolls by default, and its scroller is the browser's): taller than the
     // window, so the document scrolls, with the full native gesture tier
+
+    // Tab reads the header first, though it is declared last to paint on top
+
+    tabOrder() { return [this.header as View, ...this.tabDefault().filter((v) => v != this.header)] },
 
     scroller: View [ width = { app.width }, shows = "home",
 
@@ -1473,17 +1473,17 @@ App [ tagline: string = "a UI language for you and your AI",
             nav: View [
                 layout: SimpleLayout [ axis = x, spacing = 2 ],
                 datapath = { app.navSource.value },
-                NavLink [ datapath = :items[], label = { :label }, menu = { :children.length > 0 },
+                NavLink [ datapath = :items[], label = { :label }, dropdown = { :children.length > 0 },
                     link = { :children.length > 0 ? "" : :link } ]
                 ],
 
             // the appearance switch — one icon, two states: it shows the mode
             // you are in, and a press flips to the other
 
-            modeBtn: View [ width = 34, height = 33, cornerRadius = 8,
+            modeBtn: Control [ width = 34, height = 33, cornerRadius = 8,
                 fill = { pressed ? provided("theme").pillPress : hovered ? provided("theme").pillHover : null },
                 tooltipLabel = { app.isDark ? "Switch to light" : "Switch to dark" },
-                onClick() { app.appearance = app.isDark ? "light" : "dark" },
+                press() { app.appearance = app.isDark ? "light" : "dark" },
                 SunIcon [ x = center, y = center, iconSize = 16, visible = { !app.isDark },
                     ink = { parent.hovered ? provided("theme").text : provided("theme").muted } ],
                 MoonIcon [ x = center, y = center, iconSize = 16, visible = { app.isDark },
@@ -1493,9 +1493,9 @@ App [ tagline: string = "a UI language for you and your AI",
             // the kebab — three stacked dots (the page's dot motif), the pill's own
             // press feedback, toggling the sheet
 
-            kebab: View [ width = 34, height = 33, cornerRadius = 8,
+            kebab: Control [ width = 34, height = 33, cornerRadius = 8,
                 fill = { pressed ? provided("theme").pillPress : hovered ? provided("theme").pillHover : null },
-                onClick()     { app.menuOpen = !app.menuOpen },
+                press() { app.menuOpen = !app.menuOpen },
                 d1: View [ x = center, y = 8,  width = 3, height = 3, cornerRadius = 1.5, fill = { parent.hovered || parent.pressed ? provided("theme").text : provided("theme").muted } ],
                 d2: View [ x = center, y = 15, width = 3, height = 3, cornerRadius = 1.5, fill = { parent.hovered || parent.pressed ? provided("theme").text : provided("theme").muted } ],
                 d3: View [ x = center, y = 22, width = 3, height = 3, cornerRadius = 1.5, fill = { parent.hovered || parent.pressed ? provided("theme").text : provided("theme").muted } ]
@@ -1535,7 +1535,10 @@ App [ tagline: string = "a UI language for you and your AI",
     // a thumb-height row, replicated from the SAME navSource as the pills. Auto-hides
     // if the window is widened back past the breakpoint.
 
-    navSheet: View [ ignoreScroll = true, visible = { app.menuOpen && app.header.bar.kebab.visible }, width = { app.width }, height = { app.height },
+    navSheet: Floating [ shown = { app.menuOpen && app.header.bar.kebab.visible },
+        input(open: boolean) { app.menuOpen = open },
+        pressPolicy = "dismiss", takesFocus = true, focusScope = modal,
+        width = { app.width }, height = { app.height },
         scrim: View [ y = { 56 + app.safeTop }, width = 100%, height = { parent.height - 56 - app.safeTop }, fill = { provided("theme").scrim },
             onClick() { app.menuOpen = false }
             ],
@@ -1563,11 +1566,9 @@ App [ tagline: string = "a UI language for you and your AI",
     // below closes it on an outside tap; narrowing past the breakpoint hides
     // it with the pills it belongs to.
 
-    appsMenu: View [ ignoreScroll = true, visible = { app.appsOpen && !app.header.bar.kebab.visible },
-        width = { app.width }, height = { app.height },
-        catcher: View [ width = 100%, height = 100%,
-            onClick() { app.appsOpen = false }
-            ],
+    appsMenu: Floating [ shown = { app.appsOpen && !app.header.bar.kebab.visible },
+        input(open: boolean) { app.appsOpen = open },
+        pressPolicy = "dismiss", takesFocus = true, focusScope = modal,
         panel: View [ x = { app.appsX }, y = { app.appsY }, width = 190,
             cornerRadius = 12, padding = 6,
             fill = { provided("theme").surface }, shadow = { shadow(0, 12, 40, provided("theme").shade) },

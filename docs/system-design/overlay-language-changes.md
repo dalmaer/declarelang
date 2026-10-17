@@ -221,12 +221,60 @@ the last evals' findings (`my-apps/evalaudit/STATUS.md`) led to these.
     `Shortcut`; `Menu.items`, `MenuBar.menus`, `Dialog.buttons`, `Shortcuts.items` take them, so a
     misspelled field (`lable`) is a compile error. A schema cannot name itself, so `submenu` is
     `any`.
+31. **A press on content that takes no focus clears focus** (2026-10-17, DT: "go with web
+    rule"; keyboard-follows-focus.md §9). When nothing on the pressed view's chain can take
+    focus, focus is cleared — the keyboard returns to the program pressed in — and the next
+    Tab or Shift-Tab starts from the pressed spot, inside the cycle that holds it (a dialog's
+    plain content keeps Tab in the dialog). A press on a control, or inside a focusable view,
+    is unchanged. `focus.ts` (`pressAt`, `precedes`, the start point in `move`),
+    `services.ts` (the router's press hook), `outside.ts` (`leafAcross` exported).
+32. **A hold or a context menu goes to the nearest view that declares it** (2026-10-17;
+    Murmur 7's "hold anywhere on the bubble"; DT: current behaviour was inconsistent with
+    pinch). The pressed view used to take every gesture, so a child that took a tap blocked
+    its ancestor's `onHold`. Now each of hold and the context gesture resolves up the hit
+    chain to the nearest declarer, as pinch already did (`HitTarget.hold`, `.context`;
+    `scene-walk.ts` for canvas and the Mac, `dom-backend.ts`), and a hold that went to an
+    ancestor suppresses the release's click on the child. Nothing bubbles: each gesture is
+    answered once, by one view. `input.ts`; guide 10, View prose.
+33. **Focus fixes from the tab-order review** (2026-10-17):
+    - the reveal frames the page App by the window (`hostWidth`/`hostHeight`), not its own
+      content-tall size — Tab now scrolls a long page to the focused control (`frameExtent`);
+    - focus moved by code shows the ring when the person's last input was the keyboard (the
+      web's rule) — so an overlay giving focus back a turn after Esc keeps the ring (revises
+      #19's "only while a key is being handled"); `Focus.lastInputKeyboard`;
+    - focus does not stay on what can no longer be reached: the focused view hidden, made
+      unfocusable or disabled, or dropped by an ancestor's `tabOrder()` clears focus after
+      the settle, the next Tab starting from where it was (`Focus.reachable` watch);
+    - Tab with an overlay holding the keys while focus is outside it (a menu) closes it, as
+      Esc would, then moves;
+    - an overlay that takes focus and holds nothing focusable focuses itself
+      (`Floating.holdFocusItself`), so Tab cannot reach what is behind it;
+    - `Combobox` is one Tab stop (its entry).
+34. **In a `stop`, the arrows move among the members by default** (2026-10-17, DT: "yes";
+    no `grid` — moving by position stays each program's own code, known right for its case).
+    The base `onKeyDown` every view has: Right/Down to the next member, Left/Up to the
+    previous, wrapping, Home/End to the ends; never with a modifier, never in a text field.
+    A member takes the keys it wants and hands the rest to `super.onKeyDown(e)` — inheritance,
+    not propagation: no ancestor's handler sees the key (declare.md rule 6 stands).
+    `super.onKeyDown` now resolves on any view (`View` lists it among its runtime methods; the
+    checker's scaffold makes it a required member). The default lives in the focus module
+    (`setKeyDefaultHook`), so a program with no focus carries none of it. `Control` hands on
+    what it does not take. `Segmented.roveFrom`, `RadioGroup.step` and `MenuBar.stepTitle`
+    are gone (a radio still checks where the arrow lands; a segment that is a place is still
+    followed). Programs: the desktop dock's own stepping removed; new stops for the tracker's
+    status chips, weather's city lists, the birds quiz's choices and the marketmap's eras.
+    The desktop's Files columns keep their own Up/Down (they select and do not wrap, as
+    Finder's do).
 
 Library behaviour settled alongside (no language surface): `Segmented`'s arrows wrap at
 the ends, as `RadioGroup`'s do, and still move focus without selecting (a radio group
 selects on the arrow — the web's, Windows' and ARIA's rule; a segmented control is the
 Mac's, Space picks). `Accordion`'s pane drew its own focus edge besides the ring; the ring,
-shaped to the header (`focusShape`), is now its only indicator.
+shaped to the header (`focusShape`), is now its only indicator. `Menu` has typeahead (2026-10-17):
+letters typed while it has the keys move the highlight to the first row whose label starts
+with them (the prefix grows while typing continues, the same letter again cycles, Return still
+picks); `typeahead = false` turns it off, as `Combobox` does for its list, whose letters are its
+field's. Only menus: a group control's few members gain little from it.
 
 ## Programs changed (for review with the merge)
 
@@ -246,6 +294,10 @@ shaped to the header (`focusShape`), is now its only indicator.
   window, 24 (the boundary is transparent) — neutral examples, nothing shaped like an eval.
 
 ## Runtime bug fixes found on the way (no semantic change intended)
+
+- `input.ts`: a press with a mouse's secondary button (a right-click) fired `onClick` on the
+  view under it as well as the context gesture. It fires no click now, as on the web; the
+  raw `onPointerDown` still hears every button. Found probing #32.
 
 - `compile.ts`: a `script` block whose last line ended in a `//` comment lost every name it
   declared — the bindings tail went on that line (the open-list must-fix, also in main).

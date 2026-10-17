@@ -282,7 +282,7 @@ class Dialog extends Floating [
         const kids = this.kidsOf(this.arrangement == "stack" ? b.stackInner : b.rowInner)
         const d = kids.find((k) => k.primary)
         if (d != null || kids.length > 0) Focus.focus(d != null ? d : kids[kids.length - 1])
-        else Focus.focusIn(this)
+        else if (!Focus.focusIn(this)) this.holdFocusItself()
         },
 
     pickDefault() {

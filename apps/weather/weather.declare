@@ -620,6 +620,10 @@ class CityRow extends Control [ width = 100%, height = { ROW_H }, cursor = "poin
         // page is already beside it, so a press is only a selection
         if (!app.phone) { app.selectById(this.mine); return }
         app.openRow(this.mine, this.y)
+        // the row is hidden under the city it became: focus goes to the city's
+        // way back, and comes back to this row when the city closes
+        app.openedRow = this
+        afterSettle(() => Focus.focus(app.phoneUI.back.btn))
         }
     ]
 
@@ -817,6 +821,10 @@ class GlassChip [
 // bookkeeping, and it stays right if the list is ever reordered.
 
 class Dot extends Control [ width = 18, height = 44, cursor = "pointer", fill = null,
+    // a page indicator the pointer can scrub; the keyboard pages with the
+    // arrows either side, so twenty-five dots are not twenty-five stops
+
+    focusable = false,
     mine: string = { :id },
     here: boolean = { app.city != null && app.city.id == this.mine },
 
@@ -1054,7 +1062,12 @@ App [ textColor = whitesmoke, appName = "Weather",
         app.scrollTo(want)
         },
 
+    openedRow: View? = null,
+
     closeCity() {
+        const back = openedRow
+        openedRow = null
+        if (back != null && Focus.holds(app.phoneUI)) afterSettle(() => Focus.focus(back))
         liftOff()
         openTo = 0
         dragging = false
@@ -1280,6 +1293,11 @@ App [ textColor = whitesmoke, appName = "Weather",
     // land directly beneath it. The document scrolls throughout, which is why
     // the browser's own chrome behaves.
 
+    // Esc puts an open city back into its row
+
+    cityKeys: Keys [ onKeyUp(e: KeyEvent) { if (e.key == "Escape" && app.cityUp) app.closeCity() }
+        ],
+
     phoneUI: View [ width = 100%, height = 100%, visible = { app.phone },
 
         // the list's chrome recedes as a city takes over; the rows themselves
@@ -1324,6 +1342,11 @@ App [ textColor = whitesmoke, appName = "Weather",
                 width = { parent.width - 32 },
                 visible = { !app.listGone },
                 datapath = { app.phone ? app.shown.value : null },
+
+                // one Tab stop, entered at the open city; the arrows move among the rows
+
+                focusScope = stop,
+                focusEntry() -> View? { return (this.children.find((c) => (c as CityRow).selected) ?? null) as View | null },
                 CityRow [ datapath = :rows[], key = :id ]
                 ],
             tail: View [ y = { app.listGone ? app.cityH : app.listH }, width = 100%,
@@ -1443,6 +1466,11 @@ App [ textColor = whitesmoke, appName = "Weather",
                 text = "No locations match" ],
             list: View [ y = 48, width = 100%,
                 datapath = { app.phone ? null : app.shown.value },
+
+                // one Tab stop, entered at the open city; the arrows move among the rows
+
+                focusScope = stop,
+                focusEntry() -> View? { return (this.children.find((c) => (c as CityRow).selected) ?? null) as View | null },
                 CityRow [ width = 100%, datapath = :rows[], key = :id ]
                 ]
             ],

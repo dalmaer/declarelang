@@ -4,7 +4,7 @@
 # Reading the calendar
 
 [Core concepts](declare-docs:guide:what-declare-is) made a promise: that you would end this guide by opening a real calendar
-application — four views, continuous zoom, drag-to-reschedule; <!--stat:calendar.code-->501<!--/stat--> lines of code, about <!--stat:calendar.total-->885<!--/stat--> with its detailed comments — and understanding all of it. This is that chapter. Run the app first:
+application — four views, continuous zoom, drag-to-reschedule; <!--stat:calendar.code-->524<!--/stat--> lines of code, about <!--stat:calendar.total-->930<!--/stat--> with its detailed comments — and understanding all of it. This is that chapter. Run the app first:
 `apps/calendar/calendar.declare` in your running distro, or the **Run Declare
 Calendar** button on the homepage. Switch Month to Week to Day to Year. Drag an
 event somewhere else. Click one open and edit it. Interrupt every transition
@@ -41,7 +41,9 @@ rowH: number = { (app.bodyH - app.headH) / app.nr }
 You built exactly this in [Animated arrangements](declare-docs:guide:animated-arrangements@sprung-scalars-driving-a-layout), with two
 scalars and twenty-one cells. Here it is with four and forty-two. Switching views is
 one assignment to `mode`; the targets re-derive, the springs chase, and every cell's
-geometry — a constraint reading `colW`/`rowH` — follows in lock-step. Now connect it
+geometry — a constraint reading `colW`/`rowH` — follows in lock-step. (That is why the
+cells place themselves with `x` and `y`: the grid is a scene whose geometry is the springs.
+A page of cards and rows is a layout's job instead.) Now connect it
 to the argument in [Motion and states](declare-docs:guide:motion), in the running app:
 when you click **Week**, watch what your eyes do. Nothing. You never lose the day
 you were looking at, because it never ceases to exist — *that* is continuity keeping

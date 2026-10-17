@@ -21,7 +21,7 @@
 import { SCHEMAS, RichTextSchema } from "./schema.js";
 export const RUNTIME_METHODS = {
     Node: ["insertChild", "removeChild", "discard"],
-    View: ["contentBox", "bounds", "footprint", "tabDefault", "viewAt", "containsPoint", "rootBounds", "rootTransform", "transformTo", "rootOrigin", "scrollIntoView", "scrollTo", "scrollToX", "scrollBy", "createView", "raise"],
+    View: ["contentBox", "bounds", "footprint", "tabDefault", "viewAt", "containsPoint", "rootBounds", "rootTransform", "transformTo", "rootOrigin", "scrollIntoView", "scrollTo", "scrollToX", "scrollBy", "createView", "raise", "onKeyDown"],
     App: ["post", "navigate", "destinationOf", "follow", "inspect", "openWindow", "reveal", "provide", "exposed", "watchExposed"],
     Text: [],
     Image: [],

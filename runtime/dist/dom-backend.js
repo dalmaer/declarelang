@@ -664,21 +664,22 @@ export class DomBackend {
             }
             if (el === null)
                 return null;
-            // The nearest PINCH OWNER over this point (input.ts HitTarget.pinch):
-            // the claim covers a subtree, so the walk climbs past interactive
-            // children to the ancestor that declared the family.
-            let pinch;
+            let pinch, hold, context;
             for (let pe = el; pe !== null; pe = pe === rootEl ? null : pe.parentElement) {
-                if (WANTS.get(pe)?.wantsPinch === true) {
-                    const ps = SINKS.get(pe);
-                    if (ps !== undefined) {
-                        pinch = { key: pe, sink: ps };
-                        break;
-                    }
-                }
+                const w = WANTS.get(pe), ps = SINKS.get(pe);
+                if (w === undefined || ps === undefined)
+                    continue;
+                if (pinch === undefined && w.wantsPinch === true)
+                    pinch = { key: pe, sink: ps };
+                if (hold === undefined && w.wantsHold === true)
+                    hold = { key: pe, sink: ps };
+                if (context === undefined && w.wantsContext === true)
+                    context = { key: pe, sink: ps };
+                if (pinch !== undefined && hold !== undefined && context !== undefined)
+                    break;
             }
             const p = localPoint(el, e.clientX, e.clientY);
-            return { key: el, sink: SINKS.get(el), ...WANTS.get(el), pinch, x: p.x, y: p.y };
+            return { key: el, sink: SINKS.get(el), ...WANTS.get(el), pinch, hold, context, x: p.x, y: p.y };
         }, (e) => localPoint(rootEl, e.clientX, e.clientY), undefined, !embedded);
         // Tap-to-dismiss for native editable fields. Desktop blurs a focused
         // input/textarea when you press a non-focusable element, but mobile Safari

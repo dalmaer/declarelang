@@ -16,10 +16,11 @@
 // §mutation. Keyboard delivery to the focused view (Keys → onKeyDown/onKeyUp)
 // is wired by the runtime entry, not here, keeping this layer independent.
 
-import { View, fireEvent, setFocusDiscardHook, noteFocused } from "./view.js";
+import { View, fireEvent, setFocusDiscardHook, setKeyDefaultHook, noteFocused } from "./view.js";
+import type { KeyEvent } from "./keys.js";
 import { radiusMax } from "./value.js";
 import type { KeysService } from "./keys.js";
-import { Cell, Constraint } from "./reactive.js";
+import { Cell, Constraint, afterSettle } from "./reactive.js";
 import { rootFrameBox, rootTransform, type InteractionView } from "./interaction.js";
 import { apply as applyAffine } from "./affine.js";
 
@@ -83,6 +84,8 @@ export class FocusService {
    *  moves the resting ring WITH its control — no re-focus needed. */
   private readonly geometryHandlers = new Set<(g: FocusGeometry) => void>();
   private follower: Constraint | null = null;
+  /** Watches that the focused view stays reachable (rewatch). */
+  private watch: Constraint | null = null;
   /** Reentrancy lock: a focus change fires onFocus/onBlur handlers that may
    *  call focus() again; remember the latest target and apply it after the
    *  current change settles (LZX's discipline). */
@@ -130,6 +133,7 @@ export class FocusService {
   /** Test/lifecycle reset. */
   reset(): void {
     this.current = null;
+    this.lastInputKeyboard = false;
     noteFocused(null);
     this.rootView = null;
     this.changing = false;
@@ -146,9 +150,16 @@ export class FocusService {
    *  field), it is keyboard focus: the web's :focus-visible rule for script
    *  focus during keyboard use. */
   focus(view: View | null): void {
-    this.setKeyboard(this.keys?.inKeyDispatch() === true);
+    // the web's :focus-visible rule for focus moved by code: it shows when the
+    // person's last input was the keyboard — a key's handler roving a group,
+    // or an overlay giving focus back a turn after Esc — and not after a press
+    this.setKeyboard(this.keys?.inKeyDispatch() === true || this.lastInputKeyboard);
     this.apply(view);
   }
+
+  /** Was the person's last input a key (true) or a press (false)? Set as each
+   *  arrives (deliverKeys, pressAt). */
+  lastInputKeyboard = false;
 
   /** The key service delivering to this one (deliverKeys) — asked whether a
    *  focus call comes from a key's handler. */
@@ -171,6 +182,7 @@ export class FocusService {
     this.changing = true;
     const old = this.current;
     this.current = view;
+    if (view !== null) this.startPoint = null;
     noteFocused(view);
     this.currentCell.changed();
     if (old !== null) {
@@ -184,6 +196,7 @@ export class FocusService {
     this.changing = false;
     if (view !== null) remember(view);
     this.retargetFollower();
+    this.rewatch();
     for (const h of [...this.changeHandlers]) h(this.current);
     if (this.queued) {
       this.queued = false;
@@ -284,6 +297,51 @@ export class FocusService {
     this.focus(null);
   }
 
+  /** Focus does not stay on what the person can no longer reach. A standing
+   *  constraint over the focused view's reachability — it or an ancestor
+   *  hidden, it made unfocusable or disabled, or an ancestor's `tabOrder()` no
+   *  longer naming it (a pane that closed) — clears focus once the change has
+   *  settled, and the next Tab starts from where it was, as the web does when
+   *  a focused element stops being rendered. (A view torn down is
+   *  noteDiscarded's, before it goes.) */
+  private rewatch(): void {
+    this.watch?.dispose();
+    this.watch = null;
+    const v = this.current;
+    if (v === null) return;
+    const k = new Constraint(
+      "Focus.reachable",
+      (): boolean => reachable(v),
+      (ok) => {
+        if (ok !== false || this.current !== v) return;
+        afterSettle(() => {
+          if (this.current !== v || reachable(v)) return;
+          this.apply(null);
+          this.startPoint = v;
+        });
+      }
+    );
+    this.watch = k;
+    k.run();
+  }
+
+  /** Where the next Tab starts when nothing has focus: the spot a press on
+   *  content that takes no focus left (the web's sequential focus navigation
+   *  starting point). Cleared as soon as anything is focused. */
+  private startPoint: View | null = null;
+
+  /** A press landed on `leaf` (the view under it, across islands). The web's
+   *  rule: when nothing on its chain can take focus, focus is cleared — the
+   *  keyboard goes back to the program the press was in — and the next Tab
+   *  starts from the pressed spot. A press on something focusable, or inside
+   *  it, leaves focus to that view (a control focuses itself on press). */
+  pressAt(leaf: View | null): void {
+    this.lastInputKeyboard = false;
+    for (let v: View | null = leaf; v !== null; v = parentAcross(v)) if (canFocus(v)) return;
+    if (this.current !== null) { this.setKeyboard(false); this.apply(null); }
+    this.startPoint = leaf;
+  }
+
   next(): void {
     this.move(1);
   }
@@ -300,11 +358,18 @@ export class FocusService {
   }
 
   private move(dir: 1 | -1): void {
-    const cyc = this.current !== null ? cycleOf(this.current) : this.rootView;
+    const start = this.current === null && this.startPoint !== null && this.startPoint.root !== null ? this.startPoint : null;
+    const cyc = this.current !== null ? cycleOf(this.current) : start !== null ? cycleOf(start) : this.rootView;
     if (cyc === null) return;
     const seq = sequence(cyc);
     if (seq.length === 0) return;
     let idx = this.current !== null ? entryIndex(seq, this.current) : dir === 1 ? -1 : 0;
+    // from a pressed spot: Tab goes to the first stop after it, Shift-Tab to
+    // the last one before it
+    if (start !== null) {
+      const after = seq.findIndex((e) => precedes(start, e.view));
+      idx = after < 0 ? (dir === 1 ? seq.length - 1 : seq.length) : (dir === 1 ? after - 1 : after);
+    }
     // a focused island stands where its program's stops are spliced: Tab goes
     // into the program, Shift-Tab to the stop before it
     const tenant = this.current !== null && idx < 0 ? tenantOf(this.current) : null;
@@ -319,7 +384,7 @@ export class FocusService {
   /** Keyboard-focus `v` and show it: the focus-visible modality, and the web's
    *  focus-reveal contract (a keyboard-focused control is scrolled into view,
    *  minimum distance, through app scrollers and the document alike). */
-  private land(v: View): void {
+  land(v: View): void {
     this.setKeyboard(true);
     this.apply(v);
     if (this.current === v) reveal(v);
@@ -438,18 +503,28 @@ function reveal(v: View): void {
     if (s.scrolling) { s.$pendingScroll = () => reveal(v); return; }
     const b = rootFrameBox(v as unknown as InteractionView, undefined, s as unknown as InteractionView);
     const ax = s.scrolls;
+    const fh = frameExtent(s, "height"), fw = frameExtent(s, "width");
     const pin = pinnedEdges(s, child, b);
     if (ax === "y" || ax === "both") {
       const top = b.y - REVEAL_ROOM - pin.top, bottom = b.y + b.height + REVEAL_ROOM + pin.bottom;
       if (top < s.scrollY) s.scrollTo(Math.max(0, top));
-      else if (bottom > s.scrollY + s.height) s.scrollTo(Math.min(top, bottom - s.height));
+      else if (bottom > s.scrollY + fh) s.scrollTo(Math.min(top, bottom - fh));
     }
     if (ax === "x" || ax === "both") {
       const left = b.x - REVEAL_ROOM - pin.left, right = b.x + b.width + REVEAL_ROOM + pin.right;
       if (left < s.scrollX) s.scrollToX(Math.max(0, left));
-      else if (right > s.scrollX + s.width) s.scrollToX(Math.min(left, right - s.width));
+      else if (right > s.scrollX + fw) s.scrollToX(Math.min(left, right - fw));
     }
   }
+}
+
+/** The extent of a scroller's visible frame. A pane's is its own size; the
+ *  App scrolling as the page is seen through the window, so a page App as tall
+ *  as its content (`height` follows the content) is framed by `hostHeight`. */
+function frameExtent(s: View, size: "width" | "height"): number {
+  const host = (s as unknown as { hostWidth?: unknown; hostHeight?: unknown })[size === "width" ? "hostWidth" : "hostHeight"];
+  const own = size === "width" ? s.width : s.height;
+  return s.parent === null && typeof host === "number" && host > 0 ? Math.min(own, host) : own;
 }
 
 /** How far a scroller's pinned chrome covers each edge of its frame, over the
@@ -462,18 +537,19 @@ function reveal(v: View): void {
 function pinnedEdges(s: View, skip: View, b: { x: number; y: number; width: number; height: number }): { top: number; bottom: number; left: number; right: number } {
   const out = { top: 0, bottom: 0, left: 0, right: 0 };
   const fx = b.x - s.scrollX, fy = b.y - s.scrollY;     // the box in the frame
+  const sh = frameExtent(s, "height"), sw = frameExtent(s, "width");
   for (const k of s.childViews) {
     if (k === skip || !k.ignoreScroll || !k.visible || k.pointerEvents === "none") continue;
     const kx = k.x, ky = k.y, kw = k.width, kh = k.height;
     const acrossX = kx < fx + b.width && kx + kw > fx;   // over the box's columns
     const acrossY = ky < fy + b.height && ky + kh > fy;  // over the box's rows
-    if (acrossX && kh < s.height / 2) {
+    if (acrossX && kh < sh / 2) {
       if (ky <= 0.5) out.top = Math.max(out.top, ky + kh);
-      else if (ky + kh >= s.height - 0.5) out.bottom = Math.max(out.bottom, s.height - ky);
+      else if (ky + kh >= sh - 0.5) out.bottom = Math.max(out.bottom, sh - ky);
     }
-    if (acrossY && kw < s.width / 2) {
+    if (acrossY && kw < sw / 2) {
       if (kx <= 0.5) out.left = Math.max(out.left, kx + kw);
-      else if (kx + kw >= s.width - 0.5) out.right = Math.max(out.right, s.width - kx);
+      else if (kx + kw >= sw - 0.5) out.right = Math.max(out.right, sw - kx);
     }
   }
   return out;
@@ -491,6 +567,47 @@ function overflows(n: View): boolean {
   const ax = n.scrolls;
   return ((ax === "x" || ax === "both") && n.contentWidth > n.width + 0.5)
     || ((ax === "y" || ax === "both") && n.contentHeight > n.height + 0.5);
+}
+
+/** Can the person still reach `v`: focusable and shown, every ancestor shown,
+ *  and named by each ancestor's own `tabOrder()` where one gates its members.
+ *  Read inside a constraint, so each of those is tracked. */
+function reachable(v: View): boolean {
+  if (!canFocus(v) || v.root === null) return false;
+  for (let c: View = v, p = parentAcross(v); p !== null; c = p, p = parentAcross(p)) {
+    if (!p.visible) return false;
+    if (c.parent !== p) continue;                // crossed an island: its tenant is its whole content
+    const own = (p as unknown as { tabOrder?: unknown }).tabOrder;
+    if (typeof own === "function") {               // a view has one only where a program gates its members
+      if (!tabOrderOf(p).includes(c) && !gatedBelow(p, c)) return false;
+    }
+  }
+  return true;
+}
+
+/** `tabOrder()` may name a descendant deeper than the direct child on the
+ *  path (a bar naming `top.brand`): the path still counts as named when any
+ *  named member holds the child. */
+function gatedBelow(p: View, c: View): boolean {
+  for (const m of tabOrderOf(p)) {
+    for (let n: View | null = m; n !== null && n !== p; n = n.parent instanceof View ? n.parent : null) if (n === c) return true;
+  }
+  return false;
+}
+
+/** Does `a` come before `b` in tree order (preorder: an ancestor before what
+ *  it holds, siblings in their order)? For the pressed-spot Tab start. */
+function precedes(a: View, b: View): boolean {
+  if (a === b) return false;
+  const chain = (v: View): View[] => { const out: View[] = []; for (let n: View | null = v; n !== null; n = parentAcross(n)) out.unshift(n); return out; };
+  const ca = chain(a), cb = chain(b);
+  let i = 0;
+  while (i < ca.length && i < cb.length && ca[i] === cb[i]) i++;
+  if (i === ca.length) return true;            // a holds b
+  if (i === cb.length) return false;           // b holds a
+  if (i === 0) return false;                   // different programs: no order
+  const kids = ca[i - 1].childViews;
+  return kids.indexOf(ca[i]) < kids.indexOf(cb[i]);
 }
 
 function canFocus(v: View): boolean {
@@ -588,6 +705,39 @@ function entryIndex(seq: Entry[], f: View): number {
   return seq.findIndex((e) => e.scope !== null && insideAcross(f, e.scope));
 }
 
+/** The `stop` `f` is one of the members of — its nearest stop, with no
+ *  focusable view between them, and not one that takes focus itself (a list's
+ *  rows are reached by Enter) — or null. */
+function memberStop(f: View): View | null {
+  for (let v: View | null = parentAcross(f); v !== null; v = parentAcross(v)) {
+    const k = scopeOf(v);
+    if (k === "stop") return canFocus(v) ? null : v;
+    if (k === "region" || k === "modal" || v.focusable) return null;
+  }
+  return null;
+}
+
+/** The base `onKeyDown` (view.ts): in a stop, Right/Down move focus to the
+ *  next member and Left/Up to the previous, wrapping, and Home/End to the
+ *  first and last — the members in the stop's Tab order, a nested scope one
+ *  member. Not with a modifier, and never in a text field (its arrows move the
+ *  caret). */
+function arrowDefault(f: View, ev: unknown): void {
+  const e = ev as KeyEvent;
+  if (e.ctrl || e.alt || e.meta || e.shift || Focus.getFocus() !== f) return;
+  const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+  if (d === 0 && e.key !== "Home" && e.key !== "End") return;
+  const t = f as unknown as { placeholder?: unknown; multiline?: unknown };
+  if (typeof t.placeholder === "string" && typeof t.multiline === "boolean") return;
+  const s = memberStop(f);
+  if (s === null) return;
+  const seq = sequence(s).filter((x) => canFocus(x.view));
+  const i = entryIndex(seq, f);
+  if (i < 0 || seq.length < 2 && d !== 0) return;
+  const n = e.key === "Home" ? 0 : e.key === "End" ? seq.length - 1 : (i + d + seq.length) % seq.length;
+  if (n !== i) Focus.land(seq[n].view);   // as Tab lands: keyboard focus, revealed
+}
+
 /** The `stop` whose member scope focus has entered — focus inside a stop on a
  *  view that is not one of the stop's own members (a field in a list's row, an
  *  editor in a grid's cell) — or null. A stop's own members are the views its
@@ -609,6 +759,9 @@ function enteredStop(f: View): View | null {
  *  the way down — a row), or the outermost program. A view that is itself a
  *  region moves in its parent's cycle. */
 function cycleOf(f: View): View {
+  // a modal overlay holding focus itself (nothing inside it to focus) is its
+  // own cycle: Tab has nowhere to go, and does not leave it
+  if (scopeOf(f) === "modal") return f;
   const s = enteredStop(f);
   let child: View = f;
   for (let v: View | null = parentAcross(f); v !== null; child = v, v = parentAcross(v)) {
@@ -679,6 +832,7 @@ export function deliverKeys(keys: KeysService, focus: FocusService): () => void 
   // The way out that every browser leaves to the page (CodeMirror's rule).
   let escArmed = false;
   const offDown = keys.onKeyDown((e) => {
+    if (!/^(Shift|Control|Alt|Meta)(Left|Right)?$/.test(e.code)) focus.lastInputKeyboard = true;
     // a modifier going down on its own (Shift, for Shift-Tab) keeps it armed
     const lone = /^(Shift|Control|Alt|Meta)(Left|Right)?$/.test(e.code);
     const armed = escArmed;
@@ -689,6 +843,14 @@ export function deliverKeys(keys: KeysService, focus: FocusService): () => void 
     }
     if (e.code === "Escape" && !e.repeat && !keys.navClaimed()) escArmed = true;
     if (e.code === "Tab") {
+      // an open overlay that holds the keys while focus is outside it (a menu
+      // roving for its opener): Tab closes it as Esc would, then moves on —
+      // the web's menu-button rule; focus never goes behind a menu left open
+      const c = keys.claimant();
+      if (c instanceof View && !focus.holds(c)) {
+        const esc = (c as unknown as { escape?: () => void }).escape;
+        if (typeof esc === "function") esc.call(c);
+      }
       if (e.shift) focus.prev();
       else focus.next();
       return;
@@ -744,3 +906,4 @@ export const Focus = new FocusService();
 // that is being torn down. One-directional — focus.ts imports view.ts, not the
 // reverse — so no import cycle.
 setFocusDiscardHook((view) => Focus.noteDiscarded(view));
+setKeyDefaultHook(arrowDefault);

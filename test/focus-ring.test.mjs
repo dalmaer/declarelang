@@ -23,6 +23,7 @@ async function boot(src) {
   return app;
 }
 
+const same = (a, b, msg) => assert.ok(a === b, msg);
 const stopAt = (want) => { for (let i = 0; i < 20 && Focus.getFocus() !== want; i++) { Focus.next(); settle(); } };
 
 await test("Tab reveals a control clear of the page's pinned bars, both ways", async () => {
@@ -123,7 +124,10 @@ await test("focus moved by an arrow's handler is keyboard focus: the ring stays 
   assert.equal(Focus.getFocus(), segs[2], "and back from the first to the last");
   assert.equal(app.sel, "a", "roving selects nothing");
   Focus.focus(app.after); settle();
-  assert.ok(!Focus.byKeyboard(), "Focus.focus outside a key's handler is still pointer/programmatic");
+  assert.ok(Focus.byKeyboard(), "focus moved by code after keyboard use is keyboard focus (the web's rule)");
+  Focus.pressAt(app); settle();
+  Focus.focus(app.after); settle();
+  assert.ok(!Focus.byKeyboard(), "after a press, focus moved by code is not");
 });
 
 await test("F6 moves focus to the next region, and Shift-F6 back", async () => {
@@ -175,6 +179,115 @@ await test("focused is every view's reactive fact, and Focus.getFocus() is a tra
   assert.equal(app.which, "v");
   Focus.blur(); settle();
   assert.ok(!app.v.lit && app.which === "none", "and leave");
+});
+
+await test("a press on content that takes no focus clears focus, and the next Tab starts from the pressed spot", async () => {
+  const app = await boot(`App [ width = 600, height = 400,
+    a: Button [ x = 10, y = 10, label = "A" ],
+    note: View [ x = 10, y = 60, width = 200, height = 40, fill = #EEEEEE ],
+    b: Button [ x = 10, y = 120, label = "B" ],
+    c: Button [ x = 10, y = 170, label = "C" ] ]`);
+  Focus.focus(app.a); settle();
+  Focus.pressAt(app.b); settle();
+  same(Focus.getFocus(), app.a, "a press on a control leaves focus to the control (it focuses itself)");
+  Focus.pressAt(app.note); settle();
+  assert.equal(Focus.getFocus(), null, "a press on plain content clears focus");
+  Focus.next(); settle();
+  same(Focus.getFocus(), app.b, "Tab goes to the first stop after the pressed spot");
+  Focus.pressAt(app.note); settle();
+  Focus.prev(); settle();
+  same(Focus.getFocus(), app.a, "Shift-Tab to the last one before it");
+});
+
+await test("inside a dialog, a press on its plain content keeps the next Tab in the dialog", async () => {
+  const app = await boot(`App [ width = 600, height = 400,
+    out: Button [ x = 10, y = 10, label = "Out" ],
+    dlg: Dialog [ title = "T", buttons = { [ ({ id: "ok", label: "OK", default: true }) ] },
+        body: View [ width = 200, height = 40 ], f: Button [ label = "In" ] ] ]`);
+  app.dlg.show(); settle();
+  await new Promise((r) => setTimeout(r, 0)); settle();
+  Focus.pressAt(app.dlg.body); settle();
+  Focus.next(); settle();
+  assert.ok(Focus.holds(app.dlg), `Tab from a spot inside the dialog stays inside it (${Focus.getFocus()?.label})`);
+  app.dlg.close(); settle();
+});
+
+await test("Tab scrolls a page App taller than its window: the reveal is framed by the window, not the App's own height", async () => {
+  const app = await boot(`App [ width = 400, height = 1600,
+    page: View [ width = 400, height = 1600,
+        a: Button [ y = 40, label = "A" ],
+        b: Button [ y = 1200, label = "B" ] ] ]`);
+  app.hostWidth = 400; app.hostHeight = 300; settle();
+  assert.ok(app.height >= 1600, `the App is as tall as its content (${app.height})`);
+  stopAt(app.page.b);
+  const top = app.page.b.y - app.scrollY;
+  assert.ok(top >= 0 && top + app.page.b.height <= 300, `B is brought inside the window (top ${top}, scrollY ${app.scrollY})`);
+});
+
+await test("focus does not stay on what can no longer be reached: hidden, made unfocusable, dropped by tabOrder", async () => {
+  const app = await boot(`App [ width = 600, height = 400, open: boolean = true, on: boolean = true, shown: boolean = true,
+    a: Button [ x = 10, y = 10, label = "A" ],
+    pane: View [ x = 10, y = 60, width = 300, height = 200, visible = { app.shown },
+        tabOrder() { return app.open ? this.tabDefault() : [] },
+        f: Button [ label = "In pane", focusable = { app.on } ] ],
+    z: Button [ x = 10, y = 300, label = "Z" ] ]`);
+  const turn = async () => { settle(); await new Promise((r) => setTimeout(r, 0)); settle(); };
+  for (const [what, off, on] of [
+    ["hidden", () => { app.shown = false }, () => { app.shown = true }],
+    ["made unfocusable", () => { app.on = false }, () => { app.on = true }],
+    ["dropped by its pane's tabOrder", () => { app.open = false }, () => { app.open = true }]]) {
+    Focus.focus(app.pane.f); await turn();
+    same(Focus.getFocus(), app.pane.f, `focused in the pane before it is ${what}`);
+    off(); await turn();
+    assert.equal(Focus.getFocus(), null, `${what}: focus is cleared`);
+    Focus.next(); await turn();
+    same(Focus.getFocus(), app.z, `${what}: the next Tab goes on from where it was`);
+    on(); await turn();
+  }
+});
+
+await test("in a stop the arrows move among the members by default; a member's own handler keeps the keys it takes", async () => {
+  const app = await boot(`App [ width = 600, height = 200, sel: string = "a",
+    bar: View [ focusScope = stop, layout: SimpleLayout [ axis = x, spacing = 8 ],
+        a: Button [ label = "A" ],
+        b: Button [ label = "B", disabled = true ],
+        c: View [ width = 30, height = 20, focusable = true ],
+        d: Button [ label = "D", hits: number = 0,
+            onKeyDown(e: KeyEvent) { if (e.key == "ArrowLeft") this.hits = this.hits + 1; else super.onKeyDown(e) } ] ],
+    radios: RadioGroup [ y = 60, value = { app.sel }, input(v: any) { app.sel = v },
+        Radio [ choice = "a", label = "A" ], Radio [ choice = "b", label = "B" ], Radio [ choice = "c", label = "C" ] ],
+    field: View [ y = 160, focusScope = stop, t: TextInput [ width = 100, focusable = true ], u: Button [ x = 120, label = "U" ] ] ]`);
+  const key = (k, mods = {}) => ({ code: k, key: k, shift: false, ctrl: false, alt: false, meta: false, repeat: false, ...mods });
+  const press = (e) => { Keys.keyDown(e); settle(); Keys.keyUp(e); };
+  deliverKeys(Keys, Focus);
+  const { a, c, d } = app.bar;
+  Focus.focus(a); settle();
+  press(key("ArrowRight"));
+  assert.ok(Focus.getFocus() === c, "Right skips the disabled member, and a plain focusable view is a member too");
+  assert.ok(Focus.byKeyboard(), "an arrow's move is keyboard focus");
+  press(key("ArrowDown"));
+  assert.ok(Focus.getFocus() === d, "Down goes forward as well");
+  press(key("ArrowRight"));
+  assert.ok(Focus.getFocus() === a, "past the last member it wraps");
+  press(key("End"));
+  assert.ok(Focus.getFocus() === d, "End goes to the last");
+  press(key("ArrowLeft"));
+  assert.ok(Focus.getFocus() === d && d.hits === 1, "a key the member takes (no super) is its alone");
+  press(key("ArrowUp"));
+  assert.ok(Focus.getFocus() === c, "the keys it hands on with super move as usual");
+  press(key("Home"));
+  assert.ok(Focus.getFocus() === a, "Home goes to the first");
+  press(key("ArrowRight", { shift: true }));
+  assert.ok(Focus.getFocus() === a, "not with a modifier");
+  const rs = app.radios.radios();
+  stopAt(rs[0]);
+  press(key("ArrowDown"));
+  assert.ok(Focus.getFocus() === rs[1] && app.sel === "b", "a radio group's arrows move and check");
+  press(key("ArrowUp")); press(key("ArrowUp"));
+  assert.ok(Focus.getFocus() === rs[2] && app.sel === "c", "and wrap");
+  Focus.focus(app.field.t); settle();
+  press(key("ArrowRight"));
+  assert.ok(Focus.getFocus() === app.field.t, "a text field's arrows stay its own, even as a stop's member");
 });
 
 summarize("focus-ring");

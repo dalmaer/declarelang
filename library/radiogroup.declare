@@ -41,11 +41,7 @@ group does.
 The radio Tab lands on: the checked one, else the first that is enabled.
 
 ## radios()
-The group's radios, for the keyboard. A handler-only walk.
-
-## step()
-Moves to the next (`1`) or previous (`-1`) enabled radio from `from`, focusing and
-checking it — what the arrows do.
+The group's radios, for the Tab entry. A handler-only walk.
 
 */
 
@@ -69,19 +65,6 @@ class RadioGroup [
         const out = []
         for (const c of this.children) { if ((c as Radio).choice !== undefined) out.push(c) }
         return out
-        },
-    step(from: View, d: number) {
-        const rs = this.radios()
-        let i = rs.indexOf(from)
-        for (let k = 0; k < rs.length; k = k + 1) {
-            i = (i + d + rs.length) % rs.length
-            const r = rs[i] as Radio
-            if (!r.disabled) {
-                Focus.focus(r)
-                this.pick(r.choice)
-                return
-                }
-            }
         },
 
     layout: SimpleLayout [ axis = y, spacing = 10 ]
@@ -126,8 +109,8 @@ stored** — which is why turning one on cannot leave another stale.
 Delivers this radio's `choice` to the group. Called by a click and by Space/Enter.
 
 ## onKeyDown
-The arrows move to the next or previous radio in the group and check it (`RadioGroup.step`);
-Space and Enter press, as on any control.
+The arrows move to the next or previous radio in the group (the stop's) and check the one
+they land on; Space and Enter press, as on any control.
 
 ## focusShape()
 Rings the round dot rather than the dot-plus-label row.
@@ -160,10 +143,9 @@ class Radio extends Control [ height = { this.dot.width + 4 },
     // the arrows move to the next radio and check it; Space and Enter as any control
 
     onKeyDown(e: KeyEvent) {
-        if (disabled || e.repeat) return
-        if (e.key == "ArrowDown" || e.key == "ArrowRight") (parent as RadioGroup).step(this, 1)
-        else if (e.key == "ArrowUp" || e.key == "ArrowLeft") (parent as RadioGroup).step(this, -1)
-        else super.onKeyDown(e)
+        super.onKeyDown(e)
+        const to = Focus.getFocus() as any
+        if (to != null && to != this && to.parent == this.parent && to.choice !== undefined) (parent as RadioGroup).pick(to.choice)
         },
 
     on: boolean = { (parent as RadioGroup).value == choice },

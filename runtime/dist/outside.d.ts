@@ -9,6 +9,9 @@ export declare function noteOverlay(v: View): void;
 export declare function contextOf(v: View): View | null;
 /** Is `node` inside `overlay`, along the paint tree? */
 export declare function inside(node: InteractionView | null, overlay: View): boolean;
+/** The view under a root point, walking on through an island into the program
+ *  it hosts (an overlay may belong to a tenant). */
+export declare function leafAcross(app: View, x: number, y: number): InteractionView | null;
 /** A hosted program is leaving: its overlays are no longer open. */
 export declare function withdrawOpen(root: View): void;
 /** Anything open at all — a cheap gate for the router's hot path. */

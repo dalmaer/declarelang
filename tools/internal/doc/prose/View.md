@@ -580,7 +580,8 @@ numeric tabindex; override `tabOrder()` to reorder within a container.
 ## focusScope
 What Tab does at this view's edge. `none` (the default): the view's stops are its
 parent's, Tab walks straight through. `stop`: the view is **one** Tab stop and the arrows
-move among its members — a radio group, a segmented control, a list; Tab lands on the
+move among its members (Right and Down forward, Left and Up back, wrapping; Home and End to
+the ends) — a radio group, a segmented control, a row of chips; Tab lands on the
 member the view names with a `focusEntry()` method, else the one that last had focus, else
 the view itself when it takes focus, else its first stop. `capture`: Tab walks into the view
 and through its stops (an entry form). `region`: one stop from outside, entered with Enter,
@@ -619,6 +620,9 @@ nothing to reset here.
 
 ## onHold
 A press held in place for half a second — the tap-hold, equally available to a mouse.
+It goes to the **nearest view that declares it**, the pressed view or an ancestor, so a
+hold anywhere on a card reaches the card even over a child that takes a tap of its own;
+the release then does not also tap that child.
 It does **not** consume the gesture: the raw stream continues and the eventual click
 still fires unless the pointer wanders, so a hold can open a menu, start a pick-up, or
 be ignored. Declared **alongside the drag handlers** it changes who owns a touch
@@ -661,7 +665,8 @@ handler that holds state across a touch.
 
 ## onContextMenu
 The platform's context gesture — a right-click, or a two-finger tap on a trackpad —
-carrying the point in this view's coordinates. Declaring it **suppresses the browser's own
+carrying the point in this view's coordinates. Like `onHold` it goes to the nearest view
+that declares it, the pressed view or an ancestor. Declaring it **suppresses the browser's own
 menu**, and exactly where it is declared: elsewhere on the page the native menu still
 opens. A touch long-press does not arrive here; that is `onHold`, which is the gate touch
 context rides.
@@ -706,7 +711,9 @@ policy asked to hear it: the cue for an overlay to close.
 
 ## onKeyDown
 A key was pressed while the view holds focus; the event carries the key. For app-wide
-shortcuts use a `Keys` subscription instead — this is for the focused view only.
+shortcuts use a `Keys` subscription instead — this is for the focused view only. The base
+body moves among a `focusScope = stop`'s members on the arrows: take the keys you want
+and hand the rest to `super.onKeyDown(e)`.
 
 ## onKeyUp
 A key was released while the view holds focus — the partner of `keyDown`.
@@ -1100,6 +1107,15 @@ tabOrder() { return open ? this.tabDefault() : [] }
 ## tabDefault()
 The default traversal list — visible children in source order. **The thing a `tabOrder()`
 override calls** when it wants the ordinary answer under a condition of its own.
+
+## onKeyDown()
+The base body of every view's key handler: inside a `focusScope = stop`, the arrows move to
+the next or previous member and Home and End to the ends. **The thing an `onKeyDown`
+override hands keys to** when it does not take them:
+
+```declare-fragment
+onKeyDown(e: KeyEvent) { if (e.key == "ArrowRight") this.expand(); else super.onKeyDown(e) }
+```
 
 ## scrollStartX
 The horizontal offset a `scrolls` view **starts at** — applied once, at

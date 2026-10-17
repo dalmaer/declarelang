@@ -119,6 +119,10 @@ use [ Menu ]
 
 class Combobox extends Control [
     width = 220,
+
+    // one Tab stop: the entry is the stop, the combobox around it is not
+
+    focusable = false,
     height = { provided("theme").comboboxHeight },
 
     // ── the surface ───────────────────────────────────────────────────────
@@ -175,6 +179,7 @@ class Combobox extends Control [
         if (list != null) return
         list = (this.parent as View).createView("Menu", ({ }))
         const m = this.list as any
+        m.typeahead = false                       // its letters are the entry's
         m.picked = (id) => this.pickIndex(parseInt(id))
         },
 
@@ -204,6 +209,7 @@ class Combobox extends Control [
         width = { classroot.width },
         height = { classroot.height },
         placeholder = { classroot.placeholder },
+        focusable = { !classroot.disabled },
         onInput(t: string) {
             classroot.query = "" + t
             classroot.filtering = true

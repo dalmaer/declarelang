@@ -319,7 +319,8 @@ one-or-four shape, with `null` for a bare side, which is how a single rule under
 drawn.
 
 **Stacking order is declaration order**; later siblings paint on top. There is no `z-index`, so
-chrome that must float above everything is declared last.
+chrome that must float above everything is declared last (a menu, popover or dialog is a library
+overlay, which floats on its own).
 
 → the layouts that ship: `library/` · their attributes: the reference (`npx declare-help <name>`)
 

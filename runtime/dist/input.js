@@ -109,6 +109,12 @@ topLevel = true) {
     let pressY = 0;
     let pressSlop = SLOP_MOUSE;
     let wandered = false;
+    /** A hold fired on an ancestor of the pressed view (HitTarget.hold): the
+     *  release is not also that view's click. */
+    let heldAbove = false;
+    /** The press came from a mouse's secondary button: not a click (the web's
+     *  rule — a right-click is the context gesture, and fires no click). */
+    let pressAux = false;
     // Double-click pairing (platform-level, both backends): a second click on
     // the SAME view within the interval — and, on touch, within slop of the first
     // tap — also fires dblClick; the third starts a fresh cycle (the classic
@@ -229,10 +235,11 @@ topLevel = true) {
                 return;
             }
             const t = resolve(e);
-            if (t !== null && t.wantsContext === true) {
+            const owner = t === null ? undefined : t.context ?? (t.wantsContext === true ? t : undefined);
+            if (owner !== undefined) {
                 e.preventDefault();
                 const cp = rootOf(e);
-                t.sink("contextMenu", cp.x, cp.y);
+                owner.sink("contextMenu", cp.x, cp.y);
             }
         };
         window.addEventListener("contextmenu", ctxListener);
@@ -288,6 +295,7 @@ topLevel = true) {
         const t = resolve(e);
         held = t;
         wandered = false;
+        pressAux = e.pointerType === "mouse" && typeof e.button === "number" && e.button !== 0;
         pressSlop = e.pointerType === "touch" ? SLOP_TOUCH : SLOP_MOUSE;
         const p0 = rootPoint !== undefined ? rootPoint(e) : { x: e.clientX, y: e.clientY };
         pressX = p0.x;
@@ -374,7 +382,9 @@ topLevel = true) {
                 }
             }
             t.sink("pointerDown", p0.x, p0.y, { deltaX: 0, deltaY: 0 });
-            if (t.wantsHold === true) {
+            heldAbove = false;
+            const holder = t.hold ?? (t.wantsHold === true ? t : undefined);
+            if (holder !== undefined) {
                 const target = t;
                 const touch = e.pointerType === "touch";
                 holdTimer = setTimeout(() => {
@@ -389,7 +399,11 @@ topLevel = true) {
                         // app — the backends keep the browser's pan out from this moment.
                         if (touch && target.wantsDrag === true)
                             holdCapture = true;
-                        target.sink("hold", lastX, lastY, moved(lastX, lastY));
+                        // held on an ancestor's behalf: the long-press was the gesture, so
+                        // the release does not also click the child it began on
+                        if (holder.key !== target.key)
+                            heldAbove = true;
+                        holder.sink("hold", lastX, lastY, moved(lastX, lastY));
                     }
                 }, HOLD_MS);
             }
@@ -517,7 +531,7 @@ topLevel = true) {
             // pointer never wandered past slop (a moved finger was swiping, whatever
             // it started on). An excursion that returns still counts as wandering —
             // the gesture declared itself a drag when it left.
-            if (t !== null && t.key === captor.key && !wandered) {
+            if (t !== null && t.key === captor.key && !wandered && !heldAbove && !pressAux) {
                 const now = Date.now();
                 // The pair must also land in about the same PLACE — a view can be
                 // large, and two taps at opposite corners are not a double-tap.

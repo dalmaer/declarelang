@@ -71,6 +71,7 @@ import { isAuthoredUnion } from "../../runtime/dist/value.js";
 import { declaredType } from "../../runtime/dist/value.js";
 import { EVENT_PAYLOAD, handlerName } from "../../runtime/dist/schema.js";
 import { THEME_PRESET_NAMES } from "../../runtime/dist/themes.js";
+import { runtimeMethodsOf } from "../../runtime/dist/runtime-methods.js";
 /** The fixed value-type prelude — the closed vocabulary of value.ts as TS
  *  types, plus the value constructors in scope for every body. Mirrors
  *  value.ts's runtime shapes exactly (Length/Color/Fill/Stroke/Shadow/
@@ -1012,9 +1013,12 @@ function emitClass(s, decl, rootType, extras, isClassName) {
     // is then a TS2416 against this signature, and writing `onPointerUp(e)` with no
     // type is a TS7006 — the same treatment TypeScript gives any override, which
     // is the behaviour the language section that is 1:1 with TS should have.
+    // A handler the runtime gives a base body (View's onKeyDown: the arrows in a
+    // stop) is a required member, so `super.onKeyDown(e)` type-checks.
     for (const ev of s.events ?? []) {
         const payload = EVENT_PAYLOAD[ev];
-        lines.push(`  ${handlerName(ev)}?(${payload === undefined ? "" : `e: ${payload}`}): void;`);
+        const opt = runtimeMethodsOf(s.name).has(handlerName(ev)) ? "" : "?";
+        lines.push(`  ${handlerName(ev)}${opt}(${payload === undefined ? "" : `e: ${payload}`}): void;`);
     }
     const api = LANGUAGE_API[s.name];
     if (api !== undefined)

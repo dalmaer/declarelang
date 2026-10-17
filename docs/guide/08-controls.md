@@ -169,7 +169,8 @@ style is yours: views, a layout, and data.
 ## Keyboard focus
 
 Every control is a tab stop. Tab and Shift-Tab move through them in tree order, Space
-and Enter activate, and a click moves focus to what was clicked. A control with members —
+and Enter activate, and a click moves focus to what was clicked; a click on anything that
+can't take focus clears it, and the next Tab starts from where you clicked. A control with members —
 a radio group, a segmented control, a list, a menu bar — is one stop: Tab lands on its
 chosen member and the arrows move among the rest. A focus ring that
 travels to the focused control is added to any app that uses library controls; the
@@ -181,11 +182,13 @@ When you need more:
 - A container reorders or gates what Tab reaches by overriding [`tabOrder()`](declare-docs:View.method.tabOrder) — a closed
   pane returns nothing, so Tab never reaches content the user cannot see.
 - [`focusScope`](declare-docs:View.focusScope) says what Tab does at a container's edge:
-  `stop` makes it one stop with arrows inside, `region` gives it a cycle of its own that
+  `stop` makes it one stop whose arrows move among its members, `region` gives it a cycle of its own that
   Enter enters and F6 leaves (a window, a pane), `modal` keeps Tab inside it (a dialog).
   Some browsers take F6 for themselves, so **Esc then Tab** leaves a region too (Shift-Tab
   goes back), and a program's own command can call
   [`Focus.nextRegion`](declare-docs:Focus.method.nextRegion).
+- A member of a `stop` that wants an arrow for itself handles it in `onKeyDown`, and hands
+  the keys it doesn't want to `super.onKeyDown(e)`.
 - Every view carries [`focused`](declare-docs:View.focused), true while it holds focus — a
   fact a constraint reads (`stroke = { focused ? stroke(2, provided("theme").accent) : null }`).
 - [`Focus.focus(view)`](declare-docs:Focus.method.focus) moves focus from code;

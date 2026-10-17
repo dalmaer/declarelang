@@ -84,7 +84,7 @@ export function inside(node, overlay) {
 }
 /** The view under a root point, walking on through an island into the program
  *  it hosts (an overlay may belong to a tenant). */
-function leafAcross(app, x, y) {
+export function leafAcross(app, x, y) {
     let leaf = leafAt(app, x, y);
     for (let guard = 0; leaf !== null && guard < 8; guard++) {
         const t = leaf.$tenant;

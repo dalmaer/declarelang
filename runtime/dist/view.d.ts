@@ -599,6 +599,13 @@ export declare class View extends Node {
      *  uses this, so an all-default tree is pure tree preorder. An override may
      *  call it to compose ("the rest, minus X"). */
     tabDefault(): View[];
+    /** The base body of every view's `onKeyDown`: inside a `focusScope = stop`,
+     *  an arrow moves focus to the next member (Right/Down) or the previous one
+     *  (Left/Up), Home and End to the first and last. A handler takes the keys it
+     *  wants and hands the rest on with `super.onKeyDown(e)`. The behaviour is
+     *  the focus service's (keyDefaultHook), so a program with no focus carries
+     *  none of it. */
+    onKeyDown(e: unknown): void;
     /** Internal focus notification, called by the focus service when this view
      *  gains (true) or loses (false) Declare focus — SEPARATE from the user's
      *  `onFocus`/`onBlur` handlers, so a built-in class (TextInput) can drive
@@ -864,6 +871,7 @@ export declare function withCursorDefining<T>(view: Node, fn: () => T): T;
  *  ANYWHERE on the chain wakes exactly the reads below it. */
 export declare function inheritedCursor(node: Node | null): Cursor | null;
 export declare function setFocusDiscardHook(fn: (view: View) => void): void;
+export declare function setKeyDefaultHook(fn: (view: View, e: unknown) => void): void;
 export declare function noteFocused(now: View | null): void;
 /** A node's address for an error message: its authored-name path up the tree
  *  (`app.pulse.card`), or its class when anonymous. Cheap, and built only once

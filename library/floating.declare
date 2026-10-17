@@ -117,6 +117,10 @@ focus if it takes focus.
 ## showFor()
 Opens it for `v` — `opener` becomes `v`.
 
+## holdFocusItself()
+**Internal.** Focuses the overlay itself when it takes focus and holds nothing focusable,
+so Tab cannot reach what is behind it.
+
 ## close()
 Closes it at once, through `input(false)` (it stops taking input); it is torn down when its
 closing motion lands.
@@ -290,7 +294,15 @@ class Floating [
         this.show()
         },
 
-    focusFirst() { Focus.focusIn(this) },
+    // nothing inside to focus (a full-screen picture): the overlay holds focus
+    // itself, so Tab has nowhere to go behind it and Esc still closes it
+
+    focusFirst() { if (!Focus.focusIn(this)) this.holdFocusItself() },
+
+    holdFocusItself() {
+        focusable = true
+        Focus.focus(this)
+        },
 
     close() {
         if (shown) this.input(false)

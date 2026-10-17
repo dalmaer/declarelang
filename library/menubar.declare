@@ -72,9 +72,6 @@ one.
 `stop`: the bar is one Tab stop. Tab lands on the title last used (the first, at first);
 Left and Right move among the titles; Enter, Space or Down opens the focused title's menu.
 
-## stepTitle()
-Moves focus to the adjacent title — what Left and Right do while no menu is open.
-
 ## stepMenu()
 Moves to the adjacent title's menu — Left/Right while a menu is open, yielding to the
 open menu when a submenu is up or the rover sits on one.
@@ -165,13 +162,6 @@ class MenuBar [
 
     focusScope = stop,
 
-    stepTitle(t: object, d: number) {
-        const ts = this.rowsOf()
-        const i = ts.indexOf(t)
-        if (i < 0 || ts.length < 2) return
-        Focus.focus(ts[(i + d + ts.length) % ts.length] as any)
-        },
-
     stepMenu(d: number) {
         const ms = menus || []
         const i = ms.findIndex((m) => "" + m.id == this.openId)
@@ -222,8 +212,7 @@ class MenuBar [
             focusable = true,
             onKeyDown(e: KeyEvent) {
                 if (e.key == "Enter" || e.key == " " || e.key == "ArrowDown") classroot.openMenu(this)
-                else if (e.key == "ArrowLeft") classroot.stepTitle(this, -1)
-                else if (e.key == "ArrowRight") classroot.stepTitle(this, 1)
+                else if (e.key == "ArrowLeft" || e.key == "ArrowRight") super.onKeyDown(e)
                 },
             onPointerOver() { classroot.trackMenu(this) },
             onClick() { if (this.open) classroot.menu.close(); else classroot.openMenu(this) },

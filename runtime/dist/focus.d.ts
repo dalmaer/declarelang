@@ -62,6 +62,8 @@ export declare class FocusService {
      *  moves the resting ring WITH its control — no re-focus needed. */
     private readonly geometryHandlers;
     private follower;
+    /** Watches that the focused view stays reachable (rewatch). */
+    private watch;
     /** Reentrancy lock: a focus change fires onFocus/onBlur handlers that may
      *  call focus() again; remember the latest target and apply it after the
      *  current change settles (LZX's discipline). */
@@ -96,6 +98,9 @@ export declare class FocusService {
      *  field), it is keyboard focus: the web's :focus-visible rule for script
      *  focus during keyboard use. */
     focus(view: View | null): void;
+    /** Was the person's last input a key (true) or a press (false)? Set as each
+     *  arrives (deliverKeys, pressAt). */
+    lastInputKeyboard: boolean;
     /** The key service delivering to this one (deliverKeys) — asked whether a
      *  focus call comes from a key's handler. */
     keys: KeysService | null;
@@ -117,6 +122,24 @@ export declare class FocusService {
      *  the same missing term as the pointer walk's — ONE WALK, everywhere). */
     private retargetFollower;
     blur(): void;
+    /** Focus does not stay on what the person can no longer reach. A standing
+     *  constraint over the focused view's reachability — it or an ancestor
+     *  hidden, it made unfocusable or disabled, or an ancestor's `tabOrder()` no
+     *  longer naming it (a pane that closed) — clears focus once the change has
+     *  settled, and the next Tab starts from where it was, as the web does when
+     *  a focused element stops being rendered. (A view torn down is
+     *  noteDiscarded's, before it goes.) */
+    private rewatch;
+    /** Where the next Tab starts when nothing has focus: the spot a press on
+     *  content that takes no focus left (the web's sequential focus navigation
+     *  starting point). Cleared as soon as anything is focused. */
+    private startPoint;
+    /** A press landed on `leaf` (the view under it, across islands). The web's
+     *  rule: when nothing on its chain can take focus, focus is cleared — the
+     *  keyboard goes back to the program the press was in — and the next Tab
+     *  starts from the pressed spot. A press on something focusable, or inside
+     *  it, leaves focus to that view (a control focuses itself on press). */
+    pressAt(leaf: View | null): void;
     next(): void;
     prev(): void;
     /** The ordered focus stops of the cycle a view's Tab moves in (planes.md
@@ -127,7 +150,7 @@ export declare class FocusService {
     /** Keyboard-focus `v` and show it: the focus-visible modality, and the web's
      *  focus-reveal contract (a keyboard-focused control is scrolled into view,
      *  minimum distance, through app scrollers and the document alike). */
-    private land;
+    land(v: View): void;
     /** Enter the focused region (Enter on a window focused as one stop): focus
      *  what last had focus inside it, else its first stop. True when it entered. */
     enter(): boolean;

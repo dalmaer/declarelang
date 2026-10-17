@@ -3104,8 +3104,20 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
     // built as the window class it names; record order is paint order, so a
     // raise is a data move and the minimized band is the tail ──
 
+    // Tab reads the screen top to bottom: the menu bar, the windows, then the dock
+
+    tabOrder() {
+        return [this.bar as View, this.wins, this.dock as View,
+            ...this.tabDefault().filter((v) => v != this.bar && v != this.wins && v != this.dock)]
+        },
+
     wins: View [ x = 0, y = { app.menuBarH }, width = { app.width }, height = { app.height - app.menuBarH },
         datapath = { app.wm.list.value },
+
+        // the records' order is the stacking, front-most last: Tab visits the
+        // front window first
+
+        tabOrder() { return this.tabDefault().reverse() },
         DeskWindow [ datapath = :wins[], key = :id,
             classFor = { :cls == "FilesWindow" ? FilesWindow : :cls == "ViewerWindow" ? ViewerWindow
                 : :cls == "AppWindow" ? AppWindow : :cls == "AboutWindow" ? AboutWindow
@@ -3449,11 +3461,6 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
             datapath = { app.launcher.data.value },
             layout: SimpleLayout [ axis = x, spacing = 16 ],
             focusScope = stop,
-            step(icon: View, d: number) {
-                const ics = this.children.filter((c) => (c as View).visible)
-                const i = ics.indexOf(icon)
-                if (i >= 0 && ics.length > 1) Focus.focus(ics[(i + d + ics.length) % ics.length] as View)
-                },
 
             // a running app's icon raises its open windows instead of opening
             // more — dockOpen: raise if any, else the app's own open verb
@@ -3472,8 +3479,7 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
                 onClick() { const a = this.ap; if (a != null) app.wm.dockOpen(a, () => a.launch(this)) },
                 onKeyDown(e: KeyEvent) {
                     if (e.key == "Enter" || e.key == " ") this.onClick()
-                    else if (e.key == "ArrowRight") app.dock.row.step(this, 1)
-                    else if (e.key == "ArrowLeft") app.dock.row.step(this, -1)
+                    else super.onKeyDown(e)
                     }
                 ]
             ],

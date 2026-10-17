@@ -30,7 +30,7 @@ and `edge` are the whole variation: sage in the contacts bar, rust on the
 login. The label is engraved — a dark copy sitting just above a white one.
 */
 
-class DashButton [
+class DashButton extends Control [
     label: string = "",
     height = 16,
     cornerRadius = 8,

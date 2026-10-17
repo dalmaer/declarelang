@@ -168,7 +168,7 @@ class ContactsPanel [
             ],
         newBtn: DashButton [ x = 4, y = 2, width = 43, label = "new",
             face = #96B8A6, edge = #2F5646,
-            onClick() {
+            press() {
                 if (classroot.formOpen) return
                 classroot.formOpen = true
                 classroot.form.slide.to = 270; classroot.form.slide.start()
@@ -177,12 +177,12 @@ class ContactsPanel [
         saveBtn: DashButton [ x = { parent.width - 110 }, y = 2, width = 50, label = "save",
             face = #96B8A6, edge = #2F5646,
             visible = { classroot.formOpen },
-            onClick() { classroot.saveNew() }
+            press() { classroot.saveNew() }
             ],
         cancelBtn: DashButton [ x = { parent.width - 55 }, y = 2, width = 50, label = "cancel",
             face = #96B8A6, edge = #2F5646,
             visible = { classroot.formOpen },
-            onClick() { classroot.closeForm() }
+            press() { classroot.closeForm() }
             ]
         ],
 

@@ -22,7 +22,7 @@ write, then check the program and look at it running.
    the user's place, the views and any script each belong; and
    `docs/guide/05-run-and-check.md`, the working loop (run, read an error, check, debug).
 3. **The calendar, whole** — `apps/calendar/calendar.declare`, with
-   `docs/guide/27-calendar.md` beside it as its commentary. It is <!--stat:calendar.code-->501<!--/stat--> lines of code,
+   `docs/guide/27-calendar.md` beside it as its commentary. It is <!--stat:calendar.code-->524<!--/stat--> lines of code,
    and it shows a whole program in the grain Declare is designed for: a change of view is
    one assignment, and the screen follows it continuously and interruptibly, with no
    transition code. Read it for how the work divides — the events as a dataset class with
@@ -92,7 +92,7 @@ Then check every need in the plan against
     thousand records and a million on demand: one dataset class holds them and makes every
     write; the list is a dataset derived from it, virtualized, with headings as a second
     row class; editing through a draft; menus, shortcuts, undo. It is
-    <!--stat:tracker.code-->961<!--/stat--> lines of code, and worth reading whole.
+    <!--stat:tracker.code-->971<!--/stat--> lines of code, and worth reading whole.
   - **A surface over time, or things dragged between places** — a schedule, a timeline, a
     board, a grid you zoom from years to a day. → `apps/calendar/calendar.declare`, read
     first (above).

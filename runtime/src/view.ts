@@ -1213,6 +1213,16 @@ export class View extends Node {
     return out;
   }
 
+  /** The base body of every view's `onKeyDown`: inside a `focusScope = stop`,
+   *  an arrow moves focus to the next member (Right/Down) or the previous one
+   *  (Left/Up), Home and End to the first and last. A handler takes the keys it
+   *  wants and hands the rest on with `super.onKeyDown(e)`. The behaviour is
+   *  the focus service's (keyDefaultHook), so a program with no focus carries
+   *  none of it. */
+  onKeyDown(e: unknown): void {
+    keyDefaultHook?.(this, e);
+  }
+
   /** Internal focus notification, called by the focus service when this view
    *  gains (true) or loses (false) Declare focus — SEPARATE from the user's
    *  `onFocus`/`onBlur` handlers, so a built-in class (TextInput) can drive
@@ -2127,6 +2137,13 @@ export function inheritedCursor(node: Node | null): Cursor | null {
 let focusDiscardHook: ((view: View) => void) | null = null;
 export function setFocusDiscardHook(fn: (view: View) => void): void {
   focusDiscardHook = fn;
+}
+
+/** The focus service's default for a key a view's handlers left alone (the
+ *  base `onKeyDown`), registered by focus.ts — the same one-way seam. */
+let keyDefaultHook: ((view: View, e: unknown) => void) | null = null;
+export function setKeyDefaultHook(fn: (view: View, e: unknown) => void): void {
+  keyDefaultHook = fn;
 }
 
 /** The `focused` fact (every view): the focus service reports each change

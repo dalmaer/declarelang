@@ -432,11 +432,15 @@ class IssueRow extends ListRow [
     // every row would be most of what the list builds.
 
     card: EditorCard [ exists = { classroot.exp }, x = 12, y = 48, clip = true,
+        // opened from the list (Return): the editor takes focus, as a new issue's does
+
+        onInit() { if (app.focusOpened) { app.focusOpened = false; afterSettle(() => this.focusTitle()) } },
         width = { parent.width - 24 },
         height = { Math.max(0, parent.height - 56) },
         fill = { provided("theme").surface }, cornerRadius = 10,
         stroke = { stroke(1, provided("theme").line) },
-        shadow = { shadow(0, 4, 16, 0x00000018) } ],
+        shadow = { shadow(0, 4, 16, 0x00000018) }
+        ],
 
     // An issue row keeps TableRow's selection protocol and adds the context
     // menu. Only its line toggles the editor: a press on the open card below
@@ -925,7 +929,9 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
         creating = false
         this.seedDraft()
         editing = true
+        focusOpened = true                  // the opened row's card takes focus as it arrives
         },
+    focusOpened: boolean = false,
 
     newIssue() {
         this.takeSelection(null)
@@ -1102,8 +1108,15 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     // key on the way down and the field it focuses never sees it.
 
     shortcuts: Shortcuts [ title = "Tracker",
-        items = { [ ({ id: "search", key: "⌘K", label: "Search" }), ({ id: "search", key: "/", label: "Search" }) ] },
-        picked(id: string) { if (id == "search") Focus.focus(app.omni) }
+        // ⌘Z is the toast's Undo from the keyboard — the toast's own button takes
+        // no focus — enabled while there is a delete to put back
+
+        items = { [ ({ id: "search", key: "⌘K", label: "Search" }), ({ id: "search", key: "/", label: "Search" }),
+                    ({ id: "undo", key: "⌘Z", label: "Undo delete", enabled: app.lastDeleted.length > 0 }) ] },
+        picked(id: string) {
+            if (id == "search") Focus.focus(app.omni)
+            else if (id == "undo") app.undoDelete()
+            }
         ],
 
     keys: Keys [
@@ -1205,6 +1218,11 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             layout: SimpleLayout [ axis = x, spacing = 8 ],
             byStatus: View [ datapath = { app.issues.byStatus.value }, padding = [0, 14, 0, 0],
                 layout: SimpleLayout [ axis = x, spacing = 8 ],
+
+                // one Tab stop, entered at the chip that is on; the arrows move among them
+
+                focusScope = stop,
+                focusEntry() -> View? { return (this.children.find((c) => (c as Chip).on) ?? null) as View | null },
                 Chip [ datapath = :rows[], value = :status, count = :n, on = { app.fStatus == :status } ]
                 ],
             assigneeBtn: DropButton [ on = { app.fAssignee != "" },

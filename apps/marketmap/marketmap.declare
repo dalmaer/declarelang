@@ -1033,6 +1033,7 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
 
         chips: View [ width = 100%,
             layout: WrappingLayout [ spacing = 8, rowSpacing = 8 ],
+            focusScope = stop,   // one Tab stop; the arrows move among the eras
 
             // editorial, anchored to this file's span — the crash/bottom dates
             // are the data's own drawdown troughs; revisit on a data swap
@@ -1098,13 +1099,6 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
                 Text [ x = end, y = center, fontSize = 10,
                     letterSpacing = 1, textColor = { provided("theme").inkOnHighlight }, opacity = { app.zoom * 0.75 },
                     text = { app.zoom > 0.3 ? app.market.groupStat(app.stageKey, app.day) : "" } ]
-                ],
-            closeBox: Control [ x = { parent.width - 26 }, y = 4, width = 22, height = 22,
-                cornerRadius = 4, cursor = "pointer", tooltipLabel = "Close",
-                fill = { hovered ? provided("theme").highlightHover : provided("theme").highlight },
-                opacity = { app.zoom },
-                press() { app.closeGroup() },
-                CloseIcon [ x = center, y = center, iconSize = 14, ink = { provided("theme").inkOnHighlight } ]
                 ]
             ],
 
@@ -1125,6 +1119,19 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
                 height = { this.r.h + 2 },
                 stroke = { stroke(2, provided("theme").highlight) }
                 ]
+            ],
+
+        // the stage's close box, last in the field so nothing paints over it —
+        // the roster above the stage covers the whole field and would take its
+        // press; placed at the stage's top-right corner and shown with it
+
+        closeBox: Control [ ignoreLayout = true, x = { parent.stage.x + parent.stage.width - 26 }, y = { parent.stage.y + 4 },
+            width = 22, height = 22, visible = { parent.stage.visible },
+            cornerRadius = 4, cursor = "pointer", tooltipLabel = "Close",
+            fill = { hovered ? provided("theme").highlightHover : provided("theme").highlight },
+            opacity = { app.zoom },
+            press() { app.closeGroup() },
+            CloseIcon [ x = center, y = center, iconSize = 14, ink = { provided("theme").inkOnHighlight } ]
             ]
         ],
 

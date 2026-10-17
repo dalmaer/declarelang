@@ -28,7 +28,7 @@ import { View } from "./view.js";
 import { THEME_PRESETS, activeTone } from "./themes.js";
 import { Focus } from "./focus.js";
 import { setOutsidePressHook } from "./input.js";
-import { pressOutside, scrollOutside, contextOf, inside as insideAcross } from "./outside.js";
+import { pressOutside, scrollOutside, contextOf, inside as insideAcross, leafAcross } from "./outside.js";
 import { Files } from "./files.js";
 import { Inspect } from "./inspect-service.js";
 import { afterSettle } from "./reactive.js";
@@ -53,7 +53,17 @@ function escapeHtml(s) {
 // another.
 // The open overlays answer presses aimed past them (outside.ts), at the router
 // of the top-level program.
-setOutsidePressHook((x, y) => { const root = Focus.getRoot(); return root !== null && pressOutside(root, x, y); }, (x, y) => { const root = Focus.getRoot(); return root !== null && scrollOutside(root, x, y); });
+// A press that goes on to the program also settles focus: on content that takes
+// no focus it clears it, as the web does (focus.ts pressAt).
+setOutsidePressHook((x, y) => {
+    const root = Focus.getRoot();
+    if (root === null)
+        return false;
+    if (pressOutside(root, x, y))
+        return true;
+    Focus.pressAt(leafAcross(root, x, y));
+    return false;
+}, (x, y) => { const root = Focus.getRoot(); return root !== null && scrollOutside(root, x, y); });
 setBodyServices({ Focus, Keys, Files, Inspect, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
 // A focused island is not a control: what its program claims, it claims itself.
 setKeysFocusProbe(() => { const f = Focus.getFocus(); return f !== null && !("$tenant" in f); });

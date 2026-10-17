@@ -245,9 +245,9 @@ class Control [
     // is a role rather than an icon: a chevron drawn by hand brings none of this.
 
     onKeyDown(e: KeyEvent) {
-        if (disabled || e.repeat) return
-        if (e.key == "Enter" || e.key == " ") press()
-        else if (e.key == "ArrowDown" && this.menu != null) this.openMenu()
+        if (!disabled && !e.repeat && (e.key == "Enter" || e.key == " ")) press()
+        else if (!disabled && !e.repeat && e.key == "ArrowDown" && this.menu != null) this.openMenu()
+        else super.onKeyDown(e)
         },
 
     // a click activates, through the same seam as the keyboard; a control whose

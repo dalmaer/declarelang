@@ -47,6 +47,20 @@ export interface HitTarget {
         key: object;
         sink: InputSink;
     };
+    /** The nearest HOLD OWNER over this point — the closest view (self
+     *  included) up the hit chain declaring `onHold`. Each gesture goes to the
+     *  nearest view that wants it, as pinch does: a child that takes the click
+     *  does not take the long-press, so a hold anywhere on a message bubble —
+     *  its photo, its label — reaches the bubble. Absent = nothing holds here. */
+    hold?: {
+        key: object;
+        sink: InputSink;
+    };
+    /** The nearest CONTEXT-MENU OWNER (onContextMenu), resolved the same way. */
+    context?: {
+        key: object;
+        sink: InputSink;
+    };
 }
 /** One finger, as the raw touch family reports it. `id` is stable for the
  *  life of that finger's contact, so an engine can track it across events. */

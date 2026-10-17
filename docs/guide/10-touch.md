@@ -84,6 +84,20 @@ scopes a claim you already have rather than making one: declare the drag handler
 still scrolls the page. A [`DataGrid`](declare-docs:DataGrid) header drags this way. It cannot help once the
 `onTouch*` family has taken **every** finger, because there is nothing left to narrow.
 
+**A long-press or a right-click goes to the nearest view that wants it**, as a pinch does.
+Declare `onHold` (or `onContextMenu`) on a message bubble, and a hold anywhere on it —
+on its photo, on its time label — reaches the bubble, even where those children take a
+tap of their own. Each gesture is answered once, by the one view that declares it, so
+nothing bubbles; and once a hold has gone to the bubble, the release does not also tap the
+photo.
+
+```declare-fragment
+Bubble [ onHold(e: PointerEvent) { app.rowMenu.open(this, e) },
+    photo: Image [ onClick() { app.viewPhoto(:photo) } ],    // a tap opens the photo; a hold is the bubble's
+    time: Text [ text = :time ]
+    ]
+```
+
 `onClick`, `onPointerDown`, and `onHold` alone claim nothing. A tap coexists with every
 browser gesture — that is the resolved layer's whole point — and when the browser
 does take a gesture back mid-flight, `e.canceled` reports it. Everything a claim

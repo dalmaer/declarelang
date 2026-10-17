@@ -445,8 +445,17 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // program that replaces what it shows every frame ran the kernel out of
   // memory; on main alone it took the build just past 121, band 123): the two
   // together measure 129.5 KB on the calendar, inside the 130 band.
+  //
+  // 130 → 131 KB (2026-10-17, the tab-order review, overlay changes #31–#33):
+  // the press that clears focus and the Tab start point, the reachability
+  // watch that moves focus off what was hidden or closed, the reveal framed by
+  // the window, hold and the context gesture resolved to their nearest owner —
+  // and the calendar's own keyboard path (its events reachable and opened from
+  // the keyboard, focus given back when the panel closes) — measured 130.6 KB.
+  // A build whose model program could not be used from the keyboard was never
+  // a smaller build; it was a mouse-only one.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 130 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 131 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 

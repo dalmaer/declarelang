@@ -172,6 +172,23 @@ both do.
 Moves the keyboard rover by ±1 over the pickable rows, skipping dividers, disabled rows
 and custom-content rows, and scrolls the landing row into view.
 
+## typeahead
+Whether typing a letter moves the keyboard highlight to a row — `true` by default, as in
+every desktop menu: type "ex" to land on Export. The highlight only moves; Return picks.
+A `Combobox` turns it off on its list, whose letters belong to its text field.
+
+## typed
+**Internal.** The letters typed so far, while typing continues.
+
+## typedAt
+**Internal.** When the last letter was typed; after a second's pause the next letter starts
+over.
+
+## typeTo()
+Moves the highlight to the first enabled row whose label starts with what has been typed:
+the prefix grows while typing continues and starts over after a pause, and the same
+letter again goes on to the next row that starts with it.
+
 ## pickActive()
 Picks the roved row — Enter's action. On a row with a `submenu` it enters the cascade
 instead.
@@ -314,6 +331,15 @@ class Menu extends Floating [
     child: Menu? = null,
     activeRow: View? = null,
 
+    // typeahead: letters typed while the menu has the keys move the rover to the
+    // first row whose label starts with them — the prefix grows while typing
+    // continues and starts over after a pause; one letter again goes on to the
+    // next row with it. It moves the highlight only; Return still picks.
+
+    typeahead: boolean = true,
+    typed: string = "",
+    typedAt: number = 0,
+
     // the delivery seam — the app overrides; the id is the whole message
 
     picked(id: string) { },
@@ -433,6 +459,29 @@ class Menu extends Floating [
 
     revealRow(r: View?) { if (r != null) r.scrollIntoView("nearest") },
 
+    typeTo(ch: string) {
+        const now = Date.now()
+        const t = (now - typedAt < 1000 ? typed : "") + ch.toLowerCase()
+        typed = t
+        typedAt = now
+        const rows = this.rowsOf(this.panel.body).filter((r) => !r.divider && r.enabled && r.custom == "")
+        if (rows.length == 0) return
+        // the same letter again cycles through the rows it starts; a longer
+        // prefix keeps the current row while it still matches
+        const cycling = t.split("").every((c) => c == t[0])
+        const query = cycling ? t[0] : t
+        const i = rows.indexOf(this.activeRow)
+        const from = cycling ? i + 1 : Math.max(0, i)
+        for (let k = 0; k < rows.length; k++) {
+            const r = rows[(from + k) % rows.length]
+            if (("" + r.label).toLowerCase().startsWith(query)) {
+                activeRow = r
+                this.revealRow(r)
+                return
+                }
+            }
+        },
+
     pickActive() { this.pickRow(this.activeRow) },
 
     pickRow(r: object) {
@@ -460,6 +509,10 @@ class Menu extends Floating [
             else if (e.key == "Enter") classroot.pickActive()
             else if (e.key == "ArrowRight") classroot.enterSub()
             else if (e.key == "ArrowLeft") { if (!classroot.isRoot) classroot.close() }
+            // a printable letter moves the rover (not while a text field is
+            // typing into the menu's opener — a combobox's own entry)
+            else if (classroot.typeahead && e.key.length == 1 && e.key != " " && !e.meta && !e.ctrl && !e.alt
+                     && (Focus.getFocus() as any)?.placeholder === undefined) classroot.typeTo(e.key)
             }
         ],
 
@@ -501,6 +554,7 @@ class Menu extends Floating [
                 enabled:  boolean = { :enabled != false },
                 sub:      boolean = { !!:submenu },
                 custom:   string  = { typeof :kind == "string" ? "" + :kind : "" },
+                label:    string  = { "" + (:label || "") },
 
                 // the row's highlight gate: the hover intrinsic under menu policy
 

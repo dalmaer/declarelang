@@ -174,11 +174,12 @@ host may need chords it always keeps).
 
 ## 9. Open
 
-- **A press outside every focusable view leaves focus where it was** — today's rule, and
-  the reason Desktop hands the keyboard over on activation. On a page with an embedded
-  program (the docs), clicking the page around a preview leaves the preview's program
-  with the keyboard until something else takes focus; on the web, a press on
-  non-focusable content returns focus to the page.
+- *(Settled 2026-10-17: the web's rule.)* A press on content where nothing up its chain
+  can take focus clears focus — the keyboard returns to the program pressed in — and the
+  next Tab starts from the pressed spot (the web's sequential focus navigation starting
+  point), so inside a dialog it stays in the dialog. `focus.ts pressAt`, called from the
+  router's press hook (`services.ts`). Clicking the page around a docs preview now takes
+  the keyboard back from the preview's program.
 - **The native host (Mac)** delivers keys through the same service, so Rule 1 applies
   there; Rule 2 concerns browser defaults and has no Mac counterpart.
 
