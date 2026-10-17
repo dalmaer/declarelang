@@ -61,4 +61,26 @@ await test("binary geometry replays to the exact all-JSON op sequence", async ()
   for (const [id, op] of lastGeom) assert.equal((op[2] - 1) % 3, 0, `surface ${id}: the last geometry op is the last write (x = 3i+1), got ${op[2]}`);
 });
 
+await test("a frame that only moves things is committed", async () => {
+  // Geometry rides its own buffer, so such a frame has records and no JSON ops; the
+  // flush must still send it (it once returned early on an empty op list, and the first
+  // phase of every calendar view change — pure motion — never reached the screen).
+  const { h, commits } = makeHost(true);
+  globalThis.__declareMacHost = h;
+  globalThis.requestAnimationFrame = undefined;
+  const b = new MacBackend();
+  const s = b.createSurface();
+  s.setWidth(40); s.setHeight(40);
+  flushOps();
+  const before = commits.length;
+  s.setX(120); s.setY(64);
+  flushOps();
+  assert.equal(commits.length, before + 1, "the move was committed");
+  const last = commits[commits.length - 1];
+  assert.deepEqual(JSON.parse(last.json), [], "no JSON ops rode with it");
+  assert.ok(last.geoms.length > 0, "the move rode the geometry records");
+  const rec = last.geoms.slice(-6);
+  assert.deepEqual([rec[2], rec[3]], [120, 64], "the record carries the new place");
+});
+
 summarize("mac-geom-binary");
