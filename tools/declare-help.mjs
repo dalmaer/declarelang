@@ -254,7 +254,8 @@ function sayClass(cls) {
   // A THEME PRESET is a record, not a class: one line says how it is used,
   // and its pair is the other appearance of the same design.
   if (t?.kind === "theme") {
-    say(`${cls} — a theme preset (${t.appearance}) · \`theme = ${cls}\` on the App provides it · pair: ${t.pair}`);
+    if (cls === "ThemeDefaults") say(`${cls} — the library's defaults for its optional theme tokens, laid under every provided theme · not a preset: no program names it`);
+    else say(`${cls} — a theme preset (${t.appearance}) · \`theme = ${cls}\` on the App provides it · pair: ${t.pair}`);
     if (t.doc) say(`  ${firstSentence(t.doc)}`);
     say(`  the record: ${t.source}`);
     json = { kind: "theme", name: cls, appearance: t.appearance, pair: t.pair, doc: t.doc ?? null };

@@ -1202,32 +1202,32 @@ await test("a constraint a State or an Animator took over follows its inputs aga
   } finally { setClock(new Clock()); }
 });
 
-await test("element-typed arrays (`Window[]`) and the literal-tag createView", async () => {
+await test("element-typed arrays (`Tile[]`) and the literal-tag createView", async () => {
   // Both were mislabeled "gaps needing a ruling". TS has element-typed arrays;
   // only the WRITTEN-type grammar had to admit the spelling (same story as
   // function types). And createView's tag is a string literal at nearly every
   // call site, with the class table in the scaffold's hands — so the return is
-  // the class the tag names, and `child = createView("Popover", …)` needs no cast.
+  // the class the tag names, and `child = createView("Flyout", …)` needs no cast.
   const ok = async (src) => { const r = await compile(src, {}); assert.ok(r.source, (r.errors?.[0]?.rawMessage) ?? "expected it to compile"); };
   const errs = async (src) => {
     try { const r = await compile(src); return (r.errors ?? []).map((e) => e.message ?? String(e)).join("\n"); }
     catch (e) { return String(e?.message ?? e); }
   };
-  const W = `class Window extends View [ dockSlot: number = -1 ]\n`;
+  const W = `class Tile extends View [ dockSlot: number = -1 ]\n`;
 
-  await ok(W + `App [ width=1, height=1, n: number = 0, f(ws: Window[]) { for (const w of ws) this.n = w.dockSlot } ]`);
-  await ok(W + `App [ width=1, height=1, mk() -> Window[] { return [] } ]`);
+  await ok(W + `App [ width=1, height=1, n: number = 0, f(ws: Tile[]) { for (const w of ws) this.n = w.dockSlot } ]`);
+  await ok(W + `App [ width=1, height=1, mk() -> Tile[] { return [] } ]`);
   await ok(`App [ width=1, height=1, xs: number[] = null, grid: number[][] = null ]`);
-  assert.match(await errs(W + `App [ width=1, height=1, n: number = 0, f(ws: Window[]) { for (const w of ws) this.n = w.dockSlott } ]`),
+  assert.match(await errs(W + `App [ width=1, height=1, n: number = 0, f(ws: Tile[]) { for (const w of ws) this.n = w.dockSlott } ]`),
     /did you mean 'dockSlot'/);
   assert.match(await errs(`App [ width=1, height=1, f(xs: Nonsense[]) { } ]`), /unknown type 'Nonsense'/);
-  // adjacency is the grammar: `Popover[]` glued is a type; `Popover [ ]` spaced is a
+  // adjacency is the grammar: `Flyout[]` glued is a type; `Flyout [ ]` spaced is a
   // named CHILD with an empty body — both must keep working
-  await ok(`class Popover extends View [ n: number = 0 ]\nApp [ width=1, height=1, m: Popover [ ] ]`);
+  await ok(`class Flyout extends View [ n: number = 0 ]\nApp [ width=1, height=1, m: Flyout [ ] ]`);
 
   // createView: a literal tag returns that class; a dynamic tag honestly View
-  await ok(`class Popover extends View [ shown: boolean = false ]\nApp [ width=1, height=1, n: number = 0, go() { const m = app.createView("Popover", ({ })); this.n = m.shown ? 1 : 0 } ]`);
-  assert.match(await errs(`class Popover extends View [ shown: boolean = false ]\nApp [ width=1, height=1, n: number = 0, go() { const m = app.createView("Popover", ({ })); this.n = m.showwn ? 1 : 0 } ]`),
+  await ok(`class Flyout extends View [ shown: boolean = false ]\nApp [ width=1, height=1, n: number = 0, go() { const m = app.createView("Flyout", ({ })); this.n = m.shown ? 1 : 0 } ]`);
+  assert.match(await errs(`class Flyout extends View [ shown: boolean = false ]\nApp [ width=1, height=1, n: number = 0, go() { const m = app.createView("Flyout", ({ })); this.n = m.showwn ? 1 : 0 } ]`),
     /did you mean 'shown'/);
   await ok(`App [ width=1, height=1, k: string = "Text", go() { const v = app.createView(this.k, ({ })); v.x = 1 } ]`);
 });
@@ -1267,7 +1267,7 @@ await test("function types — `(id: string) -> void`, the type a method IS", as
     /expects a function \(id: string\) -> void, or null for none/);
 });
 
-await test("a signature type may be NULLABLE — `c: Popover?` — and TS narrowing does the rest", async () => {
+await test("a signature type may be NULLABLE — `c: Flyout?` — and TS narrowing does the rest", async () => {
   // The measured problem this solves: a component SLOT is null-defaulted, so a
   // non-null parameter rejects it, and making every parameter nullable makes
   // every unchecked body read an error. Neither is right for all methods —
@@ -1278,18 +1278,18 @@ await test("a signature type may be NULLABLE — `c: Popover?` — and TS narrow
     try { const r = await compile(src); return (r.errors ?? []).map((e) => e.message ?? String(e)).join("\n"); }
     catch (e) { return String(e?.message ?? e); }
   };
-  const M = `class Popover extends View [ shown: boolean = false, child: Popover? = null, closeSelf() { } ]\n`;
+  const M = `class Flyout extends View [ shown: boolean = false, child: Flyout? = null, closeSelf() { } ]\n`;
 
-  await ok(M + `App [ width=1, height=1, m: Popover [ ], f(c: Popover?) -> boolean { return c != null && c.shown } ]`);
-  await ok(M + `App [ width=1, height=1, m: Popover [ ], f(c: Popover?) { if (c != null) c.closeSelf() } ]`);
-  await ok(M + `App [ width=1, height=1, m: Popover [ ], f() -> Popover? { return null } ]`);
+  await ok(M + `App [ width=1, height=1, m: Flyout [ ], f(c: Flyout?) -> boolean { return c != null && c.shown } ]`);
+  await ok(M + `App [ width=1, height=1, m: Flyout [ ], f(c: Flyout?) { if (c != null) c.closeSelf() } ]`);
+  await ok(M + `App [ width=1, height=1, m: Flyout [ ], f() -> Flyout? { return null } ]`);
   // a nullable slot reaches a nullable parameter…
-  await ok(M + `App [ width=1, height=1, m: Popover [ ], f(c: Popover?) { if (c != null) c.closeSelf() }, go() { this.f(this.m.child) } ]`);
+  await ok(M + `App [ width=1, height=1, m: Flyout [ ], f(c: Flyout?) { if (c != null) c.closeSelf() }, go() { this.f(this.m.child) } ]`);
   // …but not a non-null one: the caller must guarantee it
-  assert.match(await errs(M + `App [ width=1, height=1, m: Popover [ ], f(c: Popover) { c.closeSelf() }, go() { this.f(this.m.child) } ]`),
+  assert.match(await errs(M + `App [ width=1, height=1, m: Flyout [ ], f(c: Flyout) { c.closeSelf() }, go() { this.f(this.m.child) } ]`),
     /not assignable/);
   // an unchecked read of a nullable value names BOTH repairs
-  assert.match(await errs(M + `App [ width=1, height=1, m: Popover [ ], f(c: Popover?) { c.closeSelf() } ]`),
+  assert.match(await errs(M + `App [ width=1, height=1, m: Flyout [ ], f(c: Flyout?) { c.closeSelf() } ]`),
     /'c' may be absent here — check it .*declare its type without '\?'/);
 });
 
@@ -1309,7 +1309,7 @@ await test("a declared attribute may be typed by a CLASS", async () => {
   await ok(`App [ width=1, height=1, m: Text? = null ]`);                       // built-in class too
   // self- and forward references: a component AttrType stores only the NAME,
   // so no schema need exist yet (the submenu-chain shape).
-  await ok(`class Popover extends View [ child: Popover? = null, n: number = 0 ]\nApp [ width=1, height=1, m: Popover [ ] ]`);
+  await ok(`class Flyout extends View [ child: Flyout? = null, n: number = 0 ]\nApp [ width=1, height=1, m: Flyout [ ] ]`);
   await ok(`class A extends View [ b: B? = null ]\nclass B extends View [ n: number = 0 ]\nApp [ width=1, height=1, a: A [ ] ]`);
   // it maps to the SAME TS class every other reference does — members resolve,
   // typos are caught, and a foreign class is rejected.
@@ -1745,6 +1745,31 @@ await test("onHold: a press held in place fires hold, and does not consume the g
   } finally { h.done(); }
 });
 
+await test("paintsIn: a view paints and is hit in another view's frame, above its children, and leaves its parent's layout", async () => {
+  const app = buildProgram(await compiled(`App [ width = 300, height = 300,
+    on: boolean = true,
+    home: View [ x = 0, y = 0, width = 100,
+        layout: SimpleLayout [ axis = y ],
+        a: View [ width = 100, height = 20 ],
+        guest: View [ width = 40, height = 40, x = 10, y = 10, paintsIn = { app.on ? app.dock : null } ],
+        b: View [ width = 100, height = 20 ] ],
+    dock: View [ x = 150, y = 150, width = 100, height = 100,
+        plate: View [ width = 100, height = 100 ] ],
+    ]`));
+  settle();
+  assert.equal(app.viewAt(165, 165), app.home.guest, "hit at the host's origin plus its own x/y — above the host's own child");
+  assert.equal(app.viewAt(240, 240), app.dock.plate, "the rest of the host is the host's");
+  assert.equal(app.home.b.y, 20, "the declared parent's layout leaves it out");
+  assert.equal(app.home.contentHeight, 40, "…and so does the extent its auto-size reads");
+  const o = app.home.guest.rootOrigin();
+  assert.deepEqual([o.x, o.y], [160, 160], "its root origin is through the host");
+  app.on = false;
+  settle();
+  assert.equal(app.home.b.y, 60, "home again: laid out in its parent");
+  assert.equal(app.home.contentHeight, 80, "…and measured in it");
+  assert.equal(app.viewAt(165, 165), app.dock.plate, "and no longer hit in the dock");
+});
+
 await test("the hit test: app.viewAt answers with the SAME walk the pointer is routed by", async () => {
   const app = buildProgram(await compiled(`App [ width = 200, height = 200,
     a: View [ x = 10, y = 10, width = 80, height = 80,
@@ -2170,11 +2195,11 @@ await test("exists: a named child that may be absent is typed so — its reader 
 });
 
 await test("defaultplacement: a subclass's and a use site's children go into the child the class names", async () => {
-  const app = buildProgram(await compiled(`class Sheet [ width = 200, height = 200, defaultplacement = body,
+  const app = buildProgram(await compiled(`class Panel [ width = 200, height = 200, defaultplacement = body,
       head: View [ width = 200, height = 20 ],
       body: View [ y = 20, width = 200, height = 180 ] ]
-    class DetailSheet extends Sheet [ figs: View [ width = 10, height = 10 ], acts: View [ width = 10, height = 10 ] ]
-    App [ width = 300, height = 300, d: DetailSheet [ extra: View [ width = 10, height = 10 ] ] ]`));
+    class DetailPanel extends Panel [ figs: View [ width = 10, height = 10 ], acts: View [ width = 10, height = 10 ] ]
+    App [ width = 300, height = 300, d: DetailPanel [ extra: View [ width = 10, height = 10 ] ] ]`));
   try {
     settle();
     const d = app.d;
@@ -2186,7 +2211,7 @@ await test("defaultplacement: a subclass's and a use site's children go into the
 });
 
 await test("defaultplacement: the checker names a missing child, and a use of it outside a class", () => {
-  assert.match(check(parseProgram(`class Sheet [ defaultplacement = bodie, body: View [ ] ]\nApp [ ]`)).map((e) => e.message).join("\\n"), /declares no child named 'bodie'/);
+  assert.match(check(parseProgram(`class Panel [ defaultplacement = bodie, body: View [ ] ]\nApp [ ]`)).map((e) => e.message).join("\\n"), /declares no child named 'bodie'/);
   assert.match(check(parseProgram(`App [ v: View [ defaultplacement = x, x: View [ ] ] ]`)).map((e) => e.message).join("\\n"), /defaultplacement belongs on a class/);
 });
 
@@ -2928,7 +2953,7 @@ await test("compile(): a miss names its exact rewrite (the camelCase ruling + th
   const cases = [
     [`App [ width=100, height=100, View [ ignorelayout = true ] ]`, /ignoreLayout/],
     [`App [ width=100, height=100, View [ ignoreclip = true ] ]`, /ignoreClip/],
-    [`App [ width=100, height=100, View [ focustrap = true ] ]`, /focusTrap/],
+    [`App [ width=100, height=100, View [ focusscope = stop ] ]`, /focusScope/],
     [`App [ width=100, height=100, View [ scrolls = true ] ]`, /scrolls = y/],
     [`App [ width=100, height=100, View [ scrolls = false ] ]`, /scrolls = none/],
   ];
@@ -6917,21 +6942,83 @@ await test("focus: a tabOrder() override reorders a container's members", async 
   assert.deepEqual(Focus.sequenceFor(null), [app.r.c, app.r.b], "override reverses b/c");
 });
 
-await test("focus: a focusTrap bounds the group, cycles within, and escapes at the edge", async () => {
+await test("focus: a modal scope keeps Tab inside it, and its contents are not in the outer cycle", async () => {
   Focus.reset();
-  globalThis.__esc = 0;
-  const app = buildProgram(await compiled(`${TALLY}App [ width = 100, height = 100,
+  const app = buildProgram(await compiled(`App [ width = 100, height = 100,
     a: View [ focusable = true ],
-    dialog: View [ focusTrap = true, onEscapeFocus() { hit("__esc") },
+    dialog: View [ focusScope = modal,
       p: View [ focusable = true ], q: View [ focusable = true ] ],
     b: View [ focusable = true ],
   ]`));
   Focus.setRoot(app);
-  assert.deepEqual(Focus.sequenceFor(app.a), [app.a, app.b], "the trap's contents are excluded from the outer group");
+  assert.deepEqual(Focus.sequenceFor(app.a), [app.a, app.b], "the modal's contents are excluded from the outer cycle");
   Focus.focus(app.dialog.p);
-  Focus.next(); assert.equal(Focus.getFocus(), app.dialog.q, "moves within the trap");
-  Focus.next(); assert.equal(Focus.getFocus(), app.dialog.p, "cycles within the trap");
-  assert.equal(globalThis.__esc, 1, "onEscapeFocus fired at the boundary");
+  Focus.next(); assert.equal(Focus.getFocus(), app.dialog.q, "moves within the modal");
+  Focus.next(); assert.equal(Focus.getFocus(), app.dialog.p, "wraps within the modal — never leaves");
+  Focus.prev(); assert.equal(Focus.getFocus(), app.dialog.q, "and backwards");
+});
+
+await test("focus: a stop scope is one entry — its chosen member, then what last had focus", async () => {
+  Focus.reset();
+  const app = buildProgram(await compiled(`App [ width = 100, height = 100,
+    a: View [ focusable = true ],
+    g: View [ focusScope = stop,
+      focusEntry() -> View? { return this.k },
+      j: View [ focusable = true ], k: View [ focusable = true ], l: View [ focusable = true ] ],
+    h: View [ focusScope = stop,
+      m: View [ focusable = true ], n: View [ focusable = true ] ],
+    b: View [ focusable = true ],
+  ]`));
+  Focus.setRoot(app);
+  assert.deepEqual(Focus.sequenceFor(app.a), [app.a, app.g.k, app.h.m, app.b], "each stop is one entry: its focusEntry(), else its first");
+  Focus.focus(app.h.n);
+  Focus.focus(app.a);
+  assert.deepEqual(Focus.sequenceFor(app.a), [app.a, app.g.k, app.h.n, app.b], "re-entering a stop lands on what last had focus in it");
+  Focus.focus(app.g.l);
+  Focus.next(); assert.equal(Focus.getFocus(), app.h.n, "Tab from any member leaves the stop");
+});
+
+await test("focus: a region is one stop from outside, wraps inside, and remembers; F6 moves between regions", async () => {
+  Focus.reset();
+  const app = buildProgram(await compiled(`App [ width = 100, height = 100,
+    w1: View [ focusScope = region,
+      p: View [ focusable = true ], q: View [ focusable = true ] ],
+    w2: View [ focusScope = region,
+      r: View [ focusable = true ], s: View [ focusable = true ] ],
+    bar: View [ focusScope = stop, t: View [ focusable = true ] ],
+  ]`));
+  Focus.setRoot(app);
+  assert.deepEqual(Focus.sequenceFor(null), [app.w1, app.w2, app.bar.t], "at the top: each region one stop");
+  Focus.focus(app.w1);
+  assert.equal(Focus.enter(), true, "Enter on a region enters it");
+  assert.equal(Focus.getFocus(), app.w1.p, "to its first stop");
+  Focus.next(); assert.equal(Focus.getFocus(), app.w1.q);
+  Focus.next(); assert.equal(Focus.getFocus(), app.w1.p, "Tab wraps inside the region — never leaves");
+  Focus.next();
+  Focus.nextRegion(1); assert.equal(Focus.getFocus(), app.w2.r, "F6 enters the next region");
+  Focus.next(); assert.equal(Focus.getFocus(), app.w2.s);
+  Focus.nextRegion(1); assert.equal(Focus.getFocus(), app.bar.t, "F6 reaches a stop among the regions");
+  Focus.nextRegion(1); assert.equal(Focus.getFocus(), app.w1.q, "F6 back into the first region, where focus last was");
+  Focus.nextRegion(-1); Focus.nextRegion(-1); assert.equal(Focus.getFocus(), app.w2.s, "Shift-F6 goes back, and the region remembers");
+});
+
+await test("focus: inside a stop that keeps focus, a row's controls are an entered member — Tab cycles in it, Esc leaves", async () => {
+  Focus.reset();
+  const app = buildProgram(await compiled(`App [ width = 100, height = 100,
+    a: View [ focusable = true ],
+    list: View [ focusScope = stop, focusable = true,
+      row1: View [ f: View [ focusable = true ], g: View [ focusable = true ] ],
+      row2: View [ h: View [ focusable = true ] ] ],
+    b: View [ focusable = true ],
+  ]`));
+  Focus.setRoot(app);
+  assert.deepEqual(Focus.sequenceFor(app.a), [app.a, app.list, app.b], "the list is one stop; its rows' controls are not in the walk past it");
+  Focus.focus(app.list.row1.f);
+  Focus.next(); assert.equal(Focus.getFocus(), app.list.row1.g, "Tab walks the entered row's controls");
+  Focus.next(); assert.equal(Focus.getFocus(), app.list.row1.f, "and wraps within the row");
+  assert.equal(Focus.leaveMember(), true);
+  assert.equal(Focus.getFocus(), app.list, "Esc returns focus to the list");
+  Focus.next(); assert.equal(Focus.getFocus(), app.b, "and Tab from the list leaves it");
 });
 
 await test("focus: byKeyboard() — the focus-visible modality: Tab sets it, a direct focus clears it", async () => {
@@ -7811,7 +7898,30 @@ await test("rootOrigin + the focus follower: geometry is scroll-true (ONE WALK, 
   // traveled (platform-carried) indicator needs no re-derive per scroll tick
   assert.equal(seen.at(-1).scroller, app.pane, "the travel home is the nearest scroller");
   assert.deepEqual({ x: seen.at(-1).homeX, y: seen.at(-1).homeY }, { x: 10, y: 400 }, "home coords are content-space");
-  assert.equal(app.pane.deep.travelWith(app.pane), false, "no surface headless — callers keep the reactive fallback");
+  off();
+  Focus.blur();
+});
+
+await test("focus geometry: the view that lost focus pushes no more geometry", async () => {
+  // The follower was built for each focus and never kept, so none was ever
+  // disposed: every view that had held focus went on reporting where it was,
+  // and the ring answered each — with paintsIn, a settle that never closed.
+  Focus.reset();
+  const app = buildProgram(await compiled(`App [ width = 200, height = 200,
+    a: View [ x = 10, y = 10, width = 40, height = 20, focusable = true ],
+    b: View [ x = 10, y = 60, width = 40, height = 20, focusable = true ],
+    ]`));
+  Focus.setRoot(app);
+  settle();
+  const seen = [];
+  const off = Focus.onGeometry((g) => seen.push(g.view));
+  Focus.focus(app.a); settle();
+  Focus.focus(app.b); settle();
+  seen.length = 0;
+  app.a.x = 30; settle();
+  assert.equal(seen.includes(app.a), false, "moving the view that lost focus pushes nothing");
+  app.b.x = 30; settle();
+  assert.equal(seen.at(-1), app.b, "the focused view still does");
   off();
   Focus.blur();
 });

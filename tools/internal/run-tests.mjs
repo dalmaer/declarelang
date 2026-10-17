@@ -49,6 +49,9 @@ const SUITE = [
   "test/datasource-failure.test.mjs",
   "test/table.test.mjs",
   "test/library.test.mjs",
+  "test/overlays.test.mjs",        // overlays by kind, windows, hosted programs (planes.md §3, §8, §11, §12)
+  "test/shortcuts.test.mjs",       // shortcuts as declared data, across islands (planes.md §9)
+  "test/focus-ring.test.mjs",      // reveal clear of pinned chrome, the ring under it, turned rings, flight (planes.md §14)
   "test/layout-padding.test.mjs", // padding on the Layout base, per-side stroke on both backends, Card + Divider
   "test/layout-claims.test.mjs",  // a claim meeting an author value: the literal is reported, a refused size drops the child, every message is positioned and names the strategy
   "test/responsive-share.test.mjs", // what a ResponsiveLayout share divides (naturals first), "auto", and the two refusals

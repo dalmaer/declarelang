@@ -101,6 +101,10 @@ pane is clip-occluded rather than hidden — its content must stay visible for t
 to carry it — so **this is what stops Tab from descending into a pane the user cannot
 see**. The header itself remains a stop either way.
 
+## focusShape()
+Rings the header — the part Space and Enter press — rather than the whole pane with its
+open content. The ring is the pane's only focus indicator.
+
 ## press()
 Opens this pane by writing its `name` to the group. Called by a click and by
 Space/Enter on the header.
@@ -142,15 +146,14 @@ class Pane extends Control [ width = 100%, clip = true,
 
     press()   { (parent as Accordion).value = name },
 
-    opacity = { disabled ? (typeof provided("theme").disabledOpacity == "number" ? provided("theme").disabledOpacity : 0.45) : 1 },
+    opacity = { disabled ? (provided("theme").disabledOpacity) : 1 },
 
     layout: SimpleLayout [ axis = y, spacing = 0 ],
 
-    // headers are filled, edgeless — an edge reads as an input field. The one
-    // exception is the control's own channel of the focus model: while this pane
-    // holds keyboard focus (Control's focusVisible — the web's :focus-visible
-    // rule), a darker-than-fill edge appears. A pointer click focuses silently
-    // — the click is its own feedback, no edge.
+    // headers are filled, edgeless — an edge reads as an input field. Keyboard
+    // focus is the ring's, shaped to the header (focusShape): one indicator.
+
+    focusShape() { return ({ x: 0, y: 0, w: this.width, h: this.header.height, rad: provided("theme").controlCornerRadius }) },
 
     // The twisty rotates rather than swapping between two marks, and it does it
     // on a spring — so it turns in step with the pane sliding open instead of
@@ -162,13 +165,12 @@ class Pane extends Control [ width = 100%, clip = true,
     Spring [ attribute = twist, to = { classroot.open ? 0 : -Math.PI / 2 },
         stiffness = 220, damping = 26, epsilon = 0.004 ],
 
-    header: View [ width = 100%, height = 34,
+    header: View [ width = 100%, height = { provided("theme").accordionHeaderHeight },
         cornerRadius = { provided("theme").controlCornerRadius },
-        fill = { classroot.open || classroot.hovered || classroot.pressed ? provided("theme").controlSelected : provided("theme").control },
-        stroke = { classroot.focusVisible ? stroke(1, provided("theme").textMuted) : null },
+        fill = { classroot.open || classroot.hovered || classroot.pressed ? provided("theme").controlSelected : ((provided("theme").accordionHeaderFill ?? provided("theme").control)) },
         chev: ChevronIcon [ x = 11, y = center, iconSize = 14,
             angle = { classroot.twist }, ink = { provided("theme").textMuted } ],
-        t: TextLabel [ x = 32, fontSize = 14, fontWeight = { classroot.open ? "semibold" : "medium" },
+        t: TextLabel [ x = 32, fontSize = { provided("theme").accordionFontSize }, fontWeight = { classroot.open ? "semibold" : "medium" },
             textColor = { provided("theme").text }, text = { classroot.label } ]
         ]
     ]

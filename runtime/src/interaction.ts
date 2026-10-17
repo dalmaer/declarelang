@@ -221,9 +221,28 @@ function toChildLocal(v: InteractionView, c: InteractionView, lx: number, ly: nu
  *  is tested exactly where the view's renderer can (its surface's
  *  `insideClip`), as its box otherwise. All attribute reads here run inside the
  *  driver's tracked compute — they ARE the dependencies. */
+/** The view a view PAINTS in (planes.md §3.1): its `paintsIn` when that is not
+ *  its parent, else its parent. Paint, hit and root geometry follow it. */
+export function paintParentOf(v: InteractionView): InteractionView | null {
+  const p = (v as { paintsIn?: unknown }).paintsIn;
+  if (isView(p) && p !== v.parent) return p;
+  return isView(v.parent) ? v.parent : null;
+}
+
+/** A view's children as painted: its own, less those that paint elsewhere,
+ *  then the views painting in it though declared elsewhere, in entry order. */
+function paintChildren(v: InteractionView): readonly unknown[] {
+  const own = v.children;
+  const guests = (v as { $paintGuests?: InteractionView[] }).$paintGuests;
+  const away = (c: unknown): boolean => isView(c) && (c as { $paintsElsewhere?: () => boolean }).$paintsElsewhere?.() === true;
+  let out: readonly unknown[] = own.some(away) ? own.filter((c) => !away(c)) : own;
+  if (guests !== undefined && guests.length > 0) out = out.concat(guests);
+  return out;
+}
+
 const VIEWS: HitAdapter<InteractionView> = {
   isNode: (c): c is InteractionView => isView(c),
-  children: (v) => v.children,
+  children: (v) => paintChildren(v),
   visible: (v) => v.visible,
   width: (v) => v.width,
   height: (v) => v.height,
@@ -262,7 +281,7 @@ function chainAt(app: InteractionApp, x: number, y: number): Set<InteractionView
   let leaf = leafAt(app, x, y);
   while (leaf !== null) {
     chain.add(leaf);
-    leaf = isView(leaf.parent) ? leaf.parent : null;
+    leaf = paintParentOf(leaf);
   }
   return chain;
 }
@@ -416,7 +435,7 @@ export function rootTransform(
   // transform (about its pivot), then its position, then its parent's scroll
   let m: Affine = IDENTITY_AFFINE;
   for (let n: InteractionView | null = view; n !== null && n !== stopAt; ) {
-    const p: InteractionView | null = isView(n.parent) ? n.parent : null;
+    const p: InteractionView | null = paintParentOf(n);
     const h3 = homographyOf(p, n);
     if (h3 !== null) {
       // a 3D view lifts by the affine that agrees with its projection at the
@@ -442,6 +461,36 @@ export function rootTransform(
   }
   // the similarity-shaped facts a general matrix "is": √|det| and its rotation
   return { scale: affineScaleOf(m), rotation: affineRotationOf(m), tx: m[4], ty: m[5], matrix: m };
+}
+
+/** A view's frame mapped into the OUTERMOST program's frame space: its own
+ *  root's frame first, then on from that root through the island that hosts
+ *  it (a hosted program's root frame is its island's frame), program by
+ *  program. The panning of an oversized tenant inside its island's box is
+ *  not counted. */
+export function outerAffine(view: InteractionView): Affine {
+  let m = rootTransform(view).matrix;
+  let r: InteractionView = view;
+  for (let p = paintParentOf(r); p !== null; p = paintParentOf(r)) r = p;
+  for (let island = hostIslandOf(r); island !== null; ) {
+    m = composeAffine(rootTransform(island).matrix, m);
+    let ir: InteractionView = island;
+    for (let p = paintParentOf(ir); p !== null; p = paintParentOf(ir)) ir = p;
+    island = hostIslandOf(ir);
+  }
+  return m;
+}
+
+function hostIslandOf(root: InteractionView): InteractionView | null {
+  const h = (root as { $hostIsland?: unknown }).$hostIsland;
+  return isView(h) ? h : null;
+}
+
+/** The similarity from `from`'s frame to `to`'s, across the islands between
+ *  their programs. */
+export function transformBetween(from: InteractionView, to: InteractionView): { x: number; y: number; scale: number; rotation: number } {
+  const m = composeAffine(invertAffine(outerAffine(to)), outerAffine(from));
+  return { x: m[4], y: m[5], scale: affineScaleOf(m), rotation: affineRotationOf(m) };
 }
 
 /** A view's origin in the ROOT'S FRAME space (viewport coordinates for a

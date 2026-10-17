@@ -1,16 +1,20 @@
 /*
 # Dialog
 
-The modal tier: a full-app scrim that swallows every press — modal input
-blocking, no light dismiss — under a centered panel with a focus trap.
-Buttons are **records** (the records door): `{ id, label, default?, cancel? }`,
-rendered as themed library Buttons right-aligned in the platform arrangement.
-Focus is saved on open and restored on close.
+A modal over its context: everything behind it is held back — presses aimed past it go
+nowhere and do not close it — and Tab stays inside it. It closes by its buttons, or Esc.
+Its content is yours (its children), and an alert is the most common use, so it carries
+the alert verbs too: a title, a message, and buttons as **records** (the records door):
+`{ id, label, default?, cancel? }`, rendered as themed library Buttons in the platform
+arrangement. Open it with a verb — `show()` for a dialog of your own content, `ask`, `notice`,
+`error` or `open` for an alert. Focus is saved on open and restored on close, one turn late,
+deliberately: an immediate restore would hand the in-flight keystroke back to the opener. It
+fades in and out.
 
-Keyboard: Return picks the default button (the Cupertino rule; a focused
-button also activates on Space/Enter — the pick guard makes the double
-harmless), Escape picks the cancel record when one exists, else just
-closes.
+Keyboard: Return picks the default button — unless the focused view takes Return
+itself: a focused button or control presses itself (Return on Cancel is Cancel), and a
+multi-line field types a line break. Escape picks the cancel record when one exists,
+else just closes. Every control inside keeps its own keys (Space, the arrows).
 
 The idioms — one verb each, an optional callback receiving the picked id
 (the `picked(id)` override remains the declarative seam):
@@ -46,10 +50,16 @@ App [ width = 520, height = 260, said: string = "",
     ]
 ```
 
-## shown
-Whether the dialog is up. Read it; **open through a verb** (`ask`, `notice`, `error`,
-`open`) rather than assigning it, or you get a panel with no buttons, no saved focus,
-and no focus trap engaged.
+A dialog of your own:
+
+```declare
+App [ width = 520, height = 300,
+    rename: Dialog [ title = "Rename", buttons = { [ { id: "cancel", label: "Cancel", cancel: true }, { id: "ok", label: "Rename", default: true } ] },
+        TextInput [ width = 100% ]
+        ],
+    Button [ x = 20, y = 20, label = "Rename…", onClick() { app.rename.show() } ]
+    ]
+```
 
 ## picked()
 **The declarative delivery seam — override it at the use site.** Receives the picked
@@ -72,11 +82,6 @@ records, a tone (`"error"` or `""`), and an optional callback. Reach for it when
 three idioms do not spell your choices — **button records are `{ id, label, default?,
 cancel? }`**, and the two flags are what Return and Escape key off.
 
-## close()
-Takes the dialog down without delivering anything, and restores focus to whatever held
-it before. **Focus is restored one turn later, deliberately** — an immediate restore
-hands the in-flight keystroke back to the opener, which re-activates and reopens.
-
 ## pick()
 Delivers a button by id: **dismisses first, then delivers**, one painted frame later —
 the same contract as `Menu.pick`, so a slow action cannot freeze the dialog on screen.
@@ -85,6 +90,10 @@ Return is harmless.
 
 ## pickDefault()
 Picks whichever button record carries `default: true` — Return's action, the Cupertino rule.
+
+## returnTaken()
+Whether the focused view takes Return itself — a control inside the dialog (it presses
+itself) or a multi-line field (a line break) — so Return does not also pick the default.
 
 ## pickCancel()
 Picks the `cancel: true` record when there is one, else just closes — Escape's action.
@@ -113,12 +122,12 @@ row), `"stack"` (full-width buttons stacked, Cupertino-style, default on top), o
 ## centered
 Whether the title and message are centre-aligned, elected by `provided("theme").dialogTextAlign`.
 
+## rotation
+Its program's turn where it opens in a host's layer; none in the full-screen presentation.
+
 ## focusDefault()
 Puts keyboard focus on the default button when the dialog opens — or the last button
 when no record is marked default.
-
-## saved
-**Internal.** The view that held focus when the dialog opened, restored on close.
 
 ## cb
 **Internal.** The callback handed to the opening verb.
@@ -129,36 +138,94 @@ when no record is marked default.
 ## kidsOf()
 **Internal.** The rendered button views of an arrangement, for `focusDefault`.
 
-## visible
-Derived from `shown`; open and close by the fact, never by assigning visibility.
+## presentation
+`"center"` (the default): a panel centered over its context. `"full"`: the whole context,
+for a viewer or a lightbox — your content edge to edge, no title or buttons unless you set
+them.
+
+## escape()
+Esc picks the cancel button (`pickCancel`).
+
+## focusFirst()
+On opening, focus goes to your content's first control when it has one, else to the
+default button.
+
+## hostW
+The width of the layer it paints in.
+
+## hostH
+The height of the layer it paints in.
+
+## full
+Whether it presents full-screen.
 
 ## width
-A dialog is the whole app: its box is the backdrop and the panel is its child, so a press anywhere outside the panel lands on the dialog.
+The theme's `dialogWidth` (420), inside its context; the whole width full-screen.
 
 ## height
-The whole app's height, for the same reason as `width`.
+Its column's height; the whole height full-screen.
 
+## x
+Centered in its context.
+
+## y
+A third of the way down its context; the top, full-screen.
+
+## opacity
+Its open blend — it fades in and out.
+
+## scale
+It settles from slightly small as it opens — at its program's scale where it opens in a
+host's layer.
+
+## pivotX
+It settles about its middle.
+
+## pivotY
+It settles about its middle.
 */
 
 include [ "control.declare" ]
 
 include [ "button.declare" ]
 
-class Dialog [
-    visible = { shown },
-    ignoreLayout = true,                         // it covers the app from its own origin; a parent's layout never arranges it
-    x = 0,
-    y = 0,
-    width = { app.width },
-    height = { app.height },
+include [ "floating.declare" ]
 
-    shown: boolean = false,
+// a dialog button, as data
+
+schema DialogButton [ id: string, label: string, default?: boolean, cancel?: boolean ]
+
+class Dialog extends Floating [
+    kind = "modal",
+    pressPolicy = "block",
+    scrollPolicy = "block",
+    takesFocus = true,
+    focusScope = modal,
+    defaultplacement = content,
+
+    presentation: "center" | "full" = "center",
     title: string = "",
     message: string = "",
     tone: string = "",
-    buttons: array = null,
-    saved: View? = null,
+    buttons: DialogButton[]? = null,
     cb: (id: string) -> void? = null,
+
+    hostW: number = { this.host != null ? this.host.width : app.width },
+    hostH: number = { this.host != null ? this.host.height : app.height },
+    full: boolean = { this.presentation == "full" },
+
+    width = { this.full ? this.hostW : Math.min(this.hostW - 32, provided("theme").dialogWidth) },
+    height = { this.full ? this.hostH : this.col.height },
+    x = { (this.hostW - this.width) / 2 },
+    y = { this.full ? 0 : Math.max(40, (this.hostH - this.height) / 3) },
+
+    // motion: it fades in and settles from slightly small; full-screen, it fades
+
+    opacity = { this.openT },
+    scale = { this.full ? 1 : this.baseScale * (0.96 + 0.04 * this.openT) },
+    rotation = { this.full ? 0 : this.baseRotation },
+    pivotX = { this.width / 2 },
+    pivotY = { this.height / 2 },
 
     // the delivery seam — override declaratively, or pass a callback to a verb
 
@@ -170,12 +237,7 @@ class Dialog [
         tone = "" + (tone_ || "")
         buttons = btns
         this.cb = cb_ || null
-        saved = Focus.getFocus()
-        shown = true
-        this.raise()
-        // the buttons are records until this settle closes; the default one
-        // is real, placed and focusable on the far side of it
-        afterSettle(this.focusDefault)
+        this.show()
         },
 
     // ── the idioms ─────────────────────────────────────────────────────────
@@ -190,16 +252,6 @@ class Dialog [
             ({ id: "no", label: "No" }),
             ({ id: "yes", label: "Yes", default: true }),
         ], "", cb_)
-        },
-
-    close() {
-        shown = false
-        const s = saved
-        saved = null
-        // restore deferred: the in-flight keystroke must finish against the
-        // old focus — an immediate restore hands the same Enter to the opener,
-        // which re-activates and reopens
-        if (s != null) afterDelay(0, () => Focus.focus(s))
         },
 
     // Dismiss-then-deliver, the same contract as Menu's pick: transient
@@ -217,12 +269,20 @@ class Dialog [
 
     kidsOf(b: View) -> array { return b.children },
 
+    // the buttons are records until the opening settle closes; the default one
+    // is real, placed and focusable on the far side of it (Floating calls this
+    // after that settle)
+
+    focusFirst() { this.focusDefault() },
+
     focusDefault() {
         if (!shown) return
-        const b = this.panel.col.btns
+        if (Focus.focusIn(this.col.content)) return   // your content's first control, when it has one
+        const b = this.col.btns
         const kids = this.kidsOf(this.arrangement == "stack" ? b.stackInner : b.rowInner)
         const d = kids.find((k) => k.primary)
-        Focus.focus(d != null ? d : kids.length > 0 ? kids[kids.length - 1] : null)
+        if (d != null || kids.length > 0) Focus.focus(d != null ? d : kids[kids.length - 1])
+        else Focus.focusIn(this)
         },
 
     pickDefault() {
@@ -236,11 +296,21 @@ class Dialog [
         else this.close()
         },
 
-    keys: Keys [
+    escape() { this.pickCancel() },
+
+    // Return picks the default unless the focused view takes Return itself:
+    // a focused control presses itself (Return on Cancel is Cancel), and a
+    // multi-line field types a line break
+
+    returnTaken() -> boolean {
+        const f = Focus.getFocus() as any
+        if (f == null || !Focus.holds(this)) return false
+        return f.multiline === true || typeof f.press == "function"
+        },
+
+    enterKeys: Keys [
         onKeyDown(e: KeyEvent) {
-            if (!classroot.shown) return
-            if (e.key == "Enter") classroot.pickDefault()
-            else if (e.key == "Escape") classroot.pickCancel()
+            if (classroot.shown && classroot.isTop() && e.key == "Enter" && !classroot.returnTaken()) classroot.pickDefault()
             }
         ],
 
@@ -248,83 +318,86 @@ class Dialog [
     // "stack" arrangement reorders: the default on top, cancel at the bottom
     // (the Cupertino stacked alert); row arrangements keep authored order.
 
-    arrangement: string = { typeof provided("theme").dialogButtonLayout == "string" ? provided("theme").dialogButtonLayout : "end" },
+    arrangement: string = { provided("theme").dialogButtonLayout },
     centered: boolean = { provided("theme").dialogTextAlign == "center" },
 
     data: Dataset [ contents = { { b: classroot.arrangement == "stack"
         ? [...(classroot.buttons || [])].sort((p, q) => (q.default ? 1 : q.cancel ? -1 : 0) - (p.default ? 1 : p.cancel ? -1 : 0))
         : classroot.buttons || [] } } ],
 
-    // the scrim: modal input blocking — every press lands here and stops
+    // the dimming behind the panel — paint only; the dialog's `block` policy is
+    // what stops presses aimed past it
 
-    scrim: View [ x = 0, y = 0, width = { app.width }, height = { app.height },
-        fill = { provided("theme").scrimFill != null ? provided("theme").scrimFill : 0x000000 },
-        opacity = { typeof provided("theme").scrimOpacity == "number" ? provided("theme").scrimOpacity : 0.32 },
-        onPointerDown() { }
-        ],
+    scrim: View [ pointerEvents = "none",
+        x = { -classroot.x }, y = { -classroot.y },
+        width = { classroot.hostW }, height = { classroot.hostH },
+        fill = { provided("theme").scrimFill },
+        opacity = { (provided("theme").scrimOpacity) * (classroot.full ? 0 : 1) } ],
 
-    panel: View [ focusTrap = true, x = center,
-        width = { typeof provided("theme").dialogWidth == "number" ? provided("theme").dialogWidth : 420 },
-        y = { Math.max(40, (app.height - this.height) / 3) },
-        height = { this.col.height + 40 },
-        cornerRadius = { typeof provided("theme").menuCornerRadius == "number" ? provided("theme").menuCornerRadius + 2 : 10 },
+    panel: View [ width = 100%, height = 100%,
+        cornerRadius = { classroot.full ? 0 : provided("theme").dialogCornerRadius ?? provided("theme").menuCornerRadius + 2 },
         fill = { provided("theme").surface },
-        stroke = { stroke(1, provided("theme").line) },
-        shadow = { provided("theme").menuShadow != null ? provided("theme").menuShadow : shadow(0, 12, 48, 0x00000040) },
+        stroke = { classroot.full ? null : stroke(1, provided("theme").line) },
+        shadow = { classroot.full ? null : provided("theme").dialogShadow ?? provided("theme").menuShadow } ],
 
-        // the 20pt margin is the panel's own content box, so the column
-        // below starts at the content origin and spans the room it is given;
-        // the fill, the edge and the shadow stay on the outer box
+    // the 20pt margin is the column's own content box; the fill, the edge and
+    // the shadow stay on the panel
 
-        padding = 20,
+    col: View [ width = 100%, padding = { classroot.full ? 0 : 20 },
+        layout: SimpleLayout [ axis = y, spacing = 12 ],
 
-        col: View [ width = 100%,
-            layout: SimpleLayout [ axis = y, spacing = 12 ],
+        ttl: Text [ fontWeight = bold, wrap = true, width = 100%,
+            visible = { classroot.title != "" },
+            fontSize = { provided("theme").dialogTitleFontSize },
+            textAlign = { classroot.centered ? "center" : "left" },
+            textColor = { classroot.tone == "error" ? (provided("theme").error) : provided("theme").text },
+            text = { classroot.title } ],
 
-            ttl: Text [ fontWeight = bold, wrap = true, width = 100%,
-                fontSize = { typeof provided("theme").dialogTitleFontSize == "number" ? provided("theme").dialogTitleFontSize : 15 },
-                textAlign = { classroot.centered ? "center" : "left" },
-                textColor = { classroot.tone == "error" ? (provided("theme").error != null ? provided("theme").error : 0xC93429) : provided("theme").text },
-                text = { classroot.title } ],
+        msg: Text [ wrap = true, width = 100%,
+            fontSize = { provided("theme").dialogBodyFontSize },
+            textAlign = { classroot.centered ? "center" : "left" },
+            visible = { classroot.message != "" },
+            textColor = { provided("theme").textMuted }, text = { classroot.message } ],
 
-            msg: Text [ wrap = true, width = 100%,
-                fontSize = { typeof provided("theme").dialogBodyFontSize == "number" ? provided("theme").dialogBodyFontSize : 13 },
-                textAlign = { classroot.centered ? "center" : "left" },
-                visible = { classroot.message != "" },
-                textColor = { provided("theme").textMuted }, text = { classroot.message } ],
+        content: View [ width = 100%,
+            height = { classroot.full ? classroot.hostH : this.contentHeight },
+            layout: SimpleLayout [ axis = y, spacing = 10 ]
+            ],
 
-            gap: View [ width = 4, height = 4 ],
+        btns: View [ width = 100%, visible = { (classroot.buttons || []).length > 0 },
+            height = { classroot.arrangement == "stack" ? this.stackInner.height : this.rowInner.height },
 
-            btns: View [ width = 100%,
-                height = { classroot.arrangement == "stack" ? this.stackInner.height : this.rowInner.height },
+            // two arrangements, one visible — layout attributes are
+            // literal-only (the surface), so the axes are two containers
 
-                // two arrangements, one visible — layout attributes are
-                // literal-only (the surface), so the axes are two containers
+            rowInner: View [ visible = { classroot.arrangement != "stack" },
+                height = { this.contentHeight },
 
-                rowInner: View [ visible = { classroot.arrangement != "stack" },
-                    height = { this.contentHeight },
-                    x = { classroot.arrangement == "end" ? parent.width - this.width : 0 },
-                    width = { classroot.arrangement == "end" ? this.contentWidth : parent.width },
-                    layout: SimpleLayout [ axis = x, spacing = 10 ],
-                    datapath = { classroot.data.value },
-                    Button [ datapath = :b[], label = { "" + :label },
-                        width = { classroot.arrangement == "fill"
-                                ? (this.parent.width - 10 * (((classroot.buttons || []).length || 1) - 1)) / ((classroot.buttons || []).length || 1)
-                                : 86 },
-                        primary = { !!:default },
-                        onClick() { classroot.pick("" + :id) }
-                        ]
-                    ],
+                // "end": the buttons' own width — 86 each, 10 between. (Not
+                // contentWidth: a button's width reads its row's in the "fill"
+                // arrangement, so the row's extent leaves the buttons out.)
 
-                stackInner: View [ visible = { classroot.arrangement == "stack" },
-                    height = { this.contentHeight }, width = 100%,
-                    layout: SimpleLayout [ axis = y, spacing = 8 ],
-                    datapath = { classroot.data.value },
-                    Button [ datapath = :b[], label = { "" + :label },
-                        width = 100%,
-                        primary = { !!:default },
-                        onClick() { classroot.pick("" + :id) }
-                        ]
+                x = { classroot.arrangement == "end" ? parent.width - this.width : 0 },
+                width = { classroot.arrangement == "end" ? Math.max(0, (classroot.buttons || []).length * 96 - 10) : parent.width },
+                layout: SimpleLayout [ axis = x, spacing = 10 ],
+                datapath = { classroot.data.value },
+                Button [ datapath = :b[], label = { "" + :label },
+                    width = { classroot.arrangement == "fill"
+                            ? (this.parent.width - 10 * (((classroot.buttons || []).length || 1) - 1)) / ((classroot.buttons || []).length || 1)
+                            : 86 },
+                    primary = { !!:default },
+                    onClick() { classroot.pick("" + :id) }
+                    ]
+                ],
+
+            stackInner: View [ visible = { classroot.arrangement == "stack" },
+                height = { this.contentHeight }, width = 100%,
+                layout: SimpleLayout [ axis = y, spacing = 8 ],
+                datapath = { classroot.data.value },
+                Button [ datapath = :b[], label = { "" + :label },
+                    width = 100%,
+                    primary = { !!:default },
+                    onClick() { classroot.pick("" + :id) }
                     ]
                 ]
             ]

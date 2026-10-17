@@ -22,7 +22,7 @@ import { SCHEMAS, RichTextSchema, type ClassSchema } from "./schema.js";
 
 export const RUNTIME_METHODS: Readonly<Record<string, readonly string[]>> = {
   Node: ["insertChild", "removeChild", "discard"],
-  View: ["contentBox", "bounds", "footprint", "tabDefault", "viewAt", "containsPoint", "rootBounds", "rootTransform", "rootOrigin", "travelWith", "scrollIntoView", "scrollTo", "scrollToX", "scrollBy", "createView", "raise"],
+  View: ["contentBox", "bounds", "footprint", "tabDefault", "viewAt", "containsPoint", "rootBounds", "rootTransform", "transformTo", "rootOrigin", "scrollIntoView", "scrollTo", "scrollToX", "scrollBy", "createView", "raise"],
   App: ["post", "navigate", "destinationOf", "follow", "inspect", "openWindow", "reveal", "provide", "exposed", "watchExposed"],
   Text: [],
   Image: [],

@@ -33,9 +33,3 @@ field that is not `<->`-bound.
 ## revert()
 Discard edits — reset the field to the committed dataset value.
 
-## focused
-**Read-only.** True while this editor holds keyboard focus — the runtime maintains it, and
-assigning it (a compile error) would not have moved platform focus anyway:
-**`Focus.focus(view)` is what moves focus**. It is published so an author who displaces
-the default field chrome (by assigning `fill` or `stroke`) can still draw the focus
-affordance themselves.

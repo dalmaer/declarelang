@@ -53,7 +53,9 @@ const emit = (t) => {
 const decls = records
   .map((r) => `export const ${r.name}: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({\n${r.tokens.map((t) => `  ${t.name}: ${emit(t)},`).join("\n")}\n});`)
   .join("\n\n");
-const body = records.map((r) => `  ${r.name},`).join("\n");
+// ThemeDefaults is not a preset: the optional tokens' defaults, which the
+// runtime lays every provided theme over (themes.ts withThemeDefaults)
+const body = records.filter((r) => r.name !== "ThemeDefaults").map((r) => `  ${r.name},`).join("\n");
 const next = `// GENERATED from library/themes/*.declare by tools/internal/gen-themes.mjs — DO NOT EDIT.
 // The presets are authored in the language (theme Name [ … ]); this module is
 // their projection into the runtime, so themes.ts serves the SAME objects the

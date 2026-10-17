@@ -1,0 +1,70 @@
+/*
+# Window
+
+A window inside a program — a pane with its own content, its own overlays and its own Tab
+cycle. A menu, popover, dialog or sheet declared inside it opens over it: above its content
+and past its edges, turning and scaling with it. A toast belongs to the whole program and
+shows at the bottom of the App. Tab stays among the window's controls; F6 moves to the next
+window, Shift-F6 back; a press inside it gives it the keyboard, back on the control that
+last had focus there. A dialog or sheet open in it holds back presses aimed at this window
+only — another window, or what lies behind, still takes them.
+
+A window draws nothing of its own: its fill, stroke, shadow and rounding are yours. Its
+children go into its `content` pane, which clips to its rounding; its overlays open in its
+`layer`, above the content and unclipped. A title bar, resizing and stacking are the program's —
+`raise()` brings a window to the front.
+
+```declare
+App [ width = 560, height = 300, fill = #E6E9EE,
+    Window [ x = 40, y = 40, width = 240, height = 160, rotation = -4, cornerRadius = 10,
+        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
+        more: Menu [ items = { [ ({ id: "rename", label: "Rename" }), ({ id: "copy", label: "Duplicate" }) ] } ],
+        Text [ x = 16, y = 16, text = "A window" ],
+        Button [ x = 16, y = 52, label = "Options", menu = { parent.more } ]
+        ],
+    Window [ x = 300, y = 70, width = 220, height = 140, cornerRadius = 10,
+        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
+        TextInput [ x = 16, y = 16, width = 188 ],
+        TextInput [ x = 16, y = 56, width = 188 ]
+        ]
+    ]
+```
+
+## overlays
+The layer the overlays declared inside the window open in — its `layer`, read by them as
+`provided("overlays")`.
+
+## enter()
+Gives the window the keyboard: focus goes back to the control that last had it inside the
+window, else to the first. What a press inside the window does; a program's own way of
+bringing a window to the front calls it too.
+
+## holdsFocus()
+Whether focus is inside the window now, in a program it hosts included.
+
+## focusScope
+`region`: Tab stays among the window's controls, and F6 moves between windows.
+
+## onPointerDown
+A press inside the window, on nothing that takes it, gives the window the keyboard.
+*/
+
+class Window [
+    focusScope = region,
+    defaultplacement = content,
+
+    overlays: View? = { this.layer },
+
+    holdsFocus() -> boolean { return Focus.holds(this) },
+
+    enter() { if (!this.holdsFocus()) Focus.focusIn(this) },
+
+    onPointerDown() { this.enter() },
+
+    content: View [ width = 100%, height = 100%, clip = true, cornerRadius = { classroot.cornerRadius } ],
+
+    // above the content and outside its clip: what opens inside the window
+    // paints here, past its edges
+
+    layer: View [ width = 100%, height = 100%, pointerEvents = "none" ]
+    ]

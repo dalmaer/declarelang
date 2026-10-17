@@ -1036,6 +1036,8 @@ final class EditableOverlay: NSObject, NSTextFieldDelegate, NSTextViewDelegate {
         return v
     }()
     private var multiline = false
+    /// A multi-line field whose Return submits; Shift-Return is the line break.
+    private var enterSubmits = false
     /// Does this editor WRAP? False means long lines run off to the right and
     /// the scroll view carries them, which is what `wrap = false` asks for.
     private var wraps = true
@@ -1062,7 +1064,23 @@ final class EditableOverlay: NSObject, NSTextFieldDelegate, NSTextViewDelegate {
     init(id: Int, view: DeclareView, bridge: Bridge) {
         self.id = id; self.view = view; self.bridge = bridge
         super.init()
+        // The read half of the selection (TextInput.selectionStart/End): the
+        // multi-line text view, or the single-line field's field editor while it
+        // edits, reports each move; only a change crosses the bridge.
+        selectionObserver = NotificationCenter.default.addObserver(
+            forName: NSTextView.didChangeSelectionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self = self, let tv = note.object as? NSTextView else { return }
+            guard tv === self.textView || tv === (self.field?.currentEditor() as? NSTextView) else { return }
+            let r = tv.selectedRange()
+            let s = r.location, e = r.location + r.length
+            if s == self.lastSel.0 && e == self.lastSel.1 { return }
+            self.lastSel = (s, e)
+            self.bridge.call("__declareEditSelect", [self.id, s, e])
+        }
     }
+    private var selectionObserver: NSObjectProtocol?
+    private var lastSel: (Int, Int) = (-1, -1)
 
     /// Re-apply the current spec under a new text style (a TEXTSTYLE after EDIT).
     func restyle(_ style: TextStyleSpec) {
@@ -1073,6 +1091,7 @@ final class EditableOverlay: NSObject, NSTextFieldDelegate, NSTextViewDelegate {
     func configure(_ spec: [String: Any], style: TextStyleSpec) {
         self.spec = spec
         let ml = (spec["multiline"] as? NSNumber)?.boolValue ?? false
+        enterSubmits = (spec["enterSubmits"] as? NSNumber)?.boolValue ?? false
         pad = Self.insets(spec["padding"])
         let value = spec["value"] as? String ?? ""
         let placeholder = spec["placeholder"] as? String ?? ""
@@ -1159,7 +1178,13 @@ final class EditableOverlay: NSObject, NSTextFieldDelegate, NSTextViewDelegate {
     }
     /// The multiline editor's commands (NSTextViewDelegate): Tab must TRAVERSE,
     /// never insert a tab character.
-    func textView(_ textView: NSTextView, doCommandBy sel: Selector) -> Bool { traversal(sel) }
+    func textView(_ textView: NSTextView, doCommandBy sel: Selector) -> Bool {
+        if enterSubmits && sel == #selector(NSResponder.insertNewline(_:)),
+           !(NSApp.currentEvent?.modifierFlags.contains(.shift) ?? false) {
+            bridge.call("__declareEditEnter", [id]); return true
+        }
+        return traversal(sel)
+    }
 
     /// DECLARE OWNS TAB TRAVERSAL (keys.ts, focus.ts): a Tab inside a native
     /// field is the same keystroke the DeclareView forwards — it goes to the
@@ -1257,6 +1282,7 @@ final class EditableOverlay: NSObject, NSTextFieldDelegate, NSTextViewDelegate {
     }
 
     func remove() {
+        if let o = selectionObserver { NotificationCenter.default.removeObserver(o); selectionObserver = nil }
         clipBox.removeFromSuperview()
         field?.removeFromSuperview(); field = nil
         scroll?.removeFromSuperview(); scroll = nil; textView = nil

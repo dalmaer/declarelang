@@ -1,0 +1,16 @@
+// Made by the first overlay that opens, never written
+// `OverlayStrata` holds the App's overlay layers. Open the dialog, then its menu: the menu
+// paints above the dialog because it opened after it, and Esc closes them in turn.
+
+App [ width = 420, height = 260,
+    more: Menu [ items = { [ ({ id: "dup", label: "Duplicate" }), ({ id: "arc", label: "Archive" }) ] } ],
+    dlg: Dialog [ title = "Item",
+        buttons = { [ { id: "done", label: "Done", default: true } ] },
+        Button [ label = "More…",
+            onClick() { app.more.openFor(this) }
+            ]
+        ],
+    Button [ x = 20, y = 20, label = "Open…",
+        onClick() { app.dlg.show() }
+        ]
+    ]

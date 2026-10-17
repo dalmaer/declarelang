@@ -108,6 +108,9 @@ Whether the list is currently up.
 Whether the keyboard rover is sitting on a row. **This is what makes Enter mean two
 things**: pick the roved row when there is one, else take the first match — the
 type-then-Enter path.
+
+## height
+From the theme's `comboboxHeight` (30 by default).
 */
 
 include [ "control.declare", "menu.declare" ]
@@ -116,7 +119,7 @@ use [ Menu ]
 
 class Combobox extends Control [
     width = 220,
-    height = 30,
+    height = { provided("theme").comboboxHeight },
 
     // ── the surface ───────────────────────────────────────────────────────
 
@@ -157,11 +160,11 @@ class Combobox extends Control [
         input(m)
         },
 
-    // ── the list lives at the app layer (the overlay idiom — the same
-    //    app.createView Menu's own cascade uses): created lazily at first
-    //    open, so it paints over everything, not just the combobox's later
-    //    siblings. Its items are pushed on each keystroke, as Menu drives its
-    //    own cascade child ──────────────────────────────────────────────────
+    // ── the list is a Menu made beside the combobox, lazily at first open —
+    //    the way Menu makes its own cascade — so it opens in the overlay
+    //    layer of the combobox's context (a window's, in a window) and paints
+    //    over everything there. Its items are pushed on each keystroke, as
+    //    Menu drives its own cascade child ───────────────────────────────────
 
     //    (View-typed attribute + any-seam driving — Menu members are invisible
     //    across files, the seam menu.declare itself uses)
@@ -170,7 +173,7 @@ class Combobox extends Control [
 
     ensureList() {
         if (list != null) return
-        list = app.createView("Menu", ({ }))
+        list = (this.parent as View).createView("Menu", ({ }))
         const m = this.list as any
         m.picked = (id) => this.pickIndex(parseInt(id))
         },

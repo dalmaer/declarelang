@@ -59,6 +59,12 @@ way and needs nothing else.
 ## held()
 Every key currently down in the asking program, as `code` strings.
 
+## onCommandHeld
+The command key (⌘ on a Mac, Ctrl elsewhere) has been held **alone** for a moment: `true`;
+then `false` when it is let go, or another key joins it. Every program hears it, wherever
+the keyboard is — what a panel of the shortcuts in force (`Keys.shortcutsInForce()`) shows
+and hides on, as iPadOS shows its own while ⌘ is held.
+
 ## onNavClaim
 The navigation keys changed hands: `true` when something claimed them (an overlay opened
 and its arrows now rove it), `false` when the last claim released. It fires on the
@@ -73,4 +79,20 @@ Claims the navigation keys — arrows, Space, Home/End, Page — away from the b
 scroll defaults while an overlay is roving, and releases them when passed `false`. **An
 open menu owns the arrow keys**; without the claim the page scrolls underneath it. Claim
 on open, release on close, always in pairs — a claim that outlives its overlay leaves the
-page unscrollable.
+page unscrollable. While an overlay holds the claim, the keys it uses — Esc, Enter, the
+arrows — reach only the `Keys` members inside it, not the program's others. A claim made
+by an overlay that opened in a `Window` holds only while focus is in that window.
+
+## claimant()
+The overlay the keys go to now: the latest claim that holds, or null. Esc closes this one.
+
+## declareShortcuts()
+**Internal.** How a `Shortcuts` set registers itself when it starts. A program declares a
+`Shortcuts` member instead.
+
+## shortcutsInForce()
+The shortcuts in force where focus is now — the nearest declaration of each key, walking
+from the focused view up through its program and on into the program that hosts it:
+records `{ id, key, label, enabled, origin, group }`, `origin` being the declaring set's
+`title` and `group` the menu a menu bar's shortcut sits in (else the origin).
+What a panel of the available shortcuts lists (hold ⌘ in the desktop).

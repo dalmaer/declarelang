@@ -68,6 +68,10 @@ export declare function markWindowedBlock(v: View, on: boolean): void;
 /** The tracked read behind `View.rowIndex`. */
 export declare function readRowIndex(v: View): number;
 export declare function setRowIndex(v: View, index: number): void;
+/** A hosted program is leaving (its island unlinks): every view of it painting
+ *  in another view — a menu open in its host's window — leaves that view's
+ *  listing and comes home, so nothing of the program stays in the host. */
+export declare function withdrawPaintGuests(root: View): void;
 export declare function markEvicting(v: View): void;
 /** A retired subtree RECYCLED onto a new member (replicate.ts departure
  *  recycling) can retire again when that membership ends. */
@@ -257,6 +261,14 @@ export declare class View extends Node {
      *  placed by its own x/y inside this box, masks the subtree. Applied after
      *  clip, before opacity. Paint only, never input. */
     mask: Mask | null;
+    /** Where the view paints when not in its parent (planes.md §3.1): its surface
+     *  is hosted in this view's, its x/y are in this view's frame, and it is hit
+     *  there. null = its parent. */
+    paintsIn: View | null;
+    /** What a press, and a scroll, aimed past this view do while it is shown —
+     *  an overlay's input policy (planes.md §8.1, outside.ts). */
+    outsidePress: string;
+    scrollBelow: string;
     /** Views masked BY this one (it is their stencil) — re-pushed when this
      *  view attaches, since a stencil declared after (or inside) the masked
      *  view has no surface at the masked view's own push. */
@@ -287,11 +299,11 @@ export declare class View extends Node {
     scrollStartX: number;
     scrolling: boolean;
     scrollAnchor: string;
-    /** Keyboard focus (docs/system-design/input.md, Layer 2). `focusable` = a tab stop;
-     *  `focusTrap` = a self-contained focus group. Traversal order is the tree,
-     *  overridable per view by defining a `tabOrder()` method. */
+    /** Keyboard focus (planes.md §13). `focusable` = a tab stop; `focusScope` = what
+     *  Tab does at this view's edge (`none` | `stop` | `capture` | `region` | `modal`).
+     *  Traversal order is the tree, overridable per view by a `tabOrder()` method. */
     focusable: boolean;
-    focusTrap: boolean;
+    focusScope: string;
     anchor: string;
     /** The linking triple (location.md §0): `link` — this view IS a link to the
      *  reference ("" = not a link); `replace` — following it overwrites the
@@ -538,6 +550,9 @@ export declare class View extends Node {
      *  keyboard shows the same look a pointer press does. One pair of facts,
      *  styled against everywhere. */
     get hovered(): boolean;
+    /** True while this view holds keyboard focus — a reactive, read-only fact on
+     *  every view, set by the focus service (`Focus.focus(v)` moves it). */
+    get focused(): boolean;
     get pressed(): boolean;
     /** Is this view ON SCREEN — inside the viewport, not scrolled away, not in
      *  a hidden subtree? A COARSE fact that flips at threshold crossings, so
@@ -699,36 +714,30 @@ export declare class View extends Node {
         scale: number;
         rotation: number;
     };
+    /** The composed similarity from MY frame to `other`'s — `{x, y, scale,
+     *  rotation}` — across the islands between our programs: a program hosted
+     *  in a window places its menu against the host's layer with it. */
+    transformTo(other: View): {
+        x: number;
+        y: number;
+        scale: number;
+        rotation: number;
+    };
     rootOrigin(): {
         x: number;
         y: number;
     };
-    /** Travel with `scroller`: re-host this view's SURFACE inside the
-     *  scroller's container so the platform carries it with the scrolled
-     *  content — zero-lag chrome that belongs to content (the FocusRing's
-     *  ride; the inverse of `ignoreScroll`). Position slots then mean the
-     *  scroller's CONTENT coordinates. Pass null (or this view's own parent —
-     *  its natural host) to come home; the ROOT is a real destination, not
-     *  home, so chrome can climb OUT of a scroller that sits directly under
-     *  it (the DataGrid header's escape).
-     *  Returns whether the surface now rides the scroller — false when the
-     *  backend can't (no travelWith) or the surfaces do not exist YET, so
-     *  callers keep the reactive root-space fallback.
-     *
-     *  The request is DECLARATIVE, and that is what makes the answer
-     *  trustworthy: a caller in `onInit` runs before attach (initTree precedes
-     *  App.attach), so the first call can only ever answer "not yet". The
-     *  request is therefore remembered and re-applied when this view attaches
-     *  — no polling, and no retry budget that can be exhausted on a slow
-     *  machine and silently leave the chrome un-escaped (which is exactly what
-     *  DataGrid's 20×50ms chain used to risk). `escaped` becomes true at
-     *  attach, through the ordinary reactive write below, so a `{ }` reading it
-     *  re-runs then. */
-    travelWith(scroller: View | null): boolean;
-    /** The standing travel request (undefined = never asked). Applied here and
-     *  re-applied at attach; `travelDone` is the reactive echo the requester
-     *  reads (see attach). */
-    private travelHost;
+    /** The view this one paints in when that is not its parent, else null. */
+    private get travelHost();
+    /** The host this view is listed under as a paint guest (planes.md §3.1). */
+    $guestOf: View | null;
+    /** `paintsIn` changed: move the guest listing, re-host the surface, and let
+     *  the declared parent re-arrange and re-measure without it (or with it). */
+    $paintHostChanged(): void;
+    /** Views painting in this one though declared elsewhere, in entry order. */
+    $paintGuests: View[];
+    /** Does this view paint somewhere other than its parent? */
+    $paintsElsewhere(): boolean;
     private $applyTravel;
     /** @internal Re-send x/y through the seam against the CURRENT position host
      *  — the one case where the realized position changes without either slot
@@ -855,6 +864,7 @@ export declare function withCursorDefining<T>(view: Node, fn: () => T): T;
  *  ANYWHERE on the chain wakes exactly the reads below it. */
 export declare function inheritedCursor(node: Node | null): Cursor | null;
 export declare function setFocusDiscardHook(fn: (view: View) => void): void;
+export declare function noteFocused(now: View | null): void;
 /** A node's address for an error message: its authored-name path up the tree
  *  (`app.pulse.card`), or its class when anonymous. Cheap, and built only once
  *  a handler has already thrown. */

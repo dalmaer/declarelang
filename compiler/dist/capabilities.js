@@ -37,10 +37,12 @@ const FOCUS_OBJECT = { members: {
         setRoot: "noop", focus: "noop", blur: "noop", next: "noop", prev: "noop",
         byKeyboard: "false", getFocus: "null", getRoot: "null", keyboardProgram: "null",
         onFocusChange: "unsubscribe", onGeometry: "unsubscribe", noteDiscarded: "noop",
+        sequenceFor: "array", enter: "false", leaveMember: "false", nextRegion: "noop", focusIn: "false", holds: "false",
     } };
 const KEYS_OBJECT = { members: {
         listen: "noop", isDown: "false", held: "array", onKeyDown: "unsubscribe", onKeyUp: "unsubscribe",
         keyDown: "noop", keyUp: "noop", chord: "unsubscribe", keyboardMoved: "noop", claimed: "false",
+        declareShortcuts: "noop", shortcutsInForce: "array",
     } };
 /** The effect constructors a literal slot or a body can name (effects.ts). */
 const EFFECT_CALLS = ["blur", "brightness", "contrast", "saturate", "grayscale", "invert",
@@ -72,7 +74,7 @@ export const CAPABILITIES = [
     // ── what the program reaches ─────────────────────────────────────────────
     { id: "themes", describe: "the Themes preset records", modules: ["themes"], hostsKeep: true, refusal: "unused",
         when: [{ mentions: [...THEME_PRESET_NAMES, "activeTone"] }],
-        inert: { THEME_PRESETS: "object", THEME_PRESET_NAMES: "array", activeTone: "identity" } },
+        inert: { THEME_PRESETS: "object", THEME_PRESET_NAMES: "array", activeTone: "identity", withThemeDefaults: "identity" } },
     { id: "draw", describe: "draw(): the drawing vocabulary and raster cache", modules: ["draw"], requires: ["visibility"], hostsKeep: true, refusal: "unused",
         when: [{ methods: ["draw"] }],
         inert: { record: "null", replay: "noop", Draw: "class", DrawGradient: "class", replayArea: "zero", listIsolated: "false",
@@ -83,8 +85,8 @@ export const CAPABILITIES = [
         when: [{ writes: ["filter"] }, { build: { render: "canvas" } }],
         inert: { isIdentity: "true", ctxFilterSupported: "true", applyFilterFallback: "identity", forceFilterFallback: "noop" } },
     { id: "focus-keys", describe: "keyboard focus and the key service", modules: ["focus", "keys"], hostsKeep: true, refusal: "unused",
-        when: [{ classes: ["Keys", "Focus", "TextInput"], methods: ["onKeyDown", "onKeyUp", "onFocus", "onBlur", "onEscapeFocus"],
-                attributes: ["focusable"], attributesUnless: { focusable: "false" }, mentions: ["Keys", "Focus"] }],
+        when: [{ classes: ["Keys", "Focus", "TextInput"], methods: ["onKeyDown", "onKeyUp", "onFocus", "onBlur"],
+                attributes: ["focusable", "focusScope"], attributesUnless: { focusable: "false", focusScope: "none" }, mentions: ["Keys", "Focus"] }],
         inert: { Focus: FOCUS_OBJECT, deliverKeys: "unsubscribe", FocusService: "class",
             Keys: KEYS_OBJECT, setKeysFocusProbe: "noop", setKeysPrograms: "noop", keysCaller: "null", KeysService: "class", normalize: "null" } },
     { id: "files", describe: "the person's files: the file dialog, drops, uploads", modules: ["files"], hostsKeep: true, refusal: "unused",

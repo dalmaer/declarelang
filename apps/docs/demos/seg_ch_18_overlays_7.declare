@@ -1,0 +1,12 @@
+App [ width = 520, height = 300, theme = { SanFrancisco },
+    order: string = "name",
+    w: Window [ x = 60, y = 30, width = 260, height = 130, rotation = 4,
+        fill = { provided("theme").surface }, cornerRadius = 10, stroke = { stroke(1, provided("theme").line) },
+        sort: Menu [ items = { [ ({ id: "name", label: "By name" }), ({ id: "date", label: "By date" }),
+                                ({ id: "size", label: "By size" }), ({ id: "kind", label: "By kind" }) ] },
+            picked(id: string) { app.order = id }
+            ],
+        Text [ x = 16, y = 16, textColor = { provided("theme").text }, text = { "Sorted by " + app.order } ],
+        Button [ x = 16, y = 84, label = "Sort", menu = { app.w.sort } ]
+        ]
+    ]

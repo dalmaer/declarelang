@@ -67,6 +67,12 @@ and contribute nothing to the scroll range. It is the third of the opt-outs a ch
 declares for itself, with [`ignoreLayout`](declare-docs:View.ignoreLayout) and [`ignoreClip`](declare-docs:View.ignoreClip)
 ([Size, position and layout](declare-docs:guide:layout)).
 
+A bar pinned against an edge also tells the keyboard where the scroller's view really
+starts. When Tab moves to a control the scroller has to bring into view, it scrolls the
+control clear of the bar, not under it, and a control scrolled under the bar takes its
+focus ring under with it. Nothing is declared for this: a pinned child counts as a bar
+when it stands against an edge, takes the pointer, and covers less than half the frame.
+
 A view may extend past a non-scrolling edge; it is simply not drawn there. On a
 scrolling axis, though, past-the-edge *is* scroll range. So a panel that waits offstage
 on a scrolling page is staged inside a frame-sized layer that ignores the scroll, and

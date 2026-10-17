@@ -70,6 +70,7 @@ const CHANNELS_KEYS = [
     ["onKeyDown", (fn, owner) => Keys.onKeyDown(fn, owner)],
     ["onKeyUp", (fn, owner) => Keys.onKeyUp(fn, owner)],
     ["onNavClaim", (fn) => Keys.onNavClaim(fn)],
+    ["onCommandHeld", (fn) => Keys.onCommandHeld(fn)],
 ];
 /** The focus service, as a member: `onFocusChange(v)` when focus moves, and
  *  `onGeometry(g)` for the focused control's live silhouette — what a focus

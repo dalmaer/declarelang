@@ -10,6 +10,55 @@
 // dispatches — so it unit-tests with synthetic events, no browser. `listen()`
 // is the thin DOM adapter that feeds the core from a host, self-retiring on the
 // `alive` gate exactly like routeInput (input.ts).
+/** The modifier glyphs in their display order. */
+const MOD_ORDER = ["⌃", "⌥", "⇧", "⌘"];
+const MOD_WORDS = { ctrl: "⌃", control: "⌃", alt: "⌥", option: "⌥", opt: "⌥", shift: "⇧", cmd: "⌘", command: "⌘", meta: "⌘" };
+const KEY_NAMES = {
+    ArrowLeft: "←", ArrowRight: "→", ArrowUp: "↑", ArrowDown: "↓", Enter: "↩", Escape: "⎋",
+    Backspace: "⌫", Delete: "⌦", Tab: "⇥", " ": "Space",
+};
+const IS_MAC = typeof navigator === "undefined" || /Mac|iPhone|iPad/.test(navigator.platform ?? "");
+/** A key event as a shortcut's spelling: modifiers in display order, then the
+ *  key (a letter upper-cased, a named key by its glyph). ⌘ is the command key:
+ *  Meta on a Mac, Control elsewhere. */
+export function comboOf(e) {
+    const cmd = e.meta || (!IS_MAC && e.ctrl);
+    const k = KEY_NAMES[e.key] ?? (e.key.length === 1 ? e.key.toUpperCase() : e.key);
+    // a typed symbol already says Shift (? is ⇧/): only a letter or a named
+    // key spells ⇧ out (⇧⌘Z)
+    const shift = e.shift && !(e.key.length === 1 && !/[a-z]/i.test(e.key));
+    return (IS_MAC && e.ctrl ? "⌃" : "") + (e.alt ? "⌥" : "") + (shift ? "⇧" : "") + (cmd ? "⌘" : "") + k;
+}
+/** A declared spelling, normalized: glyphs or words (`"Cmd+Shift+Z"`), any
+ *  order, to the one form comboOf produces. */
+export function normalizeCombo(spec) {
+    let rest = spec.trim();
+    const mods = new Set();
+    for (;;) {
+        const g = MOD_ORDER.find((m) => rest.startsWith(m));
+        if (g !== undefined) {
+            mods.add(g);
+            rest = rest.slice(g.length);
+            continue;
+        }
+        const w = /^([A-Za-z]+)[+-]/.exec(rest);
+        if (w !== null && MOD_WORDS[w[1].toLowerCase()] !== undefined) {
+            mods.add(MOD_WORDS[w[1].toLowerCase()]);
+            rest = rest.slice(w[0].length);
+            continue;
+        }
+        break;
+    }
+    const k = KEY_NAMES[rest] ?? (rest.length === 1 ? rest.toUpperCase() : rest);
+    return MOD_ORDER.filter((m) => mods.has(m)).join("") + k;
+}
+/** The chords a text field answers itself — select all, the clipboard, undo
+ *  and redo, and the caret's command moves. While a field has focus they stay
+ *  the field's, whatever a program declares: the Mac's first-responder rule
+ *  (a field's editing commands come before the menu's key equivalents). */
+const FIELD_CHORDS = new Set(["⌘A", "⌘C", "⌘X", "⌘V", "⌘Z", "⇧⌘Z", "⌘Y", "⌘←", "⌘→", "⌘↑", "⌘↓", "⇧⌘←", "⇧⌘→", "⇧⌘↑", "⇧⌘↓", "⌥←", "⌥→", "⇧⌥←", "⇧⌥→", "⌥⌫", "⌘⌫"]);
+/** Does a combo carry a command modifier (anything but ⇧)? */
+const commanded = (combo) => /[⌃⌥⌘]/.test(combo) || /^F\d+$/.test(combo.replace(/^[⇧]/, ""));
 let PROGRAMS = null;
 export function setKeysPrograms(p) {
     PROGRAMS = p;
@@ -65,8 +114,10 @@ export class KeysService {
      *  down while an overlay owns the keys — the menu's rover is the focus). */
     navClaim(owner, on) {
         const was = this.navClaims.size > 0;
-        if (on)
+        if (on) {
+            this.navClaims.delete(owner);
             this.navClaims.add(owner);
+        }
         else
             this.navClaims.delete(owner);
         const is = this.navClaims.size > 0;
@@ -76,7 +127,35 @@ export class KeysService {
     }
     /** Is any navigation-keys claim live right now? */
     navClaimed() {
-        return this.navClaims.size > 0;
+        return this.claimant() !== null;
+    }
+    /** The overlay the keys go to now: the latest claim that holds (focus is not
+     *  in another context than its own), or null. */
+    claimant() {
+        this.dropTornDown();
+        let top = null;
+        for (const c of this.navClaims)
+            if (PROGRAMS === null || PROGRAMS.claimHolds(c))
+                top = c;
+        return top;
+    }
+    /** A program is leaving (its island unlinks): the claims its views hold go,
+     *  as their closes would have released them. */
+    releaseProgram(root) {
+        for (const c of [...this.navClaims]) {
+            let r = c;
+            while (r.parent != null)
+                r = r.parent;
+            if (r === root)
+                this.navClaim(c, false);
+        }
+    }
+    /** A claimant torn down while open — a hosted program unmounted with its
+     *  menu up — holds nothing any more: its claim goes, as a close would. */
+    dropTornDown() {
+        for (const c of [...this.navClaims])
+            if (c.$tornDown === true)
+                this.navClaim(c, false);
     }
     /** Was a claim live when the key now being dispatched arrived? Read once,
      *  before any handler runs: the handler that acts on the key (a menu's
@@ -84,10 +163,12 @@ export class KeysService {
      *  rest of the same keypress must still see who owned it. */
     claimedAtDispatch = false;
     /** Does an overlay own this key? While an overlay claims the navigation
-     *  keys — an open menu — the arrows, Enter, Space, Escape and the jump keys
-     *  are the overlay's: the focused view beneath does not also receive them
-     *  (its Enter would re-press the button that opened the menu; its arrows
-     *  would move a list's selection under an open context menu). */
+     *  keys — an open menu, a popover, a dialog — the arrows, Enter, Space,
+     *  Escape and the jump keys are the overlay's: the focused view beneath does
+     *  not also receive them (its Enter would re-press the button that opened the
+     *  menu; its arrows would move a list's selection under an open context
+     *  menu), and neither does a `Keys` member outside the topmost overlay (one
+     *  Esc closes the popover and does nothing else — planes.md §9). */
     overlayOwns(e) {
         return this.claimedAtDispatch && OVERLAY_KEYS.has(e.key);
     }
@@ -163,14 +244,24 @@ export class KeysService {
         this.upHandlers.set(fn, owner);
         return () => this.upHandlers.delete(fn);
     }
-    /** The handlers a key pressed in `program` reaches. */
-    reached(handlers, program) {
+    /** The handlers a key pressed in `program` reaches. A key an open overlay
+     *  owns reaches only the `Keys` members inside a claiming overlay. */
+    reached(handlers, program, e = null) {
+        const owned = e !== null && this.overlayOwns(e) && PROGRAMS !== null;
         const out = [];
         for (const [fn, owner] of handlers) {
+            if (owner !== null && owned && !this.inClaimant(owner))
+                continue;
             if (owner === null || program === null || PROGRAMS === null || PROGRAMS.programOf(owner) === program)
                 out.push(fn);
         }
         return out;
+    }
+    /** Is this `Keys` member inside the overlay that claimed the keys last — the
+     *  topmost? A dialog's Enter is not also the menu's open over it. */
+    inClaimant(owner) {
+        const top = this.claimant();
+        return top !== null && PROGRAMS.inside(owner, top);
     }
     /** The keyboard may have moved to another program (focus moved): the one
      *  that had it is told each key it holds went up, and those presses are no
@@ -213,15 +304,107 @@ export class KeysService {
     // ── Fed by the adapter (or a test) ────────────────────────────────────────
     /** A key went down: record it, fire the down stream, then complete any chord
      *  whose keys are now all held. */
+    /** The declared shortcut sets, as their `Shortcuts` nodes register. */
+    shortcutOwners = new Set();
+    /** A `Shortcuts` node declares its set (it registers at init). */
+    declareShortcuts(owner) {
+        this.shortcutOwners.add(owner);
+    }
+    /** The owners in force, nearest scope first: each paired with its depth on
+     *  the focus chain. */
+    ownersInForce() {
+        if (PROGRAMS === null)
+            return [];
+        const chain = PROGRAMS.focusChain();
+        const out = [];
+        for (const o of [...this.shortcutOwners]) {
+            if (o.$tornDown === true) {
+                this.shortcutOwners.delete(o);
+                continue;
+            }
+            const scope = o.on != null ? o.on : o.parent;
+            const d = scope != null ? chain.indexOf(scope) : -1;
+            if (d >= 0)
+                out.push({ owner: o, depth: d });
+        }
+        return out.sort((a, b) => a.depth - b.depth);
+    }
+    /** The shortcuts in force where focus is now, nearest declaration of each
+     *  key first — what a hold-⌘ panel lists: `{ id, key, label, enabled,
+     *  origin, group }`, `origin` being the declaring set's `title` and `group`
+     *  the menu a menu bar's shortcut sits in (else the origin). */
+    shortcutsInForce() {
+        const seen = new Set();
+        const out = [];
+        for (const { owner } of this.ownersInForce()) {
+            const items = Array.isArray(owner.items) ? owner.items : [];
+            for (const r of items) {
+                if (typeof r?.key !== "string" || r.key === "")
+                    continue;
+                const c = normalizeCombo(r.key);
+                if (seen.has(c))
+                    continue;
+                seen.add(c);
+                out.push({ id: r.id, key: r.key, label: r.label ?? "", enabled: r.enabled !== false,
+                    origin: typeof owner.title === "string" ? owner.title : "", group: typeof r.menu === "string" ? r.menu : (typeof owner.title === "string" ? owner.title : "") });
+            }
+        }
+        return out;
+    }
+    /** The declared shortcut a key event triggers, if any: the nearest set that
+     *  declares its combo, enabled. None while an overlay holds the keyboard
+     *  (its keys are its own), and none without a command modifier while a
+     *  field has focus (typing is the field's), nor a field's own editing
+     *  chords (⌘A, ⌘C/X/V, ⌘Z — FIELD_CHORDS). */
+    shortcutFor(e) {
+        if (this.shortcutOwners.size === 0 || MODIFIERS.has(e.code) || this.navClaimed())
+            return null;
+        const combo = comboOf(e);
+        if (PROGRAMS !== null && (!commanded(combo) || FIELD_CHORDS.has(combo)) && PROGRAMS.typing())
+            return null;
+        for (const { owner } of this.ownersInForce()) {
+            const items = Array.isArray(owner.items) ? owner.items : [];
+            const hit = items.find((r) => typeof r?.key === "string" && normalizeCombo(r.key) === combo);
+            if (hit !== undefined)
+                return hit.enabled === false ? null : { owner, id: String(hit.id) };
+        }
+        return null;
+    }
+    /** A key went down. Returns whether a declared shortcut took it — the
+     *  adapter then stops the browser's own use of the chord. */
     keyDown(e) {
+        this.noteCommandHold(e, true);
+        this.dispatching++;
+        try {
+            const sc = this.shortcutFor(e);
+            if (sc !== null) {
+                // the shortcut's, and no program's: its release reaches only the runtime
+                this.heldKeys.set(e.code, { e, program: ORPHAN, owned: false });
+                sc.owner.picked(sc.id);
+                return true;
+            }
+            this.keyDownRaw(e);
+            return false;
+        }
+        finally {
+            this.dispatching--;
+        }
+    }
+    /** Whatever a key's handlers do happens while this is true — so focus they
+     *  move is keyboard focus (focus.ts `focus()`, the web's :focus-visible rule
+     *  for script focus during keyboard use). */
+    dispatching = 0;
+    inKeyDispatch() { return this.dispatching > 0; }
+    /** Raw delivery: record the key, fire the down stream, complete chords. */
+    keyDownRaw(e) {
         const now = PROGRAMS !== null ? PROGRAMS.keyboardProgram() : null;
         this.lastProgram = now;
         // an auto-repeat belongs where its press went, not where the keyboard is now
         const prev = this.heldKeys.get(e.code);
         const program = e.repeat && prev !== undefined ? prev.program : now;
-        this.heldKeys.set(e.code, { e, program });
         this.claimedAtDispatch = this.navClaimed();
-        for (const h of this.reached(this.downHandlers, program))
+        this.heldKeys.set(e.code, { e, program, owned: this.claimedAtDispatch });
+        for (const h of this.reached(this.downHandlers, program, e))
             h(e);
         for (const c of this.chords) {
             if (!c.active && this.allHeld(c.codes)) {
@@ -231,14 +414,61 @@ export class KeysService {
         }
     }
     /** A key went up: drop it, fire the up stream, then re-arm any chord it broke. */
+    // ── the command key held alone (a panel of the shortcuts in force) ───────
+    cmdHandlers = new Set();
+    cmdTimer = null;
+    cmdShown = false;
+    /** Subscribe to the command key being HELD ALONE for a moment (true) and let
+     *  go, or joined by another key (false) — when a panel of the shortcuts in
+     *  force shows. Every program hears it, wherever the keyboard is. */
+    onCommandHeld(fn) {
+        this.cmdHandlers.add(fn);
+        return () => this.cmdHandlers.delete(fn);
+    }
+    noteCommandHold(e, down) {
+        const cmd = IS_MAC ? e.code === "MetaLeft" || e.code === "MetaRight" : e.code === "ControlLeft" || e.code === "ControlRight";
+        if (down && cmd && !e.repeat && this.heldKeys.size === 0) {
+            if (this.cmdTimer !== null)
+                clearTimeout(this.cmdTimer);
+            this.cmdTimer = setTimeout(() => { this.cmdTimer = null; this.setCommandHeld(true); }, 700);
+            return;
+        }
+        if (down && cmd)
+            return; // its auto-repeat
+        this.endCommandHold();
+    }
+    endCommandHold() {
+        if (this.cmdTimer !== null) {
+            clearTimeout(this.cmdTimer);
+            this.cmdTimer = null;
+        }
+        this.setCommandHeld(false);
+    }
+    setCommandHeld(on) {
+        if (this.cmdShown === on)
+            return;
+        this.cmdShown = on;
+        for (const fn of [...this.cmdHandlers])
+            fn(on);
+    }
     keyUp(e) {
+        this.dispatching++;
+        try {
+            this.keyUpRaw(e);
+        }
+        finally {
+            this.dispatching--;
+        }
+    }
+    keyUpRaw(e) {
+        this.noteCommandHold(e, false);
         const h0 = this.heldKeys.get(e.code);
         this.heldKeys.delete(e.code);
-        this.claimedAtDispatch = this.navClaimed();
+        this.claimedAtDispatch = h0 !== undefined ? h0.owned : this.navClaimed();
         // the release goes where the press went; a press the keyboard moved away
         // from was released to its program already, and reaches only the runtime
         const program = h0 !== undefined ? h0.program : PROGRAMS !== null ? PROGRAMS.keyboardProgram() : null;
-        for (const h of this.reached(this.upHandlers, program))
+        for (const h of this.reached(this.upHandlers, program, e))
             h(e);
         for (const c of this.chords) {
             if (c.active && !this.allHeld(c.codes))
@@ -248,6 +478,7 @@ export class KeysService {
     /** Release everything — on app blur, so a key held across a focus-out does
      *  not stick (a key-up may never arrive while the app is unfocused). */
     clearHeld() {
+        this.endCommandHold();
         this.heldKeys.clear();
         for (const c of this.chords)
             c.active = false;
@@ -316,7 +547,8 @@ export class KeysService {
             // command modifier stays the browser's, and so does typing in a field.
             if (ev.key !== "Tab" && !ev.metaKey && !ev.ctrlKey && !ev.altKey && !isField(document.activeElement) && this.claimed(ev.code))
                 ev.preventDefault();
-            this.keyDown(normalize(ev));
+            if (this.keyDown(normalize(ev)))
+                ev.preventDefault(); // a declared shortcut's chord is not also the browser's
         };
         const onUp = (ev) => {
             if (!isAlive())

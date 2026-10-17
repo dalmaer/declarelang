@@ -1,7 +1,5 @@
 import type { Theme } from "./value.js";
-/** The built-in theme presets, keyed by name — the values a body's bare
- *  `SanFrancisco` / `CupertinoDark` reference, and the set `theme = Name`
- *  resolves against. */
+export declare function withThemeDefaults(t: Theme): Theme;
 export declare const THEME_PRESETS: Readonly<Record<string, Theme>>;
 /** The preset names, for the checker and the scaffold. */
 export declare const THEME_PRESET_NAMES: readonly string[];

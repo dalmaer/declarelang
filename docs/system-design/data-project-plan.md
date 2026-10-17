@@ -7,7 +7,7 @@
 > [materialization.md](materialization.md) (windowing, and the one ceiling
 > still open), [selection-model.md](selection-model.md),
 > [component-briefs.md](component-briefs.md),
-> [focus-scopes.md](focus-scopes.md),
+> [planes.md](planes.md) §13 (focus navigation),
 > [jsonpath-spelling.md](jsonpath-spelling.md). The day-to-day tracking file
 > this once pointed at (`/DATA-PROJECT.md`) was working-copy scaffolding and
 > has been deleted; nothing here depends on it.

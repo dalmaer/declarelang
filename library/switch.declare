@@ -41,8 +41,8 @@ A hairline in the accent when checked, in the theme's line colour otherwise, so 
 include [ "control.declare" ]
 
 class Switch extends Control [
-    width  = { typeof provided("theme").switchWidth == "number" ? provided("theme").switchWidth : 44 },
-    height = { typeof provided("theme").switchHeight == "number" ? provided("theme").switchHeight : 24 },
+    width  = { provided("theme").switchWidth },
+    height = { provided("theme").switchHeight },
     cornerRadius = { height / 2 },
     checked: boolean = false,
 
@@ -50,18 +50,18 @@ class Switch extends Control [
 
     press()   { input(!checked) },
 
-    opacity = { disabled ? (typeof provided("theme").disabledOpacity == "number" ? provided("theme").disabledOpacity : 0.45) : 1 },
-    fill    = { checked ? provided("theme").accent : hovered || pressed ? provided("theme").controlSelected : provided("theme").control },
+    opacity = { disabled ? (provided("theme").disabledOpacity) : 1 },
+    fill    = { checked ? provided("theme").accent : hovered || pressed ? provided("theme").controlSelected : ((provided("theme").trackFill ?? provided("theme").control)) },
     stroke  = { stroke(1, checked ? provided("theme").accent : provided("theme").line) },
 
     // the thumb derives from the track: inset 2 normally; a theme may say the
     // unchecked thumb is smaller (Mountain View's 16→24 grow-on-check)
 
     thumb: View [ cornerRadius = { this.width / 2 },
-        width  = { checked || typeof provided("theme").switchThumbOffSize != "number" ? classroot.height - 4 : provided("theme").switchThumbOffSize },
+        width  = { checked || provided("theme").switchThumbOffSize == null ? classroot.height - 4 : provided("theme").switchThumbOffSize },
         height = { this.width },
         y = center,
-        fill = { provided("theme").surface },
+        fill = { provided("theme").switchThumbFill ?? provided("theme").surface },
         slide: Spring [ attribute = x, to = { checked ? classroot.width - classroot.thumb.width - 2 : 2 }, stiffness = 300, damping = 26 ]
         ]
     ]

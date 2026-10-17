@@ -83,12 +83,12 @@ class Checkbox extends Control [
     press()   { input(!checked) },
 
     width   = { this.box.width + (label == "" ? 0 : 8 + this.cap.width) },
-    opacity = { disabled ? (typeof provided("theme").disabledOpacity == "number" ? provided("theme").disabledOpacity : 0.45) : 1 },
+    opacity = { disabled ? (provided("theme").disabledOpacity) : 1 },
 
     box: View [ y = center,
-        width  = { classroot.size > 0 ? classroot.size : typeof provided("theme").checkboxSize == "number" ? provided("theme").checkboxSize : 20 },
+        width  = { classroot.size > 0 ? classroot.size : provided("theme").checkboxSize },
         height = { this.width },
-        cornerRadius = { typeof provided("theme").checkboxCornerRadius == "number" ? provided("theme").checkboxCornerRadius : Math.min(8, Math.max(3, provided("theme").controlCornerRadius - 2)) },
+        cornerRadius = { provided("theme").checkboxCornerRadius ?? Math.min(8, Math.max(3, provided("theme").controlCornerRadius - 2)) },
         fill   = { checked ? provided("theme").accent : provided("theme").control },
         stroke = { stroke(1, checked ? provided("theme").accent : hovered || pressed ? provided("theme").textMuted : provided("theme").line) },
 

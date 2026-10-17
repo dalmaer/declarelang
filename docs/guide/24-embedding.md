@@ -161,6 +161,15 @@ This is not a corner feature. The desktop demo's windows, the homepage's
 live previews, and this documentation's own runnable examples are all
 `AppIsland` — the page you are reading is an app hosting apps.
 
+The boundary is transparent where a person would expect it to be. Tab walks
+into the tenant at its first stop and out after its last. The tenant's menus,
+popovers and dialogs open in the nearest overlay layer above the island — the
+window it runs in, in a desktop — so they hang past the island's box and turn
+and scale with it ([Menus, dialogs and overlays](declare-docs:guide:overlays@overlays-that-belong-to-a-window));
+`containOverlays = true` keeps them inside the box. And a key the tenant has
+no shortcut for reaches the host's: a program in a desktop window answers ⌘N
+with the desktop's New ([Pointer and keyboard](declare-docs:guide:pointer-and-keyboard@keyboard-shortcuts)).
+
 When you ship a build (`declarec`), the tenants ship with it: every island whose
 `program` is a literal is compiled ahead and written beside the app, loaded the
 moment the island first names it — no compiler on the page. An island whose

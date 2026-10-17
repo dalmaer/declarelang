@@ -92,7 +92,7 @@ Then check every need in the plan against
     thousand records and a million on demand: one dataset class holds them and makes every
     write; the list is a dataset derived from it, virtualized, with headings as a second
     row class; editing through a draft; menus, shortcuts, undo. It is
-    <!--stat:tracker.code-->990<!--/stat--> lines of code, and worth reading whole.
+    <!--stat:tracker.code-->961<!--/stat--> lines of code, and worth reading whole.
   - **A surface over time, or things dragged between places** — a schedule, a timeline, a
     board, a grid you zoom from years to a day. → `apps/calendar/calendar.declare`, read
     first (above).
@@ -154,7 +154,7 @@ build it: the guide section that teaches it, a program that does it, and names t
 | Arranging views; sizes that follow content; one program for phone and desktop | `06-layout.md` | tracker: `SimpleLayout` and `padding` throughout; sampler: `Specimen extends Card`; weather: the App's `desk: State [ applied = { !app.phone } ]` | `SimpleLayout`, `ResponsiveLayout`, `Card`, `padding` |
 | Scrolling panes; views that stay put while the page scrolls; what is on screen staying still when content above it changes; a log that follows its newest line | `07-scrolling.md` | weather: `HourStrip`'s `scroller` (`scrolls = x`), the App's `pill` and `back` (`ignoreScroll = true`); keeping the reader's place is the default, so the tracker's list has no code for it | `scrolls`, `ignoreScroll`, `scrollTo`, `scrollAnchor` |
 | Buttons, fields, toggles; your own control, with keyboard, focus, hover and pressed built in | `08-controls.md`; `17-your-own-views.md` § View or Control | sampler: every library control; tracker: `Chip`, `Facet`, `RailStat`; calendar: `NavArrow` (each `extends Control`, with `press()`) | `Control`, `Button`, `TextInput`, `Segmented` |
-| Dragging and dropping; keyboard shortcuts | `09-pointer-and-keyboard.md` § Dragging, § Keyboard events | calendar: `Ev` (`onPointerDown`, `onPointerUp`) and its `Drag` class; desktop: `Window`'s `beginDrag`; tracker: the App's `keys: Keys` | `onPointerDown`, `viewAt`, `Keys` |
+| Dragging and dropping; keys; keyboard shortcuts | `09-pointer-and-keyboard.md` § Dragging, § Keyboard events, § Keyboard shortcuts | calendar: `Ev` (`onPointerDown`, `onPointerUp`) and its `Drag` class; desktop: `DeskWindow`'s `beginDrag`, and its menu bar's records, whose `key:` fields are the program's shortcuts | `onPointerDown`, `viewAt`, `Keys`, `Shortcuts` |
 | Touch: a drag inside a scrolling page, press and hold | `10-touch.md` § Gesture claims | calendar: `Ev`'s `onHold`; tracker: `IssueRow`'s `onHold` (opens the context menu) | `claim`, `onHold` |
 | Themes, dark mode, a value every descendant reads | `11-paint-and-themes.md` | tracker: `theme Tracker`, the App's `theme = { … }` and `appear: AppearanceSwitch`; calendar: `theme CalendarLight` and `CalendarDark`; sampler: four themes | `theme`, `provided`, `AppearanceSwitch` |
 | Text, fonts, styled runs, views inside a line, Markdown | `12-text.md` | swatchbook: the Type and Rich text sections; desktop: `ViewerWindow` (a Markdown document in a window) | `Text`, `Font`, `style`, `HTMLText`, `Markdown` |
@@ -165,7 +165,7 @@ build it: the guide section that teaches it, a program that does it, and names t
 | A long list: only the rows near the screen built, rows of different heights and kinds, a heading between records | `16-collections.md` | tracker: the App's `ListRow [ … virtualize = true, classFor = { … } ]` over `GroupRow` and `IssueRow`; desktop: the App's `wins` (a class per kind of window) | `virtualize`, `classFor`, `rowIndex`, `exists` |
 | Drawing what attributes can't express: a gauge, a chart, an icon | `17-your-own-views.md` § Custom drawing, § Icons | weather (`weather-art.declare`): `WindDial`, `PressureGauge`; marketmap: `StageTile`'s sparkline | `draw`, `Draw`, `Icon` |
 | A layout of your own | `17-your-own-views.md` § Writing a layout | weather (`weather-art.declare`): `MasonryLayout`; marketmap: `MarketLayout` | `Layout`, `place` |
-| Menus, context menus and dialogs that close and hold focus correctly | `18-overlays.md` | tracker: the App's `sortMenu`, `facetMenu` and `ctx: ContextMenu`; sampler: `dlg: Dialog` | `Menu`, `ContextMenu`, `Dialog` |
+| Anything that opens over the interface — a menu, a context menu, a popover, a dialog, a sheet, a toast — closing when it should, holding focus and keys while open, staying with its window | `18-overlays.md` | tracker: the App's `sortMenu`, `facetMenu`, `ctx: ContextMenu` and its undo `Toast`; sampler: the Overlays page, every kind opened from a card; desktop: a Files window's row menu, which opens in the window's layer | `Menu`, `ContextMenu`, `Popover`, `Dialog`, `Sheet`, `Toast`, `Window` |
 | Addresses, back and forward, deep links | `19-urls.md` | birds: the App's `location` and `waypoint` and what derives from them | `location`, `waypoint` |
 | Motion that can be interrupted and redirected; a view's states | `20-motion.md` | tracker: `ListRow`'s height spring; calendar: `DetailSection`'s spring; desktop: `DockIcon`'s `magSpring` | `Spring`, `State` |
 | Clocks, a later call, one action when something changes | `21-time.md` | calendar: the App's `clock: Time [ tick = day ]`; tracker: `Toast` (`afterDelay`), the App's `trackChanges` and `onChange` | `Time`, `afterDelay`, `onChange` |
@@ -210,6 +210,17 @@ shows the Declare form.
   control: use the library's, or subclass `Control` and put the action in `press()`;
   keyboard, focus and pressed and hover states come with it. (`08-controls.md`;
   `17-your-own-views.md` § View or Control)
+- **An overlay built by hand** — a full-window view with a scrim, shown by a flag; a panel
+  positioned from a snapshot of its anchor, with its own flip and clamp; an empty `onClick`
+  to stop presses falling through; Esc handled as a chain of checks in a `Keys` member. A
+  full-window view with a scrim is a `Dialog` or a `Sheet`; a panel at a control is a
+  `Popover` or a `Menu`, opened with `openFor`. Each closes itself on Esc and on a press past
+  it, holds back what is behind it as its kind should, keeps Tab inside while open, and
+  animates out before it goes. (`18-overlays.md`)
+- **Shortcuts as a chain of key tests** in a `Keys` member — `if (e.meta && e.key == "s")`.
+  A command with a key is a record in a `Shortcuts` member, or a `key:` on a menu bar item:
+  it gets a label a panel can list, stays out of a text field's typing, and stands down
+  while a menu is open. (`09-pointer-and-keyboard.md` § Keyboard shortcuts)
 - **Placing everything by hand.** A page's cards, rows and insets are a layout's job; `x` and
   `y` are for a diagram's scene or an overlay. Two tells: a container whose height is
   arithmetic over its children (it sizes from its content), and

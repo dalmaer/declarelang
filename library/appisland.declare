@@ -36,6 +36,12 @@ come to the island as `onNavigate(n: IslandNavigation)` when the island declares
 so the host decides what a link leading out of it means — a desktop opens a window.
 Without it, the page navigates. A host that only shows a program uses none of this.
 
+**Its overlays.** The program's menus, popovers and dialogs open in the nearest overlay layer
+up the chain — the `Window` the island sits in, or any view above it that provides
+`overlays`, in this program or a host further up — so they hang past the island's edge and
+turn and scale with the program as it is shown. With no such layer above, they stay inside
+the box. `containOverlays = true` keeps them inside the box always.
+
 The window frame, activation, and titling belong to the caller — a desktop window
 adds an `onPointerDown` that raises itself and reads `childName` for its title; the
 homepage and the viewer just size the box. This primitive is only the embedding.
@@ -54,6 +60,11 @@ channel, where the running program is the host app's `liveSource` and recompiles
 changes. **`""` detaches the island** and nothing mounts, which is how a closed panel
 stops paying for its tenant — and what bounds the recursion when a program embeds a
 view of itself.
+
+## containOverlays
+Keeps the program's overlays — its menus, popovers, dialogs — inside the island's box, where
+they would otherwise open in the nearest overlay layer above it (its window's) and hang past
+the box. For a host that shows programs as self-contained tiles. `false` by default.
 
 The tenant runs in the host page's runtime, as its own app. Where its compiled program
 comes from is the host's arrangement: on the distro, a prewarmed artifact or
@@ -90,6 +101,7 @@ The host's slot marker, derived from `program` — `run:<program>` — which is 
 
 class AppIsland extends DOMIsland [
     program: string = "",
+    containOverlays: boolean = false,
     location: string = "",
     place: string = "",
     departedPlace: string = "",

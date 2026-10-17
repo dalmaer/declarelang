@@ -18,6 +18,7 @@
 // is target → nearest sinked surface; the pairing/click rule is shared
 // (input.ts), so both backends decide clicks identically.
 
+import { watchSelection } from "./edit-selection.js";
 import { type MaskSpec, allowedRef, notifyIslandSlot, type Bitmap, type EditableSpec, type InputSink, type InputWants, type RenderBackend, type RichBlock, type SlotBox, type Stretch, type Surface } from "./backend.js";
 import { domTransform3D, unproject, type Homography } from "./projective.js";
 import { IDENTITY as IDENTITY_AFFINE, apply as applyAffine, cssMatrix, fromParts as affineFromParts, invert as invertAffine, isIdentity as affineIsIdentity, rotationOf as affineRotationOf, scaleOf as affineScaleOf, type Affine } from "./affine.js";
@@ -35,6 +36,19 @@ import { onDprChange } from "./dpr.js";
 import { routeInput, holdCaptureActive } from "./input.js";
 import { lockFocusZoom } from "./viewport-lock.js";
 import { observeVisibility, refreshObserved, type VisibilityCb } from "./dom-visibility.js";
+
+/** A child is being moved (insertChild): a native blur it causes is not the
+ *  person leaving the field. */
+let MOVING_FOCUS = false;
+
+/** Move `el` (by `move`) without losing a focused field inside it. */
+function keepingFocus(el: HTMLElement, move: () => void): void {
+  const active = el.ownerDocument.activeElement as HTMLElement | null;
+  const held = active !== null && active !== el.ownerDocument.body && el.contains(active) ? active : null;
+  MOVING_FOCUS = held !== null;
+  try { move(); } finally { MOVING_FOCUS = false; }
+  if (held !== null && el.ownerDocument.activeElement !== held) held.focus({ preventScroll: true });
+}
 
 /** Style a native editable element to match the view's painted text metrics, so
  *  the caret and glyphs sit exactly where the static measure would place them. */
@@ -270,8 +284,8 @@ function sendHome(el: HTMLElement): void {
  *  into it ride the frame with no per-frame JS and no lag. Zero-size +
  *  visible overflow: it occupies no layout space among the (absolute)
  *  content and contributes nothing to the scroll range itself. zIndex lifts
- *  the frame's subtree above the unindexed content — frame chrome paints
- *  over what it is pinned above. */
+ *  the frame's subtree above the unindexed content and above paint guests —
+ *  frame chrome paints over what it is pinned above. */
 function ensureScrollFrame(scrollerEl: HTMLElement): HTMLElement {
   const existing = scrollerEl.querySelector<HTMLElement>(":scope > [data-declare-scrollframe]");
   if (existing !== null) return existing;
@@ -284,7 +298,9 @@ function ensureScrollFrame(scrollerEl: HTMLElement): HTMLElement {
   s.width = "0";
   s.height = "0";
   s.overflow = "visible";
-  s.zIndex = "1";
+  // above a paint guest's lift (travelWith's 1): a ring riding the pane paints
+  // under its pinned chrome, as on canvas and the Mac
+  s.zIndex = "2";
   scrollerEl.insertBefore(frame, scrollerEl.firstChild);
   return frame;
 }
@@ -645,7 +661,9 @@ export class DomBackend implements RenderBackend {
         const p = localPoint(el, e.clientX, e.clientY);
         return { key: el, sink: SINKS.get(el)!, ...WANTS.get(el), pinch, x: p.x, y: p.y };
       },
-      (e) => localPoint(rootEl, e.clientX, e.clientY)
+      (e) => localPoint(rootEl, e.clientX, e.clientY),
+      undefined,
+      !embedded,
     );
     // Tap-to-dismiss for native editable fields. Desktop blurs a focused
     // input/textarea when you press a non-focusable element, but mobile Safari
@@ -2009,7 +2027,8 @@ export class DomSurface implements Surface {
     const el = this.element;
     if (host === null) {
       if (this.travelHomeEl !== null) {
-        if (el.parentElement !== this.travelHomeEl) this.travelHomeEl.appendChild(el);
+        const home = this.travelHomeEl;
+        if (el.parentElement !== home) keepingFocus(el, () => home.appendChild(el));
         this.travelHomeEl = null;
         el.style.zIndex = "";
       }
@@ -2018,10 +2037,14 @@ export class DomSurface implements Surface {
     const target = (host as DomSurface).element;
     if (el.parentElement === target) return;
     if (this.travelHomeEl === null) this.travelHomeEl = el.parentElement;
-    // absolute child of the scroll container = content coordinates, carried
-    // by the platform's own scroll; z lifts it over the unindexed content
-    // (the sticky frame's stratum) so late-created rows never bury it
-    target.appendChild(el);
+    // absolute child of the host = the host's (content) coordinates, carried
+    // by the platform's own scroll; z lifts it over the host's unindexed
+    // children, so late-created rows never bury it — and the host isolates, so
+    // the lift stays inside it: a guest paints above its host's own children
+    // and never above the host's later siblings (planes.md §3.1, the hit
+    // walk's order)
+    keepingFocus(el, () => target.appendChild(el));
+    target.style.isolation = "isolate";
     el.style.zIndex = "1";
   }
 
@@ -2064,9 +2087,15 @@ export class DomSurface implements Surface {
       const self = el;
       el.addEventListener("input", () => this.edit?.onInput(self.value));
       el.addEventListener("focus", () => this.edit?.onFocus());
-      el.addEventListener("blur", () => this.edit?.onBlur());
+      el.addEventListener("blur", () => { if (!MOVING_FOCUS) this.edit?.onBlur(); });
+      watchSelection(el, (s, e) => this.edit?.onSelect?.(s, e));
       el.addEventListener("keydown", (e) => {
-        if (!(this.edit?.multiline ?? false) && (e as KeyboardEvent).key === "Enter") this.edit?.onEnter?.();
+        const k = e as KeyboardEvent;
+        if (k.key !== "Enter" || k.isComposing) return;
+        const ml = this.edit?.multiline ?? false;
+        if (!ml) { this.edit?.onEnter?.(); return; }
+        // a multi-line field that submits on Return: Shift-Return is the line break
+        if (this.edit?.enterSubmits === true && !k.shiftKey) { k.preventDefault(); this.edit?.onEnter?.(); }
       });
       this.element.appendChild(el);
       this.editEl = el;
@@ -2112,7 +2141,7 @@ export class DomSurface implements Surface {
 
   activateEditable(active: boolean): void {
     if (this.editEl === null) return;
-    if (active) this.editEl.focus();
+    if (active) this.editEl.focus({ preventScroll: true });   // the focus service reveals (planes.md §14), bounded by contexts
     else this.editEl.blur();
   }
 
@@ -2590,7 +2619,11 @@ export class DomSurface implements Surface {
     if (exempt && this.clipBox === null && this.element.style.overflow === "clip") ensureClipBoxFor(this.element);
     const target = exempt ? this.element : (this.clipBox ?? this.element);
     const beforeEl = before === null ? null : (before as DomSurface).element;
-    target.insertBefore(el, beforeEl !== null && beforeEl.parentElement === target ? beforeEl : null);
+    // A move also blurs a focused field inside the moved subtree: the native
+    // blur is not the person leaving it, so it is not passed on, and the field
+    // is focused again where it now is (a dialog's field while the page's
+    // children re-order under it).
+    keepingFocus(el, () => target.insertBefore(el, beforeEl !== null && beforeEl.parentElement === target ? beforeEl : null));
     for (const [s, l, t] of saved) { if (s.scrollLeft !== l) s.scrollLeft = l; if (s.scrollTop !== t) s.scrollTop = t; }
     // an ignoreScroll child's realization depends on the ancestry it just
     // gained — resolve it now that the context exists

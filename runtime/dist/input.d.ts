@@ -55,10 +55,8 @@ export interface TouchPoint {
     x: number;
     y: number;
 }
-/** Start routing window pointer input through `resolve`. `alive` gates the
- *  whole route (false = the tree is gone; the listeners remove themselves
- *  on the next event). */
+export declare function setOutsidePressHook(fn: ((x: number, y: number) => boolean) | null, scroll?: ((x: number, y: number) => boolean) | null): void;
 export declare function routeInput(alive: () => boolean, resolve: (e: MouseEvent) => HitTarget | null, rootPoint?: (e: MouseEvent) => {
     x: number;
     y: number;
-}, onHover?: (t: HitTarget | null) => void): void;
+}, onHover?: (t: HitTarget | null) => void, topLevel?: boolean): void;

@@ -151,7 +151,7 @@ try {
 
   await test("DOM: the halo realizes CSS-inert with no authored pointerEvents (the carved-sink rule)", async () => {
     const r = await page.evaluate(() => {
-      const halo = globalThis.__w.children.find((c) => c.ignoreClip);
+      const halo = globalThis.__w.halo;   // by name: since Window places views in its content pane, not a direct child
       return { attr: halo.pointerEvents, css: getComputedStyle(halo.$surface.element).pointerEvents };
     });
     assert.equal(r.attr, "", "the app must not need the workaround");

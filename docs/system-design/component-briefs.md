@@ -36,8 +36,8 @@ Every component here rides the ruled contracts and the data substrate as-is:
 - **Materialization** (materialization.md, BUILT): the `materialize` policy
   slot; the invisibility contract; the kernel window API; windowing-aware
   AT. Collections here are its consumers, never re-implementers.
-- **Focus scopes** (focus-scopes.md, ADOPTED): Tab-within-scope, Esc
-  ascends, per-component entry policy — §5 below carries the D9 details as
+- **Focus scopes** (planes.md §13): Tab-within-scope, Esc
+  closes what is open, per-component entry policy — §5 below carries the D9 details as
   concrete proposals.
 - **Sizing** (Contract 4), **theming** (Contract 2), and the **Process**
   discipline (literate source, prose, guide fence, eval questions).
@@ -82,7 +82,7 @@ the path-machinery showcase once filters land.
 
 **Ends.**
 - Composition, not invention: Field/TextInput for the entry; the Menu
-  machinery (overlay, raise, light-dismiss, Escape-ascends) for the list;
+  machinery (overlay, raise, light-dismiss, Escape-closes) for the list;
   a derived collection for the matches (`Dataset [ contents = { … } ]`
   today; the filter selector when B-filters land — the brief's design must
   not care which).
@@ -90,8 +90,8 @@ the path-machinery showcase once filters land.
   the selection model's currency); the field's text is the query, seeded
   from the choice, editable; `input(v)` delivery for app-owned use.
 - Keyboard: typing filters live; arrows move the option-list's keyboard
-  position; Enter picks (delivers + closes); Esc ascends (closes the list,
-  then leaves the control — the focus-scope rule). The list is never a tab
+  position; Enter picks (delivers + closes); Esc closes the list,
+  and focus stays in the field (planes.md §13.3). The list is never a tab
   stop of its own.
 - Touch: tap opens, tap picks; the list respects the enclosing scroll
   regime (no claim beyond the overlay's own).
@@ -121,7 +121,7 @@ pointer-anchored placement.
 - Items are written children (the menu practice) or replicated over data
   (bulk actions over a selection — Tracker's row menu); picking delivers
   through the ordinary activation path and closes.
-- Esc ascends; outside-click closes-and-swallows (the resolved Mac rule).
+- Esc closes; outside-click closes-and-swallows (the resolved Mac rule).
 - The OPENING view declares it: a `contextMenu:`-shaped member on the view
   it serves (exact spelling at build; the brief's constraint is that it is
   declared where it applies, discoverable in source).
@@ -205,7 +205,7 @@ under a column model; selection at 100k; the whole Tracker table view.
    (claim-surface.md's proposed row and deference).
 3. `onRetire` as the departure hook's name.
 4. `active` as the keyboard-position name on collections.
-5. The §5-adjacent D9 details as proposed in focus-scopes.md §4 (descend =
+5. The §5-adjacent D9 details as planes.md §13.2 states them (descend =
    Enter or F2; capture claims Enter for row-advance; the
    `focusScope = stop | capture` spelling; shift-Tab exits backwards;
    no F6 in v1).

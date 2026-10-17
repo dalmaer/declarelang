@@ -21,8 +21,9 @@ The shape to notice:
   None of it is a rule of the game, but without it the game would not be the arcade's.
 - **The screen follows the data.** Each part of the screen is a view class
   (screen.declare, panel.declare) drawn from the records; nothing in the views changes
-  anything. The top of the screen is a frame older than the bottom, as on the arcade's
-  monitor, which redraws each half while its beam is in the other.
+  anything. The arcade's monitor redraws each half of the playfield while its beam is in the
+  other, so the top is a frame older than the bottom; the checks draw it so (`Monitor`), and
+  the game draws the whole playfield from the world as each frame ends.
 - **Places are pixels**, kept to the fractions of a pixel the arcade moves things by: across
   a planet 2,048 pixels round, and down the screen (game.declare says more).
 
@@ -158,17 +159,19 @@ App [ fill = black,
 
     // The arcade's picture is 304 pixels by 256, of which its monitor shows 292 by 240, from
     // the seventh pixel across and the eighth down. It is drawn in the arcade's own pixels and
-    // scaled up. Its playfield is drawn twice, the top half from the world as it was a frame
-    // ago (the arcade redraws that half while the beam is in the other), and the top of the
-    // screen goes over both. Every pixel of it shows as a solid block, as on the monitor.
+    // scaled up. Its playfield is drawn once, from the world as the frame ends — or, drawn as
+    // the arcade's monitor shows it (Monitor), twice, the top half from the world as it was a
+    // frame ago — and the top of the screen goes over it. Every pixel of it shows as a solid
+    // block, as on the monitor.
 
     screen: View [ clip = true, x = center, y = center, width = 292, height = 240, scale = { app.unit }, scaling = pixelated,
         beam: number = 128,             // the row where the halves meet
         picture: View [ x = -6, y = -7, width = 304, height = 256,
-            upper: View [ clip = true, width = 100%, height = { app.screen.beam },
+            whole: Playfield [ exists = { !app.monitor.split }, datapath = { app.game.value }, explosions = { app.game } ],
+            upper: View [ exists = { app.monitor.split }, clip = true, width = 100%, height = { app.screen.beam },
                 Playfield [ datapath = { app.monitor.upper.value }, explosions = { app.monitor.upperBursts } ]
                 ],
-            lower: View [ clip = true, width = 100%, y = { app.screen.beam }, height = { 256 - app.screen.beam },
+            lower: View [ exists = { app.monitor.split }, clip = true, width = 100%, y = { app.screen.beam }, height = { 256 - app.screen.beam },
                 Playfield [ datapath = { app.game.value }, explosions = { app.monitor.lowerBursts },
                     y = { -app.screen.beam } ]
                 ],

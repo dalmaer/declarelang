@@ -10,6 +10,9 @@ import { declarationsOf, defineAttributes, localProvision } from "./attributes.j
 import { observe } from "./reactive.js";
 import { BoundaryValues } from "./boundary.js";
 import { scrollPlaces, holdScrollPlaces } from "./scroll-places.js";
+import { withdrawPaintGuests } from "./view.js";
+import { withdrawOpen } from "./outside.js";
+import { Keys } from "./keys.js";
 
 /** The island's own box, as a host hands it to the link: its scroll, which is
  *  where a tenant that scrolls as a page scrolls (the box is its viewport). */
@@ -24,7 +27,11 @@ export function islandProvision(island: Island, name: string): unknown {
   if (own !== undefined) return own;
   const decls = declarationsOf(island);
   if (decls[name] !== undefined) return (island as unknown as Record<string, unknown>)[name];
-  return (island as unknown as { $provided(n: string, d: unknown): unknown }).$provided(name, undefined);
+  const v = (island as unknown as { $provided(n: string, d: unknown): unknown }).$provided(name, undefined);
+  // the overlay layer goes on up the chain: nothing in this program provides
+  // one, so the one this program's own host provides (planes.md §12)
+  if (v === undefined && name === OVERLAYS) return (island as unknown as { $hostProvided(n: string, d: unknown): unknown }).$hostProvided(name, undefined);
+  return v;
 }
 
 /** Everything an island provides right now, by name — what a host passes as
@@ -36,10 +43,20 @@ export function islandProvisions(island: Island): Record<string, unknown> {
   return out;
 }
 
-/** The names an island provides, as a clean string list. */
+/** The overlay layer's provision (library `Floating`, planes.md §11). */
+const OVERLAYS = "overlays";
+
+/** The names an island provides, as a clean string list. An island that hosts
+ *  a Declare program (it declares `containOverlays`, as `AppIsland` does) also
+ *  offers the overlay layer unless it keeps its program's overlays in its box:
+ *  a hosted program's menus and dialogs open in the nearest layer up the chain
+ *  — its window's — without the host listing anything. */
 function providesOf(island: Island): string[] {
   const p = (island as unknown as { provides?: unknown }).provides;
-  return Array.isArray(p) ? p.filter((n): n is string => typeof n === "string") : [];
+  const out = Array.isArray(p) ? p.filter((n): n is string => typeof n === "string") : [];
+  const contain = (island as unknown as { containOverlays?: unknown }).containOverlays;
+  if (contain === false && !out.includes(OVERLAYS)) out.push(OVERLAYS);
+  return out;
 }
 
 
@@ -293,6 +310,9 @@ export function linkIslandTenant(island: Island, tenant: App, box: IslandBox | n
   island.$tenant = tenant;
   tenant.$hostIsland = island;
   undo.push(() => { island.tenantSink = null; tenant.hostSink = null; island.$tenant = null; tenant.$hostIsland = null; });
+  // what the program had in its host goes with it: its overlays open in the
+  // host's layers, and the keyboard they held (run first: undo runs in order)
+  undo.unshift(() => { withdrawPaintGuests(tenant); withdrawOpen(tenant); Keys.releaseProgram(tenant); });
   return () => { for (const fn of undo.splice(0)) { try { fn(); } catch { /* torn down */ } } };
 }
 

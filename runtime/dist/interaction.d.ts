@@ -64,6 +64,13 @@ export declare function traceHitAt(root: unknown, x: number, y: number, pierce?:
 };
 /** view.ts calls this once at module init — the injected instance test. */
 export declare function initInteraction(test: (n: unknown) => n is InteractionView): void;
+/** The views as the hit walk reads them (hit-walk.ts). A shape or rounded clip
+ *  is tested exactly where the view's renderer can (its surface's
+ *  `insideClip`), as its box otherwise. All attribute reads here run inside the
+ *  driver's tracked compute — they ARE the dependencies. */
+/** The view a view PAINTS in (planes.md §3.1): its `paintsIn` when that is not
+ *  its parent, else its parent. Paint, hit and root geometry follow it. */
+export declare function paintParentOf(v: InteractionView): InteractionView | null;
 /** The topmost visible view whose box contains the point — THE hit walk
  *  (hit-walk.ts), read over the views. Exported because it is also the
  *  language's own hit test (View.viewAt / View.containsPoint, view.ts): what an
@@ -112,6 +119,20 @@ export declare function rootTransform(view: InteractionView, stopAt?: Interactio
     tx: number;
     ty: number;
     matrix: Affine;
+};
+/** A view's frame mapped into the OUTERMOST program's frame space: its own
+ *  root's frame first, then on from that root through the island that hosts
+ *  it (a hosted program's root frame is its island's frame), program by
+ *  program. The panning of an oversized tenant inside its island's box is
+ *  not counted. */
+export declare function outerAffine(view: InteractionView): Affine;
+/** The similarity from `from`'s frame to `to`'s, across the islands between
+ *  their programs. */
+export declare function transformBetween(from: InteractionView, to: InteractionView): {
+    x: number;
+    y: number;
+    scale: number;
+    rotation: number;
 };
 /** A view's origin in the ROOT'S FRAME space (viewport coordinates for a
  *  top-level app) — the composed transform of (0, 0). Shared for the same

@@ -67,7 +67,7 @@ schema Line [ id: number, status: string, kind?: "hdr", count?: number,
 // `closedAt` honest so no caller has to. Nothing here knows what the user is
 // looking at: filters, selection and the editor's draft belong to the App.
 
-class Issues extends DataSource [ url = "issues.json", auto = true, schema = [ issues[]: Issue ],
+class Issues extends DataSource [ url = { hostProvided("base", "") + "issues.json" }, auto = true, schema = [ issues[]: Issue ],
 
     // workflow order: the chips, the rail and the grouped list all follow it
 
@@ -560,39 +560,6 @@ class KeyHint [ width = 100%, height = 18, padding = [1, 0, 0, 0],
     ]
 
 
-// the undo toast: one at a time, rises from the bottom, waits eight seconds,
-// honors its word. A newer notice replaces the pending dismissal.
-
-class Toast [ visible = { shown || lift > 0.02 }, height = 40, cornerRadius = 10,
-    shown: boolean = false,
-    msg: string = "",
-    hideTimer: DelayHandle? = null,
-    lift: number = 0,
-    Spring [ attribute = lift, to = { shown ? 1 : 0 }, stiffness = 260, damping = 26 ],
-    opacity = { lift },
-    padding = [0, 20, 0, 16],
-    layout: SimpleLayout [ axis = x, spacing = 10 ],
-    fill = { provided("theme").tooltipFill },
-    shadow = { shadow(0, 6, 24, 0x00000040) },
-    cap: TextLabel [ fontSize = 12.5, wrap = false,
-        textColor = { provided("theme").tooltipTextColor }, text = { msg } ],
-    u: Control [ y = 7, height = 26, cornerRadius = 7, padding = [0, 9, 0, 9],
-        fill = { hovered || pressed ? provided("theme").accent : null },
-        t: Text [ y = center, fontSize = 12, fontWeight = semibold, wrap = false,
-            textColor = { this.parent.hovered || this.parent.pressed ? provided("theme").accentTextColor : provided("theme").accent }, text = "Undo" ],
-        press() { app.undoDelete() }
-        ],
-    show(m: string) {
-        msg = m
-        shown = true
-        this.raise()
-        hideTimer?.cancel()
-        hideTimer = afterDelay(8000, () => { this.shown = false })
-        },
-    hide() { hideTimer?.cancel(); shown = false }
-    ]
-
-
 // an editable label tag for the detail panel — the list Tag plus a remove ×
 
 class EditTag [ height = 22, cornerRadius = 7, padding = [4, 10, 0, 8],
@@ -806,11 +773,6 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     trackChanges = ["fStatus", "fAssignee", "fLabel", "query", "sortOn", "sortDir", "groupBy"],
 
     onChange(e: ChangeEvent) { this.list.scrollTo(0) },
-
-    // Is the keyboard owned by a text field? A bare-character shortcut must
-    // never steal a keystroke from one: the search box, or the open editor.
-
-    typing: boolean = { app.editing || app.omni.focused },
 
     clearAll() {
         fStatus = ""; fAssignee = ""; fLabel = ""; query = ""
@@ -1031,7 +993,8 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     performDelete() {
         lastDeleted = issues.removeEach(selection.map((r) => r.id))
         this.takeSelection(null)
-        this.toast.show(lastDeleted.length == 1 ? "Deleted 1 issue" : "Deleted " + lastDeleted.length + " issues")
+        this.toast.say(lastDeleted.length == 1 ? "Deleted 1 issue" : "Deleted " + lastDeleted.length + " issues",
+            ({ id: "undo", label: "Undo" }))
         },
 
     undoDelete() {
@@ -1040,7 +1003,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
         issues.restore(back)
         lastDeleted = []
         this.takeSelection(back.map((r) => r.rec))
-        this.toast.hide()
+        this.toast.close()
         },
 
     bulkSet(field: string, v: object) {
@@ -1134,29 +1097,27 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
 
     // ⌘K claims the omnibox from anywhere; Escape backs out by layers
 
+    // ⌘K or "/" reach the search field from anywhere — "/" is a plain key,
+    // so it stands down while a field is taking text. A shortcut takes its
+    // key on the way down and the field it focuses never sees it.
+
+    shortcuts: Shortcuts [ title = "Tracker",
+        items = { [ ({ id: "search", key: "⌘K", label: "Search" }), ({ id: "search", key: "/", label: "Search" }) ] },
+        picked(id: string) { if (id == "search") Focus.focus(app.omni) }
+        ],
+
     keys: Keys [
         onKeyDown(e: KeyEvent) {
-            // ⌘K or "/" reach the search field from anywhere — but "/" is a
-            // character, so it only counts when nothing is taking text
-            if ((e.meta || e.ctrl) && e.code == "KeyK") { Focus.focus(app.omni) }
             // Escape unwinds the innermost layer first: the open editor, then
             // a selection, then the query, then the facet filters. Anything
             // else and a keystroke meant for the thing in front of you lands
             // on something behind it.
-            else if (e.key == "Escape") {
+            if (e.key == "Escape") {
                 if (app.editing) app.closeDetail()
                 else if (app.selCount > 0) app.takeSelection(null)
                 else if (app.query != "") app.query = ""
                 else if (app.fStatus != "" || app.fAssignee != "" || app.fLabel != "") app.clearAll()
                 }
-            },
-
-        // "/" moves focus on key up, not down: a printable shortcut handled on
-        // the way down would still be delivered as text to the field it just
-        // focused, and the search box would open holding a stray "/".
-
-        onKeyUp(e: KeyEvent) {
-            if (e.key == "/" && !app.typing) Focus.focus(app.omni)
             }
         ],
 
@@ -1504,8 +1465,11 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             text = { "load " + app.loadMs + " ms · ingest " + app.ingestMs + " ms" } ]
         ],
 
-    toast: Toast [ ignoreLayout = true, x = center,
-        y = { app.height - 84 + (1 - this.lift) * 20 } ],
+    // the undo toast: eight seconds to change your mind; a newer delete replaces it
+
+    toast: Toast [ duration = 8000,
+        picked(id: string) { if (id == "undo") app.undoDelete() }
+        ],
 
     // the entry screen: honest states for the one fetch
 

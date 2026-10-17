@@ -384,13 +384,69 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // resolver (boot-uniform, the service worker, the artifact ladder) stays out:
   // a deployed app has nothing to resolve.
   //
-  // 121 → 123 KB (2026-10-14, region cells given back): a record or object
+  // 121 → 122 KB (focus scopes, planes.md §13): Tab entries that stand for a
+  // whole scope, the cycle a Tab moves in, per-scope memory, islands walked
+  // through, region entry and the region keys (focus.ts), and an open overlay's
+  // keys withheld from Keys members (keys.ts) — measured +0.6 KB gz on the
+  // calendar. A build whose Tab could not leave an embedded program was never a
+  // smaller build; it was a trapped one.
+  //
+  // 122 → 125 KB (the overlay layer, planes.md §3, §8): `paintsIn` (a view
+  // painted and hit in another's frame), the router's walk over open overlays
+  // (outside.ts — presses and scrolls aimed past them), and the library's
+  // Floating base and layers, which a program carries once it has the
+  // provided tooltip or a menu — measured +2.0 KB gz on the calendar. A build
+  // whose overlays could not stay above their context, or close when pressed
+  // past, was never a smaller build; it was an unfinished one.
+  //
+  // 125 → 126 KB (overlay steps 5–6, planes.md §11, §12, §14): a transform
+  // between any two views across islands (interaction.ts — how a program's
+  // menu is placed in its host's window), the program's own scale and turn on
+  // an overlay in a host's layer (Floating), the focus service's own reveal,
+  // bounded by contexts (a dialog's Tab never scrolls the page behind it), and
+  // the ring's paint-host rules — the two steps together take the calendar to
+  // 125.4 KB, from under 125 at step 5's start. A build whose focus scrolled
+  // the page behind a dialog was never a smaller build; it was a wrong one.
+  //
+  // 126 → 127 KB (shortcuts as declared data, planes.md §9): the Keys
+  // service's lookup from the focused view outward across islands, the
+  // combo spelling (comboOf / normalizeCombo), the resolved set for a panel
+  // and the command-held event — core, since every program's keyboard goes
+  // through it; measured 126.7 KB on the calendar (+1.3 KB gz). A build whose
+  // ⌘N could not reach the desktop from a program in its window was never a
+  // smaller build; it was a deaf one.
+  //
+  // 127 → 128 KB (the focus stress page, planes.md §14): reveal lands clear of
+  // a scroller's pinned chrome (pinnedEdges), the focus geometry carries the
+  // control's turn so a tilted window is ringed turned, and the ring stacks
+  // beneath the page's pinned bars — measured 127.3 KB on the calendar. A
+  // build whose Tab revealed each control under the toolbar was never a
+  // smaller build; it was a hidden one.
+  //
+  // 128 → 129 KB (overlay changes #18, #19): the follower's scroller walk
+  // skips a pane its control is pinned across, and focus moved by a key's
+  // handler keeps keyboard modality (the dispatch depth) — measured over 128
+  // KB on the calendar. A build
+  // whose ring faded on every arrow in a segmented control was never a smaller
+  // build; it was a blinking one.
+  //
+  // 129 → 130 KB (the assessment's fixes, overlay changes #22–#27): the theme
+  // defaults record every provided theme is laid over (the library's optional
+  // tokens, read with no fallback at the read site), `focused` on every view
+  // and a reactive Focus.getFocus(), TextInput's selection facts and
+  // enterSubmits, overlays whose `shown` is state, and Esc-then-Tab out of a
+  // region — measured 129.3 KB on the calendar. A build whose dialog swallowed
+  // Return in its own text area was never a smaller build; it was a broken one.
+  //
+  //
+  // Merged with main's region cells given back (2026-10-14: a record or object
   // value that leaves its place returns the kernel cells its readers made in
-  // it (reactive.ts retireCell, data.ts retireTree and RETIRE). Without it a
+  // it — reactive.ts retireCell, data.ts retireTree and RETIRE; without it a
   // program that replaces what it shows every frame ran the kernel out of
-  // memory; it took the build just past 121.
+  // memory; on main alone it took the build just past 121, band 123): the two
+  // together measure 129.5 KB on the calendar, inside the 130 band.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 123 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 130 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 

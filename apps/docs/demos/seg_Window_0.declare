@@ -1,0 +1,13 @@
+App [ width = 560, height = 300, fill = #E6E9EE,
+    Window [ x = 40, y = 40, width = 240, height = 160, rotation = -4, cornerRadius = 10,
+        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
+        more: Menu [ items = { [ ({ id: "rename", label: "Rename" }), ({ id: "copy", label: "Duplicate" }) ] } ],
+        Text [ x = 16, y = 16, text = "A window" ],
+        Button [ x = 16, y = 52, label = "Options", menu = { parent.more } ]
+        ],
+    Window [ x = 300, y = 70, width = 220, height = 140, cornerRadius = 10,
+        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
+        TextInput [ x = 16, y = 16, width = 188 ],
+        TextInput [ x = 16, y = 56, width = 188 ]
+        ]
+    ]

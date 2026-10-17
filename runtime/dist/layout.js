@@ -239,6 +239,7 @@ export class Layout extends Node {
             return [];
         return v.children.filter((c) => c instanceof View &&
             c.ignoreLayout !== true &&
+            !c.$paintsElsewhere() &&
             !this.authorSized.has(c));
     }
     /** Children this arrangement WANTED to size and cannot, because the author

@@ -125,8 +125,8 @@ class Button extends Control [
     // the baseline a row aligns this control by: its label's (declared, never discovered)
 
     baseline: number = { this.run.y + this.run.cap.y + this.run.cap.baseline },
-    height = { typeof provided("theme").buttonHeight == "number" ? provided("theme").buttonHeight : 40 },
-    cornerRadius = { typeof provided("theme").buttonCornerRadius == "number" ? Math.min(provided("theme").buttonCornerRadius, height / 2) : provided("theme").controlCornerRadius },
+    height = { provided("theme").buttonHeight },
+    cornerRadius = { provided("theme").buttonCornerRadius != null ? Math.min(provided("theme").buttonCornerRadius, height / 2) : provided("theme").controlCornerRadius },
     label:   string = "",
     primary: boolean = false,
 
@@ -154,7 +154,7 @@ class Button extends Control [
     // outward.
 
     width   = { this.run.width + this.padH * 2 },
-    opacity = { disabled ? (typeof provided("theme").disabledOpacity == "number" ? provided("theme").disabledOpacity : 0.45) : 1 },
+    opacity = { disabled ? (provided("theme").disabledOpacity) : 1 },
 
     fill = { primary   ? (pressed || menuOpen ? provided("theme").accentPressed : hovered ? provided("theme").accentHovered : provided("theme").accent)
            : menuOpen  ? provided("theme").controlSelected

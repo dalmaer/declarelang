@@ -1,10 +1,13 @@
-App [ width = 360, height = 150, theme = { SanFrancisco },
-    said: string = "",
-    dlg: Dialog [ ],
-    Button [ x = 20, y = 20, label = "Delete…",
-        onClick() { app.dlg.ask("Delete this file?", "This cannot be undone.",
-                                (id) => { app.said = id }) }
+App [ width = 360, height = 220, theme = { SanFrancisco },
+    size: number = 14,
+    Button [ x = 20, y = 20, label = "Text size…",
+        onClick() { app.sizes.showFor(this) }
         ],
-    Text [ x = 20, y = 84, textColor = { provided("theme").text },
-        text = { app.said == "" ? "—" : "you chose: " + app.said } ]
+    Text [ x = 20, y = 80, fontSize = { app.size }, textColor = { provided("theme").text }, text = "Sample" ],
+    sizes: Popover [
+        Text [ textColor = { provided("theme").text }, text = { "Size " + app.size } ],
+        Slider [ width = 180, min = 10, max = 32, value = { app.size },
+            input(v: number) { app.size = Math.round(v) }
+            ]
+        ]
     ]

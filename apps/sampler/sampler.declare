@@ -82,9 +82,9 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     narrow: boolean = { app.width < 940 },       // the Controls page: the card columns stack
     gridNarrow: boolean = { app.width < 760 },   // the grid: the narrow column-width set
 
-    barH: number = 52,                           // fixed — the bar never grows
+    barH: number = { app.compact ? 92 : 52 },    // fixed for a width — on a narrow one the page switch takes a second row
 
-    page: "controls" | "table" | "grid" = "controls",      // the center switch
+    page: "controls" | "table" | "grid" | "overlays" = "controls",      // the center switch
     style: "sanFrancisco" | "mountainView" | "cupertino" | "redmond" = "sanFrancisco",
     menuLocked: boolean = true,
     lastPick: string = "(none yet)",
@@ -234,6 +234,66 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     dlg: Dialog [ ],
     lastDialog: string = "(none yet)",
 
+    // ── the Overlays page's overlays: each a Floating, declared once here ──
+
+    textSize: number = 15,
+    docName: string = "Untitled",
+    lastOverlay: string = "(none yet)",
+
+    sizer: Popover [
+        Text [ fontWeight = semibold, textColor = { provided("theme").text }, text = { "Text size · " + app.textSize } ],
+        Slider [ width = 200, min = 10, max = 32, value = { app.textSize },
+            input(v: number) { app.textSize = Math.round(v) }
+            ]
+        ],
+
+    rename: Dialog [ title = "Rename document",
+        buttons = { [ ({ id: "cancel", label: "Cancel", cancel: true }), ({ id: "ok", label: "Rename", default: true }) ] },
+        picked(id: string) { if (id == "ok" && this.nameField.text != "") app.docName = this.nameField.text; app.lastOverlay = "rename: " + id },
+        nameField: TextInput [ width = 100%, initial = { app.docName } ]
+        ],
+
+    viewer: Dialog [ presentation = "full",
+        View [ width = 100%, height = 100%, fill = #101418,
+            Text [ x = center, y = center, fontSize = 28, fontWeight = semibold, textColor = #F4F6FA, text = "A full-screen dialog" ],
+            Text [ x = center, y = { parent.height - 60 }, fontSize = 13, textColor = #9AA4B0, text = "Esc closes it" ]
+            ]
+        ],
+
+    prefs: Sheet [ edge = "end",
+        Text [ fontSize = 17, fontWeight = bold, textColor = { provided("theme").text }, text = "Preferences" ],
+        Checkbox [ label = "Show line numbers", checked = true ],
+        Checkbox [ label = "Wrap long lines" ],
+        Checkbox [ label = "Autosave" ],
+        Button [ label = "Done", primary = true,
+            onClick() { app.prefs.close() }
+            ]
+        ],
+
+    share: Sheet [
+        Text [ fontSize = 17, fontWeight = bold, textColor = { provided("theme").text }, text = "Share" ],
+        Text [ width = 100%, wrap = true, textColor = { provided("theme").textMuted },
+            text = "A sheet whose edge is the bottom floats as a card on a wide screen and rises from the bottom on a phone." ],
+        Button [ label = "Copy link",
+            onClick() { app.share.close(); app.toast.say("Link copied", null) }
+            ]
+        ],
+
+    toast: Toast [ picked(id: string) { app.lastOverlay = "toast: " + id }
+        ],
+
+    stackMenu: Menu [ items = { [ ({ id: "duplicate", label: "Duplicate" }), ({ id: "toast", label: "Show a toast" }) ] },
+        picked(id: string) {
+            if (id == "toast") app.toast.say("A toast above the dialog", ({ id: "undo", label: "Undo" }))
+            app.lastOverlay = "menu: " + id
+            }
+        ],
+    stacked: Dialog [ title = "A dialog with a menu",
+        message = "Open the menu from here: it paints above the dialog, and Esc closes the menu first, then the dialog.",
+        buttons = { [ ({ id: "done", label: "Done", default: true }) ] },
+        Button [ label = "More…", menu = { app.stackMenu } ]
+        ],
+
     // ── the top bar: fixed height — brand · pages · styling · light/dark ───
 
     bar: View [ x = 0, y = 0, width = { app.width }, height = { app.barH }, fill = { provided("theme").surface },
@@ -263,14 +323,15 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
         // the page switch is the library Segmented — one tab stop, arrows
         // move, the ring hugs the active segment
 
-        pageSwitch: Segmented [ y = 11,
-            x = { Math.max(app.compact ? 104 : 200, (app.width - this.width) / 2) },
-            segMin = { app.compact ? 74 : 92 },
+        pageSwitch: Segmented [ y = { app.compact ? 52 : 11 },
+            x = { app.compact ? (app.width - this.width) / 2 : Math.max(200, (app.width - this.width) / 2) },
+            segMin = { app.compact ? Math.min(92, (app.width - 32) / 4) : 92 },
             value = { app.page },
-            input(v: object) { app.page = v as "controls" | "table" | "grid" },
+            input(v: object) { app.page = v as "controls" | "table" | "grid" | "overlays" },
             choices = { [ ({ id: "controls", label: "Controls" }),
                           ({ id: "table",    label: "Table" }),
-                          ({ id: "grid",     label: "DataGrid" }) ] }
+                          ({ id: "grid",     label: "DataGrid" }),
+                          ({ id: "overlays", label: "Overlays" }) ] }
             ],
 
         // at the right end: the STYLING door — a button with a menu (the
@@ -279,7 +340,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
         // dark switch, which shows the appearance in force; until a press
         // flips it, `themeMode` stays "auto" and the OS decides
 
-        right: View [ x = end, y = center, padding = [0, 14, 0, 0],
+        right: View [ x = end, y = 10, padding = [0, 14, 0, 0],
             layout: SimpleLayout [ axis = x, spacing = 8, align = center ],
             styling: Button [ height = 30, label = "Styling", menu = { app.stylingMenu } ],
             appear: AppearanceSwitch [
@@ -489,9 +550,80 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                     GridRow [ datapath = :rows[], virtualize = true ]
                     ],
                 cap: Text [ fontSize = 12, textColor = { provided("theme").textFaint },
-                    text = "Title edits live; State and Owner pick from a menu; Done is a checkbox — every edit writes the RECORD (windowing keeps it). Drag headers to reorder, edges to resize, click to sort." ]
-                ]
+                    text = "Title edits live; State and Owner pick from a menu; Done is a checkbox — every edit writes the RECORD (windowing keeps it). Drag headers to reorder, edges to resize, click to sort. From the keyboard: arrows move the active cell, Enter or typing edits, Esc puts it back." ]
+                ],
 
+            // ── Overlays page: every kind of Floating, opened from a card ──
+
+            overlaysPage: View [ visible = { app.page == "overlays" }, width = 100%,
+                layout: SimpleLayout [ axis = y, spacing = 16 ],
+                Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.2,
+                    textColor = { provided("theme").textFaint }, text = "OVERLAYS — EACH PAINTS ABOVE ITS CONTEXT, CLOSES AS ITS KIND DOES" ],
+
+                Specimen [ label = "Popover",
+                    View [ layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
+                        Button [ label = "Text size…",
+                            onClick() { app.sizer.showFor(this) }
+                            ],
+                        Text [ fontSize = { app.textSize }, textColor = { provided("theme").text }, text = "The quick brown fox" ]
+                        ],
+                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                        text = "Anchored to its button, follows it as the page scrolls; a press outside closes it and still lands." ]
+                    ],
+
+                Specimen [ label = "Dialog",
+                    View [ layout: SimpleLayout [ axis = x, spacing = 12 ],
+                        Button [ label = "Ask…",
+                            onClick() { app.dlg.ask("Save changes?", "Your unsaved changes will be lost.", (id) => app.lastOverlay = "ask: " + id) }
+                            ],
+                        Button [ label = "Rename…",
+                            onClick() { app.rename.show() }
+                            ],
+                        Button [ label = "Full screen…",
+                            onClick() { app.viewer.show() }
+                            ]
+                        ],
+                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                        text = { "Document: " + app.docName + " · " + app.lastOverlay } ]
+                    ],
+
+                Specimen [ label = "Sheet",
+                    View [ layout: SimpleLayout [ axis = x, spacing = 12 ],
+                        Button [ label = "Preferences…",
+                            onClick() { app.prefs.show() }
+                            ],
+                        Button [ label = "Share…",
+                            onClick() { app.share.show() }
+                            ]
+                        ],
+                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                        text = "Preferences slides in from the end edge; Share floats as a card — both rise from the bottom on a phone." ]
+                    ],
+
+                Specimen [ label = "Toast",
+                    View [ layout: SimpleLayout [ axis = x, spacing = 12 ],
+                        Button [ label = "Copy",
+                            onClick() { app.toast.say("Copied", null) }
+                            ],
+                        Button [ label = "Delete",
+                            onClick() { app.toast.say("Item deleted", ({ id: "undo", label: "Undo" })) }
+                            ]
+                        ],
+                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                        text = "Takes no focus, blocks nothing, goes by itself." ]
+                    ],
+
+                Specimen [ label = "Stacking",
+                    View [ layout: SimpleLayout [ axis = x, spacing = 12 ],
+                        Button [ label = "Dialog with a menu…",
+                            onClick() { app.stacked.show() }
+                            ],
+                        Button [ label = "With a tooltip", tooltipLabel = "Tooltips paint above everything too" ]
+                        ],
+                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                        text = "A menu over a dialog, a toast over both; Esc closes the topmost." ]
+                    ]
+                ]
             ]
         ]
     ]

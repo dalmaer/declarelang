@@ -1,0 +1,8 @@
+App [ width = 420, height = 220,
+    Button [ x = 20, y = 20, label = "Show",
+        onClick() { app.note.show() }
+        ],
+    note: Popover [ anchorTo = { app.children[0] as View },
+        Text [ text = "A popover is a Floating." ]
+        ]
+    ]

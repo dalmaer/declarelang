@@ -19,8 +19,10 @@ await test("themes: the generated projection is FRESH (gen-themes --check)", () 
 });
 
 await test("themes: the presets are served by name (the { }-body / theme = Name surface)", () => {
-  assert.equal(THEME_PRESETS.SanFrancisco, THEME_RECORDS.SanFrancisco, "the by-name table serves the authored object");
-  assert.equal(THEME_PRESETS.SanFranciscoDark, THEME_RECORDS.SanFranciscoDark);
+  for (const name of ["SanFrancisco", "SanFranciscoDark"]) {
+    for (const [k, v] of Object.entries(THEME_RECORDS[name])) assert.equal(THEME_PRESETS[name][k], v, `${name}.${k}: the served preset carries the authored token`);
+  }
+  assert.ok(!THEME_PRESET_NAMES.includes("ThemeDefaults"), "the defaults record is not a preset");
   assert.ok(THEME_PRESET_NAMES.includes("Cupertino") && THEME_PRESET_NAMES.includes("RedmondDark"),
     "every city/mode name is a preset");
 });
@@ -39,6 +41,18 @@ await test("themes: the authored tokens round-tripped (spot checks through the r
   assert.equal(THEME_RECORDS.MountainView.disabledOpacity, 0.38, "a fractional number token");
   assert.equal(THEME_RECORDS.Cupertino.focusRingGap, 0, "a zero survives");
   assert.equal(THEME_RECORDS.SanFrancisco.focusRingStyle, "both", "a style token");
+});
+
+await test("themes: a theme is laid over the defaults record — an optional token it leaves out has the default", async () => {
+  const { withThemeDefaults } = await import("../runtime/dist/themes.js");
+  const { ThemeDefaults } = await import("../runtime/dist/themes-data.js");
+  const mine = { accent: 0xCC3333 };
+  const filled = withThemeDefaults(mine);
+  assert.equal(filled.accent, 0xCC3333, "what the theme states wins");
+  assert.equal(filled.segmentedHeight, ThemeDefaults.segmentedHeight, "what it leaves out is the default");
+  assert.equal(withThemeDefaults(mine), filled, "the same theme fills to the same object");
+  assert.equal(THEME_PRESETS.Cupertino.menuCornerRadius, THEME_RECORDS.Cupertino.menuCornerRadius, "a preset's own value is never displaced");
+  assert.equal(THEME_PRESETS.Cupertino.gridRowHeight, ThemeDefaults.gridRowHeight, "a preset gains the defaults it does not state");
 });
 
 summarize("themes");

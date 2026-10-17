@@ -27,7 +27,9 @@ theme Cupertino [
     menuFill = #F9F9FBDB, menuBackdrop = frost(24, 1.5), menuTitleHighlightFill = #FFFFFF24,   // frosted menu panel (true backdrop blur, saturation boosted for the material read) + the open/nav title highlight (subtle translucent shape so white title text stays legible)
     scrimFill = #000000, scrimOpacity = 0.12, error = #C93429,
     dialogWidth = 260, dialogButtonLayout = "stack", dialogTextAlign = "center", dialogTitleFontSize = 13, dialogBodyFontSize = 12,
-    buttonStrokeColor = #C6C6C8
+    buttonStrokeColor = #C6C6C8,
+    trackFill = #E3E3E8, segmentedSelectedFill = #FFFFFF, segmentDividerColor = #C7C7CC,   // the Mac's grey well under a white pill, rules between unselected segments
+    switchThumbFill = #FFFFFF, sliderThumbFill = #FFFFFF
     ]
 
 
@@ -47,5 +49,7 @@ theme CupertinoDark [
     menuFill = #2C2C2EE6, menuBackdrop = frost(24, 1.5), menuTitleHighlightFill = #FFFFFF26,   // frosted dark menu panel (true backdrop blur) + title highlight
     scrimFill = #000000, scrimOpacity = 0.3, error = #FF6961,
     dialogWidth = 260, dialogButtonLayout = "stack", dialogTextAlign = "center", dialogTitleFontSize = 13, dialogBodyFontSize = 12,
-    buttonStrokeColor = #5A5A5E
+    buttonStrokeColor = #5A5A5E,
+    trackFill = #3A3A3C, segmentedSelectedFill = #636366, segmentDividerColor = #545458,   // the selected segment lifts above the well, as dark themes light what is raised
+    switchThumbFill = #E5E5EA, sliderThumbFill = #E5E5EA                                                          // the Mac switch knob stays light in dark
     ]

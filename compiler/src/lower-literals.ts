@@ -18,7 +18,10 @@
 // parsers for such a program (the `literal-parsing` capability).
 
 import type { Literal } from "../../runtime/dist/parser.js";
-import { THEME_PRESETS } from "../../runtime/dist/themes.js";
+// the AUTHORED records, not the served (filled) ones: the runtime lays a
+// provided theme over the library defaults itself, so the program carries
+// only what the preset states
+import { THEME_RECORDS as THEME_PRESETS } from "../../runtime/dist/themes-data.js";
 
 const LITERAL_KINDS = new Set(["number", "percent", "string", "hexColor", "ident", "call", "list"]);
 /** Literal kinds the runtime reads as they are — no coercion to replace. */

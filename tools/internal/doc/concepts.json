@@ -102,9 +102,14 @@
     "routing": "App.location",
     "navigation stack": "App.location",
     "modal": "Dialog",
-    "sheet": "Dialog",
+    "drawer": "Sheet",
+    "bottom sheet": "Sheet",
+    "snackbar": "Toast",
+    "notification": "Toast",
+    "flyout": "Popover",
+    "lightbox": "Dialog",
+    "overlay": "Floating",
     "alert": "Dialog",
-    "popover": "Menu",
     "dropdown": "Menu",
     "context menu": "Menu",
     "select": "Combobox",
@@ -237,22 +242,18 @@
     {
       "terms": [
         "zstack",
-        "z stack",
-        "overlay"
+        "z stack"
       ],
       "answer": "No ZStack and no overlay wrapper — children stack by default: a view with no `layout` imposes no arrangement, and declaration order is z-order (later siblings paint above). Place the layers with x/y; `ignoreLayout = true` floats one child above an arranged set."
     },
     {
       "terms": [
-        "toast",
-        "snackbar",
-        "drawer",
         "carousel",
         "skeleton",
         "badge",
         "avatar"
       ],
-      "answer": "No dedicated class — the library is deliberately small, and these are compositions: a toast is an `ignoreScroll` View a `Spring` slides in; a drawer is a panel whose `x` follows one sprung scalar; a badge is a small rounded `Text` riding its parent's corner; an avatar is an `Image` with `stretches = cover` and rounding. Compose it, then keep it as your own class."
+      "answer": "No dedicated class — the library is deliberately small, and these are compositions: a carousel is a row whose `x` follows one sprung scalar; a skeleton is a few rounded Views whose opacity a `Time` pulses; a badge is a small rounded `Text` riding its parent's corner; an avatar is an `Image` with `stretches = cover` and rounding. Compose it, then keep it as your own class."
     },
     {
       "terms": [

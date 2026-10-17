@@ -276,8 +276,13 @@ export interface EditableSpec {
      *  away) — for syncing Declare focus with the platform. */
     onFocus: () => void;
     onBlur: () => void;
-    /** Enter pressed on a single-line field (submit). */
+    /** Enter pressed on a single-line field (submit) — or on a multi-line one
+     *  with `enterSubmits`, where Shift-Enter types the line break instead. */
     onEnter?: () => void;
+    /** A multi-line field whose Return submits (`TextInput.enterSubmits`). */
+    enterSubmits?: boolean;
+    /** The native selection moved — the caret is a zero-length range. */
+    onSelect?: (start: number, end: number) => void;
 }
 /** One view's handle on the rendering substrate — the Declare "sprite".
  *

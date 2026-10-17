@@ -69,6 +69,13 @@ read only by `contain` (which letterboxes on one axis) and `cover` (which crops 
 one) — under a distorting stretch there is nothing left over to align, and the
 value is ignored.
 
+## FocusScope
+
+What Tab does at a view's edge. `none`: its stops are its parent's. `stop`: it is one Tab stop
+and the arrows move inside (a radio group, a list). `capture`: Tab walks in and through its
+stops (an entry form). `region`: one stop from outside, a cycle of its own inside, left with
+F6 (a window, a pane). `modal`: Tab wraps inside and never leaves (a dialog).
+
 ## FontLate
 
 What a face that finishes loading **after** the text is already painted does to
@@ -128,12 +135,25 @@ Whether the members of an `AnimatorGroup` run one after another or all at once. 
 is the group's own control — nothing else in the language reads it — and it is
 what makes a group more than a list of animators started together.
 
+## OutsidePress
+
+What a press aimed past an open overlay does: `dismiss` (the overlay closes; the press goes
+no further — a menu), `dismissAndDeliver` (it closes; the press goes on — a popover), `block`
+(the press goes nowhere; the overlay stays — a dialog), `ignore` (the press goes on as if the
+overlay were not there — a toast). `none` is every ordinary view.
+
 ## Scaling
 
 How a view's images and drawings look when they are shown larger or smaller. `smooth`
 blends neighbouring pixels, which suits photographs and an ordinary interface under a
 zoom. `pixelated` shows every pixel as a solid block, so pixel art stays sharp. A view's
 whole subtree follows its setting.
+
+## ScrollBelow
+
+What a scroll aimed past an open overlay does: `block` (nothing behind it scrolls — a menu,
+a dialog), `allow` (it goes on — a popover, a toast), `dismiss` (the overlay closes and the
+scroll goes on — a tooltip). `none` is every ordinary view.
 
 ## ScrollAnchor
 

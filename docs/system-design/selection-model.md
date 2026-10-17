@@ -1,8 +1,8 @@
 # The selection model (D6)
 
 > **Status: RULED 2026-07-30 (David, in full — §7 is the ledger). B7's
-> selection prerequisites are met.** Related: focus-scopes.md (D9,
-> adopted in the same conversation) rules how the keyboard ENTERS and LEAVES
+> selection prerequisites are met.** Related: planes.md §13 (focus navigation)
+> rules how the keyboard ENTERS and LEAVES
 > a collection; this doc rules what happens inside.
 > Nothing in the record covers selection, and every component in scope needs
 > it — Table, DataGrid, Combobox, the Tracker capstone's whole triage flow.
@@ -129,8 +129,8 @@ The standard triad, ruled once so every component agrees:
 | Home / End (⌘↑ / ⌘↓) | first / last record, same modifiers |
 
 Esc is deliberately ABSENT from this table: under the hierarchical-focus
-ruling (focus-scopes.md, D9 — adopted 2026-07-30) Esc universally means
-ASCEND ONE LEVEL and never carries collection-specific meanings. Clearing a
+ruling (planes.md §13.3) Esc closes or cancels the innermost
+thing that is open and never carries collection-specific meanings. Clearing a
 selection is an explicit affordance/command — the deselect-all the filter
 ruling (§5) already requires.
 
@@ -189,7 +189,7 @@ drop-on-filter instead, only §5 changes — the model is otherwise identical.)
 3. **RULED** — modes as the component attribute `selection = none | single
    | multi`, `single` the Control-family default.
 4. **RULED (via D9)** — Esc never carries collection meanings; entering and
-   leaving the collection is focus-scopes.md's business.
+   leaving the collection is planes.md §13's business.
 5. **RULED** — the §4 gesture table and the three-facts interaction state
    (selection + keyboard position + anchor), including the ⌘-walk + Space
    discontiguous flow (keyboard parity for discontiguous selection) and

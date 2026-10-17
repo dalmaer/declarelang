@@ -1,0 +1,118 @@
+/*
+# Sheet
+
+A modal panel attached to an edge of its context — a form, a detail, a set of choices. On
+a phone-width screen it rises from the bottom, and a downward swipe on its handle puts it
+away; on a wide screen it slides in from the end edge (`edge = "end"`) or, for a sheet whose
+edge is the bottom, floats as a card in the middle. Behind it the context dims; a press
+there closes the sheet, and nothing behind it scrolls while it is open. Tab stays inside it;
+Esc closes it; focus goes to its first control when it opens and back when it closes.
+
+```declare
+App [ width = 640, height = 420,
+    Button [ x = 20, y = 20, label = "New entry…", onClick() { app.entry.show() } ],
+    entry: Sheet [ edge = "end",
+        Text [ fontWeight = bold, text = "New entry" ],
+        TextInput [ width = 100% ],
+        Button [ label = "Save", primary = true, onClick() { app.entry.close() } ]
+        ]
+    ]
+```
+
+## edge
+Which edge it belongs to on a wide screen: `"bottom"` (the default — it floats as a centered
+card there) or `"end"` (it slides in at the end edge, full height). On a phone-width screen
+every sheet rises from the bottom.
+
+## narrow
+Whether the screen is phone-width — narrower than 600 by default.
+
+## form
+How it presents now: `"bottom"`, `"end"` or `"center"`.
+
+## sheetWidth
+Its width as a side sheet or a floating card.
+
+## dragY
+How far its handle has been pulled down — a swipe past a quarter of its height puts it away.
+
+## hostW
+The width of the layer it paints in.
+
+## hostH
+The height of the layer it paints in.
+
+## width
+The whole width at the bottom; `sheetWidth` at the end edge or as a card.
+
+## height
+Its content's height, kept inside its layer; the full height at the end edge.
+
+## x
+At the end edge as it slides in; centered as a card.
+
+## y
+Risen from the bottom, less any pull on its handle; centered as a card.
+
+## opacity
+Its open blend, as a card; a sheet at an edge slides rather than fades.
+*/
+
+include [ "floating.declare" ]
+
+class Sheet extends Floating [
+    kind = "modal",
+    sharesProgram = false,
+    pressPolicy = "dismiss",
+    scrollPolicy = "block",
+    takesFocus = true,
+    focusScope = modal,
+    defaultplacement = body,
+
+    edge: "bottom" | "end" = "bottom",
+    narrow: boolean = { this.hostW < 600 },
+    form: string = { this.narrow ? "bottom" : this.edge == "end" ? "end" : "center" },
+    sheetWidth: number = { this.form == "end" ? 420 : 520 },
+    dragY: number = 0,
+
+    hostW: number = { this.host != null ? this.host.width : app.width },
+    hostH: number = { this.host != null ? this.host.height : app.height },
+
+    width = { this.form == "bottom" ? this.hostW : Math.min(this.sheetWidth, this.hostW - (this.form == "center" ? 48 : 0)) },
+    height = { this.form == "end" ? this.hostH : Math.min(this.body.contentHeight + (this.form == "bottom" ? 20 : 0), this.hostH - (this.form == "bottom" ? 24 : 48)) },
+    x = { this.form == "end" ? this.hostW - this.width * this.openT : this.form == "bottom" ? 0 : (this.hostW - this.width) / 2 },
+    y = { this.form == "bottom" ? this.hostH - this.height * this.openT + this.dragY
+        : this.form == "end" ? 0 : (this.hostH - this.height) / 2 + 16 * (1 - this.openT) },
+    opacity = { this.form == "center" ? this.openT : 1 },
+
+    closed() { dragY = 0 },
+
+    scrim: View [ pointerEvents = "none",
+        x = { -classroot.x }, y = { -classroot.y },
+        width = { classroot.hostW }, height = { classroot.hostH },
+        fill = { provided("theme").scrimFill },
+        opacity = { (provided("theme").scrimOpacity) * classroot.openT } ],
+
+    panel: View [ width = 100%, height = { parent.height + (classroot.form == "bottom" ? 40 : 0) },
+        cornerRadius = { classroot.form == "bottom" ? [(provided("theme").sheetCornerRadius), (provided("theme").sheetCornerRadius), 0, 0] : classroot.form == "end" ? 0 : (provided("theme").sheetCornerRadius) - 2 },
+        fill = { provided("theme").surface },
+        shadow = { provided("theme").sheetShadow } ],
+
+    // the bottom sheet's handle: pull it down past a quarter of the sheet to put it away
+
+    handle: View [ visible = { classroot.form == "bottom" }, width = 100%, height = 20, claim = y,
+        bar: View [ x = center, y = 7, width = 36, height = 5, cornerRadius = 3, fill = { provided("theme").line } ],
+        onPointerMove(e: PointerEvent) { if (e.deltaY != 0 || classroot.dragY != 0) classroot.dragY = Math.max(0, e.deltaY) },
+        onPointerUp(e: PointerUpEvent) {
+            if (!e.canceled && classroot.dragY > classroot.height / 4) classroot.close()
+            else classroot.dragY = 0
+            }
+        ],
+
+    body: View [ y = { classroot.form == "bottom" ? 20 : 0 }, width = 100%,
+        height = { classroot.height - this.y },
+        scrolls = y,
+        padding = { classroot.form == "bottom" ? [4, 18, 24, 18] : 24 },
+        layout: SimpleLayout [ axis = y, spacing = 12 ]
+        ]
+    ]

@@ -36,10 +36,6 @@ View [ x = 20, y = 20, width = 130, height = 38, cornerRadius = 8, fill = steelb
 The text currently displayed, pushed in by the `Tooltips` service from the hovered view's
 `tooltipLabel`. **A subclass reads this; nothing writes it from app code.**
 
-## shown
-Whether a tip is currently up. Driven by the service's delay, retarget and hide rules —
-not by you.
-
 ## placement
 Where the chip sits, elected by `provided("theme").tooltipPlacement`: `"below"` (the default,
 centred under the target, flipping above at the edge), `"above"` (the Fluent default,
@@ -88,14 +84,23 @@ A hairline only when the theme names a tooltip line; flat themes get none.
 ## selectable
 Chrome, never prose: a tip's text does not select, even inside a `selectable` region — the same provision every `Control` makes for its label.
 
+## cornerRadius
+From the theme's `tooltipCornerRadius` (4 by default).
 */
 
-class Tooltip [
+include [ "floating.declare" ]
+
+class Tooltip extends Floating [
+    // a Floating in the floating layer (floating.declare): above everything in
+    // the app, taking no focus and no keys; presses pass through it, and a
+    // scroll aimed past it puts it away. It appears and goes at once.
+
+    kind = "floating",
+    pressPolicy = "ignore",
+    scrollPolicy = "dismiss",
     visible = { shown && label != "" },
-    ignoreLayout = true,                         // it sits beside its target; a parent's layout never arranges it
 
     label: string = "",
-    shown:   boolean = false,
     ex: number = 0,                              // the target's root-space box
     ey: number = 0,
     ew: number = 0,
@@ -105,12 +110,11 @@ class Tooltip [
 
     tips: Tooltips [
         onTooltip(e: TooltipEvent) {
-            if (e == null || e.root != app) { classroot.shown = false; return }
+            if (e == null || e.root != app) { classroot.close(); return }
             classroot.ex = e.x; classroot.ey = e.y; classroot.ew = e.w; classroot.eh = e.h
             classroot.px = app.pointerX; classroot.py = app.pointerY   // the pointer as it rests at show
             classroot.label = e.text
-            classroot.shown = true
-            classroot.raise()     // chrome stays chrome: above whatever raised last
+            classroot.show()
             }
         ],
 
@@ -118,7 +122,7 @@ class Tooltip [
     // election (below | above | pointer), always flipped when it would leave
     // the app and clamped horizontally
 
-    placement: string = { typeof provided("theme").tooltipPlacement == "string" ? provided("theme").tooltipPlacement : "below" },
+    placement: string = { provided("theme").tooltipPlacement },
 
     width  = { this.t.width + 16 },
     height = { this.t.height + 10 },
@@ -130,9 +134,9 @@ class Tooltip [
                 ? (ey - this.height - 7 < 0 ? ey + eh + 7 : ey - this.height - 7)
                 : (ey + eh + 7 + this.height > app.height ? ey - this.height - 7 : ey + eh + 7) },
 
-    cornerRadius = 4,
-    fill   = { typeof provided("theme").tooltipFill == "number" ? provided("theme").tooltipFill : 0x1B2733 },
-    stroke = { typeof provided("theme").tooltipStrokeColor == "number" ? stroke(1, provided("theme").tooltipStrokeColor) : null },
+    cornerRadius = { provided("theme").tooltipCornerRadius },
+    fill   = { provided("theme").tooltipFill },
+    stroke = { provided("theme").tooltipStrokeColor != null ? stroke(1, provided("theme").tooltipStrokeColor) : null },
 
     // pure chrome: never a pointer target — and never on the hover chain
     // either, which is what pointerEvents (unlike a hit-test override) governs.
@@ -146,7 +150,7 @@ class Tooltip [
     selectable = false,
 
     t: Text [ pointerEvents = "none",
-        x = 8, y = 5, fontSize = { typeof provided("theme").tooltipFontSize == "number" ? provided("theme").tooltipFontSize : 12 },
-        textColor = { typeof provided("theme").tooltipTextColor == "number" ? provided("theme").tooltipTextColor : 0xF4F6FA },
+        x = 8, y = 5, fontSize = { provided("theme").tooltipFontSize },
+        textColor = { provided("theme").tooltipTextColor },
         text = { classroot.label } ]
     ]

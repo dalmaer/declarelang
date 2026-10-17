@@ -46,7 +46,14 @@ The grey prompt shown while the field is empty.
 
 ## multiline
 Makes it a multi-line area rather than a single line — and then **Return inserts a newline**
-instead of firing `enter`.
+instead of firing `enter` (unless `enterSubmits`). Left unsized, a multi-line field is as
+tall as its text; to let it grow only so far and then scroll, cap it as any box is capped —
+`height = { Math.min(contentHeight, 120) }` — since its `contentHeight` is its text's.
+
+## enterSubmits
+For a `multiline` field: **Return submits** — fires `enter`, and commits a field with
+`commitOn = "enter"` — and **Shift-Return types the line break**, as in a chat composer.
+`false` by default (Return is a line break). A single-line field always submits on Return.
 
 ## spellcheck
 Toggles the native spell-check underline.
@@ -73,13 +80,14 @@ Fires on every edit, carrying the new text — for live validation or search-as-
 `<->` field the draft is already committed (per `commitOn`) by the time this runs.
 
 ## onEnter
-Fires when the user submits a single-line field (Return). On a `multiline` field Return
-makes a newline and this never fires.
+Fires when the user submits the field with Return: always on a single-line field, and on a
+`multiline` one that sets `enterSubmits` (where Shift-Return makes the newline instead).
+On a plain `multiline` field Return makes a newline and this does not fire.
 
 
 ## select()
 `select(at, end?)` — place the caret or select a range; the write half of the native
-selection (there are no selection facts to read). One verb, because a
+selection (`selectionStart` and `selectionEnd` are the read half). One verb, because a
 caret **is** a zero-length range: `select(7)` puts the caret at 7, `select(3, 9)`
 selects the range, and the word forms need no lengths — `select("start")`,
 `select("end")`, `select("all")`. Numbers clamp to the text, like a scroll write.
@@ -89,6 +97,18 @@ moment — so `field.select("start")` on a freshly loaded draft puts the caret a
 top instead of the platform's end-of-value default. A pointer click into the field
 keeps the clicked caret: a deliberate click names a spot, and outranks a held
 selection by the platform's own ordering.
+
+## selectionStart
+Where the selection starts, as an index into `text` — read-only, reported by the field as
+the user clicks, drags, types or moves the caret, so a constraint reading it follows along:
+`canBold = { field.selectionEnd > field.selectionStart }`. With no range selected it is
+the caret's position, and equals `selectionEnd`. Indices count UTF-16 units, as JavaScript
+strings do. To move the selection, call `select()` — the field is the truth, and a fact a
+program could write would race the user's own typing.
+
+## selectionEnd
+Where the selection ends — read-only; equal to `selectionStart` for a bare caret. See
+`selectionStart`.
 
 ## textColor
 The colour of the text being edited. Like the rest of the face it defaults to

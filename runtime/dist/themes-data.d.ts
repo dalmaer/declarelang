@@ -1,5 +1,6 @@
 export declare const Cupertino: Readonly<Record<string, unknown>>;
 export declare const CupertinoDark: Readonly<Record<string, unknown>>;
+export declare const ThemeDefaults: Readonly<Record<string, unknown>>;
 export declare const MountainView: Readonly<Record<string, unknown>>;
 export declare const MountainViewDark: Readonly<Record<string, unknown>>;
 export declare const Redmond: Readonly<Record<string, unknown>>;

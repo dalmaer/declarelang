@@ -9,7 +9,7 @@ swelled, what the menu bar belongs to — all held true at once by the
 runtime while you drag, resize, zoom, and click.
 
 - **Windows** are their own layer, created at runtime by name. One
-  `Window` class carries the chrome — a title bar you drag, edges and
+  `DeskWindow` class carries the chrome — a title bar you drag, edges and
   corners you resize (each with its resize cursor), a shadow that deepens
   when the window is front, and close / minimize / zoom controls — and
   subclasses carry the contents.
@@ -47,20 +47,22 @@ use [ BracketIcon, CodeIcon, AutoIcon, LightbulbIcon, BrandMark, HelpSearch ]
 // file itself, which the Declare Viewer window displays.
 
 ship [
-    islands = ["../../library/platform-apps/viewer/viewer", "../docs/docs", "../calendar/calendar", "../birds/birds", "../marketmap/marketmap"],
+    islands = ["../../library/platform-apps/viewer/viewer", "../docs/docs", "../calendar/calendar", "../birds/birds", "../marketmap/marketmap", "../tracker/tracker"],
     files = ["desktop.declare"]
     ]
 
 
 /*
-## Window — chrome once, contents per subclass
+## DeskWindow — chrome once, contents per subclass
 
-Every window on the desktop is one of these. `Window` carries all of the
-chrome — the shadow, the resize edges and corners, and the shade / zoom /
-minimize behaviors — and each subclass (Files, Viewer, AppWindow, About,
-Jot) supplies only its contents. Geometry the class shares is named
-once (`barH`, `minW`, `gutter`, `corner`…) so no derived position below
-carries a bare number.
+Every window on the desktop is one of these. It is a library `Window` — its
+own Tab cycle, F6 between windows, and its own layer for the menus and
+dialogs opened inside it, which hang past its edges and turn with its tilt —
+and `DeskWindow` adds all of the chrome: the shadow, the resize edges and
+corners, and the shade / zoom / minimize behaviors. Each subclass (Files,
+Viewer, AppWindow, About, Jot) supplies only its contents. Geometry the class
+shares is named once (`barH`, `minW`, `gutter`, `corner`…) so no derived
+position below carries a bare number.
 
 Two motions drive most of the class. **Open and close** run `baseScale`
 from the icon a window launched from up to full size and back, so it grows
@@ -71,12 +73,12 @@ magnification swell as the icons, blended by `miniT` from a free window
 */
 
 // one stop on a window's back/forward trail: where it was, and where in that
-// the person had scrolled (both opaque to the window — see Window.trail)
+// the person had scrolled (both opaque to the window — see DeskWindow.trail)
 
 schema Stop [ at: string, place: string ]
 
 
-class Window [ width = 560, height = 400, clip = true,
+class DeskWindow extends Window [ width = 560, height = 400,
     fill = { provided("theme").surface },
     stroke = { stroke(1, provided("theme").line) },
 
@@ -262,8 +264,14 @@ class Window [ width = 560, height = 400, clip = true,
     thumbRadius: number = 3.5,                   // the window's rounding at thumbnail scale, in dock pixels
     cornerRadius = { this.baseRadius + (this.thumbRadius * this.waveMag / Math.max(0.02, this.parkScale) - this.baseRadius) * this.miniT },
 
-    x = { this.wx + (this.slotX - this.wx) * this.miniT },
-    y = { this.wy + (this.parkY - this.wy) * this.miniT },
+    // From the first frame of the journey into the dock until it is home again,
+    // the window paints in the dock — above the plate, below the icons and
+    // badges — and so its x/y are in the dock's frame: the same place, less
+    // where the dock sits (the windows layer starts under the menu bar).
+
+    paintsIn = { this.miniT > 0 ? app.dock.parked : null },
+    x = { this.wx + (this.slotX - this.wx) * this.miniT - (this.miniT > 0 ? app.dock.x : 0) },
+    y = { this.wy + (this.parkY - this.wy) * this.miniT + (this.miniT > 0 ? app.menuBarH - app.dock.y : 0) },
     scale = { (this.baseScale + (this.parkScale - this.baseScale) * this.miniT) * (1 + (this.zoomA - 1) * (1 - this.miniT)) },
 
     // Each journey stops the other before it starts, so a restore mid-park never
@@ -350,17 +358,14 @@ class Window [ width = 560, height = 400, clip = true,
 
     activate() { app.wm.frontId = this.recId; app.wm.raiseWin(this); if (!plain) app.launcher.dismissAbouts(); this.takeKeyboard() },
 
-    // The keyboard follows focus, so the window in front takes it: focus left
-    // in another window, or in a program running in one, is let go. A window
-    // that runs a program hands it the keyboard instead (AppWindow).
+    // The keyboard follows focus, so the window in front takes it: back on the
+    // control that last had focus in it (the library Window's enter), and a
+    // window with nothing to focus lets go of a focus left in another window.
+    // A window that runs a program hands it the keyboard instead (AppWindow).
 
     takeKeyboard() {
-        const f = Focus.getFocus()
-        if (f != null && !this.holds(f)) Focus.blur()
-        },
-    holds(v: View) -> boolean {
-        for (let n: View | null = v; n != null; n = n.parent as View | null) if (n == this) return true
-        return false
+        this.enter()
+        if (!this.holdsFocus()) Focus.blur()
         },
 
     // Raising is split by pointer kind. A mouse raises the instant it touches
@@ -911,38 +916,27 @@ The Help menu's search field, rendered as a menu `kind:` row: the row's chrome (
 highlight, no pick) is the menu's, and inside sits a live `TextInput` — a genuine test
 of keyboard focus inside a raised layer.
 
-The search *look* is two attributes, not a class of its own: a capsule is
-`cornerRadius = height / 2`, and `padding` opens the room the magnifier sits in. The
-field keeps its own derived chrome (surface fill, and the 1px edge that turns accent
-while focused), which a wrapper drawing the box itself would have displaced.
+The search *look* is attributes, not a class of its own: a capsule is
+`cornerRadius = height / 2`, and per-side `padding` opens the room the magnifier sits in.
+The field is the capsule, so focus — and the focus ring, which takes the focused view's
+corners — frames what a person sees (planes.md §14); the magnifier is its child.
 */
 
 class HelpSearch [ height = 40,
     width = 100%,
 
-    // The capsule is a view, and the field sits inside it: a leading glyph
-    // needs its inset horizontally only, which is a position, not a padding —
-    // `padding` is one number on all four sides, and 28px of it does not fit
-    // a 30px-tall box.
-    //
-    // The cost is reproducing the chrome TextInput derives for itself — surface
-    // fill, and the 1px edge that turns accent while focused. Both are read off
-    // the same provided theme the field would have used, so a theme swap still
-    // carries. The capsule reaches 12px from the menu's edges, past the kind-row
-    // host's standard 24px inset — hence the negative x.
+    // The capsule reaches 12px from the menu's edges, past the kind-row host's
+    // standard 24px inset — hence the negative x.
 
-    cap: View [ x = -12, y = 5, width = { parent.width + 10 }, height = 30,
+    sf: TextInput [ x = -12, y = 5, width = { parent.width + 10 }, height = 30,
         cornerRadius = { this.height / 2 },
-        fill = { provided("theme").surface },
-        stroke = { stroke(1, this.sf.focused ? provided("theme").accent : provided("theme").line) },
+        padding = [0, 8, 0, 28],
+        placeholder = "Search",
 
-        // chrome off: the capsule draws it. The x **is** the glyph's room.
+        // children sit in the content box, past the 28px left inset: back
+        // into it, 10px from the capsule's edge
 
-        sf: TextInput [ x = 28, y = 0, width = { parent.width - 36 }, height = 100%,
-            padding = 0, fill = null, stroke = null, cornerRadius = 0,
-            placeholder = "Search" ],
-
-        mag: View [ x = 10, y = center,
+        mag: View [ x = -18, y = center,
             width = 14, height = 14, pointerEvents = "none",
             draw(d: Draw) {
                 d.strokeStyle = provided("theme").textFaint
@@ -960,6 +954,29 @@ class HelpSearch [ height = 40,
 
 
 /*
+## ShortcutRow, ShortcutLine, ShortcutHead — the hold-⌘ panel's rows
+
+The panel lists `Keys.shortcutsInForce()` — what a key press would do where focus is now,
+nearest declaration first, a hosted program's own and the desktop's alike — grouped by the
+menu each sits in. A heading and a shortcut are two kinds of record, so two classes.
+*/
+
+class ShortcutRow [ width = 100% ]
+
+class ShortcutLine extends ShortcutRow [ height = 24,
+    Text [ y = center, fontSize = 13, text = { "" + :label },
+        textColor = { :enabled == false ? provided("theme").textFaint : provided("theme").text } ],
+    Text [ x = end, y = center, fontSize = 13, text = { "" + :key }, textColor = { provided("theme").textFaint } ]
+    ]
+
+
+class ShortcutHead extends ShortcutRow [ height = 28,
+    Text [ y = { parent.height - this.height - 3 }, fontSize = 11, fontWeight = semibold,
+        text = { "" + :text }, textColor = { provided("theme").textFaint } ]
+    ]
+
+
+/*
 ## AboutWindow — a tall, image-topped About box
 
 One class serves the desktop and every application: `forApp` picks the art,
@@ -967,7 +984,7 @@ the name, and the blurb. `plain` windows give up resize and shade/zoom — the
 close control is the whole interface.
 */
 
-class AboutWindow extends Window [ width = 280, height = 380, plain = true,
+class AboutWindow extends DeskWindow [ width = 280, height = 380, plain = true,
 
     // the subject arrives at creation (openAbout passes the app instance);
     // name, blurb, and art all read it — nothing here switches on a kind
@@ -1095,7 +1112,27 @@ class FilesColumn [ height = 100%, clip = true, fill = { provided("theme").backg
 // a list column — this level's nodes as selectable rows
 
 class ListColumn extends FilesColumn [
+
+    // from the keyboard a column is one Tab stop, entered at its selected row:
+    // Up and Down select, Right goes into a folder's column, Left back to the
+    // column before, Enter opens — the Finder's column view
+
+    colDepth: number = { 0 + (:depth ?? 0) },
+    rows() -> View[] { return this.lst.inner.children.filter((c) => (c as View).visible) as View[] },
+    stepRow(r: View, d: number) {
+        const rs = this.rows()
+        const n = rs[rs.indexOf(r) + d]
+        if (n == null) return
+        Focus.focus(n)
+        this.win!.selPath = "" + (n as any).item().at
+        },
+
     lst: View [ x = 0, y = 0, width = 100%, height = 100%, scrolls = y,
+        focusScope = stop,
+        focusEntry() -> View? {
+            const rs = classroot.rows()
+            return rs.find((r) => (r as any).on === true) ?? rs[0] ?? null
+            },
 
         // a second click that lands on dead space (the reveal slide moved
         // the rows out from under the pointer) still completes a pointer-
@@ -1122,8 +1159,27 @@ class ListColumn extends FilesColumn [
                         afterDelay(550, () => { if (w.pendingAt == at) w.pendingAt = "" })
                     }
                     },
+
+                // a right-click, or a long press, opens the row's menu — in the
+                // window's own layer, so it hangs past the window and turns with it
+
+                onContextMenu(e: PointerEvent) { classroot.win!.rowMenuFor(this, e, this.item()) },
+                onHold(e: PointerEvent) { classroot.win!.rowMenuFor(this, e, this.item()) },
+                item() -> object { return ({ name: "" + :name, path: "" + :path, doc: "" + :doc, loc: "" + :loc, hasKids: !!:hasKids, at: "" + :at }) },
+                focusable = true,
+                onKeyDown(e: KeyEvent) {
+                    const w = classroot.win!
+                    if (e.key == "ArrowDown") classroot.stepRow(this, 1)
+                    else if (e.key == "ArrowUp") classroot.stepRow(this, -1)
+                    else if (e.key == "ArrowRight" && :hasKids) { w.selPath = "" + :at; afterSettle(() => w.focusColumn(classroot.colDepth + 1)) }
+                    else if (e.key == "ArrowLeft") w.focusColumn(classroot.colDepth - 1)
+                    else if (e.key == "Enter") { if (:hasKids) app.launcher.openFolderWindow("" + :at, this); else w.openLeaf(this.item(), this) }
+                    },
+                ringed: boolean = { classroot.win!.ctxAt == "" + :at && classroot.win!.rowMenu.shown },
                 hl: View [ x = 4, y = 2, width = { parent.width - 8 }, height = { classroot.win!.rowH - 4 }, cornerRadius = 5,
-                    visible = { parent.on }, fill = { provided("theme").accent } ],
+                    visible = { parent.on || parent.ringed },
+                    fill = { parent.on ? provided("theme").accent : null },
+                    stroke = { parent.ringed && !parent.on ? stroke(2, provided("theme").accent) : null } ],
                 fo: FolderIcon [ x = 11, y = center, visible = { :hasKids } ],
                 fi: FileIcon [ x = 12, y = center, visible = { !:hasKids } ],
                 nm: Text [ x = 34, y = center, fontSize = 13, wrap = false, width = { parent.width - 52 },
@@ -1165,7 +1221,7 @@ and clip independently, the dividers between them drag, and a double-click
 opens a document in the Viewer.
 */
 
-class FilesWindow extends Window [
+class FilesWindow extends DeskWindow [
 
     // the selection chain: the open nodes' names, newline-joined, one per column
     // ("" = nothing open). Every level of the hierarchy — even the top — is data
@@ -1276,6 +1332,40 @@ class FilesWindow extends Window [
     // File → Open (⌘O) on this window's current selection: a document opens in the
     // viewer, a folder opens a new window rooted at it — the double-click actions.
 
+    // the keyboard into column `d`: back on the row it last had there, else the
+    // selected one
+
+    focusColumn(d: number) {
+        const c = this.body.strip.row.children[d]
+        if (c == null || (c as any).lst == null) return
+        Focus.focusIn((c as any).lst as View)
+        const f = Focus.getFocus() as any
+        if (f != null && f.item != null && f.on !== true) this.selPath = "" + f.item().at
+        },
+
+    // the row menu: one for the window, opened for whichever row asked; the
+    // row it serves is ringed while it is up, as in the Finder
+
+    ctxItem: object = null,
+    ctxAt: string = { this.ctxItem != null ? "" + this.ctxItem.at : "" },
+    rowMenuFor(v: View, e: PointerEvent, it: object) {
+        this.activate()
+        this.ctxItem = it
+        this.rowMenu.open(v, e)
+        },
+    ctxPicked(id: string) {
+        const it = this.ctxItem
+        if (it == null) return
+        if (id == "open") { if (it.hasKids) app.launcher.openFolderWindow("" + it.at, null); else this.openLeaf(it, null) }
+        else if (id == "text") app.launcher.openViewer("../../" + it.path, null)
+        },
+    rowMenu: ContextMenu [
+        items = { classroot.ctxItem == null ? [] : classroot.ctxItem.hasKids
+            ? [ ({ id: "open", label: "Open in New Window" }) ]
+            : [ ({ id: "open", label: "Open" }), ({ id: "text", label: "Open as Text", enabled: "" + classroot.ctxItem.path != "" }) ] },
+        picked(id: string) { classroot.ctxPicked(id) }
+        ],
+
     openSelection() {
         if (this.selPath == "") return
         const cols = this.columnData(this.selPath, app.docsModel.value, this.rootPath)
@@ -1341,7 +1431,7 @@ child's own name, `island.childName`), activation, and the values it provides th
 environment it hands the island.
 */
 
-class AppWindow extends Window [ width = 880, height = 560,
+class AppWindow extends DeskWindow [ width = 880, height = 560,
     base: string = { :props.base ?? "" },       // provided: the hosted app's home, in this app's transport
     subject: string = { :props.subject ?? "" },  // provided: the program a viewer window shows
 
@@ -1395,6 +1485,8 @@ class AppWindow extends Window [ width = 880, height = 560,
         // hostProvided(name, default): the desktop's appearance (a tenant's
         // Auto mode follows it; toggling re-derives the hosted app), and the
         // app's own base and subject. A tenant that never asks ignores them.
+        // (Its menus and dialogs open in this window's layer with nothing
+        // listed: an AppIsland passes the overlay layer on by itself.)
 
         provides = ["dark", "base", "subject"],
         dark: boolean = { app.darkMode },
@@ -1412,7 +1504,7 @@ reference page from the documentation model; anything else fetches the real
 file as text. Its title is the file's basename.
 */
 
-class ViewerWindow extends Window [ width = 640, height = 460,
+class ViewerWindow extends DeskWindow [ width = 640, height = 460,
     path: string = { :props.path ?? "" },
 
     // the window's name is the file being viewed — its basename, not the path
@@ -1431,7 +1523,7 @@ class ViewerWindow extends Window [ width = 640, height = 460,
     src: DataSource [ format = "text", url = { classroot.path } ],
 
     // the scrolling body is a real pointer target covering the whole window,
-    // and subclass children attach after the base's — so the Window's resize
+    // and subclass children attach after the base's — so the DeskWindow's resize
     // strips re-promote above it (order is an attribute) or edge drags never land
 
     onInit() {
@@ -1481,11 +1573,11 @@ A custom window type: square corners, yellow paper, and — when active — a
 saturated title strip carrying olive-outlined pale widgets (a close box at the
 left; a zoom triangle and a collapse box at the right). An inactive note is
 chromeless: the strip and widgets vanish into the paper. It keeps all of the
-base `Window`'s behavior — drag, the activation shadow, shade, resize edges —
+base `DeskWindow`'s behavior — drag, the activation shadow, shade, resize edges —
 through `chrome = false`, so here chrome is a skin, not the skeleton.
 */
 
-class JotWindow extends Window [ width = 300, height = 250, chrome = false,
+class JotWindow extends DeskWindow [ width = 300, height = 250, chrome = false,
     baseRadius = 0, barH = 12, minW = 160, minH = 90,
     title = "",                                  // untitled — labels fall back to the app's name
     note: string = { :props.note ?? "" },       // the note's seed text
@@ -2116,6 +2208,30 @@ class MarketMapApp extends HostedApp [ id = "marketmap", label = "Market Map", t
     ]
 
 
+class TrackerApp extends HostedApp [ id = "tracker", label = "Tracker", title = "Tracker",
+    blurb = "The actual apps/tracker — ten thousand issues to list, filter and edit — hosted as an embedded app.",
+    hue1 = #8E7CF0, hue2 = #5B45C9, drawn = true,
+    prog = "../tracker/tracker", base = "../tracker/", src = "../tracker/tracker.declare",
+    face(d: Draw) {
+        // the list: three rows, each a status dot and a title bar, the first
+        // one's dot filled — an issue closed
+        d.fillStyle = 0xFFFFFF
+        for (const y of [14, 24, 34]) {
+            d.beginPath()
+            d.arc(13, y, 3.2, 0, 6.2832)
+            if (y == 14) d.fill()
+            else { d.strokeStyle = "#FFFFFF"; d.lineWidth = 1.6; d.stroke() }
+            d.beginPath()
+            d.roundRect(20, y - 2, y == 34 ? 15 : 20, 4, 2)
+            d.fill()
+            }
+        }
+    ]
+
+
+// Write is out of the dock while the tracker stands in for it (2026-10-15);
+// the class stays so it can come back: declare `write: WriteApp [ ]` and list it.
+
 class WriteApp extends InertApp [ id = "write", label = "Write", title = "Write",
     quip = "No.", hue1 = #F49B45, hue2 = #C96B1D, drawn = true,
     face(d: Draw) {
@@ -2230,7 +2346,7 @@ class WinManager extends Node [
     // anywhere.
 
     frontId: string = "",
-    frontWin: Window = { this.winOf(this.frontId) },
+    frontWin: DeskWindow = { this.winOf(this.frontId) },
 
     // the keyboard goes with the front: however a window comes to the front, it
     // takes the keyboard, and with none in front the desktop has it
@@ -2262,15 +2378,15 @@ class WinManager extends Node [
 
     miniData: Dataset [ contents = { { minis: app.wm.minis() } } ],
 
-    appOf(w: Window?) -> DesktopApp { return w != null && w.forApp != null ? w.forApp : app.launcher.files },
+    appOf(w: DeskWindow?) -> DesktopApp { return w != null && w.forApp != null ? w.forApp : app.launcher.files },
 
     activeApp: DesktopApp = { this.appOf(app.wm.frontWin) },
 
     // ── the live windows (order = record order) ──
 
-    windows() -> Window[] { return app.wins.childViews as Window[] },
-    miniList() -> Window[] { return this.windows().filter((w) => this.isMin(w)).sort((a, b) => this.ixOf(a) - this.ixOf(b)) },
-    winOf(id: string) -> Window {
+    windows() -> DeskWindow[] { return app.wins.childViews as DeskWindow[] },
+    miniList() -> DeskWindow[] { return this.windows().filter((w) => this.isMin(w)).sort((a, b) => this.ixOf(a) - this.ixOf(b)) },
+    winOf(id: string) -> DeskWindow {
         return this.windows().find((w) => w.recId == id) ?? null
         },
     idxOf(id: string) -> number { return this.recs().findIndex((r) => r.id == id) },
@@ -2295,7 +2411,7 @@ class WinManager extends Node [
     // a raise is a move to the top of the normal band (just under the
     // minimized tail); the tail's own order is the band's business
 
-    raiseWin(w: Window) {
+    raiseWin(w: DeskWindow) {
         if (w == null || w.recId == "" || this.isMin(w)) return
         const ws = this.recs()
         const from = ws.findIndex((r) => r.id == w.recId)
@@ -2316,7 +2432,7 @@ class WinManager extends Node [
         if (i >= 0) this.list.removeAt(["wins"], i)
         },
 
-    focusWin(w: Window?) { if (w == null) return; if (this.isMin(w)) this.restoreMini(w); else w.activate() },
+    focusWin(w: DeskWindow?) { if (w == null) return; if (this.isMin(w)) this.restoreMini(w); else w.activate() },
 
     // Quit closes every window of that application — each by its own reverse
     // zoom — and clears its running flag (Files has no Quit; it's always
@@ -2364,14 +2480,14 @@ class WinManager extends Node [
     window's own — animators drive views, records carry facts.
     */
 
-    isMin(w: Window?) -> boolean { return w != null && w.dockSlot >= 0 },
-    ixOf(w: Window?) -> number { return w != null ? w.dockSlot : -1 },
-    labelFor(w: Window) -> string { const t = this.titleOf(w); return t != "" ? t : this.appOf(w).title },
+    isMin(w: DeskWindow?) -> boolean { return w != null && w.dockSlot >= 0 },
+    ixOf(w: DeskWindow?) -> number { return w != null ? w.dockSlot : -1 },
+    labelFor(w: DeskWindow) -> string { const t = this.titleOf(w); return t != "" ? t : this.appOf(w).title },
 
-    startPark(w: Window) { w.miniBack.stop(); w.bornX = 0; w.bornY = 0; w.miniGo.start() },
-    startUnpark(w: Window) { w.miniGo.stop(); w.miniBack.start() },
+    startPark(w: DeskWindow) { w.miniBack.stop(); w.bornX = 0; w.bornY = 0; w.miniGo.start() },
+    startUnpark(w: DeskWindow) { w.miniGo.stop(); w.miniBack.start() },
 
-    minimizeWin(w: Window) {
+    minimizeWin(w: DeskWindow) {
         if (w == null || this.isPlain(w) || this.isMin(w)) return
         // capture what the dock needs while the window is parked — label and
         // raw geometry (pixel fitting is the dock's business, dock.tiles)
@@ -2382,9 +2498,9 @@ class WinManager extends Node [
         this.startPark(w)
         },
 
-    bringFront(w: Window) { w.activate() },              // not focusWin — that would recurse via isMin
+    bringFront(w: DeskWindow) { w.activate() },              // not focusWin — that would recurse via isMin
 
-    restoreMini(w: Window) {
+    restoreMini(w: DeskWindow) {
         if (w == null || !this.isMin(w) || w.homing) return   // already on the way home
         w.homing = true
         this.startUnpark(w)                      // the slot stays mine until the journey home ends
@@ -2394,7 +2510,7 @@ class WinManager extends Node [
     // miniBack's onStop: the window is home — its record rejoins the normal
     // band's top, the slot is released, and it takes focus
 
-    unparked(w: Window) {
+    unparked(w: DeskWindow) {
         this.patchWin(w.recId, ({ mini: false }))
         const from = this.idxOf(w.recId)
         const rest = this.recs().filter((r) => r.id != w.recId)
@@ -2410,9 +2526,9 @@ class WinManager extends Node [
         const ws = this.miniList()
         if (i >= 0 && i < ws.length) this.restoreMini(ws[i])
         },
-    closeWin(w: Window) { w.beginClose() },              // the reverse zoom; removal on its onStop
+    closeWin(w: DeskWindow) { w.beginClose() },              // the reverse zoom; removal on its onStop
 
-    reallyClose(w: Window) {
+    reallyClose(w: DeskWindow) {
         // an About box carries its subject's forApp but is not a window of that
         // app — `plain` is the discriminator, so closing "About Markdown" never
         // decrements the viewer count
@@ -2431,8 +2547,8 @@ class WinManager extends Node [
         return w.scale < 0.9 && Math.abs(w.scale * w.width - slotW) < 0.5
         },
 
-    isPlain(w: Window?) -> boolean { return w != null && w.plain },
-    titleOf(w: Window?) -> string { return w != null ? w.title : "" }
+    isPlain(w: DeskWindow?) -> boolean { return w != null && w.plain },
+    titleOf(w: DeskWindow?) -> string { return w != null ? w.title : "" }
     ]
 
 
@@ -2474,7 +2590,7 @@ class Launcher extends Node [
     jots:     JotsApp     [ ],
     birds:    BirdsApp    [ ],
     marketmap: MarketMapApp [ ],
-    write:    WriteApp    [ ],
+    tracker:  TrackerApp  [ ],
     mail:     MailApp     [ ],
     music:    MusicApp    [ ],
     terminal: TerminalApp [ ],
@@ -2483,7 +2599,7 @@ class Launcher extends Node [
     // the dock's order, and the enumeration every by-id lookup walks
 
     roster: DesktopApp[] = { [this.files, this.markdown, this.viewer, this.docs, this.calendar,
-        this.jots, this.birds, this.marketmap, this.write, this.mail, this.music, this.terminal] },
+        this.jots, this.birds, this.marketmap, this.tracker, this.mail, this.music, this.terminal] },
 
     byId(id: string) -> DesktopApp { return this.roster.find((a) => a.id == id) ?? null },
 
@@ -2753,7 +2869,7 @@ model — `wm` (the windows as data: records whose order is the stacking), the
 windows layer, menu bar, dock, alert, in paint order. Each view owns its own state and geometry;
 the nodes never reach into them. What stays flat here has a reason to be
 root-wide: the theme, the appearance choice, the window eggs (tilt/zoom — read
-by every Window), and `command`, the one dispatch seam the menu bar, the dock, and the keyboard all
+by every DeskWindow), and `command`, the one dispatch seam the menu bar, the dock, and the keyboard all
 route through.
 
 It tracks the browser window down to a size floor — below it the host pans
@@ -2792,7 +2908,7 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
 
     menuBarH: number = 32,                       // the menu bar's height; windows live below it
 
-    // The tilt easter egg's seed (see Window.tilts): 0 = a level desktop
+    // The tilt easter egg's seed (see DeskWindow.tilts): 0 = a level desktop
     // (boot state — the egg is dormant until pressed). `r` bumps it and every
     // window springs to a fresh random lean; `R` zeroes it and they all
     // spring level.
@@ -2880,11 +2996,8 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
             if (e.key == "R" && !e.meta && !e.repeat) { app.tiltSeed = 0; return }                  // …and level again
             if (e.key == "s" && !e.meta && !e.repeat) { app.scaleSeed = app.scaleSeed + 1; return } // the zoom egg: every window springs to a random scale
             if (e.key == "S" && !e.meta && !e.repeat) { app.scaleSeed = 0; return }                 // …and true-size again
-            if (!e.meta || e.repeat || e.key == "Meta") return
-            if (app.bar.mb.shown) return             // an open menu owns the keyboard
-            const combo = "⌘" + (e.key.length == 1 ? e.key.toUpperCase() : e.key)
-            const hit = (app.bar.keyRegistry || []).find((r) => r.key == combo && r.enabled != false)
-            if (hit != null) app.command("" + hit.id)
+            // ⌘-shortcuts are the menu bar's: each item's key: is declared for
+            // the whole program, and arrives at the bar's picked() (Shortcuts)
             }
         ],
 
@@ -2993,10 +3106,10 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
 
     wins: View [ x = 0, y = { app.menuBarH }, width = { app.width }, height = { app.height - app.menuBarH },
         datapath = { app.wm.list.value },
-        Window [ datapath = :wins[], key = :id,
+        DeskWindow [ datapath = :wins[], key = :id,
             classFor = { :cls == "FilesWindow" ? FilesWindow : :cls == "ViewerWindow" ? ViewerWindow
                 : :cls == "AppWindow" ? AppWindow : :cls == "AboutWindow" ? AboutWindow
-                : :cls == "JotWindow" ? JotWindow : Window } ]
+                : :cls == "JotWindow" ? JotWindow : DeskWindow } ]
         ],
 
     // No background: the menu bar's words render straight on the wallpaper.
@@ -3086,13 +3199,10 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
             return out
             },
 
-        // ── ⌘-shortcuts dispatch from the menus' own records: one registry, derived
-        // from whatever the contextual bar currently shows, so the active
-        // application's keys are automatically the live set — nothing is declared
-        // twice.
-
-        keyRegistry: array = { (app.bar.menus || [])
-            .flatMap((m) => (m.items || []).filter((r) => r.key).map((r) => ({ menu: "" + m.label, ...r }))) },
+        // ⌘-shortcuts are the menus' own records: the bar declares each item's
+        // key: for the whole program (MenuBar's Shortcuts), so the active
+        // application's keys are automatically the live set — nothing is
+        // declared twice.
 
         // the menu chain's owner offers the dismiss: outsiders (the dock, the
         // App's command seam) ask the bar, never its internals
@@ -3114,6 +3224,41 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
     magnification swell (see "The dock's magnification swell" above). Its width is
     the plate's, and it stays centered at the bottom of the screen.
     */
+
+    // ── hold ⌘: the shortcuts in force where focus is (planes.md §9) — the
+    // records Keys resolves from the focused view out, through a hosted
+    // program into the desktop; shown while ⌘ is held alone ──
+
+    shortcutsShown: boolean = false,
+    shortcutList: array = [],
+    shortcutData: Dataset [ contents = { { rows: app.panelRows(app.shortcutList) } } ],
+    cmdHold: Keys [ onCommandHeld(on: boolean) {
+        if (on) app.shortcutList = Keys.shortcutsInForce()
+        app.shortcutsShown = on
+        }
+        ],
+
+    // grouped by menu, in the order the groups first appear
+
+    panelRows(list: array) -> array {
+        const groups: string[] = []
+        for (const r of list) if (groups.indexOf("" + r.group) < 0) groups.push("" + r.group)
+        const out: object[] = []
+        for (const g of groups) {
+            out.push(({ kind: "head", text: g == "" ? "Shortcuts" : g }))
+            for (const r of list) if ("" + r.group == g) out.push(({ kind: "line", label: r.label, key: r.key, enabled: r.enabled }))
+            }
+        return out
+        },
+
+    shortcutPanel: View [ visible = { app.shortcutsShown }, width = 340, x = center,
+        y = { Math.max(app.menuBarH + 20, (app.height - this.height) / 2) },
+        padding = [8, 18, 14, 18], cornerRadius = 14,
+        fill = { provided("theme").surface }, shadow = shadow(0, 16, 50, #00000059),
+        layout: SimpleLayout [ axis = y ],
+        datapath = { app.shortcutData.value },
+        ShortcutRow [ datapath = :rows[], classFor = { :kind == "head" ? ShortcutHead : ShortcutLine } ]
+        ],
 
     dock: View [ height = 150,
 
@@ -3291,9 +3436,24 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
                 d.stroke()
                 }
             ],
+
+        // where a minimized window paints while it is parked (DeskWindow's paintsIn):
+        // above the plate, below the icons and the windows' badges
+
+        parked: View [ x = 0, y = 0, width = 100%, height = 100% ],
+
+        // the icons are one Tab stop: Left and Right move among them, Enter or
+        // Space opens the focused one, as a click does
+
         row: View [ x = 16, y = 0, height = 100%,
             datapath = { app.launcher.data.value },
             layout: SimpleLayout [ axis = x, spacing = 16 ],
+            focusScope = stop,
+            step(icon: View, d: number) {
+                const ics = this.children.filter((c) => (c as View).visible)
+                const i = ics.indexOf(icon)
+                if (i >= 0 && ics.length > 1) Focus.focus(ics[(i + d + ics.length) % ics.length] as View)
+                },
 
             // a running app's icon raises its open windows instead of opening
             // more — dockOpen: raise if any, else the app's own open verb
@@ -3308,7 +3468,13 @@ App [ appName = "Declare Desktop", scrolls = none,   // a fixed stage: overflow 
                 ix = { rowIndex },
                 appId = { "" + (:id ?? "") },
                 running = { :running == true },
-                onClick() { const a = this.ap; if (a != null) app.wm.dockOpen(a, () => a.launch(this)) }
+                focusable = true,
+                onClick() { const a = this.ap; if (a != null) app.wm.dockOpen(a, () => a.launch(this)) },
+                onKeyDown(e: KeyEvent) {
+                    if (e.key == "Enter" || e.key == " ") this.onClick()
+                    else if (e.key == "ArrowRight") app.dock.row.step(this, 1)
+                    else if (e.key == "ArrowLeft") app.dock.row.step(this, -1)
+                    }
                 ]
             ],
 

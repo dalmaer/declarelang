@@ -27,6 +27,8 @@ import { Node, onDiscard } from "./node.js";
 import { View } from "./view.js";
 import { THEME_PRESETS, activeTone } from "./themes.js";
 import { Focus } from "./focus.js";
+import { setOutsidePressHook } from "./input.js";
+import { pressOutside, scrollOutside, contextOf, inside as insideAcross } from "./outside.js";
 import { Files } from "./files.js";
 import { Inspect } from "./inspect-service.js";
 import { afterSettle } from "./reactive.js";
@@ -49,6 +51,9 @@ function escapeHtml(s) {
 // "finish after your change has taken effect" (language §7). `measureText` is a
 // pure function of what it is given (text-measure.ts), and `escapeHtml` above is
 // another.
+// The open overlays answer presses aimed past them (outside.ts), at the router
+// of the top-level program.
+setOutsidePressHook((x, y) => { const root = Focus.getRoot(); return root !== null && pressOutside(root, x, y); }, (x, y) => { const root = Focus.getRoot(); return root !== null && scrollOutside(root, x, y); });
 setBodyServices({ Focus, Keys, Files, Inspect, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
 // A focused island is not a control: what its program claims, it claims itself.
 setKeysFocusProbe(() => { const f = Focus.getFocus(); return f !== null && !("$tenant" in f); });
@@ -76,6 +81,31 @@ setKeysPrograms({
         return true;
     },
     onGone: (node, fn) => onDiscard(node, fn),
+    inside: (node, ancestor) => {
+        for (let n = node; n !== null; n = n.parent)
+            if (n === ancestor)
+                return true;
+        return false;
+    },
+    claimHolds: (owner) => {
+        if (!(owner instanceof View))
+            return true;
+        const c = contextOf(owner), f = Focus.getFocus();
+        return c === null || f === null || insideAcross(f, c);
+    },
+    focusChain: () => {
+        const out = [];
+        let n = Focus.getFocus() ?? Focus.keyboardProgram();
+        while (n !== null) {
+            out.push(n);
+            n = n.parent ?? (n.$hostIsland ?? null);
+        }
+        return out;
+    },
+    typing: () => {
+        const f = Focus.getFocus();
+        return f !== null && typeof f.placeholder === "string" && typeof f.multiline === "boolean";
+    },
 });
 Focus.onFocusChange(() => Keys.keyboardMoved());
 //# sourceMappingURL=services.js.map

@@ -1107,6 +1107,7 @@ class MacSurface implements Surface, SceneSurface {
     editCallbacks.set(this.id, spec);
     emit(OP.EDIT, this.id, {
       multiline: spec.multiline === true, spellcheck: spec.spellcheck !== false,
+      enterSubmits: spec.enterSubmits === true,
       wrap: spec.wrap !== false, padding: insetSides(spec.padding ?? 0),
       value: spec.value ?? "", placeholder: spec.placeholder ?? "",
       // An editable carries its OWN style — the DOM backend styles the element
@@ -1575,4 +1576,7 @@ export function macEditFocus(id: number, focused: boolean): void {
 }
 export function macEditEnter(id: number): void {
   editCallbacks.get(id)?.onEnter?.();
+}
+export function macEditSelect(id: number, start: number, end: number): void {
+  editCallbacks.get(id)?.onSelect?.(start, end);
 }

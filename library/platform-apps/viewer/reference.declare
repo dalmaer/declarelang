@@ -7,14 +7,15 @@
 script {
     const REFERENCE_CLASSES: string[] = [
         "Accordion", "Animator", "AnimatorGroup", "App", "AppIsland", "AppearanceSwitch", "ArrowIcon", "Audio",
-        "AutoIcon", "Button", "Card", "CheckIcon", "Checkbox", "ChevronIcon", "CloseIcon", "Column",
-        "Combobox", "ContextMenu", "Control", "DOMIsland", "DataGrid", "DataSource", "Dataset", "Dialog",
-        "Divider", "EventStream", "Field", "Focus", "FocusRing", "Font", "FontFace", "Gauge",
-        "GridRow", "HTMLText", "Icon", "IconHost", "Image", "Keys", "Layout", "LightbulbIcon",
-        "Markdown", "Menu", "MenuBar", "MinusIcon", "MoonIcon", "Node", "Pane", "PlusIcon",
-        "ProgressBar", "Radio", "RadioGroup", "ResponsiveLayout", "Segmented", "SegmentedItem", "SimpleLayout", "Slider",
-        "Socket", "Spacer", "Spring", "State", "SunIcon", "Switch", "Table", "TableRow",
-        "Text", "TextInput", "TextLabel", "Time", "Tooltip", "Tooltips", "TweenLayout", "Video",
-        "View", "WrappingLayout"
+        "AutoIcon", "Button", "Card", "CheckCell", "CheckIcon", "Checkbox", "ChevronIcon", "CloseIcon",
+        "Column", "Combobox", "ContextMenu", "Control", "DOMIsland", "DataGrid", "DataSource", "Dataset",
+        "Dialog", "Divider", "EditCell", "EventStream", "Field", "Floating", "Focus", "FocusRing",
+        "Font", "FontFace", "Gauge", "GridCell", "GridRow", "HTMLText", "Icon", "IconHost",
+        "Image", "Keys", "Layout", "LightbulbIcon", "Markdown", "Menu", "MenuBar", "MinusIcon",
+        "MoonIcon", "Node", "OverlayStrata", "Pane", "PlusIcon", "Popover", "ProgressBar", "Radio",
+        "RadioGroup", "ResponsiveLayout", "Segmented", "SegmentedItem", "SelectCell", "Sheet", "Shortcuts", "SimpleLayout",
+        "Slider", "Socket", "Spacer", "Spring", "State", "SunIcon", "Switch", "Table",
+        "TableRow", "Text", "TextCell", "TextInput", "TextLabel", "Time", "Toast", "Tooltip",
+        "Tooltips", "TweenLayout", "Video", "View", "Window", "WrappingLayout"
         ]
     }

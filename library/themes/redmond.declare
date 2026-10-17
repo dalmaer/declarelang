@@ -31,7 +31,8 @@ theme Redmond [
     menuCornerRadius = 8, menuShadow = shadow(0, 8, 16, #00000030), menuHighlightFill = #F0F0F0, menuHighlightTextColor = #1B1B1B,
     scrimFill = #000000, scrimOpacity = 0.3, error = #C42B1C,
     dialogWidth = 448, dialogButtonLayout = "fill", dialogTitleFontSize = 20, dialogBodyFontSize = 14,
-    buttonStrokeColor = #D1D1D1
+    buttonStrokeColor = #D1D1D1,
+    segmentedSelectedFill = #FFFFFF      // the selected segment: the surface
     ]
 
 
@@ -52,5 +53,6 @@ theme RedmondDark [
     menuCornerRadius = 8, menuShadow = shadow(0, 8, 16, #00000059), menuHighlightFill = #3D3D3D, menuHighlightTextColor = #FFFFFF,
     scrimFill = #000000, scrimOpacity = 0.5, error = #FF99A4,
     dialogWidth = 448, dialogButtonLayout = "fill", dialogTitleFontSize = 20, dialogBodyFontSize = 14,
-    buttonStrokeColor = #505050
+    buttonStrokeColor = #505050,
+    segmentedSelectedFill = #505050      // the selected segment lifts above the track, as dark themes light what is raised
     ]

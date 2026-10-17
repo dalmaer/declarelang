@@ -140,6 +140,7 @@ export class TextInput extends Editor {
             padding: this.padding,
             placeholder: this.placeholder,
             style: this.$editStyle(),
+            enterSubmits: this.enterSubmits,
             onInput: (v) => this.$onNativeInput(v),
             // The native element ECHOES focus the runtime just gave it (Tab →
             // focusChanged → el.focus() → this event). Re-announcing the already-
@@ -159,6 +160,12 @@ export class TextInput extends Editor {
                 if (this.commitOn === "enter" && isTwoWay(this, "text"))
                     commitDraft(this, "text");
                 fireEvent(this, "enter");
+            },
+            onSelect: (start, end) => {
+                if (this.selectionStart !== start)
+                    this.selectionStart = start;
+                if (this.selectionEnd !== end)
+                    this.selectionEnd = end;
             },
         };
         s.setEditable(spec);
@@ -200,6 +207,23 @@ export class TextInput extends Editor {
             edited(this, "text", this.commitOn);
         fireEvent(this, "input", v);
     }
+    /** The field's text folds into `contentHeight` as its measured lines (the
+     *  same measure as the unset-height derive), so the documented cap reads as
+     *  it does for any box: `height = { Math.min(contentHeight, 120) }` — a
+     *  multi-line field that grows with its text, then scrolls. */
+    $contentExtent(size) {
+        if (size === "width")
+            return super.$contentExtent(size);
+        const font = fontString(this.$editStyle());
+        const met = fontMetrics(font);
+        const [, r, , l] = insetSides(this.padding);
+        const inner = this.width - l - r;
+        const lines = !this.multiline ? 1
+            : this.wrap && inner > 0
+                ? wrapEditable(this.text, font, inner, this.letterSpacing).length
+                : this.text.split("\n").length;
+        return Math.ceil(lines * (met.ascent + met.descent));
+    }
     /** Declare focus arrived/left — give or take the platform caret (Layer 2 hook,
      *  separate from the author's onFocus/onBlur). A held select() applies HERE,
      *  after activation — so Tab and programmatic focus land where the program
@@ -207,7 +231,6 @@ export class TextInput extends Editor {
      *  the browser places the click's caret at mouseup, after focus handlers —
      *  and that is the right ranking, because a deliberate click names a spot. */
     $focusChanged(focused) {
-        this.focused = focused; // the reactive fact themes and the house edge read
         this.$surface?.activateEditable(focused);
         if (focused)
             this.$applySelection();
@@ -250,6 +273,7 @@ defineAttributes(TextInput, {
     text: { def: "", push: (t) => t.$syncEditable() },
     placeholder: { def: "", push: (t) => t.$syncEditable() },
     multiline: { def: false, push: (t) => t.$syncEditable() },
+    enterSubmits: { def: false, push: (t) => t.$syncEditable() },
     spellcheck: { def: true, push: (t) => t.$syncEditable() },
     wrap: { def: true, push: (t) => t.$syncEditable() },
     // the field's content box, as View's: where the text sits inside it
@@ -260,7 +284,8 @@ defineAttributes(TextInput, {
             t.$syncEditable();
         } },
     initial: { def: "" },
-    focused: { def: false },
+    selectionStart: { def: 0 },
+    selectionEnd: { def: 0 },
     // commitOn / error / valid / dirty are declared on the Editor base.
 });
 //# sourceMappingURL=text-input.js.map

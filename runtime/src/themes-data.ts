@@ -53,6 +53,11 @@ export const Cupertino: Readonly<Record<string, unknown>> = /* @__PURE__ */ Obje
   dialogTitleFontSize: 13,
   dialogBodyFontSize: 12,
   buttonStrokeColor: 0xC6C6C8,
+  trackFill: 0xE3E3E8,
+  segmentedSelectedFill: 0xFFFFFF,
+  segmentDividerColor: 0xC7C7CC,
+  switchThumbFill: 0xFFFFFF,
+  sliderThumbFill: 0xFFFFFF,
 });
 
 export const CupertinoDark: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
@@ -105,6 +110,66 @@ export const CupertinoDark: Readonly<Record<string, unknown>> = /* @__PURE__ */ 
   dialogTitleFontSize: 13,
   dialogBodyFontSize: 12,
   buttonStrokeColor: 0x5A5A5E,
+  trackFill: 0x3A3A3C,
+  segmentedSelectedFill: 0x636366,
+  segmentDividerColor: 0x545458,
+  switchThumbFill: 0xE5E5EA,
+  sliderThumbFill: 0xE5E5EA,
+});
+
+export const ThemeDefaults: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
+  accordionFontSize: 14,
+  accordionHeaderHeight: 34,
+  appearanceSwitchSize: 32,
+  buttonHeight: 40,
+  checkboxSize: 20,
+  comboboxHeight: 30,
+  dialogBodyFontSize: 13,
+  dialogButtonLayout: "end",
+  dialogTitleFontSize: 15,
+  dialogWidth: 420,
+  disabledOpacity: 0.45,
+  dragShadow: {"fn":"shadow","dx":0,"dy":4,"blur":14,"color":4294967352},
+  error: 0xC93429,
+  focusRingGap: 0,
+  focusRingInnerWidth: 0,
+  focusRingWidth: 3,
+  gridCellCornerRadius: 3,
+  gridFontSize: 13,
+  gridHeaderFontSize: 12,
+  gridHeaderHeight: 30,
+  gridRowHeight: 28,
+  menuBarFontSize: 14,
+  menuBarHeight: 25,
+  menuBarTitleCornerRadius: 6,
+  menuCornerRadius: 8,
+  menuFontSize: 13,
+  menuHighlightCornerRadius: 5,
+  menuKeyFontSize: 12,
+  menuRowHeight: 26,
+  menuShadow: {"fn":"shadow","dx":0,"dy":10,"blur":40,"color":4294967352},
+  popoverCornerRadius: 12,
+  popoverShadow: {"fn":"shadow","dx":0,"dy":10,"blur":32,"color":4294967347},
+  progressBarHeight: 8,
+  radioSize: 18,
+  scrimFill: 0x000000,
+  scrimOpacity: 0.32,
+  segmentedCornerRadius: 8,
+  segmentedFontSize: 13,
+  segmentedHeight: 30,
+  sheetCornerRadius: 16,
+  sheetShadow: {"fn":"shadow","dx":0,"dy":8,"blur":40,"color":4294967360},
+  sliderTrackHeight: 4,
+  switchHeight: 24,
+  switchWidth: 44,
+  toastCornerRadius: 12,
+  toastFontSize: 13,
+  toastShadow: {"fn":"shadow","dx":0,"dy":6,"blur":24,"color":4294967360},
+  tooltipCornerRadius: 4,
+  tooltipFill: 0x1B2733,
+  tooltipFontSize: 12,
+  tooltipPlacement: "below",
+  tooltipTextColor: 0xF4F6FA,
 });
 
 export const MountainView: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
@@ -149,6 +214,7 @@ export const MountainView: Readonly<Record<string, unknown>> = /* @__PURE__ */ O
   dialogWidth: 340,
   dialogTitleFontSize: 22,
   dialogBodyFontSize: 14,
+  segmentedSelectedFill: 0xFFFFFF,
 });
 
 export const MountainViewDark: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
@@ -193,6 +259,7 @@ export const MountainViewDark: Readonly<Record<string, unknown>> = /* @__PURE__ 
   dialogWidth: 340,
   dialogTitleFontSize: 22,
   dialogBodyFontSize: 14,
+  segmentedSelectedFill: 0x625D69,
 });
 
 export const Redmond: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
@@ -245,6 +312,7 @@ export const Redmond: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object
   dialogTitleFontSize: 20,
   dialogBodyFontSize: 14,
   buttonStrokeColor: 0xD1D1D1,
+  segmentedSelectedFill: 0xFFFFFF,
 });
 
 export const RedmondDark: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
@@ -297,6 +365,7 @@ export const RedmondDark: Readonly<Record<string, unknown>> = /* @__PURE__ */ Ob
   dialogTitleFontSize: 20,
   dialogBodyFontSize: 14,
   buttonStrokeColor: 0x505050,
+  segmentedSelectedFill: 0x505050,
 });
 
 export const SanFrancisco: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
@@ -324,6 +393,7 @@ export const SanFrancisco: Readonly<Record<string, unknown>> = /* @__PURE__ */ O
   scrimFill: 0x10151B,
   scrimOpacity: 0.32,
   error: 0xC23528,
+  segmentedSelectedFill: 0xFFFFFF,
 });
 
 export const SanFranciscoDark: Readonly<Record<string, unknown>> = /* @__PURE__ */ Object.freeze({
@@ -351,6 +421,7 @@ export const SanFranciscoDark: Readonly<Record<string, unknown>> = /* @__PURE__ 
   scrimFill: 0x000000,
   scrimOpacity: 0.5,
   error: 0xFF7A6E,
+  segmentedSelectedFill: 0x34465A,
 });
 
 export const THEME_RECORDS: Readonly<Record<string, Readonly<Record<string, unknown>>>> = /* @__PURE__ */ Object.freeze({

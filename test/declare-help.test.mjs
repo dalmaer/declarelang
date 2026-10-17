@@ -158,12 +158,12 @@ await test("--json returns parseable data for hit and miss alike", () => {
 // `declare-help Popover` printed Menu with no word about why — read as a wrong
 // lookup rather than an answer (field report 2026-08-21).
 await test("a concept synonym announces the Declare name it answers with", () => {
-  const r = help("Popover");
+  const r = help("Snackbar");
   assert.equal(r.code, 0);
-  assert.ok(r.out.startsWith("'Popover' is not a Declare name — the Declare concept is Menu:"), `got:\n${r.out.slice(0, 160)}`);
-  assert.ok(r.out.includes("\nMenu — class"));
+  assert.ok(r.out.startsWith("'Snackbar' is not a Declare name — the Declare concept is Toast:"), `got:\n${r.out.slice(0, 160)}`);
+  assert.ok(r.out.includes("\nToast — class"));
   // an exact concept name carries no preface
-  assert.ok(help("Menu").out.startsWith("Menu — "));
+  assert.ok(help("Toast").out.startsWith("Toast — "));
 });
 
 await test("a class member table shows method SIGNATURES, not bare names", () => {

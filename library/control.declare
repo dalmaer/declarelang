@@ -45,11 +45,6 @@ disabled control never lights up. **Constrain it rather than assigning it**
 (`disabled = { app.muted }`) — it is ordinary derived state. Concrete controls also
 dim themselves against `provided("theme").disabledOpacity`.
 
-## focused
-True while this control holds keyboard focus. For the *ring*, you want nothing: the
-app-level `FocusRing` indicates focus for you. Read this only for a control's own
-focus styling.
-
 ## focusVisible
 Focused **and** the focus arrived by keyboard — the web's `:focus-visible` channel.
 Cleared by blur and by a pointer press on this control, so a clicked control shows no
@@ -117,11 +112,11 @@ for buttons and menu items. **Value controls whose state change is itself the fe
 (Checkbox, Switch, Radio) deliberately do not call it.**
 
 ## onFocus
-Records focus and captures the keyboard modality into `focusVisible`. An override must
-keep both or the focus channel goes dark.
+Captures the keyboard modality into `focusVisible`. An override must keep it or the
+focus channel goes dark. (`focused` itself is every view's fact, kept by the focus service.)
 
 ## onBlur
-Clears `focused` and `focusVisible`.
+Clears `focusVisible`.
 
 ## onPointerDown
 Claims focus, clears the `:focus-visible` channel, and opens `menu` if there is one —
@@ -143,7 +138,6 @@ A control takes focus unless it is disabled — one rule, so a disabled control 
 
 class Control [
     disabled: boolean = false,
-    focused:  boolean = false,
 
     // A control is chrome, not prose: its label never selects, even inside a
     // `selectable` region (a provision here vetoes the inherited value — the
@@ -163,7 +157,7 @@ class Control [
 
     // The keyboard affordance is the app-level FocusRing (focusring.declare —
     // one traveling indicator, declared once in the App), not a per-control
-    // ring; `focused` stays declared here for controls' own styling.
+    // ring; a control's own styling reads `focused`, every view's fact.
 
     // ── icons ──────────────────────────────────────────────────────────────
     //
@@ -228,8 +222,8 @@ class Control [
         afterDelay(flashMs, () => { this.flash = false })
         },
 
-    onFocus() { focused = true; focusVisible = Focus.byKeyboard() },
-    onBlur()  { focused = false; focusVisible = false },
+    onFocus() { focusVisible = Focus.byKeyboard() },
+    onBlur()  { focusVisible = false },
 
     // A click is also a focus claim — the keyboard picks up where the pointer
     // left. A menu opens here, not from `onClick`: a control routes the

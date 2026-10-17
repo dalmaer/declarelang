@@ -13,7 +13,9 @@ export interface FocusGeometry {
     root: View;
     /** The focused view's nearest scrolling ancestor (the root when none) —
      *  the container an indicator TRAVELS WITH (View.travelWith) so the
-     *  platform carries it through scrolls with zero lag. */
+     *  platform carries it through scrolls with zero lag. A scroller does not
+     *  carry what its pinned chrome holds: a control in a pane's ignoreScroll
+     *  header rides the next scroller out. */
     scroller: View;
     /** The view's origin in the scroller's CONTENT coordinates — where a
      *  traveled indicator positions itself (deliberately independent of the
@@ -30,6 +32,11 @@ export interface FocusGeometry {
     homeW: number;
     homeH: number;
     homeRad: number;
+    /** The view's turn in the scroller's content space, in degrees (0 when
+     *  nothing between turns it). When it is not 0, homeX/homeY are the box's
+     *  turned origin corner and homeW/homeH its own scaled size, so an
+     *  indicator turned by homeRot about its origin lies on the view. */
+    homeRot: number;
 }
 export declare class FocusService {
     private current;
@@ -63,7 +70,10 @@ export declare class FocusService {
     private queuedTarget;
     /** The tree root, for traversal when nothing is focused (set at attach). */
     setRoot(view: View | null): void;
+    /** The focused view — a tracked read: a constraint that reads it re-runs
+     *  when focus moves. */
     getFocus(): View | null;
+    private readonly currentCell;
     /** The top-level program's root — the program that has the keyboard while
      *  nothing is focused (null before one is mounted). */
     getRoot(): View | null;
@@ -81,8 +91,14 @@ export declare class FocusService {
     /** Focus a view (null = blur). A non-focusable or invisible view is ignored
      *  (never becomes the focus). Fires onBlur on the old, onFocus on the new.
      *  This public entry is the POINTER/PROGRAMMATIC path — it clears the
-     *  keyboard modality; Tab traversal (move) sets it. */
+     *  keyboard modality; Tab traversal (move) sets it. Called from a key's
+     *  handler (arrows roving a Segmented's segments, a shortcut focusing a
+     *  field), it is keyboard focus: the web's :focus-visible rule for script
+     *  focus during keyboard use. */
     focus(view: View | null): void;
+    /** The key service delivering to this one (deliverKeys) — asked whether a
+     *  focus call comes from a key's handler. */
+    keys: KeysService | null;
     private apply;
     /** Subscribe to focus changes. Returns the unsubscribe thunk — the `<-`
      *  wiring's contract (sources.ts). */
@@ -103,22 +119,45 @@ export declare class FocusService {
     blur(): void;
     next(): void;
     prev(): void;
-    /** The ordered focus stops in a view's group — its focusTrap ancestor, else
-     *  the root. Exposed for tooling/tests. */
+    /** The ordered focus stops of the cycle a view's Tab moves in (planes.md
+     *  §13.7) — the views Tab lands on, a scope's entry standing for the scope.
+     *  Exposed for tooling/tests. */
     sequenceFor(view: View | null): View[];
     private move;
+    /** Keyboard-focus `v` and show it: the focus-visible modality, and the web's
+     *  focus-reveal contract (a keyboard-focused control is scrolled into view,
+     *  minimum distance, through app scrollers and the document alike). */
+    private land;
+    /** Enter the focused region (Enter on a window focused as one stop): focus
+     *  what last had focus inside it, else its first stop. True when it entered. */
+    enter(): boolean;
+    /** Focus into `view`: what last had focus inside it, else its first stop —
+     *  how an overlay that takes focus takes it on opening. False when it holds
+     *  nothing to focus. */
+    focusIn(view: View): boolean;
+    /** Close the member scope focus has entered inside a `stop` (Esc in a cell's
+     *  editor, in a list row's controls): focus goes back to the stop. True when
+     *  it did. Esc never leaves a region (planes.md §13.3). */
+    leaveMember(): boolean;
+    /** The region keys (F6 / Shift-F6): move among the regions and stops of the
+     *  context around the region focus is in, entering a region it moves to. */
+    /** Is focus in `v` — on it, or inside it, a program hosted in an island
+     *  inside it included? A window asks it to know whether it has the keyboard
+     *  when what holds focus is a control of the program it hosts. */
+    /** Is focus inside the overlay that holds the keys? Then the keys the
+     *  overlay owns are still the focused view's. */
+    focusInClaimant(keys: KeysService): boolean;
+    holds(v: View): boolean;
+    /** Is focus inside a region (a window, a pane)? */
+    inRegion(): boolean;
+    nextRegion(dir: 1 | -1): void;
     /** The focused view's subtree is being discarded (or hidden) — move focus to
-     *  a live stop OUTSIDE it before it goes, so focus never dangles. Survivors
-     *  come from the dying view's OWN tree: when an embedded app is torn down
-     *  (a live-edit re-render), focus is dropped, never re-anchored into the
-     *  host app's controls. Called from View.discard() via the seam in view.ts. */
+     *  a live stop OUTSIDE it before it goes, so focus never dangles: the first
+     *  survivor in the same cycle, else in its program. Survivors come from the
+     *  dying view's OWN tree: when an embedded app is torn down (a live-edit
+     *  re-render), focus is dropped, never re-anchored into the host app's
+     *  controls. Called from View.discard() via the seam in view.ts. */
     noteDiscarded(view: View): void;
-    /** The nearest focusTrap ancestor of `view` (the group it belongs to), or the
-     *  view's OWN tree root when there is none. The tree anchor matters when more
-     *  than one app shares the page (an embedded preview inside a host app): the
-     *  focused view's group is ITS app's tree, so Tab cycles within the app the
-     *  user is interacting with and never leaks into the host's controls. */
-    private groupRoot;
 }
 export declare function deliverKeys(keys: KeysService, focus: FocusService): () => void;
 /** The runtime's focus service (LZX's lz.Focus). */

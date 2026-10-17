@@ -139,16 +139,16 @@ export default [
   {
     name: "table",
     route: async ({ drive }) => {
-      await drive.click("app.bar.pageSwitch.2");
+      await drive.click("app.bar.pageSwitch.5");
       await settle(drive, { focused: true });
     },
   },
 
-  // The DataGrid, whose header still sorts with ▼/▲ glyphs today.
+  // The DataGrid, its cells each built as their column's kind.
   {
     name: "grid",
     route: async ({ drive }) => {
-      await drive.click("app.bar.pageSwitch.3");
+      await drive.click("app.bar.pageSwitch.6");
       await settle(drive, { focused: true });
     },
   },

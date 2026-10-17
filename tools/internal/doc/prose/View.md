@@ -158,6 +158,31 @@ reach) and layout ignores the bleed. A filtered view isolates blending and backd
 it. Paint only, never input — a blurred button is still its box. `null` (the default) is none.
 The same vocabulary, sampled **beneath** the view, is `backdrop`.
 
+## outsidePress
+What a press **aimed past** this view does while it is shown — an overlay's policy, read by
+the router before the press is delivered. `none` (the default) for every ordinary view.
+`dismiss`: the view hears `onOutsidePress` and the press goes no further (a menu).
+`dismissAndDeliver`: it hears `onOutsidePress` and the press goes on to what was pressed (a
+popover). `block`: the press goes nowhere and the view stays (a dialog). `ignore`: the press
+goes on as if the view were not there (a toast). Open overlays are walked top first: one
+that lets the press go on hands it to the next one down. The library's overlays set this for
+you.
+
+## scrollBelow
+What a scroll — wheel or touch — **aimed past** this view does while it is shown: `none`
+(the default), `block` (nothing behind it scrolls), `allow`, or `dismiss` (it hears
+`onOutsidePress` and the scroll goes on). An overlay's other policy, beside `outsidePress`.
+
+## paintsIn
+Where the view **paints** when that is not where it is declared: a view reference, `null`
+(the default) for its parent. The view stays in its declared place for everything it reads,
+owns and is discarded with; it draws, and is hit, inside the view named here — above that
+view's own children, later arrivals above earlier ones — with its `x`/`y` in that view's
+frame. Its declared parent's layout and auto-size leave it out. Because it is an ordinary
+attribute, moving between layers is a constraint:
+`paintsIn = { minimized ? app.dock.parked : null }`. The expert move, for programs built of
+layers — a desktop's windows and dock, a palette above documents.
+
 ## mask
 A soft alpha mask over the view's painted (clipped) subtree, applied before `opacity`:
 a gradient's **alpha** over the box — `mask = gradient("180deg",
@@ -475,8 +500,16 @@ question — "am I visible?" — read `onScreen` or `visibleRect` instead.
 
 ## rootTransform()
 The composed similarity from this view's frame to root space — `{x, y, scale,
-rotation}`. The method tier's exact transform; the visibility facts are its coarse,
-at-rest companions.
+rotation}`: a point `(px, py)` in the view lands at `x + scale·(px·cos r − py·sin r)`,
+`y + scale·(px·sin r + py·cos r)`, with `rotation` in radians. The method tier's exact transform; the visibility facts are its coarse, at-rest
+companions.
+
+## transformTo()
+The composed similarity from this view's frame to another view's — `{x, y, scale,
+rotation}`, read as `rootTransform()` is. The two may be in different programs: the walk
+goes on from a hosted program's root through the island that hosts it, so a program in a
+desktop window can place a view of its own against one of the host's (what a `Menu` does
+when it opens in the window's layer). A one-shot query, like `rootTransform()`.
 
 ## onScreen
 Is this view **on screen** — inside the viewport, not scrolled away, not in a hidden
@@ -544,9 +577,16 @@ ownership rule: a layout that places `y` (a stack, or a row with `align`) owns i
 Makes the view a keyboard **tab stop**. Traversal order is the view tree — there is no
 numeric tabindex; override `tabOrder()` to reorder within a container.
 
-## focusTrap
-Marks a self-contained focus group: Tab cycles within it and escapes at the boundary
-(firing `escapeFocus`). For a modal or menu whose focus must not leak to the page behind.
+## focusScope
+What Tab does at this view's edge. `none` (the default): the view's stops are its
+parent's, Tab walks straight through. `stop`: the view is **one** Tab stop and the arrows
+move among its members — a radio group, a segmented control, a list; Tab lands on the
+member the view names with a `focusEntry()` method, else the one that last had focus, else
+the view itself when it takes focus, else its first stop. `capture`: Tab walks into the view
+and through its stops (an entry form). `region`: one stop from outside, entered with Enter,
+and inside it Tab wraps and never leaves — a window, a pane; F6 and Shift-F6 move between
+regions. `modal`: Tab wraps inside and never leaves; a dialog is one. Every scope remembers
+what last had focus inside it.
 
 ## onPointerDown
 The pointer pressed on the view — the raw press phase. Prefer `click` (press **and**
@@ -660,9 +700,9 @@ focus ring off it.
 ## onBlur
 The view lost keyboard focus — the partner of `focus`.
 
-## onEscapeFocus
-Fired on a `focusTrap` when Tab reaches its boundary — your cue to move focus out (close
-the modal, advance to the next group).
+## onOutsidePress
+A press — or, with `scrollBelow = dismiss`, a scroll — was aimed past this view while its
+policy asked to hear it: the cue for an overlay to close.
 
 ## onKeyDown
 A key was pressed while the view holds focus; the event carries the key. For app-wide
@@ -910,6 +950,14 @@ routes presses, so it agrees with what a click would reach. Read it in a constra
 than tracking enter/leave by hand: `fill = { hovered ? provided("theme").control : null }`. On a touch
 device there is no hovering, so gate mouse-only affordances on `app.touchDevice`.
 
+## focused
+True while this view holds keyboard focus — read-only, kept by the focus service, so a
+constraint reading it re-derives when focus arrives or leaves:
+`stroke = { focused ? stroke(2, provided("theme").accent) : null }`. It is the same on a
+control, a text field and any `focusable` view. Move focus with `Focus.focus(v)`; ask which
+view has it with `Focus.getFocus()`, also a tracked read. For the keyboard ring you need
+neither — the app's `FocusRing` shows focus for you.
+
 ## pressed
 True while the pointer is down *and* this view was on the chain captured at pointer-down —
 read-only. It stays true if the finger slides off and comes back, which is what makes a
@@ -984,14 +1032,6 @@ higher layer.
 ```declare-fragment
 onPointerDown() { this.raise() }        // click-to-front, e.g. a window in a desktop
 ```
-
-## travelWith()
-Re-hosts this view's surface inside `scroller`'s scrolling content, so the **platform**
-carries the two together with no per-scroll re-derive — and returns `false` on a backend
-that cannot. The view tree does not move: hit testing and layout see nothing change, only
-the surface is re-homed. This is a specialist tool for chrome that must track scrolled
-content exactly (the focus ring following a control inside a pane); pass `null` to return
-it to the root.
 
 ## $setData()
 Writes a value at a path relative to this view's cursor — the runtime half of a text

@@ -169,6 +169,13 @@ Four presets ship, each as a light record and a `…Dark` companion: **SanFranci
 page *Theme tokens* lists which tokens are required, which are optional, and which
 classes read each one, generated from the library's own source.
 
+**A theme states only what it changes.** Most library tokens are optional: every theme you
+provide is laid over the library's defaults record, so a `segmentedHeight` or a `toastShadow`
+your theme leaves out has its default, and a class reads `provided("theme").segmentedHeight`
+with no fallback of its own. The required ones — the palette and `controlCornerRadius` — have
+no default, because a colour missing from a dark theme should be an error you see, not a
+light default you don't.
+
 **Naming a token.** The library names its tokens one way, and your own read best if they
 follow it. A palette role is a short noun — `background`, `surface`, `line`, `text`,
 `accent`, `error` — with an interaction state appended as the view's own fact is spelled

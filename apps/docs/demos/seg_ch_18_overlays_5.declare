@@ -1,0 +1,13 @@
+App [ width = 560, height = 300, theme = { SanFrancisco },
+    Button [ x = 20, y = 20, label = "Settings…",
+        onClick() { app.prefs.show() }
+        ],
+    prefs: Sheet [ edge = "end",
+        Text [ fontWeight = bold, textColor = { provided("theme").text }, text = "Settings" ],
+        Checkbox [ label = "Show line numbers" ],
+        Checkbox [ label = "Wrap long lines" ],
+        Button [ label = "Done", primary = true,
+            onClick() { app.prefs.close() }
+            ]
+        ]
+    ]

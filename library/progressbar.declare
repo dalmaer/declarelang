@@ -19,16 +19,21 @@ raw counts as `value` rather than converting to a percentage yourself.
 ## fill
 The track wears the quiet control tint; the filled part is the bar's own child in the accent, so a theme restyles both at once.
 
+## height
+The bar's thickness, from the theme's `progressBarHeight` (8 by default).
+
+## cornerRadius
+Fully rounded: half the height, at any thickness.
 */
 
 class ProgressBar [
-    width = 220, height = 8, cornerRadius = 4,
+    width = 220, height = { provided("theme").progressBarHeight }, cornerRadius = { height / 2 },
     value: number = 0,
     min:   number = 0,
     max:   number = 100,
 
-    fill = { provided("theme").control },
+    fill = { provided("theme").trackFill ?? provided("theme").control },
 
-    bar: View [ height = 100%, cornerRadius = 4, fill = { provided("theme").accent },
+    bar: View [ height = 100%, cornerRadius = { parent.height / 2 }, fill = { provided("theme").accent },
         width = { parent.width * Math.max(0, Math.min(1, (value - min) / ((max - min) || 1))) } ]
     ]

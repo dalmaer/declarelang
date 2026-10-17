@@ -284,22 +284,27 @@ function themeTokenSpine() {
       for (const mm of line.matchAll(/theme\.([a-zA-Z][A-Za-z0-9]*)/g)) {
         const t = mm[1];
         (readers[t] ??= new Set()).add(who);
-        const g = new RegExp(`typeof\\s+theme\\.${t}\\b|theme\\.${t}\\s*!=\\s*null|theme\\.${t}\\s*==`).test(line);
+        const g = new RegExp(`typeof\\s+theme\\.${t}\\b|theme\\.${t}\\s*!=\\s*null|theme\\.${t}\\s*==|theme\\.${t}\\s*\\?\\?`).test(line);
         (g ? guarded : bare).add(t);
       }
     }
   }
+  // the optional tokens' defaults, laid under every theme (library/themes/defaults.declare):
+  // a token stated there is optional however it is read
+  const defSrc = readFileSync(join(ROOT, "library/themes/defaults.declare"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const defaults = Object.fromEntries([...(defSrc.split("theme ThemeDefaults [")[1] ?? "").matchAll(/([a-zA-Z]\w*)\s*=\s*([^,\n]+(?:\([^)]*\))?)/g)].map((m) => [m[1], m[2].trim().replace(/,$/, "")]));
+  for (const t of Object.keys(defaults)) { bare.delete(t); if (readers[t] !== undefined) guarded.add(t); }
   for (const t of bare) guarded.delete(t);            // read bare anywhere ⇒ required
   const presetSrc = readFileSync(join(ROOT, "library/themes/sanfrancisco.declare"), "utf8");
   const body = presetSrc.split("theme SanFrancisco [")[1]?.split("]")[0] ?? "";
   const stated = [...body.matchAll(/([a-zA-Z][\w]*)\s*=/g)].map((m) => m[1]);
-  const row = (t) => ({ name: t, required: bare.has(t), read: [...(readers[t] ?? [])].sort(), stated: stated.includes(t) });
+  const row = (t) => ({ name: t, required: bare.has(t), read: [...(readers[t] ?? [])].sort(), stated: stated.includes(t), ...(t in defaults ? { default: defaults[t] } : {}) });
   return {
     required: [...bare].sort().map(row),
     optional: [...guarded].sort().map(row),
     // the light record each preset file declares, by its declared name (`SanFrancisco`)
     presets: readdirSync(join(ROOT, "library/themes")).filter((f) => f.endsWith(".declare")).sort()
-      .flatMap((f) => [...readFileSync(join(ROOT, "library/themes", f), "utf8").matchAll(/^theme (\w+) \[/gm)].map((m) => m[1]).filter((n) => !/Dark$/.test(n))),
+      .flatMap((f) => [...readFileSync(join(ROOT, "library/themes", f), "utf8").matchAll(/^theme (\w+) \[/gm)].map((m) => m[1]).filter((n) => !/Dark$/.test(n) && n !== "ThemeDefaults")),
   };
 }
 
@@ -758,8 +763,8 @@ const sharedTypesDoc = (spine) => {
 // assembly until it is placed.
 const TYPE_GROUPS = [
   ["Enums", ["Axis", "Backface", "Blend", "Claim", "Credentials", "CrossAlign", "Edges",
-             "FitAlign", "FontLate", "FontWeight", "Justify", "Motion", "Numerals", "NumeralWidth",
-             "Process", "Scaling", "ScrollAnchor", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
+             "FitAlign", "FocusScope", "FontLate", "FontWeight", "Justify", "Motion", "Numerals", "NumeralWidth",
+             "OutsidePress", "Process", "Scaling", "ScrollAnchor", "ScrollBelow", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
   ["Values", ["Color", "Fill", "Gradient", "Length", "Percent", "Radius", "Inset", "Shape", "Stroke", "BoxStroke", "Outline",
               "Shadow", "Filter", "Backdrop", "Theme", "MotionCurve", "Cursor", "TextMeasure", "IslandPost", "IslandNavigation", "DelayHandle"]],
   ["Text", ["TextStyle", "TextStyles", "BlockGeometry", "RichTextLayout"]],
@@ -939,11 +944,12 @@ const themeTokensDoc = (spine) => {
     "from scratch.", "",
     "| token | read by |", "|---|---|", ...t.required.map(row), "",
     "## Optional — the tuning surface", "",
-    `**${t.optional.length} tokens are read behind a guard** and fall back to a built-in default.`,
+    `**${t.optional.length} tokens have a default.** Every provided theme is laid over the library's`,
+    "defaults record (`ThemeDefaults`), so a theme states only what it changes; a token whose",
+    "default is another token (`trackFill` is `control` unless stated) is read with `??`.",
     "These are what a city preset reaches for to change platform character — button geometry,",
-    "menu material, focus-ring behaviour, dialog arrangement — and what your own theme can set",
-    "without stating the whole set.", "",
-    "| token | read by |", "|---|---|", ...t.optional.map(row), "",
+    "menu material, focus-ring behaviour, dialog arrangement.", "",
+    "| token | default | read by |", "|---|---|---|", ...t.optional.map((r) => `| \`${r.name}\` | ${r.default !== undefined ? "`" + r.default + "`" : "—"} | ${r.read.slice(0, 6).join(", ")}${r.read.length > 6 ? ", …" : ""} |`), "",
   ].join("\n");
 };
 

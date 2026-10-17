@@ -41,7 +41,7 @@ Says what a press will do — "Switch to dark" or "Switch to light" — rather t
 naming the current state, which the icon already shows.
 
 ## width
-A square: the theme's `buttonHeight` when it states one, else 32.
+A square: the theme's `appearanceSwitchSize` (32 unless a theme says otherwise).
 
 ## height
 The same as the width.
@@ -59,7 +59,7 @@ include [ "control.declare" ]
 include [ "icons/appearance.declare" ]
 
 class AppearanceSwitch extends Control [
-    width  = { typeof provided("theme").buttonHeight == "number" ? provided("theme").buttonHeight : 32 },
+    width  = { provided("theme").appearanceSwitchSize },
     height = { this.width },
     cornerRadius = { Math.min(provided("theme").controlCornerRadius, height / 2) },
     dark: boolean = false,

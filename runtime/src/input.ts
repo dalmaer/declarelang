@@ -136,11 +136,23 @@ export interface TouchPoint {
 /** Start routing window pointer input through `resolve`. `alive` gates the
  *  whole route (false = the tree is gone; the listeners remove themselves
  *  on the next event). */
+/** The open overlays' say over a press at a root point of the top-level
+ *  program (outside.ts): true = swallow it. Installed by the runtime. */
+let OUTSIDE_PRESS: ((x: number, y: number) => boolean) | null = null;
+let OUTSIDE_SCROLL: ((x: number, y: number) => boolean) | null = null;
+export function setOutsidePressHook(fn: ((x: number, y: number) => boolean) | null, scroll: ((x: number, y: number) => boolean) | null = null): void {
+  OUTSIDE_PRESS = fn;
+  OUTSIDE_SCROLL = scroll;
+}
+
 export function routeInput(
   alive: () => boolean,
   resolve: (e: MouseEvent) => HitTarget | null,
   rootPoint?: (e: MouseEvent) => { x: number; y: number },
   onHover?: (t: HitTarget | null) => void,
+  // the top-level program's router — the one that answers the open overlays
+  // (an embedded program's own router leaves it to the page's)
+  topLevel = true,
 ): void {
   // The pressed view captures the pointer: while held, `pointerMove` (and the
   // eventual release) go to IT, not to whatever is under the pointer — the
@@ -277,7 +289,43 @@ export function routeInput(
     };
     window.addEventListener("contextmenu", ctxListener);
   }
+  // a scroll aimed past an open overlay: `scrollBelow = block` swallows it
+  // (wheel and touch alike); listened in the capture phase, ahead of every
+  // scroller, and not passive, so the browser's own scroll can be refused
+  if (topLevel && typeof window !== "undefined") {
+    const refuse = (e: Event, x: number, y: number): void => {
+      if (OUTSIDE_SCROLL === null) return;
+      const p = rootPoint !== undefined ? rootPoint({ clientX: x, clientY: y } as MouseEvent) : { x, y };
+      if (OUTSIDE_SCROLL(p.x, p.y)) { e.preventDefault(); e.stopPropagation(); }   // the canvas scrolls in its own handler
+    };
+    const onWheel = (e: Event): void => {
+      if (!alive()) { window.removeEventListener("wheel", onWheel, true); return; }
+      const w = e as WheelEvent;
+      refuse(e, w.clientX, w.clientY);
+    };
+    const onTouchMove = (e: Event): void => {
+      if (!alive()) { window.removeEventListener("touchmove", onTouchMove, true); return; }
+      const t = (e as TouchEvent).touches[0];
+      if (t !== undefined) refuse(e, t.clientX, t.clientY);
+    };
+    window.addEventListener("wheel", onWheel, { capture: true, passive: false });
+    window.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
+  }
   listen("pointerdown", (e) => {
+    // a press aimed past an open overlay: its policy first (planes.md §8.1)
+    if (topLevel && OUTSIDE_PRESS !== null) {
+      const op = rootPoint !== undefined ? rootPoint(e) : { x: e.clientX, y: e.clientY };
+      if (OUTSIDE_PRESS(op.x, op.y)) {
+        held = null;
+        swallowUp = e.pointerId;
+        e.preventDefault();
+        // the native click that would follow (a link beneath) is not this gesture's
+        const stop = (ev: Event): void => { ev.preventDefault(); ev.stopPropagation(); window.removeEventListener("click", stop, true); };
+        window.addEventListener("click", stop, true);
+        setTimeout(() => window.removeEventListener("click", stop, true), 1000);
+        return;
+      }
+    }
     const t = resolve(e);
     held = t;
     wandered = false;

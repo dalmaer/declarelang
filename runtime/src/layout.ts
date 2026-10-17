@@ -272,6 +272,7 @@ export abstract class Layout extends Node implements LayoutStrategy {
       (c): c is View =>
         c instanceof View &&
         (c as { ignoreLayout?: boolean }).ignoreLayout !== true &&
+        !c.$paintsElsewhere() &&
         !this.authorSized.has(c)
     );
   }

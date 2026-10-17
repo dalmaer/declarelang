@@ -886,15 +886,18 @@ const CLASS_GROUPS = [
   // reference is read by agents as often as by people, so the collision was one
   // we would have been adding on purpose. It is also the word the language file's
   // own map already uses for these — "controls, structure, layouts, embedding".
-  ["Structure",     ["Gauge", "Card", "Divider", "MenuBar", "Menu", "ContextMenu", "Dialog", "Tooltip", "Accordion", "Pane"]],
+  ["Structure",     ["Gauge", "Card", "Divider", "MenuBar", "Accordion", "Pane", "Window"]],
+  // what paints above everything in its context (planes.md §3.3): one base, the
+  // objects every platform converges on, and the layers they paint in
+  ["Overlays",      ["Floating", "Menu", "ContextMenu", "Popover", "Dialog", "Sheet", "Toast", "Tooltip", "OverlayStrata"]],
   // Data holds what STORES or FETCHES data and paints nothing. The tables are
   // views that display it — a different kind of thing, filed with their kind.
   ["Data",          ["Dataset", "DataSource", "Stream", "EventStream", "Socket"]],
-  ["Tables",        ["Table", "TableRow", "DataGrid", "Column", "GridRow"]],
+  ["Tables",        ["Table", "TableRow", "DataGrid", "Column", "GridRow", "GridCell", "TextCell", "EditCell", "CheckCell", "SelectCell"]],
   ["Motion and state", ["Animator", "AnimatorGroup", "Spring", "State", "Time"]],
-  ["Services",      ["Keys", "Focus", "Tooltips"]],
+  ["Services",      ["Keys", "Shortcuts", "Focus", "Tooltips"]],
   ["Embedding",     ["DOMIsland", "AppIsland"]],
-  ["Themes",        ["SanFrancisco", "SanFranciscoDark", "Cupertino", "CupertinoDark", "MountainView", "MountainViewDark", "Redmond", "RedmondDark"]],
+  ["Themes",        ["SanFrancisco", "SanFranciscoDark", "Cupertino", "CupertinoDark", "MountainView", "MountainViewDark", "Redmond", "RedmondDark", "ThemeDefaults"]],
   ["Icons",         ["Icon", "IconHost", "ArrowIcon", "ChevronIcon", "CheckIcon", "CloseIcon", "PlusIcon", "MinusIcon", "LightbulbIcon", "SunIcon", "MoonIcon", "AutoIcon"]],
 ];
 const groupProblems = [];

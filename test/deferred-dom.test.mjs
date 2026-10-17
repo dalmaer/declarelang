@@ -208,16 +208,15 @@ await test("a field brings in a hidden parent whose own parent is hidden too: ev
   assert.equal(out.outerKids, 1, "the panel has one element, not a stray second");
 });
 
-await test("travelling with a scroller not yet shown answers as it would shown: both surfaces come in, and the rider rides it", async () => {
+await test("painting in a scroller not yet shown: both surfaces come in, and the rider rides it", async () => {
   const out = await inPage(`App [ width = 300, height = 300,
     pane: View [ visible = false, width = 300, height = 200, scrolls = y,
       View [ width = 300, height = 800, fill = #EEEEEE ] ],
     rider: View [ width = 20, height = 20, fill = #FF0000 ] ]`, `
-    const rode = app.rider.travelWith(app.pane);
+    app.rider.paintsIn = app.pane;
     settle(); await frame();
     const paneEl = app.pane.$surface.element, riderEl = app.rider.$surface.element;
-    return { rode, inside: paneEl !== undefined && paneEl.contains(riderEl) };`);
-  assert.equal(out.rode, true, "travelWith answers true: the scroller's surface exists now");
+    return { inside: paneEl !== undefined && paneEl.contains(riderEl) };`);
   assert.equal(out.inside, true, "the rider's element rides inside the scroller's");
 });
 
@@ -258,6 +257,22 @@ await test("a row added inside a panel shown once and hidden since waits until t
   assert.equal(out.cameHidden, 0, "nothing came in while the panel was hidden");
   assert.equal(out.whileHidden, 1, "the new row made no element while the panel was hidden");
   assert.equal(out.shownAgain, 2, "shown again, the new row is there");
+});
+
+await test("a row before a row that needs its surface while hidden lands on the parent that one brought in", async () => {
+  // the replicator attaches last to first: the field's row brings the waiting
+  // list in, and the rows before it attach to the list's real surface
+  const out = await inPage(`App [ width = 300, height = 200, on: boolean = false,
+    d: Dataset { { "rows": [] } },
+    list: View [ visible = { app.on }, datapath = { d.value }, layout: SimpleLayout [ axis = y ],
+      View [ datapath = :rows[], width = 100, height = 20,
+        classFor = { :f ? FieldRow : PlainRow } ] ] ]
+    class PlainRow extends View [ fill = #FF0000 ]
+    class FieldRow extends View [ TextInput [ width = 80 ] ]`, `
+    app.d.value = { rows: [ { f: false }, { f: true } ] }; settle(); await frame();
+    app.on = true; settle(); await frame();
+    return [...host.querySelectorAll("*")].filter((e) => getComputedStyle(e).backgroundColor === "rgb(255, 0, 0)").length;`);
+  assert.equal(out, 1, "the plain row is drawn");
 });
 
 await test("the invariant check names a shown view left waiting", async () => {

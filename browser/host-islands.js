@@ -6,7 +6,7 @@
 // capability, compiler/src/capabilities.ts); there, wireIslands is a stand-in
 // whose methods do nothing.
 
-import { mapUrl, renderProgramAsync, afterSettle, disposeApp, DomBackend, observe, provideHostServices, onIslandSlot, setAppAssetBase, assetBaseFor, linkIslandTenant, islandProvisions, islandNavigation, mountEmbeddedApp, kernelReady } from "../runtime/dist/host-api.js";
+import { mapUrl, renderProgramAsync, afterSettle, disposeApp, DomBackend, observe, provideHostServices, onIslandSlot, setAppAssetBase, assetBaseFor, linkIslandTenant, islandProvisions, islandNavigation, mountEmbeddedApp, kernelReady, onDiscard } from "../runtime/dist/host-api.js";
 
 /** Wire the islands of `app`, the app bootHost just mounted in `host`. Returns
  *  `renderChild` (a live edit re-renders an island through it), `retry` (the
@@ -85,6 +85,15 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, resol
       };
       const childApp = await renderProgramAsync(compiled.program, box, backend, childOpts);
       box.__childApp = childApp;
+      // the island discarded — its window closed — ends the program it hosts:
+      // the bridge first (its overlays leave the host's layers, its keyboard
+      // claim goes), then the app itself (its clocks and fetches stop)
+      if (childApp && islView) onDiscard(islView, () => {
+        if (box.__childApp !== childApp) return;            // a newer render owns the box
+        for (const fn of childUndo.splice(0)) { try { fn(); } catch {} }
+        disposeApp(childApp);
+        box.__childApp = null;
+      });
       if (childApp) {
         childApp.demoSources = seeds;                     // populate a nested copy's own editors
         // The child's own wiring, by observation (its lifetime is known HERE):
@@ -251,6 +260,13 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, resol
         catch (e) { console.error(`[Declare] ${name || "island"}: ${e.message}`); }
       }
       mountEmbeddedApp(childApp, view);
+      // discarded with its window: the bridge, then the program (as the DOM mount)
+      onDiscard(view, () => {
+        if (view.__childApp !== childApp) return;
+        try { childApp.__unlink?.(); } catch {}
+        disposeApp(childApp);
+        view.__childApp = null;
+      });
       childApp.demoSources = seeds;
       provideHostServices(childApp, islandNavigation(view, resolveNav, navServices));
       view.__childApp = childApp;

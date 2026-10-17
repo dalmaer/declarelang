@@ -71,7 +71,7 @@ import { Cell, Constraint, afterSettle, isSettling, kernel, kernelLoaded, noteOr
 import { setChangeDispatcher, trackNode } from "./change-event.js";
 import { boxThrough, fromParts, isIdentity as isIdentityAffine, leavesPlane, type Affine } from "./affine.js";
 import { footprint3D, spec3DOf } from "./projective.js";
-import { initInteraction, noteUserScroll, readHovered, readPressed, hitAt, boxContains, rootFrameOrigin, rootFrameBox, rootTransform, rootToLocal, type InteractionView } from "./interaction.js";
+import { initInteraction, noteUserScroll, readHovered, readPressed, hitAt, boxContains, rootFrameOrigin, rootFrameBox, rootTransform, rootToLocal, transformBetween, type InteractionView } from "./interaction.js";
 import { bindDerived, blockOf, defineAttributes, disposeBindings, freeCells, isSet, localProvision, own, ownerOf, percentOwned, release, setBound, slotCellOf, slotIndex } from "./attributes.js";
 import { type AttrType } from "./value.js";
 import { observe } from "./reactive.js";
@@ -83,6 +83,7 @@ import { splitPath, type PathSeg } from "./path-plan.js";
 import { selectValue } from "./select.js";
 import type { Attr, LinkTarget } from "./parser.js";
 import type { Cursor } from "./data.js";
+import { noteOverlay } from "./outside.js";
 import { DeferredSurface, isDeferred } from "./deferred-surface.js";
 
 /** What a layout strategy is to the View — the whole protocol: begin
@@ -164,6 +165,26 @@ export function setRowIndex(v: View, index: number): void {
   const p = ROW_PLACES.get(v);
   if (p === undefined) ROW_PLACES.set(v, { index, cell: new Cell() });
   else if (p.index !== index) { p.index = index; p.cell.changed(); }
+}
+
+/** The views painting somewhere other than their parent (planes.md §3.1). */
+const PAINTING_ELSEWHERE = new Set<View>();
+
+/** A hosted program is leaving (its island unlinks): every view of it painting
+ *  in another view — a menu open in its host's window — leaves that view's
+ *  listing and comes home, so nothing of the program stays in the host. */
+export function withdrawPaintGuests(root: View): void {
+  for (const v of [...PAINTING_ELSEWHERE]) {
+    let r: View = v;
+    while (r.parent instanceof View) r = r.parent;
+    if (r !== root) continue;
+    const at = v.$guestOf;
+    if (at !== null) { const i = at.$paintGuests.indexOf(v); if (i >= 0) at.$paintGuests.splice(i, 1); }
+    v.$guestOf = null;
+    PAINTING_ELSEWHERE.delete(v);
+    const s = v.$surface as { travelWith?(h: unknown): void } | null;
+    try { s?.travelWith?.(null); } catch { /* its surfaces are gone with it */ }
+  }
 }
 
 // ── onRetire — the DEPARTURE hook (D5 ruled the semantics, D8 the name) ──
@@ -568,6 +589,14 @@ export class View extends Node {
    *  placed by its own x/y inside this box, masks the subtree. Applied after
    *  clip, before opacity. Paint only, never input. */
   declare mask: Mask | null;
+  /** Where the view paints when not in its parent (planes.md §3.1): its surface
+   *  is hosted in this view's, its x/y are in this view's frame, and it is hit
+   *  there. null = its parent. */
+  declare paintsIn: View | null;
+  /** What a press, and a scroll, aimed past this view do while it is shown —
+   *  an overlay's input policy (planes.md §8.1, outside.ts). */
+  declare outsidePress: string;
+  declare scrollBelow: string;
   /** Views masked BY this one (it is their stencil) — re-pushed when this
    *  view attaches, since a stencil declared after (or inside) the masked
    *  view has no surface at the masked view's own push. */
@@ -610,11 +639,11 @@ export class View extends Node {
   declare scrollStartX: number;
   declare scrolling: boolean;
   declare scrollAnchor: string;
-  /** Keyboard focus (docs/system-design/input.md, Layer 2). `focusable` = a tab stop;
-   *  `focusTrap` = a self-contained focus group. Traversal order is the tree,
-   *  overridable per view by defining a `tabOrder()` method. */
+  /** Keyboard focus (planes.md §13). `focusable` = a tab stop; `focusScope` = what
+   *  Tab does at this view's edge (`none` | `stop` | `capture` | `region` | `modal`).
+   *  Traversal order is the tree, overridable per view by a `tabOrder()` method. */
   declare focusable: boolean;
-  declare focusTrap: boolean;
+  declare focusScope: string;
   declare anchor: string;
   /** The linking triple (location.md §0): `link` — this view IS a link to the
    *  reference ("" = not a link); `replace` — following it overwrites the
@@ -934,7 +963,7 @@ export class View extends Node {
    *  reads its slots by base). */
   private $extentWords(size: "width" | "height"): number[] {
     const words: number[] = [this.$structureCellId(), slotCellOf(this, size === "width" ? "insetX" : "insetY")];
-    for (const c of this.children) if (c instanceof View) words.push(blockOf(c));
+    for (const c of this.children) if (c instanceof View && !c.$paintsElsewhere()) words.push(blockOf(c));
     return words;
   }
 
@@ -951,6 +980,7 @@ export class View extends Node {
     for (const c of this.children) {
       if (!(c instanceof View) || !c.visible) continue;
       if (c.ignoreClip) continue; // frame chrome: derives from the bounds, never defines them
+      if (c.$paintsElsewhere()) continue; // measured in another view's frame
       if (percentOwned(c, axis) || percentOwned(c, size)) continue;
       // The TRANSFORMED footprint (bounds), not the raw slots: a scaled or
       // rotated child counts the box it visibly covers — the same geometry
@@ -1020,7 +1050,7 @@ export class View extends Node {
    *  or laid-out view in the tree. */
   $positionLead(axis: "x" | "y"): number {
     const t = this.travelHost;
-    const host = t === undefined || t === null ? this.parent : t;
+    const host = t === null ? this.parent : t;
     if (!(host instanceof View)) return 0;
     const p = host.padding;
     if (p === 0) return 0;
@@ -1129,6 +1159,10 @@ export class View extends Node {
    *  keyboard shows the same look a pointer press does. One pair of facts,
    *  styled against everywhere. */
   get hovered(): boolean { return !isDisabled(this) && readHovered(this); }
+
+  /** True while this view holds keyboard focus — a reactive, read-only fact on
+   *  every view, set by the focus service (`Focus.focus(v)` moves it). */
+  get focused(): boolean { return readFocused(this); }
   get pressed(): boolean { return (!isDisabled(this) && readPressed(this)) || (this as unknown as { flash?: unknown }).flash === true; }
 
   /** Is this view ON SCREEN — inside the viewport, not scrolled away, not in
@@ -1470,57 +1504,76 @@ export class View extends Node {
     return { x: t.tx + r.scrollX, y: t.ty + r.scrollY, scale: t.scale, rotation: t.rotation };
   }
 
+  /** The composed similarity from MY frame to `other`'s — `{x, y, scale,
+   *  rotation}` — across the islands between our programs: a program hosted
+   *  in a window places its menu against the host's layer with it. */
+  transformTo(other: View): { x: number; y: number; scale: number; rotation: number } {
+    return transformBetween(this as unknown as InteractionView, other as unknown as InteractionView);
+  }
+
   rootOrigin(): { x: number; y: number } {
     const o = rootFrameOrigin(this as unknown as InteractionView);
     const r = (this.root ?? this) as View;
     return { x: o.x + r.scrollX, y: o.y + r.scrollY };
   }
 
-  /** Travel with `scroller`: re-host this view's SURFACE inside the
-   *  scroller's container so the platform carries it with the scrolled
-   *  content — zero-lag chrome that belongs to content (the FocusRing's
-   *  ride; the inverse of `ignoreScroll`). Position slots then mean the
-   *  scroller's CONTENT coordinates. Pass null (or this view's own parent —
-   *  its natural host) to come home; the ROOT is a real destination, not
-   *  home, so chrome can climb OUT of a scroller that sits directly under
-   *  it (the DataGrid header's escape).
-   *  Returns whether the surface now rides the scroller — false when the
-   *  backend can't (no travelWith) or the surfaces do not exist YET, so
-   *  callers keep the reactive root-space fallback.
-   *
-   *  The request is DECLARATIVE, and that is what makes the answer
-   *  trustworthy: a caller in `onInit` runs before attach (initTree precedes
-   *  App.attach), so the first call can only ever answer "not yet". The
-   *  request is therefore remembered and re-applied when this view attaches
-   *  — no polling, and no retry budget that can be exhausted on a slow
-   *  machine and silently leave the chrome un-escaped (which is exactly what
-   *  DataGrid's 20×50ms chain used to risk). `escaped` becomes true at
-   *  attach, through the ordinary reactive write below, so a `{ }` reading it
-   *  re-runs then. */
-  travelWith(scroller: View | null): boolean {
-    this.travelHost = scroller;
-    // A caller acts on the answer at once (positions in the scroller's
-    // content space, or in root space): both surfaces are needed now, so a
-    // stand-in on either side comes in first (deferred-surface.ts).
-    this.$ensureReal("travel");
-    scroller?.$ensureReal("travel");
-    return this.$applyTravel();
+  /** The view this one paints in when that is not its parent, else null. */
+  private get travelHost(): View | null {
+    const p = this.paintsIn;
+    return p instanceof View && p !== this.parent ? p : null;
   }
 
-  /** The standing travel request (undefined = never asked). Applied here and
-   *  re-applied at attach; `travelDone` is the reactive echo the requester
-   *  reads (see attach). */
-  private travelHost: View | null | undefined = undefined;
+  /** The host this view is listed under as a paint guest (planes.md §3.1). */
+  $guestOf: View | null = null;
+
+  /** `paintsIn` changed: move the guest listing, re-host the surface, and let
+   *  the declared parent re-arrange and re-measure without it (or with it). */
+  $paintHostChanged(): void {
+    const host = this.travelHost;
+    const moved = this.$guestOf !== host;
+    if (moved) {
+      if (this.$guestOf !== null) {
+        const g = this.$guestOf.$paintGuests;
+        const i = g.indexOf(this);
+        if (i >= 0) g.splice(i, 1);
+      }
+      if (host === null) PAINTING_ELSEWHERE.delete(this);
+      if (host !== null) {
+        PAINTING_ELSEWHERE.add(this);
+        host.$paintGuests.push(this);    // entry order: the latest guest paints last
+        // a discarded guest leaves its host's listing; paintsIn itself may be
+        // a constraint, so the listing is undone rather than the attribute
+        if (this.$guestOf === null) onDiscard(this, () => {
+          const at = this.$guestOf;
+          if (at !== null) { const i = at.$paintGuests.indexOf(this); if (i >= 0) at.$paintGuests.splice(i, 1); }
+          this.$guestOf = null;
+          PAINTING_ELSEWHERE.delete(this);
+        });
+      }
+      this.$guestOf = host;
+    }
+    if (host !== null) { this.$ensureReal("travel"); host.$ensureReal("travel"); }
+    this.$applyTravel();
+    // Only a real move re-arranges the parent. The focus ring re-writes the
+    // same host on every geometry event, and re-laying out its parent each
+    // time made new geometry, so the next event wrote again: a settle that
+    // never closed (afterSettle re-armed, Tab through the tracker's header).
+    const p = this.parent;
+    if (moved && p instanceof View) p.$childrenMutated();
+  }
+
+  /** Views painting in this one though declared elsewhere, in entry order. */
+  $paintGuests: View[] = [];
+
+  /** Does this view paint somewhere other than its parent? */
+  $paintsElsewhere(): boolean { return this.travelHost !== null; }
 
   private $applyTravel(): boolean {
     const scroller = this.travelHost;
-    if (scroller === undefined) return false;
-    const s = this.$surface as (Surface & { travelWith?(h: unknown): void }) | null;
+    const s = this.$surface as (Surface & { travelWith?(h: unknown): void; isTraveling?(): boolean }) | null;
     if (s === null || typeof s.travelWith !== "function") return false;
-    const home = scroller === null || scroller === this.parent;
-    if (home) {
-      s.travelWith(null);
-      this.$repushPosition();
+    if (scroller === null) {
+      if (s.isTraveling?.() === true) { s.travelWith(null); this.$repushPosition(); }
       return false;
     }
     if (scroller.$surface === null || isDeferred(scroller.$surface)) return false;
@@ -1908,6 +1961,7 @@ defineAttributes(View, {
   stroke: { def: null, push: (v, st) => v.$surface?.setStroke(st), equal: strokeEqual },
   shadow: { def: null, push: (v, sh) => v.$surface?.setShadow(sh), equal: shadowEqual },
   visible: { def: true, push: (v, b) => {
+    if (v.outsidePress !== "none" || v.scrollBelow !== "none") noteOverlay(v);
     // (the hot path stays one call: deferral's part is its own function)
     if (b && (waitingUnderCount > 0 || isDeferred(v.$surface))) showDeferring(v);
     else v.$surface?.setVisible(b);
@@ -1959,8 +2013,11 @@ defineAttributes(View, {
   backdrop: { def: null, push: (v, b: FilterValue) => v.$surface?.setBackdrop?.(nullIfEmpty(filterList(b))), equal: backdropEqual },
   filter: { def: null, push: (v, f: FilterValue) => v.$surface?.setFilter?.(nullIfEmpty(filterList(f))), equal: filtersEqual },
   mask: { def: null, push: (v, m: Mask | null) => v.$applyMask(m) },
+  paintsIn: { def: null, push: (v) => v.$paintHostChanged() },
+  outsidePress: { def: "none", push: (v) => noteOverlay(v) },
+  scrollBelow: { def: "none", push: (v) => noteOverlay(v) },
   focusable: { def: false },
-  focusTrap: { def: false },
+  focusScope: { def: "none" },
   // `anchor` — the view's name in the reveal namespace (location.md §6). A stored
   // slot the reveal walk reads after settle; "" = not an anchor. No push: it has
   // no surface effect. (Materializes §6's "named view"; heading slugs are the rest.)
@@ -2070,6 +2127,25 @@ export function inheritedCursor(node: Node | null): Cursor | null {
 let focusDiscardHook: ((view: View) => void) | null = null;
 export function setFocusDiscardHook(fn: (view: View) => void): void {
   focusDiscardHook = fn;
+}
+
+/** The `focused` fact (every view): the focus service reports each change
+ *  here, and only the views that lost and gained focus re-derive — a cell per
+ *  view that has been read, so a program that never reads it pays nothing. */
+let FOCUSED: View | null = null;
+const focusedCells = new WeakMap<View, Cell>();
+export function noteFocused(now: View | null): void {
+  const old = FOCUSED;
+  if (old === now) return;
+  FOCUSED = now;
+  if (old !== null) focusedCells.get(old)?.changed();
+  if (now !== null) focusedCells.get(now)?.changed();
+}
+function readFocused(v: View): boolean {
+  let c = focusedCells.get(v);
+  if (c === undefined) { c = new Cell(); focusedCells.set(v, c); }
+  c.track();
+  return FOCUSED === v;
 }
 
 /** The auto-extent, marked (reactive.ts isAutoExtent). */

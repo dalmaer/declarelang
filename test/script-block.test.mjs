@@ -132,4 +132,21 @@ await test("the delimiter crossings name their rewrite — braces hold the code,
   assert.match(await say(`script { "not a path" }`), /a lone string does nothing/);
 });
 
+await test("a script block whose last line ends in a // comment keeps all its names", async () => {
+  const { compileProgram } = await import("../compiler/dist/declarec.js");
+  const { instantiate } = await import("../runtime/dist/instantiate.js");
+  const { settle, provideMeasurer } = await import("../runtime/dist/index.js");
+  const { approximateMeasurer } = await import("../compiler/dist/headless.js");
+  provideMeasurer(approximateMeasurer());
+  const b = await compileProgram(`script {
+    const A = 7
+    function twice(n) { return n * 2 } // trailing comment
+}
+App [ width = 200, height = 100, out: string = { "v=" + twice(A) } ]`, { originDir: process.cwd() + "/library", stripPos: false });
+  assert.equal(b.errors.length, 0, b.errors.map((e) => e.message).join("; "));
+  const app = instantiate(b.program);
+  settle();
+  assert.equal(app.out, "v=14", "both names reached the program past the comment");
+});
+
 summarize("script-block");

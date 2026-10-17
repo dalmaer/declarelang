@@ -125,6 +125,12 @@ Whether two items are the same one, by `idOf`.
 Arrows, Home/End, Space (multi), Delete/Backspace and Enter. An override should call
 through or the table loses its keyboard.
 
+## focusScope
+`stop`: the table is one Tab stop, holding focus itself while the arrows move the
+active row; a row's own controls are not stops in the walk past it. Enter opens the
+active row (`activateRequested`); a program that opens a row into controls focuses the
+first of them, and Tab then walks that row's controls; Esc returns focus to the table.
+
 ## isTable
 **Internal.** The marker rows guard on, so a bare `TableRow` under a plain parent boots
 rather than crashing into a missing protocol — not API.
@@ -137,6 +143,10 @@ class Table extends Control [
     // boot, not crash into a missing protocol
 
     isTable: boolean = true,
+
+    // one Tab stop that keeps focus and moves an active row (planes.md §13.6)
+
+    focusScope = stop,
 
     // ── the value ─────────────────────────────────────────────────────────
 

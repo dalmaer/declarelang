@@ -48,7 +48,23 @@ focus edge while a tabbed one does, and what a focus indicator keys off to decid
 to appear at all.
 
 ## getFocus()
-The view that currently holds focus, or `null` — for saving focus before opening a modal
+The view that currently holds focus, or `null`. A **tracked read**: a constraint that reads
+it re-runs when focus moves (`hint = { Focus.getFocus()?.tooltipLabel ?? "" }`), and every
+view also carries its own `focused` fact. Also for saving focus before opening a modal
 and restoring it after. **Restore on a later turn, not immediately**: an in-flight
 keystroke must finish against the old focus, or the key that closed a dialog is delivered
 to the opener, which reopens it.
+
+## focusIn()
+Moves focus **into** a view that holds focusable views — to what last had focus inside it,
+else its first stop — and answers whether anything took it. What an overlay that takes
+focus does on opening; a scope remembers where focus was, so reopening returns there.
+
+## holds()
+Whether focus is on a view or anywhere inside it — a program hosted in an island inside it
+included. A `Window` answers whether it has the keyboard with it.
+
+## nextRegion()
+Moves focus to the next (`1`) or previous (`-1`) region of the context around the one
+focus is in — what F6 and Shift-F6 do. A program's own command for cycling its windows
+calls it.

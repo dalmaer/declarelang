@@ -109,12 +109,28 @@ The segment views, for the keyboard rove. A handler-only walk — a constraint m
 aggregate the view tree.
 
 ## roveFrom()
-Moves keyboard focus to the adjacent segment. Arrows rove; Space or Enter picks where
+Moves keyboard focus to the adjacent segment, wrapping from the last to the first and
+back, as a radio group does. Arrows rove; Space or Enter picks where
 they land, so **an inactive choice is reachable and selectable entirely from the
-keyboard**.
+keyboard**. A segmented control whose choices are places (each carries a `location`)
+switches on the arrow itself, as a tab bar does.
+
+## focusScope
+`stop`: the control is one Tab stop — Tab lands on the selected segment and the next
+Tab leaves; the arrows move among the segments.
+
+## focusEntry()
+The segment Tab lands on: the selected one, else the first.
+
+## rad
+The control's corner radius, from the theme's `segmentedCornerRadius` (8 by default); the
+pill and each segment's hover sit 2 inside it.
 
 ## fill
-The quiet control tint for the track; the picked segment paints its own.
+The track: the theme's `trackFill`, else `control`. The pill is `segmentedSelectedFill`, else
+`surface`. Where the theme gives `segmentDividerColor` (none by default), a divider stands
+between segments; one beside the pill fades as the pill reaches it, so they part around the
+selection as it slides.
 
 ## width
 Content-sized: every segment at least `segMin` wide, so short labels never squeeze.
@@ -122,6 +138,11 @@ Content-sized: every segment at least `segMin` wide, so short labels never squee
 ## datapath
 Roots the control on its own `items` data, so the segments replicate from `choices` without the author writing a datapath.
 
+## height
+From the theme's `segmentedHeight` (30 by default); the labels' size is `segmentedFontSize` (13).
+
+## cornerRadius
+The control's `rad`.
 */
 
 /*
@@ -197,6 +218,15 @@ class Segmented [
     value: object = null,
     disabled: boolean = false,
 
+    // one Tab stop, landing on the selected segment; the arrows move inside
+    // (planes.md §13.6)
+
+    focusScope = stop,
+    focusEntry() -> View? {
+        const ss = this.segs()
+        return (ss[Math.max(0, this.idx)] ?? null) as View | null
+        },
+
     // The group honors View's own `replace`: with `replace = true`, a pick of
     // a choice that carries a `location` replaces the history entry instead
     // of pushing one — the viewer's Reader/Source/Edit, where Back should
@@ -204,10 +234,11 @@ class Segmented [
     // switch that is itself navigation (the docs' Guide/Reference) keeps
     // pushing.
 
-    height = 30,
-    cornerRadius = 8,
-    fill = { provided("theme").control },
-    opacity = { disabled ? (typeof provided("theme").disabledOpacity == "number" ? provided("theme").disabledOpacity : 0.45) : 1 },
+    height = { provided("theme").segmentedHeight },
+    rad: number = { provided("theme").segmentedCornerRadius },
+    cornerRadius = { this.rad },
+    fill = { provided("theme").trackFill ?? provided("theme").control },
+    opacity = { disabled ? (provided("theme").disabledOpacity) : 1 },
 
     segMin: number = 96,           // per-segment width when the author sets none
     count:  number = { Math.max(1, ((this.choices ?? []) as any).length) },
@@ -241,8 +272,13 @@ class Segmented [
         const ss = this.segs()
         const i = ss.indexOf(seg)
         if (i < 0) return
-        const n = Math.max(0, Math.min(ss.length - 1, i + d))
-        if (n != i) Focus.focus(ss[n] as any)
+        // past either end it wraps, as a radio group and a tab list do
+        const n = (i + d + ss.length) % ss.length
+        if (n == i) return
+        const to = ss[n] as any
+        Focus.focus(to)
+        // choices that are places switch on the arrow, as a tab bar does
+        if (to.link != "") (app as any).follow(to.link, to.replace)
         },
 
     // The pill. `lane` is a float index the spring drives; `x` multiplies it by
@@ -253,12 +289,31 @@ class Segmented [
     Spring [ attribute = lane, to = { classroot.idx < 0 ? 0 : classroot.idx },
         stiffness = 260, damping = 30, mass = 0.9, epsilon = 0.002 ],
 
-    pill: View [ y = 2, height = { parent.height - 4 }, cornerRadius = 6,
+    pill: View [ y = 2, height = { parent.height - 4 }, cornerRadius = { Math.max(0, (parent as Segmented).rad - 2) },
         x = { 2 + (parent as Segmented).lane * (parent as Segmented).segW },
         width = { (parent as Segmented).segW },
         visible = { (parent as Segmented).idx >= 0 },
-        fill = { provided("theme").surface },
+        fill = { provided("theme").segmentedSelectedFill ?? provided("theme").surface },
         stroke = { stroke(1, provided("theme").line) } ],
+
+    // Dividers between segments, where the theme gives them a colour
+    // (`segmentDividerColor`; none by default). One beside the pill fades as
+    // the pill reaches it, so they part around the selection as it slides.
+
+    rules: View [ width = 100%, height = 100%, pointerEvents = "none",
+        visible = { provided("theme").segmentDividerColor != null },
+        draw(d: Draw) {
+            const s = parent as Segmented
+            d.fillStyle = (provided("theme").segmentDividerColor ?? provided("theme").line)
+            for (let i = 1; i < s.count; i++) {
+                const near = s.idx < 0 ? 1 : Math.abs(s.lane + 0.5 - i)
+                const a = Math.max(0, Math.min(1, (near - 0.5) * 2))
+                if (a <= 0) continue
+                d.globalAlpha = a
+                d.fillRect(2 + i * s.segW - 0.5, 7, 1, this.height - 14)
+                }
+            }
+        ],
 
     // The index rides in the data — replication has no ordinal of its own, and
     // the pill needs one to place each segment.
@@ -291,7 +346,7 @@ class SegmentedItem extends Control [
     // these, not a fill of their own. That is what lets it travel between them.
 
     bg: View [ x = 2, y = 2, width = { parent.width - 4 }, height = { parent.height - 4 },
-        cornerRadius = 6,
+        cornerRadius = { Math.max(0, (parent.parent as Segmented).rad - 2) },
         fill = { parent.on ? null
                : parent.pressed ? provided("theme").controlPressed
                : parent.hovered ? provided("theme").controlHovered
@@ -303,7 +358,7 @@ class SegmentedItem extends Control [
 
     ink: Color = { this.on || this.hovered ? provided("theme").text : provided("theme").textMuted },
 
-    t: TextLabel [ wrap = false, fontSize = 13, fontWeight = medium, x = center,
+    t: TextLabel [ wrap = false, fontSize = { provided("theme").segmentedFontSize }, fontWeight = medium, x = center,
         visible = { :label != null && :icon == null },
         textColor = { parent.ink },
         text = { "" + (:label ?? "") } ],
@@ -339,5 +394,5 @@ class SegmentedItem extends Control [
 
     // the ring hugs the segment's pill, not its whole box
 
-    focusShape() { return { x: 2, y: 2, w: this.width - 4, h: this.height - 4, rad: 6 } }
+    focusShape() { return { x: 2, y: 2, w: this.width - 4, h: this.height - 4, rad: Math.max(0, (this.parent as Segmented).rad - 2) } }
     ]

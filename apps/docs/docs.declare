@@ -1383,7 +1383,7 @@ class SearchHit [ width = 100%, cornerRadius = 8,
     onKeyDown(e: KeyEvent) {
         if (e.key == "ArrowDown") app.focusHit(classroot.idx + 1)
         else if (e.key == "ArrowUp") {
-            if (classroot.idx == 0) { app.searchSel = -1; Focus.focus(app.bar.search.field as any) }
+            if (classroot.idx == 0) { app.searchSel = -1; Focus.focus(app.bar.search as any) }
             else app.focusHit(classroot.idx - 1)
             }
         else if (e.key == "Enter") app.openResult(classroot.loc)
@@ -1646,7 +1646,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         app.dismissSearch()
         },
 
-    dismissSearch() { app.searchQ = ""; app.searchSel = -1; app.bar.search.field.text = "" },
+    dismissSearch() { app.searchQ = ""; app.searchSel = -1; app.bar.search.text = "" },
 
     // Focus result row `i` — the keyboard walk's one move. The rows are the
     // replicated children of the results column, each carrying its `idx`;
@@ -1663,7 +1663,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     keys: Keys [
         onKeyDown(e: KeyEvent) {
-            if ((e.meta || e.ctrl) && e.code == "KeyK") { Focus.focus(app.bar.search.field as any) }
+            if ((e.meta || e.ctrl) && e.code == "KeyK") { Focus.focus(app.bar.search as any) }
             else if (e.key == "Escape" && app.searchQ != "") app.dismissSearch()
             }
         ],
@@ -1790,16 +1790,12 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         // the pill: search-as-you-type over the whole corpus; Enter opens the
         // first hit; ⌘K focuses it from anywhere (the Keys source above)
 
-        /* The pill is a View; the input lives in its flat zone. TextInput's
-           `padding` is uniform (16px of it would crush a 32px field), so the
-           capsule shape and the text inset split: the wrapper draws the
-           chrome — surface fill, the themed line that turns accent while the
-           field inside holds focus — and the field starts exactly where the
-           cap ends (x = the 16px radius), transparent chrome of its own.
-           The field's own fill stays the surface tone (it paints only inside
-           the flat zone, so its square corners are invisible) because the
-           editable's colorScheme derives from its view's fill — that is what
-           keeps the native caret and placeholder legible in dark. */
+        /* The pill is the field itself: the capsule is the TextInput's own
+           shape, its text inset by per-side padding, so focus — and the focus
+           ring, which takes the focused view's corners — frames the capsule a
+           person sees (planes.md §14: no wrapper drawing chrome around a
+           square field). The field's fill is the surface tone, which is also
+           what keeps the native caret and placeholder legible in dark. */
 
         /* The pill centers in the window but never collides: its span is the
            gap between the brand and whatever the right cluster starts with
@@ -1809,24 +1805,22 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
            reading zoom is the most droppable control; the theme switch and the
            search are not), which is what keeps the pill usable at 560. */
 
-        search: View [ y = center, height = 32, cornerRadius = 16,
+        search: TextInput [ y = center, height = 32, cornerRadius = 16,
             lo: number = { parent.brand.x + parent.brand.width + 16 },
             hi: number = { (app.compact ? parent.themeSwitch.x : parent.size.x) - 16 },
             x = { Math.max(this.lo, Math.min((app.width - this.width) / 2, this.hi - this.width)) },
             width = { Math.max(120, Math.min(440, this.hi - this.lo)) },
             fill = { provided("theme").surface },
-            stroke = { stroke(1, this.field.focused ? provided("theme").accent : provided("theme").line) },
-            field: TextInput [ x = 16, y = 1, width = { parent.width - 32 }, height = { parent.height - 2 },   // 1px in from the wrapper's stroke, or the field's fill paints over it
-                fill = { provided("theme").surface }, stroke = null, cornerRadius = 0, padding = 0,
-                fontSize = 16, textColor = { provided("theme").text },   // 16: a field under it makes iOS zoom the page toward it
-                placeholder = "Search the docs…   ⌘K",
-                onInput(t: string) { app.searchQ = "" + t; app.searchSel = -1 },
-                onEnter() { if (app.searchHits.length > 0) app.openResult(app.searchHits[0].loc) },
-                onKeyDown(e: KeyEvent) {
-                    if (e.key == "Escape") app.dismissSearch()
-                    else if (e.key == "ArrowDown" && app.searchHits.length > 0) app.focusHit(0)
-                    }
-                ]
+            stroke = { stroke(1, this.focused ? provided("theme").accent : provided("theme").line) },
+            padding = [0, 16, 0, 16],
+            fontSize = 16, textColor = { provided("theme").text },   // 16: a field under it makes iOS zoom the page toward it
+            placeholder = "Search the docs…   ⌘K",
+            onInput(t: string) { app.searchQ = "" + t; app.searchSel = -1 },
+            onEnter() { if (app.searchHits.length > 0) app.openResult(app.searchHits[0].loc) },
+            onKeyDown(e: KeyEvent) {
+                if (e.key == "Escape") app.dismissSearch()
+                else if (e.key == "ArrowDown" && app.searchHits.length > 0) app.focusHit(0)
+                }
             ],
 
         size: View [ y = center, x = { parent.themeSwitch.x - this.width - 20 }, height = 30,

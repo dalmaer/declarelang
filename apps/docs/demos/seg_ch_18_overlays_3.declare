@@ -1,0 +1,12 @@
+App [ width = 400, height = 220, theme = { SanFrancisco },
+    name: string = "untitled",
+    Button [ x = 20, y = 20, label = "Rename…",
+        onClick() { app.rename.show() }
+        ],
+    Text [ x = 20, y = 80, textColor = { provided("theme").text }, text = { app.name } ],
+    rename: Dialog [ title = "Rename",
+        buttons = { [ { id: "cancel", label: "Cancel", cancel: true }, { id: "ok", label: "Rename", default: true } ] },
+        picked(id: string) { if (id == "ok") app.name = this.field.text },
+        field: TextInput [ width = 100% ]
+        ]
+    ]

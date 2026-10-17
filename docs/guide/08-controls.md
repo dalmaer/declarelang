@@ -114,6 +114,26 @@ written, and it can wait for Enter or a Save button before it lands.
 [Data](declare-docs:guide:data@editing-text-and-forms) covers drafts and forms. `<->` is for text fields only;
 the compiler refuses it on a checkbox or a slider and names the value pattern instead.
 
+A multi-line field (`multiline = true`) left unsized is as tall as its text. Cap it as you
+cap any box — `height = { Math.min(contentHeight, 120) }` — and it grows as the user types,
+then scrolls. In a multi-line field Return types a line break; `enterSubmits = true` makes
+Return fire `onEnter` and Shift-Return the break, as in a chat composer:
+
+```declare
+App [ width = 360, height = 200, theme = { SanFrancisco }, fill = { provided("theme").background },
+    textColor = { provided("theme").text }, sent: string = "",
+    Text [ x = 20, y = 20, text = { app.sent == "" ? "Return sends; Shift-Return breaks the line" : "sent: " + app.sent } ],
+    TextInput [ x = 20, y = 56, width = 300, multiline = true, enterSubmits = true,
+        placeholder = "Message", height = { Math.min(contentHeight, 96) },
+        onEnter() { app.sent = this.text } ]
+    ]
+```
+
+Where the user's caret or selection is, a field reports as two read-only facts,
+[`selectionStart`](declare-docs:TextInput.selectionStart) and `selectionEnd` — a constraint
+can follow them (`canBold = { f.selectionEnd > f.selectionStart }`); to move it, call
+[`select()`](declare-docs:TextInput.method.select).
+
 ## Controls that take records
 
 > **If the class arranges it, hand it data. If you arrange it, build it from views.**
@@ -149,7 +169,9 @@ style is yours: views, a layout, and data.
 ## Keyboard focus
 
 Every control is a tab stop. Tab and Shift-Tab move through them in tree order, Space
-and Enter activate, and a click moves focus to what was clicked. A focus ring that
+and Enter activate, and a click moves focus to what was clicked. A control with members —
+a radio group, a segmented control, a list, a menu bar — is one stop: Tab lands on its
+chosen member and the arrows move among the rest. A focus ring that
 travels to the focused control is added to any app that uses library controls; the
 theme can change or turn off how it looks. You declare none of it.
 
@@ -158,10 +180,19 @@ When you need more:
 - `focusable = true` makes any view a tab stop; there is no numeric tab index.
 - A container reorders or gates what Tab reaches by overriding [`tabOrder()`](declare-docs:View.method.tabOrder) — a closed
   pane returns nothing, so Tab never reaches content the user cannot see.
-- `focusTrap = true` keeps Tab inside a group, as a modal needs.
-- [`Focus.focus(view)`](declare-docs:Focus.method.focus) moves focus from code; [`Focus.getFocus()`](declare-docs:Focus.method.getFocus) reads it, for saving
-  before a modal opens and restoring after. Restore on a later turn, not immediately:
-  a keystroke still in flight should finish against the old focus.
+- [`focusScope`](declare-docs:View.focusScope) says what Tab does at a container's edge:
+  `stop` makes it one stop with arrows inside, `region` gives it a cycle of its own that
+  Enter enters and F6 leaves (a window, a pane), `modal` keeps Tab inside it (a dialog).
+  Some browsers take F6 for themselves, so **Esc then Tab** leaves a region too (Shift-Tab
+  goes back), and a program's own command can call
+  [`Focus.nextRegion`](declare-docs:Focus.method.nextRegion).
+- Every view carries [`focused`](declare-docs:View.focused), true while it holds focus — a
+  fact a constraint reads (`stroke = { focused ? stroke(2, provided("theme").accent) : null }`).
+- [`Focus.focus(view)`](declare-docs:Focus.method.focus) moves focus from code;
+  [`Focus.getFocus()`](declare-docs:Focus.method.getFocus) answers which view has it — a
+  constraint reading it follows focus — and is what you save before a modal opens and restore
+  after. Restore on a later turn, not immediately: a keystroke still in flight should finish
+  against the old focus.
 
 ## Building a missing control
 

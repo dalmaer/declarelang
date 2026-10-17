@@ -30,5 +30,7 @@ export { hydrateProgram } from "./hydrate.js";
 export { scrollPlaces, holdScrollPlaces, dropScrollPlaces } from "./scroll-places.js";
 export { setInspectionTarget, provideEvalParser } from "./inspect-service.js";
 export { provideChecker } from "./instantiate.js";
+// an island discarded (its window closed) takes the program it hosts with it
+export { onDiscard } from "./node.js";
 export { isEmbedded, provideHostServices, disposeApp, mountEmbeddedApp, mountApp, reflectAppName, renderProgram, renderProgramAsync, buildProgram } from "./boot.js";
 //# sourceMappingURL=host-api.js.map

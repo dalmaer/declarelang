@@ -1,0 +1,12 @@
+App [ width = 640, height = 420,
+    Button [ x = 20, y = 20, label = "New entry…",
+        onClick() { app.entry.show() }
+        ],
+    entry: Sheet [ edge = "end",
+        Text [ fontWeight = bold, text = "New entry" ],
+        TextInput [ width = 100% ],
+        Button [ label = "Save", primary = true,
+            onClick() { app.entry.close() }
+            ]
+        ]
+    ]

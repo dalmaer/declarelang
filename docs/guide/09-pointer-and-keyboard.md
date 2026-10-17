@@ -165,7 +165,8 @@ names what actually takes the press.
 ## Keyboard events
 
 A focused view receives `onKeyDown` and `onKeyUp` — right for keys that belong to one
-widget. For app-wide shortcuts that work regardless of focus, add a [`Keys`](declare-docs:Keys) member. Like
+widget. For keys the whole app hears regardless of focus, add a [`Keys`](declare-docs:Keys) member (a
+command with a label — Save, Find — is a [shortcut](#keyboard-shortcuts), below). Like
 a [`Dataset`](declare-docs:Dataset) or a [`Spring`](declare-docs:Spring), it is a child with no pixels, and it lives as long as the node
 that declares it:
 
@@ -184,7 +185,7 @@ App [ width = 240, height = 100, fill = white, textColor = black,
 
 Click the preview, then use the arrow keys. The event carries `key` (`"ArrowUp"`,
 `"Escape"`, `"a"`), `code`, and modifier flags. `Keys` hears every key, even while a text
-field has focus, so gate shortcuts on app state where that matters. [`Keys.isDown("ShiftLeft")`](declare-docs:Keys.method.isDown)
+field has focus, so gate single-key handling on app state where that matters. [`Keys.isDown("ShiftLeft")`](declare-docs:Keys.method.isDown)
 asks whether a key is held right now — how a click decides whether it extends a
 selection. Several `Keys` members all hear the keyboard; each lives with its owner.
 Keyboard focus itself is in [Controls](declare-docs:guide:controls@keyboard-focus).
@@ -204,6 +205,40 @@ host hands a program the keyboard by focusing its island (a focusable island, an
 its own views. A key held as the keyboard moves on is released, for the program that
 had it.
 
+### Keyboard shortcuts
+
+A command a person can also pick — Save, New, Find — is a shortcut, and a shortcut is
+**data**: a [`Shortcuts`](declare-docs:Shortcuts) member holds records with the key, the
+label a person reads, and the id its `picked` receives.
+
+```declare
+App [ width = 520, height = 240,
+    saved: number = 0,
+    keys: Shortcuts [ title = "Notes",
+        items = { [ ({ id: "save", key: "⌘S", label: "Save" }), ({ id: "clear", key: "⇧⌘K", label: "Clear" }) ] },
+        picked(id: string) { if (id == "save") app.saved = app.saved + 1 }
+        ],
+    Text [ x = 20, y = 20, text = { "Saved " + app.saved + " times — press ⌘S" } ]
+    ]
+```
+
+A set covers the view it is declared on. A press is looked up from the focused view outward,
+and the nearest set that declares the key takes it — so a pane can give ⌘F a meaning of its
+own while the rest of the program keeps the App's. The walk goes on past the program: a
+program in a desktop's window reaches the desktop's ⌘N. A shortcut that fires is not also a
+`Keys` event, and not also the browser's (⌘S does not save the page). A plain key (`"?"`)
+stands down while a text field has focus, and every shortcut stands down while an open menu
+or dialog holds the keyboard — Esc and the arrows are its own.
+
+A [`MenuBar`](declare-docs:MenuBar)'s items carry their keys already (`key: "⌘N"`), and
+those are its program's shortcuts, so a program with a menu bar declares them once.
+[`Keys.shortcutsInForce()`](declare-docs:Keys.method.shortcutsInForce) lists what is in force
+where focus is, for a panel of them — the desktop shows one while ⌘ is held alone, which a
+`Keys` member hears as [`onCommandHeld`](declare-docs:Keys.event.commandHeld).
+
+`Keys` stays the channel for keys that are not commands: a game's arrows, a key held to
+extend a selection.
+
 ## Files dropped on a view
 
 A view that declares [`onFilesDrop`](declare-docs:View.event.filesDrop) takes the person's files dragged onto it — the
@@ -215,6 +250,6 @@ light it while they are over it. What a file is, and what to do with one, is in
 
 **What you can now do:** style from hover and press, route behavior by calling methods,
 choose between the raw and resolved layers, let one view carry a drag and a click, find
-what is under the pointer, handle keys, and take the person's files.
+what is under the pointer, handle keys, declare shortcuts, and take the person's files.
 
 [Next: **Touch and gestures** →](declare-docs:guide:touch)

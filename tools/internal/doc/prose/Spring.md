@@ -24,6 +24,13 @@ replicated class is *N* springs, one per row; three hundred rows of "the same ha
 constraints" each carrying their own springs is three hundred integrators for motion that
 only one row at a time is ever in.
 
+**It starts where it is going.** The first target a spring computes is where its attribute
+begins: a `Switch` declared checked renders checked, a panel whose spring targets "closed"
+starts closed — nothing flies in from 0 as the program opens. Physics governs every change
+after that. To have the opening itself move, start the target somewhere else and change it
+once the program is up (from `onReady`, or a `Time`); to have a *later* first value appear
+without travel, use `arrive()`.
+
 ## arrive()
 Take the **next** target outright instead of travelling to it. A figure sprung toward data
 would otherwise count up from zero when the data lands — a change the reader never lived

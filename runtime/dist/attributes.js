@@ -26,7 +26,7 @@
 // bug is unrepresentable); a runtime-supplied derive yields to a direct write.
 import { ACTIVE, Cell, Constraint, S, isSettling, isTracking, kernel, noteWrite, nulls, retireValue, setPushHook, table, touchCell, trackCell, untracked, workPending, setOwnershipCheck } from "./reactive.js";
 import { DeclareError, at, layoutConflictMessage } from "./errors.js";
-import { THEME_PRESETS } from "./themes.js";
+import { THEME_PRESETS, withThemeDefaults } from "./themes.js";
 // Class → its attribute tables. All are prototype-chained objects mirroring
 // the class hierarchy (Text's defaults chain to View's), so "nearest declared
 // wins" is a plain property lookup — the same shape schema.ts's chain walk
@@ -242,6 +242,10 @@ export function setPosOf(self, name) {
     return self.$setAt?.[name] ?? null;
 }
 export function provideWrite(self, name, value) {
+    // a provided theme is laid over the library's defaults for the optional
+    // tokens it leaves out (themes.ts) — once, here, so no reader carries one
+    if (name === "theme" && value !== null && typeof value === "object")
+        value = withThemeDefaults(value);
     const p = self;
     const store = (p.$provides ??= Object.create(null));
     if (!(name in store)) {

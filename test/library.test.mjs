@@ -145,7 +145,7 @@ await test("Menu: viewport-aware — a list that won't fit below emerges ABOVE; 
   settle();
   assert.equal(Keys.navClaimed(), true, "an open menu claims the nav keys from page scroll");
   const h = app.m.expectedHeight();
-  assert.ok(app.m.y + app.m.offY + h <= 244, `emerged above the control (y=${app.m.y}, h=${h})`);
+  assert.ok(app.m.y + h <= 244, `emerged above the control (y=${app.m.y}, h=${h})`);
   app.m.close();
   settle();
   assert.equal(Keys.navClaimed(), false, "closed releases the claim");
@@ -245,7 +245,8 @@ await test("DataGrid: columns are written members — cells generate from the mo
   const rows = gridRows(app.g);
   assert.equal(rows.length, 3);
   assert.deepEqual(cellTexts(rows[1]), ["1", "Issue 1", "open"], "each cell shows record[field]");
-  assert.equal(app.g.hdr.y, -app.g.headerH, "the header floats ABOVE the scroll box");
+  assert.ok(app.g.hdr.paintsIn === app.g.parent, "the header paints in the grid's parent, outside the scroll box");
+  assert.equal(app.g.hdr.y, app.g.y - app.g.headerH, "and floats ABOVE the scroll box, in that parent's frame");
   assert.equal(rows[0].y, 0, "rows start at the box top — the scroll region is rows only");
 });
 
@@ -332,6 +333,10 @@ await test("DataGrid: cell KINDS — an editor, a checkbox, and a select all wri
   const row = app.g.children.find((c) => c.isGridRow === true);
   const cells = row.cells.children.filter((c) => c.k !== undefined);
   assert.deepEqual(cells.map((c) => c.k), ["text", "edit", "select", "check"], "one presentation per kind");
+  // each cell is its kind's class, and builds only that kind's presentation
+  assert.deepEqual(cells.map((c) => c.constructor.name), ["TextCell", "EditCell", "SelectCell", "CheckCell"]);
+  assert.deepEqual(cells.map((c) => ["t", "ed", "sel", "ck"].filter((n) => c[n] != null)),
+    [["t"], ["ed"], ["sel"], ["ck"]], "nothing built for the other kinds");
   // the editor commits each edit into the record through the row's cursor
   cells[1].ed.onInput("Renamed");
   settle();

@@ -414,7 +414,7 @@ interface KeyEvent { code: string; key: string; shift: boolean; ctrl: boolean; a
 /** Where the focus indicator should be, and where it came from — the rect and
  *  radius to draw, the view and root it belongs to, the scroller it sits in, and the
  *  \`home…\` fields it is travelling from. What a custom focus ring reads to animate. */
-interface FocusGeometry { x: number; y: number; w: number; h: number; rad: number; view: View; root: View; scroller: View; homeX: number; homeY: number; homeW: number; homeH: number; homeRad: number }
+interface FocusGeometry { x: number; y: number; w: number; h: number; rad: number; view: View; root: View; scroller: View; homeX: number; homeY: number; homeW: number; homeH: number; homeRad: number; homeRot: number }
 /** A tooltip's request: the text, and the rect of the view asking, so a custom
  *  tip can place itself against the thing it describes. */
 interface TooltipEvent { readonly text: string; readonly x: number; readonly y: number; readonly w: number; readonly h: number; readonly root: View }
@@ -724,6 +724,12 @@ export const LANGUAGE_STATICS: Readonly<Record<string, readonly string[]>> = {
     // Claim the nav keys (arrows/Space/Home/End/Page) from the browser's
     // scroll defaults while an overlay roves — an open Menu's claim.
     `  static navClaim(owner: object, on: boolean): void;`,
+    // the overlay the keys go to now (planes.md §9)
+    `  static claimant(): any;`,
+    // declared shortcuts (planes.md §9): a Shortcuts set registers; the
+    // resolved set where focus is, for a panel that lists them
+    `  static declareShortcuts(owner: object): void;`,
+    `  static shortcutsInForce(): any[];`,
   ],
   Focus: [
     `  static focus(v: unknown): void;`,
@@ -732,6 +738,10 @@ export const LANGUAGE_STATICS: Readonly<Record<string, readonly string[]>> = {
     `  static prev(): void;`,
     `  static byKeyboard(): boolean;`,
     `  static getFocus(): any;`,
+    // focus scopes (planes.md §13): into a scope, and between regions
+    `  static focusIn(v: unknown): boolean;`,
+    `  static nextRegion(dir: number): void;`,
+    `  static holds(v: unknown): boolean;`,
   ],
 };
 
@@ -814,7 +824,6 @@ export const LANGUAGE_API: Readonly<Record<string, readonly string[]>> = {
     `  containsPoint(x: number, y: number): boolean;`,
     // Re-host this view's surface inside a scroller so the platform carries
     // it with the content (the FocusRing's ride); false = unsupported.
-    `  travelWith(scroller: View | null): boolean;`,
     // Imperative creation — the receiver IS the parent (and the new view's
     // scope/data anchor). The tag is a string LITERAL at nearly every call
     // site, and the scaffold owns the class table — so the return is the class
@@ -833,6 +842,8 @@ export const LANGUAGE_API: Readonly<Record<string, readonly string[]>> = {
     // the composed similarity to root-frame space — the method tier's exact
     // transform (the visibility FACTS are its coarse at-rest companions)
     `  rootTransform(): { x: number; y: number; scale: number; rotation: number };`,
+    // the same similarity, to another view's frame — across islands (planes.md §12)
+    `  transformTo(other: View): { x: number; y: number; scale: number; rotation: number };`,
     // bounds() minus the position: x/y are the transform's lead offsets, and it
     // never reads the view's x/y — the form a layout's place() consumes (a
     // strategy must not read the slots it writes).

@@ -1,10 +1,10 @@
-App [ width = 340, height = 160, theme = { SanFrancisco },
-    picked: string = "",
-    people: array = { ["Ada Lovelace", "Grace Hopper", "Alan Turing", "Barbara Liskov"] },
-    Combobox [ x = 20, y = 20, width = 260, placeholder = "Assignee",
-        items = { app.people },
-        input(v: string) { app.picked = v }
+App [ width = 360, height = 150, theme = { SanFrancisco },
+    said: string = "",
+    dlg: Dialog [ ],
+    Button [ x = 20, y = 20, label = "Delete…",
+        onClick() { app.dlg.ask("Delete this file?", "This cannot be undone.",
+                                (id) => { app.said = id }) }
         ],
     Text [ x = 20, y = 84, textColor = { provided("theme").text },
-        text = { app.picked == "" ? "—" : app.picked } ]
+        text = { app.said == "" ? "—" : "you chose: " + app.said } ]
     ]

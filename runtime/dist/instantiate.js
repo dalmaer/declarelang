@@ -1219,7 +1219,11 @@ function construct(el, outer, ctx, parentEl) {
     // (`defaultplacement = body`); the children every LATER source writes — a
     // subclass body, the use site — go into that child instead, appended in
     // order. The class's own children are never placed; a later class may name
-    // a placement of its own for the sources after it.
+    // a placement of its own for the sources after it. Placement carries VIEWS:
+    // a member with no view — a Spring, an Animator, a State, Keys, a Dataset,
+    // a Node — configures the instance it is written on, and stays on it (a
+    // subclass's `Spring [ attribute = tiltA ]` drives the instance's tiltA,
+    // not the placement target's).
     const slot = { prev: null };
     let place = null;
     const into = (from, fromCroot) => {
@@ -1227,8 +1231,13 @@ function construct(el, outer, ctx, parentEl) {
             appendChildren(from, view, fromCroot, ctx, el, slot);
             return;
         }
-        appendChildren(from, place.target, fromCroot, ctx, el, place.slot);
-        hoistPlacedNames(from, view, place.target);
+        const isView = (c) => c.classSlot !== undefined || familyOf(c.tag, ctx) === "view";
+        const members = from.children.filter((c) => !isView(c));
+        if (members.length > 0)
+            appendChildren({ ...from, children: members }, view, fromCroot, ctx, el, slot);
+        const views = members.length > 0 ? { ...from, children: from.children.filter(isView) } : from;
+        appendChildren(views, place.target, fromCroot, ctx, el, place.slot);
+        hoistPlacedNames(views, view, place.target);
     };
     if (user !== undefined) {
         if (ctx.expanding.has(el.tag)) {

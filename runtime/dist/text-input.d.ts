@@ -14,11 +14,16 @@ export declare class TextInput extends Editor {
     text: string;
     placeholder: string;
     multiline: boolean;
+    enterSubmits: boolean;
+    /** The native selection, read-only: where it starts and ends (equal for a
+     *  bare caret). Reported by the backend as the user moves it; `select()` is
+     *  the write half. */
+    selectionStart: number;
+    selectionEnd: number;
     spellcheck: boolean;
     wrap: boolean;
     padding: Inset;
     initial: string;
-    focused: boolean;
     protected $draftSlot(): string;
     $attach(backend: RenderBackend, parentSurface: Surface | null): void;
     protected $flush(s: Surface): void;
@@ -34,6 +39,11 @@ export declare class TextInput extends Editor {
      *  it, exactly like any author write (attributes.ts set path), so a field can
      *  be seeded from a binding yet stay editable. */
     private $onNativeInput;
+    /** The field's text folds into `contentHeight` as its measured lines (the
+     *  same measure as the unset-height derive), so the documented cap reads as
+     *  it does for any box: `height = { Math.min(contentHeight, 120) }` — a
+     *  multi-line field that grows with its text, then scrolls. */
+    protected $contentExtent(size: "width" | "height"): number;
     /** Declare focus arrived/left — give or take the platform caret (Layer 2 hook,
      *  separate from the author's onFocus/onBlur). A held select() applies HERE,
      *  after activation — so Tab and programmatic focus land where the program

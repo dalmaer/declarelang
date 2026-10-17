@@ -351,7 +351,14 @@ sort.** Then select a range and scroll — selection holds, because it is record
 The row template is empty on purpose: **cells generate from the column model**, each
 showing `record[field]`. A column's `kind` chooses what a cell *is* — `"text"`, `"edit"`
 (a field that commits into the record as you type), `"check"`, or `"select"` — so an
-editable grid is a word per column, not a cell renderer per column.
+editable grid is a word per column, not a cell renderer per column. Each kind is a class —
+[`TextCell`](declare-docs:TextCell), [`EditCell`](declare-docs:EditCell), [`CheckCell`](declare-docs:CheckCell), [`SelectCell`](declare-docs:SelectCell), each a [`GridCell`](declare-docs:GridCell) — and a column's
+cells are built as that class alone, the `classFor` of [Records of different kinds](#records-of-different-kinds)
+applied to cells.
+
+From the keyboard the grid is one Tab stop with an active cell: the arrows move it, Enter or
+F2 or a typed character edits it, Esc puts the value back, Enter commits and moves down, and
+Space toggles a checkbox cell.
 
 Two things here are worth carrying to your own work.
 

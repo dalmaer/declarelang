@@ -1,20 +1,25 @@
-// Focus — the keyboard-focus service (docs/system-design/input.md, Layer 2). One
+// Focus — the keyboard-focus service (docs/system-design/planes.md §13). One
 // focused view at a time; Tab moves through the view tree in preorder, each
 // view's own `tabOrder()` deciding the order it is descended into (default =
 // visible children in source order — so an all-default tree is pure preorder,
-// no numeric tabindex, LZX over DOM). `focusTrap` bounds a self-contained group
-// (Tab cycles within, `onEscapeFocus` at the boundary). The sequence is
-// recomputed LIVE per move over the current tree, and the service subscribes to
-// the discard lifecycle so a moving tree can never strand focus.
+// no numeric tabindex, LZX over DOM). A view's `focusScope` says what Tab does
+// at its edge: `stop` is one entry in its parent's order (arrows inside are the
+// view's own), `region` is one entry from outside and a cycle inside, `modal` is
+// a cycle Tab never leaves, `capture` walks straight in. An island is
+// transparent: its tenant's stops take its place. Each scope remembers what last
+// had focus inside it. The sequence is recomputed LIVE per move over the current
+// tree, and the service subscribes to the discard lifecycle so a moving tree can
+// never strand focus.
 //
 // It is a small STATEFUL service (holds the current focus, the root, a
 // reentrancy lock) rather than a pure per-Tab function — see input.md
 // §mutation. Keyboard delivery to the focused view (Keys → onKeyDown/onKeyUp)
 // is wired by the runtime entry, not here, keeping this layer independent.
-import { View, fireEvent, setFocusDiscardHook } from "./view.js";
+import { View, fireEvent, setFocusDiscardHook, noteFocused } from "./view.js";
 import { radiusMax } from "./value.js";
 import { Cell, Constraint } from "./reactive.js";
-import { rootFrameBox } from "./interaction.js";
+import { rootFrameBox, rootTransform } from "./interaction.js";
+import { apply as applyAffine } from "./affine.js";
 export class FocusService {
     current = null;
     rootView = null;
@@ -54,9 +59,13 @@ export class FocusService {
     setRoot(view) {
         this.rootView = view;
     }
+    /** The focused view — a tracked read: a constraint that reads it re-runs
+     *  when focus moves. */
     getFocus() {
+        this.currentCell.track();
         return this.current;
     }
+    currentCell = new Cell();
     /** The top-level program's root — the program that has the keyboard while
      *  nothing is focused (null before one is mounted). */
     getRoot() {
@@ -82,6 +91,7 @@ export class FocusService {
     /** Test/lifecycle reset. */
     reset() {
         this.current = null;
+        noteFocused(null);
         this.rootView = null;
         this.changing = false;
         this.queued = false;
@@ -91,15 +101,21 @@ export class FocusService {
     /** Focus a view (null = blur). A non-focusable or invisible view is ignored
      *  (never becomes the focus). Fires onBlur on the old, onFocus on the new.
      *  This public entry is the POINTER/PROGRAMMATIC path — it clears the
-     *  keyboard modality; Tab traversal (move) sets it. */
+     *  keyboard modality; Tab traversal (move) sets it. Called from a key's
+     *  handler (arrows roving a Segmented's segments, a shortcut focusing a
+     *  field), it is keyboard focus: the web's :focus-visible rule for script
+     *  focus during keyboard use. */
     focus(view) {
-        this.setKeyboard(false);
+        this.setKeyboard(this.keys?.inKeyDispatch() === true);
         this.apply(view);
     }
+    /** The key service delivering to this one (deliverKeys) — asked whether a
+     *  focus call comes from a key's handler. */
+    keys = null;
     apply(view) {
         // a linked view is a focus stop by that fact alone (location.md §0.4) —
         // the <a> contract: keyboard reaches every link, Enter follows it
-        if (view !== null && !((view.focusable || view.link !== "") && view.visible))
+        if (view !== null && !canFocus(view))
             return;
         if (this.changing) {
             this.queued = true;
@@ -116,6 +132,8 @@ export class FocusService {
         this.changing = true;
         const old = this.current;
         this.current = view;
+        noteFocused(view);
+        this.currentCell.changed();
         if (old !== null) {
             old.$focusChanged(false); // internal (native element) before the user event
             fireEvent(old, "blur");
@@ -125,6 +143,8 @@ export class FocusService {
             fireEvent(view, "focus");
         }
         this.changing = false;
+        if (view !== null)
+            remember(view);
         this.retargetFollower();
         for (const h of [...this.changeHandlers])
             h(this.current);
@@ -179,9 +199,15 @@ export class FocusService {
             // scroller's content space (its own translate and — deliberately
             // unread — scroll offset are not crossed, so a traveled indicator
             // never re-derives per scroll tick)
+            // A scroller with nothing to scroll is passed over: it never moves its
+            // content, so a ring outside it rides nothing it needs, and is not cut
+            // off by its clip (planes.md §14 — the tracker's filter chips). Its
+            // extent is a tracked read, so the home changes when it starts to.
+            // A scroller does not carry what its pinned chrome holds (a pane's
+            // ignoreScroll header): that control rides the next scroller out.
             let scroller = root;
-            for (let n = v.parent; n instanceof View; n = n.parent) {
-                if (n.scrolls !== "none") {
+            for (let c = v, n = v.parent; n instanceof View; c = n, n = n.parent) {
+                if (n.scrolls !== "none" && !c.ignoreScroll && overflows(n)) {
                     scroller = n;
                     break;
                 }
@@ -189,17 +215,30 @@ export class FocusService {
             const hb = scroller === root
                 ? { x, y, width: fb.width, height: fb.height, scale: fb.scale }
                 : rootFrameBox(v, rect, scroller);
+            // a turned view (a tilted window, a control in a turned panel the
+            // ring does not ride) is ringed turned, not by its upright bounds
+            const ht = rootTransform(v, scroller === root ? null : scroller);
+            const turned = Math.abs(ht.rotation) > 1e-4;
+            const [ox, oy] = turned ? applyAffine(ht.matrix, rect?.x ?? 0, rect?.y ?? 0) : [0, 0];
+            const lx = scroller === root ? root.scrollX : 0, ly = scroller === root ? root.scrollY : 0;
             return {
                 x, y,
                 w: fb.width, h: fb.height,
                 rad: radLocal * fb.scale,
                 view: v, root, scroller,
-                homeX: hb.x, homeY: hb.y,
-                homeW: hb.width, homeH: hb.height, homeRad: radLocal * hb.scale,
+                homeX: turned ? ox + lx : hb.x, homeY: turned ? oy + ly : hb.y,
+                homeW: turned ? (rect?.w ?? v.width) * ht.scale : hb.width,
+                homeH: turned ? (rect?.h ?? v.height) * ht.scale : hb.height,
+                homeRad: radLocal * hb.scale,
+                homeRot: turned ? ht.rotation * 180 / Math.PI : 0,
             };
         }, (g) => { if (g != null)
             for (const fn of [...this.geometryHandlers])
                 fn(g); });
+        // kept, so the next focus change disposes it: an unkept follower went on
+        // pushing the geometry of a view that had lost focus, and the ring
+        // answered every one of them
+        this.follower = k;
         k.run();
     }
     blur() {
@@ -211,77 +250,359 @@ export class FocusService {
     prev() {
         this.move(-1);
     }
-    /** The ordered focus stops in a view's group — its focusTrap ancestor, else
-     *  the root. Exposed for tooling/tests. */
+    /** The ordered focus stops of the cycle a view's Tab moves in (planes.md
+     *  §13.7) — the views Tab lands on, a scope's entry standing for the scope.
+     *  Exposed for tooling/tests. */
     sequenceFor(view) {
-        const group = view !== null ? this.groupRoot(view) : this.rootView;
-        return group !== null ? sequence(group) : [];
+        const cyc = view !== null ? cycleOf(view) : this.rootView;
+        return cyc !== null ? sequence(cyc).map((e) => e.view) : [];
     }
     move(dir) {
-        const group = this.current !== null ? this.groupRoot(this.current) : this.rootView;
-        if (group === null)
+        const cyc = this.current !== null ? cycleOf(this.current) : this.rootView;
+        if (cyc === null)
             return;
-        const seq = sequence(group);
+        const seq = sequence(cyc);
         if (seq.length === 0)
             return;
-        const idx = this.current !== null ? seq.indexOf(this.current) : dir === 1 ? -1 : 0;
-        const atEdge = idx !== -1 && ((dir === 1 && idx === seq.length - 1) || (dir === -1 && idx === 0));
-        if (group.focusTrap && atEdge)
-            fireEvent(group, "escapeFocus");
+        let idx = this.current !== null ? entryIndex(seq, this.current) : dir === 1 ? -1 : 0;
+        // a focused island stands where its program's stops are spliced: Tab goes
+        // into the program, Shift-Tab to the stop before it
+        const tenant = this.current !== null && idx < 0 ? tenantOf(this.current) : null;
+        if (tenant !== null) {
+            const first = seq.findIndex((e) => insideAcross(e.view, tenant));
+            if (first >= 0)
+                idx = dir === 1 ? first - 1 : first;
+        }
         const nidx = (((idx + dir) % seq.length) + seq.length) % seq.length; // cyclic
-        this.setKeyboard(true); // Tab traversal — the focus-visible modality
-        this.apply(seq[nidx]);
-        // The web's focus-reveal contract: a keyboard-focused control is scrolled
-        // into view (minimum distance — "nearest"), through app scrollers and the
-        // document alike. Without it, Tab after a page scroll lands the ring
-        // offscreen and the traversal looks dead.
-        if (this.current === seq[nidx])
-            seq[nidx].scrollIntoView("nearest");
+        this.land(seq[nidx].view);
+    }
+    /** Keyboard-focus `v` and show it: the focus-visible modality, and the web's
+     *  focus-reveal contract (a keyboard-focused control is scrolled into view,
+     *  minimum distance, through app scrollers and the document alike). */
+    land(v) {
+        this.setKeyboard(true);
+        this.apply(v);
+        if (this.current === v)
+            reveal(v);
+    }
+    /** Enter the focused region (Enter on a window focused as one stop): focus
+     *  what last had focus inside it, else its first stop. True when it entered. */
+    enter() {
+        const f = this.current;
+        if (f === null || scopeOf(f) !== "region")
+            return false;
+        const t = entryOf(f);
+        if (t === null || t === f)
+            return false;
+        this.land(t);
+        return true;
+    }
+    /** Focus into `view`: what last had focus inside it, else its first stop —
+     *  how an overlay that takes focus takes it on opening. False when it holds
+     *  nothing to focus. */
+    focusIn(view) {
+        const t = entryOf(view);
+        if (t === null || t === view && !canFocus(view))
+            return false;
+        this.apply(t);
+        return this.current === t;
+    }
+    /** Close the member scope focus has entered inside a `stop` (Esc in a cell's
+     *  editor, in a list row's controls): focus goes back to the stop. True when
+     *  it did. Esc never leaves a region (planes.md §13.3). */
+    leaveMember() {
+        const f = this.current;
+        if (f === null)
+            return false;
+        const s = enteredStop(f);
+        if (s === null)
+            return false;
+        const t = canFocus(s) ? s : entryOf(s);
+        if (t === null || t === f)
+            return false;
+        this.land(t);
+        return true;
+    }
+    /** The region keys (F6 / Shift-F6): move among the regions and stops of the
+     *  context around the region focus is in, entering a region it moves to. */
+    /** Is focus in `v` — on it, or inside it, a program hosted in an island
+     *  inside it included? A window asks it to know whether it has the keyboard
+     *  when what holds focus is a control of the program it hosts. */
+    /** Is focus inside the overlay that holds the keys? Then the keys the
+     *  overlay owns are still the focused view's. */
+    focusInClaimant(keys) {
+        const c = keys.claimant();
+        return c instanceof View && this.holds(c);
+    }
+    holds(v) {
+        return this.current !== null && insideAcross(this.current, v);
+    }
+    /** Is focus inside a region (a window, a pane)? */
+    inRegion() {
+        for (let v = this.current; v !== null; v = parentAcross(v))
+            if (scopeOf(v) === "region")
+                return true;
+        return false;
+    }
+    nextRegion(dir) {
+        const f = this.current ?? this.rootView;
+        if (f === null)
+            return;
+        let r = null;
+        for (let v = f; v !== null; v = parentAcross(v))
+            if (scopeOf(v) === "region") {
+                r = v;
+                break;
+            }
+        const cyc = r !== null ? cycleOf(r) : cycleOf(f);
+        const seq = sequence(cyc).filter((e) => e.scope !== null);
+        if (seq.length === 0)
+            return;
+        const idx = entryIndex(seq, r ?? f);
+        const next = seq[(((idx + dir) % seq.length) + seq.length) % seq.length];
+        const t = next.scope !== null && scopeOf(next.scope) === "region" ? entryOf(next.scope) ?? next.view : next.view;
+        this.land(t);
     }
     /** The focused view's subtree is being discarded (or hidden) — move focus to
-     *  a live stop OUTSIDE it before it goes, so focus never dangles. Survivors
-     *  come from the dying view's OWN tree: when an embedded app is torn down
-     *  (a live-edit re-render), focus is dropped, never re-anchored into the
-     *  host app's controls. Called from View.discard() via the seam in view.ts. */
+     *  a live stop OUTSIDE it before it goes, so focus never dangles: the first
+     *  survivor in the same cycle, else in its program. Survivors come from the
+     *  dying view's OWN tree: when an embedded app is torn down (a live-edit
+     *  re-render), focus is dropped, never re-anchored into the host app's
+     *  controls. Called from View.discard() via the seam in view.ts. */
     noteDiscarded(view) {
         if (this.current === null || !isInSubtree(this.current, view))
             return;
-        const survivors = sequence(rootOf(view)).filter((v) => !isInSubtree(v, view));
+        const alive = (v) => !isInSubtree(v, view);
+        const inCycle = sequence(cycleOf(view)).map((e) => e.view).filter(alive);
+        const survivors = inCycle.length > 0 ? inCycle : sequence(rootOf(view)).map((e) => e.view).filter(alive);
         this.current = null; // the old focus is dying; drop it without a blur into a dead view
+        noteFocused(null);
+        this.currentCell.changed();
         if (survivors.length > 0)
             this.focus(survivors[0]);
     }
-    /** The nearest focusTrap ancestor of `view` (the group it belongs to), or the
-     *  view's OWN tree root when there is none. The tree anchor matters when more
-     *  than one app shares the page (an embedded preview inside a host app): the
-     *  focused view's group is ITS app's tree, so Tab cycles within the app the
-     *  user is interacting with and never leaks into the host's controls. */
-    groupRoot(view) {
-        for (let v = view.parent instanceof View ? view.parent : null; v !== null; v = v.parent instanceof View ? v.parent : null) {
-            if (v.focusTrap)
-                return v;
+}
+// ── scopes (planes.md §13) ──────────────────────────────────────────────────
+const scopeOf = (v) => v.focusScope ?? "none";
+/** May `v` take focus: a focusable view, a link (location.md §0.4), or a region
+ *  (focused as one stop in its parent's cycle) — and shown. */
+/** Room left around a revealed control for the ring drawn outside it. */
+const REVEAL_ROOM = 6;
+/** Show a keyboard-focused view (planes.md §14): each scroller that carries it,
+ *  innermost first, scrolls the least that shows it with room for its ring. A
+ *  scroller does not carry it past a view that ignores scroll (an overlay
+ *  layer fixed to the viewport), and the walk ends at a modal scope: focus in
+ *  a dialog scrolls the dialog's panes, never the page behind it. A scroller
+ *  the user is scrolling takes the reveal when that scroll ends, measured
+ *  then. Within the focused view's own program. */
+function reveal(v) {
+    let child = v;
+    for (let s = paintParent(v); s !== null; child = s, s = paintParent(s)) {
+        if (child !== v && scopeOf(child) === "modal")
+            return;
+        if (s.scrolls === "none" || child.ignoreScroll)
+            continue;
+        if (s.scrolling) {
+            s.$pendingScroll = () => reveal(v);
+            return;
         }
-        return rootOf(view);
+        const b = rootFrameBox(v, undefined, s);
+        const ax = s.scrolls;
+        const pin = pinnedEdges(s, child, b);
+        if (ax === "y" || ax === "both") {
+            const top = b.y - REVEAL_ROOM - pin.top, bottom = b.y + b.height + REVEAL_ROOM + pin.bottom;
+            if (top < s.scrollY)
+                s.scrollTo(Math.max(0, top));
+            else if (bottom > s.scrollY + s.height)
+                s.scrollTo(Math.min(top, bottom - s.height));
+        }
+        if (ax === "x" || ax === "both") {
+            const left = b.x - REVEAL_ROOM - pin.left, right = b.x + b.width + REVEAL_ROOM + pin.right;
+            if (left < s.scrollX)
+                s.scrollToX(Math.max(0, left));
+            else if (right > s.scrollX + s.width)
+                s.scrollToX(Math.min(left, right - s.width));
+        }
     }
 }
-/** The flat ordered focus stops within `root`'s group: preorder over each
- *  view's `tabOrder()`, emitting `focusable && visible` views, not descending
- *  into a NESTED focusTrap (its own group). */
+/** How far a scroller's pinned chrome covers each edge of its frame, over the
+ *  span a revealed box `b` (in the scroller's content coordinates) occupies:
+ *  a visible child that ignores the scroll, stands against an edge and takes
+ *  the pointer — a header bar, a footer, a side rail — hides what scrolls
+ *  under it, so a reveal lands clear of it (CSS's scroll-padding, read from
+ *  the tree). A layer spanning more than half the frame (an overlay stratum)
+ *  is not chrome, and `skip` is the branch the revealed view is in. */
+function pinnedEdges(s, skip, b) {
+    const out = { top: 0, bottom: 0, left: 0, right: 0 };
+    const fx = b.x - s.scrollX, fy = b.y - s.scrollY; // the box in the frame
+    for (const k of s.childViews) {
+        if (k === skip || !k.ignoreScroll || !k.visible || k.pointerEvents === "none")
+            continue;
+        const kx = k.x, ky = k.y, kw = k.width, kh = k.height;
+        const acrossX = kx < fx + b.width && kx + kw > fx; // over the box's columns
+        const acrossY = ky < fy + b.height && ky + kh > fy; // over the box's rows
+        if (acrossX && kh < s.height / 2) {
+            if (ky <= 0.5)
+                out.top = Math.max(out.top, ky + kh);
+            else if (ky + kh >= s.height - 0.5)
+                out.bottom = Math.max(out.bottom, s.height - ky);
+        }
+        if (acrossY && kw < s.width / 2) {
+            if (kx <= 0.5)
+                out.left = Math.max(out.left, kx + kw);
+            else if (kx + kw >= s.width - 0.5)
+                out.right = Math.max(out.right, s.width - kx);
+        }
+    }
+    return out;
+}
+/** The view a view paints in: its `paintsIn` when that is set, else its parent. */
+function paintParent(v) {
+    const p = v.paintsIn;
+    if (p instanceof View && p !== v.parent)
+        return p;
+    return v.parent instanceof View ? v.parent : null;
+}
+/** Does a scroller have anything to scroll, on an axis it scrolls? */
+function overflows(n) {
+    const ax = n.scrolls;
+    return ((ax === "x" || ax === "both") && n.contentWidth > n.width + 0.5)
+        || ((ax === "y" || ax === "both") && n.contentHeight > n.height + 0.5);
+}
+function canFocus(v) {
+    return (v.focusable || v.link !== "" || scopeOf(v) === "region") && v.visible;
+}
+/** What last had focus inside each scope (§13.2: a scope remembers). */
+const MEMORY = new WeakMap();
+function remember(f) {
+    for (let v = parentAcross(f); v !== null; v = parentAcross(v)) {
+        if (scopeOf(v) !== "none")
+            MEMORY.set(v, f);
+    }
+}
+/** The view one level up, crossing from a tenant's root to its island. */
+function parentAcross(v) {
+    if (v.parent instanceof View)
+        return v.parent;
+    return v.$hostIsland ?? null;
+}
+/** The tenant root an island view leads to, when it has one mounted. */
+function tenantOf(v) {
+    const t = v.$tenant ?? null;
+    return t instanceof View ? t : null;
+}
+function insideAcross(node, ancestor) {
+    for (let v = node; v !== null; v = parentAcross(v))
+        if (v === ancestor)
+            return true;
+    return false;
+}
+/** Where focus lands entering a scope: for a `stop`, its own choice
+ *  (`focusEntry()` — the selected segment, the checked radio), else the scope
+ *  itself when it takes focus (a list), else what last had focus in it, else its
+ *  first stop; for a `region`, what last had focus in it, else its first stop. */
+function entryOf(s) {
+    if (scopeOf(s) === "stop") {
+        const fe = s.focusEntry;
+        if (typeof fe === "function") {
+            const r = fe.call(s);
+            if (r instanceof View && canFocus(r) && insideAcross(r, s))
+                return r;
+        }
+    }
+    // a stop that holds focus itself (a list, a grid) is entered at itself; its
+    // rows' controls are reached by Enter, never by Tab
+    if (scopeOf(s) === "stop" && canFocus(s))
+        return s;
+    const m = MEMORY.get(s);
+    if (m !== undefined && m !== s && canFocus(m) && insideAcross(m, s))
+        return m; // a discarded view is no longer inside
+    const first = sequence(s)[0];
+    return first !== undefined ? first.view : canFocus(s) ? s : null;
+}
+/** The entries of `root`'s cycle: preorder over each view's `tabOrder()`; a
+ *  `stop` or `region` is one entry; a `modal` is reached only from inside; an
+ *  island's tenant splices its own entries in, or stands as one stop. */
 function sequence(root) {
     const out = [];
-    const walk = (v) => {
-        for (const m of tabOrderOf(v)) {
-            if (!m.visible)
-                continue;
-            if (m.focusable || m.link !== "")
-                out.push(m); // links are stops (§0.4)
-            if (m.focusTrap && m !== root)
-                continue; // a nested trap is a separate group
-            walk(m);
-        }
-    };
-    walk(root);
+    for (const m of tabOrderOf(root))
+        visit(m, out);
+    const t = tenantOf(root);
+    if (t !== null)
+        visit(t, out);
     return out;
+}
+function visit(m, out) {
+    if (!m.visible)
+        return;
+    const k = scopeOf(m);
+    if (k === "modal")
+        return;
+    if (k === "region") {
+        out.push({ view: m, scope: m });
+        return;
+    }
+    if (k === "stop") {
+        const t = entryOf(m);
+        if (t !== null)
+            out.push({ view: t, scope: m });
+        return;
+    }
+    const tenant = tenantOf(m);
+    if (tenant !== null) {
+        const inner = [];
+        visit(tenant, inner);
+        if (inner.length > 0)
+            out.push(...inner);
+        else if (canFocus(m))
+            out.push({ view: m, scope: null });
+        return;
+    }
+    if (m.focusable || m.link !== "")
+        out.push({ view: m, scope: null }); // links are stops (§0.4)
+    for (const c of tabOrderOf(m))
+        visit(c, out);
+}
+/** The entry `f` is at: the entry itself, or the scope entry it is inside. */
+function entryIndex(seq, f) {
+    const i = seq.findIndex((e) => e.view === f);
+    if (i >= 0)
+        return i;
+    return seq.findIndex((e) => e.scope !== null && insideAcross(f, e.scope));
+}
+/** The `stop` whose member scope focus has entered — focus inside a stop on a
+ *  view that is not one of the stop's own members (a field in a list's row, an
+ *  editor in a grid's cell) — or null. A stop's own members are the views its
+ *  arrows move among: the stop itself when it takes focus (a list), else its
+ *  focusable views with no focusable view between them and it (segments). */
+function enteredStop(f) {
+    let below = false; // a focusable view between f and the scope
+    for (let v = parentAcross(f); v !== null; v = parentAcross(v)) {
+        const k = scopeOf(v);
+        if (k === "stop")
+            return canFocus(v) || below ? v : null;
+        if (k === "region" || k === "modal")
+            return null;
+        if (v.focusable)
+            below = true;
+    }
+    return null;
+}
+/** The cycle Tab moves in from `f`: the innermost `region` or `modal` around
+ *  it, or the member scope it has entered inside a `stop` (the stop's child on
+ *  the way down — a row), or the outermost program. A view that is itself a
+ *  region moves in its parent's cycle. */
+function cycleOf(f) {
+    const s = enteredStop(f);
+    let child = f;
+    for (let v = parentAcross(f); v !== null; child = v, v = parentAcross(v)) {
+        if (s !== null && v === s)
+            return child;
+        const k = scopeOf(v);
+        if (k === "region" || k === "modal")
+            return v;
+    }
+    return child;
 }
 /** A view's ordered traversal members: its `tabOrder()` override if it defines
  *  one (an instance method, installed by the language), else `tabDefault()`.
@@ -336,7 +657,24 @@ export function deliverKeys(keys, focus) {
     const existing = perFocus.get(focus);
     if (existing !== undefined)
         return existing;
+    focus.keys = keys;
+    // Esc then Tab leaves a region (planes.md §13.3): an Esc with nothing open
+    // to close arms a one-shot, and a Tab that comes next moves to the next
+    // region — Shift-Tab the previous — as F6 does. Any other key disarms it.
+    // The way out that every browser leaves to the page (CodeMirror's rule).
+    let escArmed = false;
     const offDown = keys.onKeyDown((e) => {
+        // a modifier going down on its own (Shift, for Shift-Tab) keeps it armed
+        const lone = /^(Shift|Control|Alt|Meta)(Left|Right)?$/.test(e.code);
+        const armed = escArmed;
+        if (!lone)
+            escArmed = false;
+        if (e.code === "Tab" && armed && !e.ctrl && !e.alt && !e.meta && !keys.navClaimed() && focus.inRegion()) {
+            focus.nextRegion(e.shift ? -1 : 1);
+            return;
+        }
+        if (e.code === "Escape" && !e.repeat && !keys.navClaimed())
+            escArmed = true;
         if (e.code === "Tab") {
             if (e.shift)
                 focus.prev();
@@ -344,12 +682,24 @@ export function deliverKeys(keys, focus) {
                 focus.next();
             return;
         }
-        // an open overlay (a menu) owns the navigation keys: they are not also
-        // the focused view's (keys.ts overlayOwns)
-        if (keys.overlayOwns(e))
+        // the region keys move among windows, panes and bars — not while an
+        // overlay holds the keyboard (planes.md §13.3)
+        // — F6, fixed for now; some browsers take it (conventions-record.md)
+        if (e.key === "F6" && !keys.navClaimed()) {
+            focus.nextRegion(e.shift ? -1 : 1);
+            return;
+        }
+        // an open overlay owns the navigation keys: they are not also the focused
+        // view's when focus is outside it (a menu roves while focus stays on its
+        // opener) — focus inside it (a dialog's field, a popover's slider) keeps
+        // its keys (keys.ts overlayOwns)
+        if (keys.overlayOwns(e) && !focus.focusInClaimant(keys))
             return;
         const f = focus.getFocus();
         if (f !== null) {
+            // Enter on a region focused as one stop enters it
+            if (e.code === "Enter" && f.focusScope === "region" && focus.enter())
+                return;
             // Enter on a focused LINKED view follows the reference — the <a>
             // contract's keyboard half (location.md §0.4). The handler still fires
             // (coexistence rule: handler, then follow — same order as a click).
@@ -358,12 +708,16 @@ export function deliverKeys(keys, focus) {
                 const app = f.root;
                 app?.follow?.(f.link, f.replace);
             }
+            // Esc closes a member scope entered inside a stop — after the focused
+            // view has had it (an editor cancels its edit first)
+            if (e.code === "Escape" && focus.getFocus() === f)
+                focus.leaveMember();
         }
     });
     const offUp = keys.onKeyUp((e) => {
         if (e.code === "Tab")
             return;
-        if (keys.overlayOwns(e))
+        if (keys.overlayOwns(e) && !focus.focusInClaimant(keys))
             return;
         const f = focus.getFocus();
         if (f !== null)

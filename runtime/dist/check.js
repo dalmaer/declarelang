@@ -91,7 +91,7 @@ export function check(input) {
     // the built-in. (A LIBRARY name is refused by the include pass, which knows
     // the manifest.)
     REFUSED_TAGS = new Set(program.classes.filter((c) => Object.hasOwn(SCHEMAS, c.name)).map((c) => c.name));
-    const placementErrors = checkPlacements(program);
+    const placementErrors = [...checkPlacements(program), ...checkControlledInput(program)];
     const { infos, schemas, errors } = programSchemas(program.classes, CHECK_SHAPES);
     errors.push(...placementErrors);
     // A class body declaring one of the runtime's own members (the instantiate
@@ -1186,9 +1186,13 @@ function checkBaselineAlignment(schemas, layoutEl, owner) {
 /** `ignoreLayout` takes a child out of the arrangement — literally, or by a
  *  binding the checker cannot decide (the runtime decides that one). The use
  *  site says it first; failing that, the nearest class in the child's chain
- *  whose body sets it (`class Chip [ ignoreLayout = true, … ]`). */
+ *  whose body sets it (`class Chip [ ignoreLayout = true, … ]`). A child that
+ *  says where it paints (`paintsIn`) has left it too: its x/y are in that
+ *  view's frame (planes.md §3.1). */
 function leavesLayout(c) {
     const says = (el) => {
+        if (el.attrs.some((a) => a.name === "paintsIn"))
+            return true;
         const ig = el.attrs.find((a) => a.name === "ignoreLayout");
         return ig === undefined ? null : !(ig.value.kind === "ident" && ig.value.name === "false");
     };
@@ -1694,6 +1698,52 @@ function checkMethodHere(schema, m) {
                 `Segmented — which fire no such event; an editor delivers through its event instead.)`, m.pos) };
     }
     return r;
+}
+/** The value pattern's one trap, caught where it is written: a class whose
+ *  `input(v)` writes one of its own attributes (`input(v) { value = v }`, a
+ *  Slider's; `input(open) { shown = open }`, every overlay's) delivers its own
+ *  changes — a drag, Esc, a press past it — through that write. Constrain the
+ *  attribute at a use site (`shown = { app.editing }`) and the write is refused
+ *  at run time, the first time the user acts. So a constrained attribute that
+ *  the class's own `input` writes needs an `input` override beside it. */
+function checkControlledInput(program) {
+    const errors = [];
+    const byName = new Map(program.classes.map((c) => [c.name, c]));
+    const writes = new Map();
+    const writtenByInput = (name) => {
+        if (writes.has(name))
+            return writes.get(name);
+        writes.set(name, null);
+        let out = null;
+        for (let c = byName.get(name), n = 0; c !== undefined && n < 32; c = byName.get(c.base), n++) {
+            const m = c.body.methods.find((x) => x.name === "input");
+            if (m === undefined)
+                continue;
+            const p = m.params[0]?.name;
+            const hit = p === undefined ? null : new RegExp(`^\\s*\\{?\\s*(?:this\\.)?(\\w+)\\s*=\\s*${p}\\s*;?\\s*\\}?\\s*$`).exec(m.body);
+            out = hit !== null ? hit[1] : null;
+            break;
+        }
+        writes.set(name, out);
+        return out;
+    };
+    const visit = (el, tag) => {
+        if (!el.methods.some((m) => m.name === "input")) {
+            const attr = writtenByInput(tag);
+            const a = attr === null ? undefined : el.attrs.find((x) => x.name === attr && x.value.kind === "code" && x.bind === undefined);
+            if (a !== undefined) {
+                errors.push(new DeclareError(`${tag}.${attr} is constrained here, but the ${tag} also changes it itself — its own 'input(…)' writes ${attr} ` +
+                    `(closing on Esc or a press past it, a drag, a pick), and that write is refused against your constraint. ` +
+                    `Add 'input(…)' beside it that writes your state instead — '${attr} = { app.open }' with 'input(v: ${attr === "shown" ? "boolean" : "any"}) { app.open = v }'`, a.pos));
+            }
+        }
+        for (const c of el.children)
+            visit(c, c.tag);
+    };
+    visit(program.root, program.root.tag);
+    for (const c of program.classes)
+        visit(c.body, c.base);
+    return errors;
 }
 /** `defaultplacement = name` (instantiate.ts DEFAULT PLACEMENT): written on a
  *  CLASS body, and naming a child that body declares, at any depth. */

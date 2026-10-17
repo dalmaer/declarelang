@@ -42,13 +42,16 @@ App [ width = 320, height = 220, fill = white,
   `Keys.isDown("ShiftLeft")` asks whether a key is held now.
 - Every control is a tab stop already; Tab order is tree order. `focusable = true` makes
   any view one; there is no numeric tab index. A container reorders or gates what Tab
-  reaches by overriding `tabOrder()`.
-- `focusTrap = true` keeps Tab inside a group (a modal). `Focus.focus(view)` moves focus,
+  reaches by overriding `tabOrder()`. A control with members — a radio group, a list — is
+  one stop with arrows inside.
+- `focusScope` says what Tab does at a container's edge: `stop` (one stop, arrows inside),
+  `region` (a cycle of its own, left with F6), `modal` (Tab stays inside, as a dialog
+  needs). `Focus.focus(view)` moves focus,
   `Focus.getFocus()` reads it; restore a saved focus on a later turn, not immediately.
 - The focus ring comes with the library controls; you declare none of it.
 
 **Look up** `Keys`, `KeyEvent`, `Keys.isDown`, `View.focusable`, `View.tabOrder`,
-`View.focusTrap`, `Focus.focus`.
+`View.focusScope`, `Focus.focus`.
 
 **Examples** `library/table.declare`: arrow-key travel, Shift ranges, ⌘ toggles ·
 `apps/desktop/desktop.declare`: menu shortcuts dispatched from the menu records ·

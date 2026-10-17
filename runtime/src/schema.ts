@@ -117,6 +117,8 @@ const ViewSchema: ClassSchema = {
     // pointer-interaction intrinsics (interaction.ts) — read-only (readOnly below):
     // on the live hit chain (hovered) / on the chain captured at pointer-down (pressed)
     hovered: { kind: "boolean" },
+    // holds keyboard focus — the focus service maintains it (Focus.focus moves it)
+    focused: { kind: "boolean" },
     pressed: { kind: "boolean" },
     // Is this view ON SCREEN — in the viewport, not scrolled away, not in a
     // hidden subtree? COARSE by design: it flips at threshold crossings, so a
@@ -312,12 +314,23 @@ const ViewSchema: ClassSchema = {
     // Appendix A: "Layout is an attribute, not a child"), written as the
     // member `layout: SimpleLayout [ … ]`, or `layout = null` for none.
     layout: { kind: "class", of: "Layout" },
-    // Keyboard focus (docs/system-design/input.md, Layer 2): `focusable` = a tab stop;
-    // `focusTrap` = a self-contained focus group (Tab cycles within, escapes at
-    // the boundary). Traversal order is the view tree (no numeric tabindex),
-    // customized by overriding the `tabOrder()` method.
+    // Where the view PAINTS, when that is not where it is declared (planes.md
+    // §3.1): a view reference, null (the default) = its parent. Its x/y are in
+    // that view's frame, it is hit there, and its declared parent's layout and
+    // auto-size leave it out.
+    paintsIn: { kind: "class", of: "View" },
+    // What a press, and a scroll, aimed past this view do while it is shown
+    // (planes.md §8.1) — `none` (the default) for every ordinary view; an
+    // overlay sets them. The router walks the open overlays top first.
+    outsidePress: enumType("OutsidePress", "none", "dismiss", "dismissAndDeliver", "block", "ignore"),
+    scrollBelow: enumType("ScrollBelow", "none", "block", "allow", "dismiss"),
+    // Keyboard focus (docs/system-design/planes.md §13): `focusable` = a tab stop;
+    // `focusScope` = what Tab does at this view's edge — `stop` (one stop, arrows
+    // inside), `capture` (Tab walks in and through), `region` (one stop from
+    // outside, Tab wraps inside), `modal` (Tab wraps, never leaves). Traversal order
+    // is the view tree (no numeric tabindex), customized by `tabOrder()`.
     focusable: { kind: "boolean" },
-    focusTrap: { kind: "boolean" },
+    focusScope: enumType("FocusScope", "none", "stop", "capture", "region", "modal"),
     // Anchor name (location.md §6): give a view a name and a fragment `@name`
     // brings it into view. This is the "named view" half of the reveal namespace
     // (heading slugs are the other); resolution is views-before-slugs, preorder,
@@ -376,7 +389,7 @@ const ViewSchema: ClassSchema = {
   // Nothing writes the facts — not an assignment, not an Animator (an animator
   // drives a slot; a fact is not one — the checker refuses both, naming the
   // verb). This is what makes "who scrolls" invisible to a program.
-  readOnly: ["contentWidth", "contentHeight", "childViews", "virtualized", "rowIndex", "hovered", "pressed", "onScreen", "visibleRect", "apparentScale", "scrollX", "scrollY", "scrolling"],
+  readOnly: ["contentWidth", "contentHeight", "childViews", "virtualized", "rowIndex", "hovered", "pressed", "focused", "onScreen", "visibleRect", "apparentScale", "scrollX", "scrollY", "scrolling"],
   // R5: the pointer trio (click = press and release on the same view — the
   // shared router's rule, input.ts) plus the construction-complete lifecycle
   // event `init` (Appendix A's onInit). Hover (pointerOver/Out) waits for its
@@ -394,7 +407,7 @@ const ViewSchema: ClassSchema = {
   events: ["click", "dblClick", "hold", "pointerDown", "pointerUp", "pointerMove", "pointerOver", "pointerOut",
     "touchStart", "touchMove", "touchEnd", "touchCancel", "wheel",
     "pinchStart", "pinch", "pinchEnd",
-    "retire", "contextMenu", "focus", "blur", "escapeFocus", "keyDown", "keyUp",
+    "retire", "contextMenu", "focus", "blur", "outsidePress", "keyDown", "keyUp",
     // files dragged over the view, leaving it, dropped on it (files.ts)
     "filesOver", "filesOut", "filesDrop"],
   // (`init` is INHERITED from Node now — the faceless tier's lifecycle,
@@ -846,16 +859,10 @@ const EditorSchema: ClassSchema = {
     error: { kind: "string" },    // the current validation error, "" when valid
     valid: { kind: "boolean" },   // does the draft pass validate()?
     dirty: { kind: "boolean" },   // does the draft differ from the committed value?
-    // Does the field hold keyboard focus? Maintained by the runtime, and the
-    // fact the house field-chrome's own focus edge derives from — declared here
-    // so an author who DISPLACES that chrome (assigning `fill`/`stroke`, the
-    // yielding-derive escape) can still render the focus affordance. Read-only
-    // (readOnly below): writing it would not move platform focus, `Focus.focus(v)` does.
-    focused: { kind: "boolean" },
   },
   // The edit session's facts (editor.ts maintains them; user code reads and
   // derives — a write would silently be recomputed on the next keystroke).
-  readOnly: ["error", "valid", "dirty", "focused"],
+  readOnly: ["error", "valid", "dirty"],
 };
 
 const TextInputSchema: ClassSchema = {
@@ -867,6 +874,8 @@ const TextInputSchema: ClassSchema = {
     text: { kind: "string" },
     placeholder: { kind: "string" },
     multiline: { kind: "boolean" },
+    // a multi-line field whose Return fires `enter` (a chat composer); Shift-Return types the break
+    enterSubmits: { kind: "boolean" },
     spellcheck: { kind: "boolean" },
     wrap: { kind: "boolean" },
     padding: { kind: "inset" },
@@ -879,7 +888,12 @@ const TextInputSchema: ClassSchema = {
     // the bound slot closes the loop (that is the shape that CAN clear a
     // field). Prefer `text <-> :path` for a field editing a dataset record.
     initial: { kind: "string" },
+    // The native selection's ends, read-only (the backend reports them as the
+    // user moves the caret); `select()` is the write half.
+    selectionStart: { kind: "number" },
+    selectionEnd: { kind: "number" },
   },
+  readOnly: ["selectionStart", "selectionEnd"],
   events: ["input", "enter"],
 };
 
@@ -1208,7 +1222,9 @@ const KeysSchema: ClassSchema = {
   attrs: {},
   // navClaim: an overlay took (true) / released (false) the navigation keys
   // (keys.ts navClaim) — what a focus indicator stands down for.
-  events: ["keyDown", "keyUp", "navClaim"],
+  // commandHeld: the command key held alone for a moment (true), then let go
+  // or joined (false) — when a panel of the shortcuts in force shows.
+  events: ["keyDown", "keyUp", "navClaim", "commandHeld"],
 };
 
 const FocusSchema: ClassSchema = {
@@ -1439,6 +1455,7 @@ export const EVENT_PAYLOAD: Readonly<Record<string, string>> = {
   // value-carrying events
   input: "string",                                 // TextInput: the new text
   navClaim: "boolean",                             // Keys: an overlay took/released the nav keys
+  commandHeld: "boolean",                          // Keys: the command key held alone (true), let go (false)
   link: "string",                                  // RichText: the href
   follow: "string",                                // App: the reference being followed (onFollow returns the one to proceed with; "" vetoes)
   arrive: "View",                                  // App: the landed-on view — the destination the followed address names, measured
@@ -1451,7 +1468,7 @@ export const EVENT_PAYLOAD: Readonly<Record<string, string>> = {
   filesDrop: "FilesDrop",                          // View: the files dropped on it, and where
   post: "IslandPost",                              // Island bridge: { topic, payload } (view.ts)
   navigate: "IslandNavigation",                    // Island: a hosted program's navigation (island.ts)
-  // payload-free: focus, blur, escapeFocus, init, enter, load, ready,
+  // payload-free: focus, blur, outsidePress, init, enter, load, ready,
   // start, stop, repeat, apply, remove, open, close, error
 };
 

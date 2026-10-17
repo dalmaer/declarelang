@@ -29,7 +29,27 @@ export interface KeysPrograms {
     shown(view: object): boolean;
     /** Run `fn` when the node is discarded. */
     onGone(node: object, fn: () => void): void;
+    /** Is `node` in `ancestor`'s subtree (the node itself included)? */
+    inside(node: object, ancestor: object): boolean;
+    /** Does an overlay's claim hold now? Not while focus is in another context
+     *  than the overlay's — a sheet open in one window does not hold the keys
+     *  typed in another. */
+    claimHolds(owner: object): boolean;
+    /** Where a shortcut is looked for (planes.md §9): the focused view and its
+     *  ancestors, on through each island into its host, nearest first — or the
+     *  keyboard program's root when nothing is focused. */
+    focusChain(): object[];
+    /** Is someone typing — a text field has focus? Then a key with no command
+     *  modifier is the field's, not a shortcut. */
+    typing(): boolean;
 }
+/** A key event as a shortcut's spelling: modifiers in display order, then the
+ *  key (a letter upper-cased, a named key by its glyph). ⌘ is the command key:
+ *  Meta on a Mac, Control elsewhere. */
+export declare function comboOf(e: KeyEvent): string;
+/** A declared spelling, normalized: glyphs or words (`"Cmd+Shift+Z"`), any
+ *  order, to the one form comboOf produces. */
+export declare function normalizeCombo(spec: string): string;
 export declare function setKeysPrograms(p: KeysPrograms | null): void;
 export declare function keysCaller(node: object | null): object | null;
 export declare function setKeysFocusProbe(fn: () => boolean): void;
@@ -59,16 +79,27 @@ export declare class KeysService {
     navClaim(owner: object, on: boolean): void;
     /** Is any navigation-keys claim live right now? */
     navClaimed(): boolean;
+    /** The overlay the keys go to now: the latest claim that holds (focus is not
+     *  in another context than its own), or null. */
+    claimant(): object | null;
+    /** A program is leaving (its island unlinks): the claims its views hold go,
+     *  as their closes would have released them. */
+    releaseProgram(root: object): void;
+    /** A claimant torn down while open — a hosted program unmounted with its
+     *  menu up — holds nothing any more: its claim goes, as a close would. */
+    private dropTornDown;
     /** Was a claim live when the key now being dispatched arrived? Read once,
      *  before any handler runs: the handler that acts on the key (a menu's
      *  Enter picks and closes it) may release the claim mid-dispatch, and the
      *  rest of the same keypress must still see who owned it. */
     private claimedAtDispatch;
     /** Does an overlay own this key? While an overlay claims the navigation
-     *  keys — an open menu — the arrows, Enter, Space, Escape and the jump keys
-     *  are the overlay's: the focused view beneath does not also receive them
-     *  (its Enter would re-press the button that opened the menu; its arrows
-     *  would move a list's selection under an open context menu). */
+     *  keys — an open menu, a popover, a dialog — the arrows, Enter, Space,
+     *  Escape and the jump keys are the overlay's: the focused view beneath does
+     *  not also receive them (its Enter would re-press the button that opened the
+     *  menu; its arrows would move a list's selection under an open context
+     *  menu), and neither does a `Keys` member outside the topmost overlay (one
+     *  Esc closes the popover and does nothing else — planes.md §9). */
     overlayOwns(e: KeyEvent): boolean;
     /** Subscribe to nav-claim TRANSITIONS (true = an overlay took the keys,
      *  false = the last claim released). Returns the unsubscribe thunk. */
@@ -97,8 +128,12 @@ export declare class KeysService {
      *  keyboard (Rule 1); without one, every key. Returns an unsubscribe thunk. */
     onKeyDown(fn: KeyHandler, owner?: object | null): () => void;
     onKeyUp(fn: KeyHandler, owner?: object | null): () => void;
-    /** The handlers a key pressed in `program` reaches. */
+    /** The handlers a key pressed in `program` reaches. A key an open overlay
+     *  owns reaches only the `Keys` members inside a claiming overlay. */
     private reached;
+    /** Is this `Keys` member inside the overlay that claimed the keys last — the
+     *  topmost? A dialog's Enter is not also the menu's open over it. */
+    private inClaimant;
     /** The keyboard may have moved to another program (focus moved): the one
      *  that had it is told each key it holds went up, and those presses are no
      *  program's any more — the program now holding the keyboard sees only
@@ -111,9 +146,47 @@ export declare class KeysService {
     onChord(codes: readonly string[], fn: () => void): () => void;
     /** A key went down: record it, fire the down stream, then complete any chord
      *  whose keys are now all held. */
-    keyDown(e: KeyEvent): void;
+    /** The declared shortcut sets, as their `Shortcuts` nodes register. */
+    private readonly shortcutOwners;
+    /** A `Shortcuts` node declares its set (it registers at init). */
+    declareShortcuts(owner: object): void;
+    /** The owners in force, nearest scope first: each paired with its depth on
+     *  the focus chain. */
+    private ownersInForce;
+    /** The shortcuts in force where focus is now, nearest declaration of each
+     *  key first — what a hold-⌘ panel lists: `{ id, key, label, enabled,
+     *  origin, group }`, `origin` being the declaring set's `title` and `group`
+     *  the menu a menu bar's shortcut sits in (else the origin). */
+    shortcutsInForce(): Array<Record<string, unknown>>;
+    /** The declared shortcut a key event triggers, if any: the nearest set that
+     *  declares its combo, enabled. None while an overlay holds the keyboard
+     *  (its keys are its own), and none without a command modifier while a
+     *  field has focus (typing is the field's), nor a field's own editing
+     *  chords (⌘A, ⌘C/X/V, ⌘Z — FIELD_CHORDS). */
+    private shortcutFor;
+    /** A key went down. Returns whether a declared shortcut took it — the
+     *  adapter then stops the browser's own use of the chord. */
+    keyDown(e: KeyEvent): boolean;
+    /** Whatever a key's handlers do happens while this is true — so focus they
+     *  move is keyboard focus (focus.ts `focus()`, the web's :focus-visible rule
+     *  for script focus during keyboard use). */
+    private dispatching;
+    inKeyDispatch(): boolean;
+    /** Raw delivery: record the key, fire the down stream, complete chords. */
+    private keyDownRaw;
     /** A key went up: drop it, fire the up stream, then re-arm any chord it broke. */
+    private readonly cmdHandlers;
+    private cmdTimer;
+    private cmdShown;
+    /** Subscribe to the command key being HELD ALONE for a moment (true) and let
+     *  go, or joined by another key (false) — when a panel of the shortcuts in
+     *  force shows. Every program hears it, wherever the keyboard is. */
+    onCommandHeld(fn: (on: boolean) => void): () => void;
+    private noteCommandHold;
+    private endCommandHold;
+    private setCommandHeld;
     keyUp(e: KeyEvent): void;
+    private keyUpRaw;
     /** Release everything — on app blur, so a key held across a focus-out does
      *  not stick (a key-up may never arrive while the app is unfocused). */
     clearHeld(): void;

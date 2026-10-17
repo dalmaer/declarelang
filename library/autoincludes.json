@@ -62,5 +62,17 @@
   "IconHost": "icons/icon.declare",
   "SegmentedItem": "segmented.declare",
   "ArrowIcon": "icons/core.declare",
-  "AppearanceSwitch": "appearanceswitch.declare"
+  "AppearanceSwitch": "appearanceswitch.declare",
+  "Floating": "floating.declare",
+  "OverlayStrata": "overlaystrata.declare",
+  "Popover": "popover.declare",
+  "Sheet": "sheet.declare",
+  "Shortcuts": "shortcuts.declare",
+  "Toast": "toast.declare",
+  "Window": "window.declare",
+  "GridCell": "datagrid.declare",
+  "TextCell": "datagrid.declare",
+  "EditCell": "datagrid.declare",
+  "CheckCell": "datagrid.declare",
+  "SelectCell": "datagrid.declare"
 }

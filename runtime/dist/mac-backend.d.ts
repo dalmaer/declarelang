@@ -548,4 +548,5 @@ export declare function macRichLink(id: number, href: string): void;
 export declare function macEditInput(id: number, value: string): void;
 export declare function macEditFocus(id: number, focused: boolean): void;
 export declare function macEditEnter(id: number): void;
+export declare function macEditSelect(id: number, start: number, end: number): void;
 export {};

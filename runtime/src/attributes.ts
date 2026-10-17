@@ -27,7 +27,8 @@
 
 import { ACTIVE, Cell, Constraint, S, isSettling, isTracking, kernel, noteWrite, nulls, retireValue, setPushHook, table, touchCell, trackCell, untracked, workPending, setOwnershipCheck } from "./reactive.js";
 import { DeclareError, at, layoutConflictMessage, type Where } from "./errors.js";
-import { THEME_PRESETS } from "./themes.js";
+import { THEME_PRESETS, withThemeDefaults } from "./themes.js";
+import type { Theme } from "./value.js";
 
 /** One attribute's class-level declaration: its default, the Surface push a
  *  change makes (absent for purely model-side attributes), and an optional
@@ -353,6 +354,9 @@ export function setPosOf(self: object, name: string): Where | null {
 }
 
 export function provideWrite(self: object, name: string, value: unknown): void {
+  // a provided theme is laid over the library's defaults for the optional
+  // tokens it leaves out (themes.ts) — once, here, so no reader carries one
+  if (name === "theme" && value !== null && typeof value === "object") value = withThemeDefaults(value as Theme);
   const p = self as Carrier;
   const store = (p.$provides ??= Object.create(null) as Record<string, unknown>);
   if (!(name in store)) { PROVIDE_GEN++; if (typeof __DECLARE_DEV_SWITCHES__ !== "undefined" && __DECLARE_DEV_SWITCHES__) devMemoTally("bump"); }                 // a NEW name above someone can change their answer

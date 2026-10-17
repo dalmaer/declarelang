@@ -19,7 +19,7 @@ import { buildProgram, mountApp, settle, observe, provideTransport, provideMeasu
          scrollPlaces, holdScrollPlaces, dropScrollPlaces, islandNavigation, provideHostServices,
          provideFilesHost, deliverFiles } from "../runtime/dist/index.js";
 import { MacBackend, flushOps, provideHitPath, macScrollFacts, macWheel, macRichHeight, macRichLink,
-         macEditInput, macEditFocus, macEditEnter, embedsPending, mountEmbed, clearEmbed, surfaceById,
+         macEditInput, macEditFocus, macEditEnter, macEditSelect, embedsPending, mountEmbed, clearEmbed, surfaceById,
          publishChildName, islandViewById, macScrollTo, surfaceOrigin, createOverlaySurface, rootBox,
          countOps, peekOps, macTraceHit } from "../runtime/dist/mac-backend.js";
 
@@ -981,6 +981,7 @@ globalThis.__declareRichLink = (id, href) => { macRichLink(id, href); settle(); 
 globalThis.__declareEditInput = (id, v) => { macEditInput(id, v); settle(); flushOps(); };
 globalThis.__declareEditFocus = (id, f) => { macEditFocus(id, f); settle(); flushOps(); };
 globalThis.__declareEditEnter = (id) => { macEditEnter(id); settle(); flushOps(); };
+globalThis.__declareEditSelect = (id, s, e) => { macEditSelect(id, s, e); settle(); flushOps(); };
 globalThis.__declareSettle = () => { settle(); flushOps(); };
 
 // ── benchmarks ──────────────────────────────────────────────────────────────

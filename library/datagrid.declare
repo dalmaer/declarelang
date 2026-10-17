@@ -123,20 +123,6 @@ A column's id: its `field`, falling back to its `title`.
 ## colWidthOf()
 The present width of a column by id.
 
-## onInit
-Requests the header's escape from the scroll box (see `escaped`). The request stands:
-the runtime applies it when the view attaches, so init running before attach costs
-nothing.
-
-## escaped
-Whether the header surface has left the grid's scrolling box for its parent. **The
-grid's box is the rows' scroll region exactly** — the scrollbar spans rows only, and no
-row ever slides under the header. Backends without the ride keep an in-box header.
-
-### How it settles
-The request is made at init and applied by the runtime at attach; one deferred read
-records the answer. A `false` that survives means the backend has no ride at all.
-
 ## dragCol
 **Internal.** The column id currently being dragged.
 
@@ -161,6 +147,18 @@ pointer re-derives the spans mid-drag and flickers.
 
 ## isDataGrid
 **Internal.** The marker rows and headers guard on — not API.
+
+## activeCol
+The active cell's column — with Table's active row, the grid's keyboard position. Left and Right move it.
+
+## activeCell()
+The active cell's view, when its row is built.
+
+## enterCell()
+Enters a cell: focuses an edit cell's field (starting it with a typed character, when one is given), focuses a check cell's box, or opens a select cell's menu.
+
+## onKeyDown
+Left and Right move the active cell; Enter, F2 or a typed character edits it; Space toggles a check cell; the rest is Table's.
 */
 
 include [ "table.declare", "menu.declare" ]
@@ -169,11 +167,12 @@ use [ Menu ]
 
 // A column declaration — a data-only member (invisible; SimpleLayout skips
 // it and reclaims its space). `width` is the View attribute, reused as the
-// authored column width. `kind` declares what a cell is:
-//   "text"   — a static label (the default)
-//   "edit"   — a TextInput committing each edit into the record (live)
-//   "check"  — a Checkbox over a boolean field
-//   "select" — the value + a chevron; a tap opens the shared options menu
+// authored column width. `kind` declares what a cell is — each kind its own
+// cell class, below:
+//   "text"   — TextCell, a static label (the default)
+//   "edit"   — EditCell, a TextInput committing each edit into the record (live)
+//   "check"  — CheckCell, a Checkbox over a boolean field
+//   "select" — SelectCell, the value + a chevron; a tap opens the shared options menu
 // `options` feeds "select" (records or strings, shown by String()).
 
 /*
@@ -206,7 +205,9 @@ The record key this column shows, and the column's id. **A cell renders
 ## kind
 What a cell *is*: `"text"` (the default, a static label), `"edit"` (a `TextInput`
 committing every keystroke into the record), `"check"` (a `Checkbox` over a boolean
-field), or `"select"` (the value plus a chevron, opening the shared options menu).
+field), or `"select"` (the value plus a chevron, opening the shared options menu). Each
+kind is its own cell class — `TextCell`, `EditCell`, `CheckCell`, `SelectCell` — and a
+column's cells are built as that class alone.
 
 ## options
 The choices a `"select"` cell offers — records or strings. **Read at gesture time, not
@@ -234,7 +235,7 @@ class DataGrid extends Table [
 
     isDataGrid: boolean = true,
 
-    headerH: number = 30,
+    headerH: number = { provided("theme").gridHeaderHeight },
 
     // ── the column-model state — the value pattern ────────────────────────
 
@@ -281,7 +282,7 @@ class DataGrid extends Table [
             // low-priority columns and the model omits them entirely
             if (wd <= 0) continue
             out.push({ id: id, title: (c as Column).title, field: (c as Column).field, width: wd, x: x,
-                kind: (c as Column).kind })
+                kind: (c as Column).kind, i: out.length })
             x = x + wd
             }
         return out
@@ -339,6 +340,54 @@ class DataGrid extends Table [
         this.arrangeInput(ord)
         },
 
+    // ── the active cell: the keyboard position in two dimensions — the active
+    //    row is Table's, the column is this. Left/Right move the column; Enter,
+    //    F2 or a typed character enters the cell; inside it, Tab walks the row's
+    //    cells and Esc comes back (planes.md §13.6.2) ──────────────────────
+
+    activeCol: number = 0,
+
+    activeCell() -> GridCell? {
+        const inst = this.children.find((c) => (c as TableRow).isTableRow === true && (c as TableRow).tableIndex() == activeIndex)
+        if (inst == null) return null
+        return ((inst as GridRow).cells.children.find((c) => (c as GridCell).ci == activeCol) ?? null) as GridCell | null
+        },
+
+    enterCell(cell: GridCell, typed: string) {
+        if (cell.k == "edit") {
+            const ed = (cell as EditCell).ed
+            if (typed == "") { Focus.focus(ed); return }
+            // a typed character starts the edit with it: after this keypress,
+            // so the key is not typed a second time into the field it moved to
+            afterDelay(0, () => {
+                Focus.focus(ed)                     // first: the edit records the value it began from
+                if (cell.row != null) cell.row.setText(cell.fld, typed)
+                afterSettle(() => { ed.select("end") })
+                })
+            }
+        else if (cell.k == "check") Focus.focus((cell as CheckCell).ck)
+        else if (cell.k == "select") (cell as SelectCell).sel.press()
+        },
+
+    onKeyDown(e: KeyEvent) {
+        if (disabled) return
+        const n = this.colData.value.cols.length
+        const plain = !e.meta && !e.ctrl && !e.alt
+        if (e.key == "ArrowRight" && plain) { activeCol = Math.min(n - 1, activeCol + 1); return }
+        if (e.key == "ArrowLeft" && plain) { activeCol = Math.max(0, activeCol - 1); return }
+        const cell = this.activeCell()
+        if (cell != null && plain && !e.repeat) {
+            if ((e.key == "Enter" || e.key == "F2") && cell.k != "text") { this.enterCell(cell, ""); return }
+            if (e.key == " " && cell.k == "check") {
+                if (cell.row != null) cell.row.setFlag(cell.fld, cell.value != true)
+                return
+                }
+            if (e.key == " " && cell.k == "select") { this.enterCell(cell, ""); return }
+            if (cell.k == "edit" && e.key.length == 1 && e.key != " ") { this.enterCell(cell, e.key); return }
+            }
+        super.onKeyDown(e)
+        },
+
     // vertical arrows from an active editor cell: the edit moves to the
     // same column one row up/down (the spreadsheet expectation) — the
     // destination scrolls into existence and its editor takes focus.
@@ -389,7 +438,7 @@ class DataGrid extends Table [
         for (const c of this.children) {
             if ((c as Column).isColumn === true && this.colId(c) == field) opts = (c as Column).options
             }
-        if (selMenu == null) selMenu = app.createView("Menu", ({ }))
+        if (selMenu == null) selMenu = (this.parent as View).createView("Menu", ({ }))   // beside the grid, in its context's layer
         const m = this.selMenu as any
         m.minWidth = 170
         m.items = (opts ?? []).map((o) => ({ id: "" + o, label: "" + o, checked: "" + (current ?? "") == "" + o }))
@@ -399,42 +448,20 @@ class DataGrid extends Table [
 
     // ── the header: chrome above the scroll region. The grid's box is the
     //    rows' scroll region exactly — the scrollbar spans rows only, no
-    //    row ever slides under the header. A DOM scroller clips at its box
-    //    (overflow is real clipping — ignoreClip is Declare's rule, not the
-    //    browser's), so the header's surface escapes into the grid's parent
-    //    (travelWith — the same ride the focus ring takes, run the other way)
-    //    and positions in parent coordinates; the view-tree stays put, so hit
-    //    testing (ignoreClip) and the column model see nothing move.
-    //    Renderers without the ride keep an in-box header. ignoreLayout keeps
-    //    full-mode stacking and the kernel's leading anchor off it — rows
-    //    start at content 0 either way ──────────────────────────────────────
-
-    escaped: boolean = false,
-
-    // init runs before the renderer attaches, so the request cannot be
-    // answered yet — but travelWith remembers it and the runtime applies it
-    // the moment this view attaches, so the ride itself is guaranteed without
-    // polling. One deferred read then records the settled answer for the
-    // fallback geometry below; `false` here means the renderer has no ride
-    // (headless, native), never "attach was slow".
-    //
-    // The read waits for the next frame (afterDelay 0) rather than an afterSettle
-    // step because the boot settle closes before the tree attaches: the host
-    // awaits the program's fonts between instantiating the tree and mounting
-    // it, so a step at this settle's close still finds no surface and records
-    // false for good. The next frame comes after the mount.
-
-    onInit() {
-        escaped = this.hdr.travelWith(this.parent as any)
-        if (!escaped) afterDelay(0, () => { escaped = this.hdr.travelWith(this.parent as any) })
-        },
+    //    row ever slides under the header. A scroller clips at its box, so
+    //    the header paints in the grid's parent (paintsIn — planes.md §3.1)
+    //    and positions in the parent's frame; it stays the grid's member, so
+    //    the column model sees nothing move, and the hit walk finds it among
+    //    the parent's paint guests. ignoreLayout keeps full-mode stacking and
+    //    the kernel's leading anchor off it — rows start at content 0 ────────
 
     hdr: View [ height = { classroot.headerH },
-        x = { classroot.escaped ? classroot.x : 0 },
-        y = { classroot.escaped ? classroot.y - classroot.headerH : -classroot.headerH },
+        paintsIn = { classroot.parent },
+        x = { classroot.x },
+        y = { classroot.y - classroot.headerH },
 
-        // escaped chrome leaves the grid's display subtree, so the grid's
-        // own visibility does not reach it through the platform — mirror it
+        // painting elsewhere, it leaves the grid's display subtree, so the
+        // grid's own visibility does not reach it through the platform — mirror it
 
         visible = { classroot.visible },
         width = { classroot.width },
@@ -465,7 +492,7 @@ class DataGrid extends Table [
 
             fill = { dragging && moved ? provided("theme").surface : null },
             stroke = { dragging && moved ? stroke(1.5, provided("theme").accent) : null },
-            shadow = { dragging && moved ? shadow(0, 4, 14, 0x00000038) : null },
+            shadow = { dragging && moved ? (provided("theme").dragShadow) : null },
             cornerRadius = { dragging && moved ? 6 : 0 },
             opacity = { dragging && moved ? 0.95 : 1 },
 
@@ -495,7 +522,7 @@ class DataGrid extends Table [
                 else (classroot as DataGrid).headerClick(colid)
                 },
 
-            lbl: TextLabel [ x = 8, fontSize = 12, fontWeight = semibold, wrap = false,
+            lbl: TextLabel [ x = 8, fontSize = { provided("theme").gridHeaderFontSize }, fontWeight = semibold, wrap = false,
                 textColor = { provided("theme").textMuted },
                 text = { "" + :title } ],
 
@@ -596,12 +623,15 @@ The same for a boolean field — what a `"check"` cell calls.
 
 ## isGridRow
 **Internal.** The marker identifying a generated grid row — not API.
+
+## height
+From the theme's `gridRowHeight` (28 by default); the header row is `gridHeaderHeight` (30).
 */
 
 class GridRow extends TableRow [
     isGridRow: boolean = true,
 
-    height = 28,
+    height = { provided("theme").gridRowHeight },
 
     // the row's record as a derived attribute — the read is analyzed, so cells
     // re-render when the record's fields change (a method call would go
@@ -620,66 +650,178 @@ class GridRow extends TableRow [
         height = 100%,
         datapath = { (classroot.parent as DataGrid).isDataGrid === true ? (classroot.parent as DataGrid).colData.value : null },
 
-        // One cell per column record; `kind` picks the presentation. Editors
-        // write the record through the row (setText / setFlag) — the grid
-        // never holds cell state, so windowing and sort re-derives keep
-        // every edit.
+        // One cell per column record, built as the class its column's `kind`
+        // names — each kind builds only its own presentation. The row wires
+        // itself into each cell; editors write the record through it
+        // (setText / setFlag), so the grid never holds cell state, and
+        // windowing and sort re-derives keep every edit.
 
-        View [ datapath = :cols[],
-            x = { :x },
-            width = { :width },
-            height = 100%,
-            clip = true,
-            k: string = { "" + (:kind ?? "text") },
-            fld: string = { "" + :field },
+        GridCell [ datapath = :cols[],
+            classFor = { :kind == "edit" ? EditCell : :kind == "check" ? CheckCell : :kind == "select" ? SelectCell : TextCell },
+            row = { classroot } ]
+        ]
+    ]
 
-            t: TextLabel [ x = 8, fontSize = 13, wrap = false,
-                visible = { parent.k == "text" },
-                text = { "" + ((classroot.rec ?? ({}) as any)["" + :field] ?? "") } ],
 
-            ed: TextInput [ x = 4, y = 3, fontSize = 13,
-                visible = { parent.k == "edit" },
-                width = { parent.width - 8 },
-                height = { parent.height - 6 },
-                initial = { "" + ((classroot.rec ?? ({}) as any)["" + :field] ?? "") },
-                onInput(v: string) { classroot.setText("" + :field, v) },
-                onKeyDown(e: KeyEvent) {
-                    if ((classroot.parent as DataGrid).isDataGrid !== true) return
-                    if (e.key == "ArrowDown") (classroot.parent as DataGrid).editStep(classroot, "" + :field, 1)
-                    else if (e.key == "ArrowUp") (classroot.parent as DataGrid).editStep(classroot, "" + :field, -1)
-                    }
-                ],
+/*
+# GridCell
 
-            ck: Checkbox [ label = "",
-                visible = { parent.k == "check" },
-                x = { (parent.width - 18) / 2 },
-                y = { (parent.height - 18) / 2 },
-                checked = { ((classroot.rec ?? ({}) as any)["" + :field]) == true },
-                input(v: boolean) { classroot.setFlag("" + :field, v) }
-                ],
+The base of a `DataGrid` cell: one per column in each row, placed and sized from the column
+model, its datapath the column's record. The row sets `row`, so a cell reads the row's record
+and writes through it. The grid builds each cell as the class its column's `kind` names:
+`TextCell`, `EditCell`, `CheckCell` or `SelectCell`.
 
-            // the select cell is a Control — a real tab stop (Space/Enter
-            // opens the menu, the Control activation path), styled as a
-            // quiet button so it reads as interactive
+## row
+The `GridRow` this cell belongs to, set by the row. A cell reads `row.rec` and writes with
+`row.setText` / `row.setFlag`, because its own cursor is its column, not the row.
 
-            sel: Control [ x = 2, y = 2,
-                visible = { parent.k == "select" },
-                width = { parent.width - 4 },
-                height = { parent.height - 4 },
-                cornerRadius = 5,
-                fill = { this.hovered || this.pressed ? provided("theme").control : null },
-                press() {
-                    if ((classroot.parent as DataGrid).isDataGrid !== true) return
-                    (classroot.parent as DataGrid).openSelect(classroot, this, "" + :field,
-                        (classroot.rec ?? ({}) as any)["" + :field])
-                    },
-                onClick() { if (!this.disabled) this.press() },
-                v: TextLabel [ x = 6, fontSize = 13, wrap = false,
-                    text = { "" + ((classroot.rec ?? ({}) as any)["" + :field] ?? "") } ],
-                arrow: ChevronIcon [ y = center, iconSize = 11,
-                    x = { parent.width - this.width - 6 },
-                    ink = { provided("theme").textMuted } ]
-                ]
-            ]
+## value
+The record's value in this cell's field, read through the row — `null` when the row has no
+record.
+
+## k
+**Internal.** The column's `kind`, as a string.
+
+## fld
+**Internal.** The field this cell shows — its column's `field`.
+
+## ci
+**Internal.** Its column's place in the column model — what the grid's `activeCol` names.
+
+## dataGrid
+The `DataGrid` its row belongs to, or null under a plain table.
+
+## activeHere
+Whether it is the grid's active cell while the grid has focus.
+
+## x
+Its column's offset in the row.
+
+## width
+Its column's width.
+
+## stroke
+The outline that marks the active cell.
+
+## cornerRadius
+From the theme's `gridCellCornerRadius` (3 by default): the active cell's outline. A select cell's button sits 2 rounder.
+*/
+
+class GridCell [ x = { :x }, width = { :width }, height = 100%, clip = true,
+    row: GridRow? = null,
+    k: string = { "" + (:kind ?? "text") },
+    fld: string = { "" + :field },
+    ci: number = { 0 + (:i ?? 0) },
+    value: object = { this.row != null && this.row.rec != null ? (this.row.rec as any)["" + :field] : null },
+
+    // the active cell — the grid's keyboard position — is outlined while the
+    // grid has focus
+
+    dataGrid: DataGrid? = { this.row != null && (this.row.parent as DataGrid).isDataGrid === true ? this.row.parent as DataGrid : null },
+    activeHere: boolean = { this.dataGrid != null && this.dataGrid.focused && this.row != null && this.row.active && this.dataGrid.activeCol == this.ci },
+    stroke = { this.activeHere ? stroke(2, provided("theme").accent) : null },
+    cornerRadius = { provided("theme").gridCellCornerRadius },
+
+    // a cell's control taking focus — by a press or by Tab inside the row —
+    // makes this the active cell
+
+    takeActive() {
+        const g = this.dataGrid
+        const r = this.row
+        if (g == null || r == null) return
+        g.activeCol = this.ci
+        const i = r.tableIndex()
+        g.activeIndex = i
+        g.active = g.itemAt(i)
+        }
+    ]
+
+
+/*
+# TextCell
+
+A `DataGrid` cell that shows its value as a label — the default `kind`, `"text"`.
+*/
+
+class TextCell extends GridCell [
+    t: TextLabel [ x = 8, fontSize = { provided("theme").gridFontSize }, wrap = false, text = { "" + (classroot.value ?? "") } ]
+    ]
+
+
+/*
+# EditCell
+
+A `DataGrid` cell that edits its value in a `TextInput`, committing every keystroke into the
+record — `kind = "edit"`. Up and Down move the edit to the same column in the row above or
+below (`DataGrid.editStep`).
+
+## before
+**Internal.** The value when the edit began, which Esc puts back.
+*/
+
+class EditCell extends GridCell [
+    before: string = "",      // the value when the edit began, for Esc to restore
+
+    ed: TextInput [ x = 4, y = 3, fontSize = { provided("theme").gridFontSize },
+        width = { parent.width - 8 },
+        height = { parent.height - 6 },
+        initial = { "" + (classroot.value ?? "") },
+        onFocus() { classroot.before = "" + (classroot.value ?? ""); classroot.takeActive() },
+        onInput(v: string) { if (classroot.row != null) classroot.row.setText(classroot.fld, v) },
+        onKeyDown(e: KeyEvent) {
+            const r = classroot.row
+            if (r == null || (r.parent as DataGrid).isDataGrid !== true) return
+            if (e.key == "ArrowDown" || e.key == "Enter") (r.parent as DataGrid).editStep(r, classroot.fld, 1)
+            else if (e.key == "ArrowUp") (r.parent as DataGrid).editStep(r, classroot.fld, -1)
+            else if (e.key == "Escape") r.setText(classroot.fld, classroot.before)
+            }
+        ]
+    ]
+
+
+/*
+# CheckCell
+
+A `DataGrid` cell that shows a boolean value as a `Checkbox` and writes it back —
+`kind = "check"`.
+*/
+
+class CheckCell extends GridCell [
+    ck: Checkbox [ label = "", x = center, y = center,
+        onFocus() { super.onFocus(); classroot.takeActive() },
+        checked = { classroot.value == true },
+        input(v: boolean) { if (classroot.row != null) classroot.row.setFlag(classroot.fld, v) }
+        ]
+    ]
+
+
+/*
+# SelectCell
+
+A `DataGrid` cell that shows its value with a chevron and, pressed, opens the grid's shared
+options menu (`DataGrid.openSelect`) — `kind = "select"`. Its button is a `Control`: Space or
+Enter opens the menu.
+*/
+
+class SelectCell extends GridCell [
+    // a Control — a real tab stop (Space/Enter opens the menu, the Control
+    // activation path), styled as a quiet button so it reads as interactive
+
+    sel: Control [ x = 2, y = 2,
+        width = { parent.width - 4 },
+        height = { parent.height - 4 },
+        cornerRadius = { (provided("theme").gridCellCornerRadius) + 2 },
+        fill = { this.pressed ? provided("theme").controlPressed : this.hovered ? provided("theme").controlHovered : null },
+        onFocus() { super.onFocus(); classroot.takeActive() },
+        press() {
+            const r = classroot.row
+            if (r == null || (r.parent as DataGrid).isDataGrid !== true) return
+            (r.parent as DataGrid).openSelect(r, this, classroot.fld, classroot.value)
+            },
+        onClick() { if (!this.disabled) this.press() },
+        v: TextLabel [ x = 6, fontSize = { provided("theme").gridFontSize }, wrap = false, text = { "" + (classroot.value ?? "") } ],
+        arrow: ChevronIcon [ y = center, iconSize = 11,
+            x = { parent.width - this.width - 6 },
+            ink = { provided("theme").textMuted } ]
         ]
     ]

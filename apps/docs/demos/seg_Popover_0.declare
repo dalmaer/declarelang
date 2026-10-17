@@ -1,0 +1,9 @@
+App [ width = 420, height = 240,
+    b: Button [ x = 20, y = 20, label = "Font…",
+        onClick() { app.pick.showFor(this) }
+        ],
+    pick: Popover [
+        Text [ text = "Size" ],
+        Slider [ width = 180 ]
+        ]
+    ]

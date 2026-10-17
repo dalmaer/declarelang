@@ -23,7 +23,8 @@ theme MountainView [
     tooltipFill = #313033, tooltipTextColor = #F4EFF4,
     menuCornerRadius = 4, menuShadow = shadow(0, 4, 12, #00000026), menuHighlightFill = #E8DEF8, menuHighlightTextColor = #1D192B,
     scrimFill = #000000, scrimOpacity = 0.32, error = #B3261E,
-    dialogWidth = 340, dialogTitleFontSize = 22, dialogBodyFontSize = 14
+    dialogWidth = 340, dialogTitleFontSize = 22, dialogBodyFontSize = 14,
+    segmentedSelectedFill = #FFFFFF      // the selected segment: the surface
     ]
 
 
@@ -40,5 +41,6 @@ theme MountainViewDark [
     tooltipFill = #E6E1E5, tooltipTextColor = #313033,
     menuCornerRadius = 4, menuShadow = shadow(0, 4, 12, #0000004D), menuHighlightFill = #4A4458, menuHighlightTextColor = #E6E0E9,
     scrimFill = #000000, scrimOpacity = 0.55, error = #F2B8B5,
-    dialogWidth = 340, dialogTitleFontSize = 22, dialogBodyFontSize = 14
+    dialogWidth = 340, dialogTitleFontSize = 22, dialogBodyFontSize = 14,
+    segmentedSelectedFill = #625D69      // the selected segment lifts above the track, as dark themes light what is raised
     ]

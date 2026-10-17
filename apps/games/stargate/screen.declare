@@ -306,10 +306,14 @@ class Shards [ width = 100%, height = 100%,
 // What the arcade's monitor shows of the world. The arcade draws the top band of the
 // playfield while the beam is in the bottom one, so the top shows the world as it was a
 // frame ago; and the explosions it shows in either band are a frame older again when they
-// moved on after the beam had passed half way down.
+// moved on after the beam had passed half way down. On the monitor's glass the bands are
+// seamless, each scanned as long after it was drawn; a display that shows a whole frame at
+// once shows the seam. Drawn `split`, the screen is the monitor's, as the checks compare it
+// with MAME's; otherwise the whole playfield shows the world as the frame ends.
 
 class Monitor extends Node [
     game: Game,
+    split: boolean = false,
     upper: Dataset [ schema = World, contents = { classroot.game.earlier ?? classroot.game.value } ],
     older: Dataset [ schema = World, contents = { classroot.game.longer ?? classroot.game.earlier ?? classroot.game.value } ],
     upperBursts: Dataset = { upper.value.seen.effectsLate ? older : upper },

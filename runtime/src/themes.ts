@@ -14,7 +14,7 @@
 // bodies, so an app names the ones it wants directly.
 
 import type { Theme } from "./value.js";
-import { THEME_RECORDS } from "./themes-data.js";
+import { THEME_RECORDS, ThemeDefaults } from "./themes-data.js";
 
 // The records are authored in library/themes/*.declare (`theme Name [ … ]`
 // declarations — the language's own record form) and projected into
@@ -25,7 +25,26 @@ import { THEME_RECORDS } from "./themes-data.js";
 /** The built-in theme presets, keyed by name — the values a body's bare
  *  `SanFrancisco` / `CupertinoDark` reference, and the set `theme = Name`
  *  resolves against. */
-export const THEME_PRESETS: Readonly<Record<string, Theme>> = THEME_RECORDS;
+/** A theme with the optional tokens it does not state filled from the library's
+ *  defaults (library/themes/defaults.declare) — what every provided theme is
+ *  laid over, so a reader never carries a fallback. The same theme object
+ *  always yields the same filled one (identity is what keeps a reader quiet). */
+const FILLED = new WeakMap<object, Theme>();
+export function withThemeDefaults(t: Theme): Theme {
+  if (t === null || typeof t !== "object") return t;
+  const hit = FILLED.get(t);
+  if (hit !== undefined) return hit;
+  let missing = false;
+  for (const k in ThemeDefaults) if (!(k in t)) { missing = true; break; }
+  const out = missing ? Object.freeze({ ...ThemeDefaults, ...t }) as Theme : t;
+  FILLED.set(t, out);
+  if (out !== t) FILLED.set(out, out);
+  return out;
+}
+
+export const THEME_PRESETS: Readonly<Record<string, Theme>> = /* @__PURE__ */ Object.freeze(
+  Object.fromEntries(Object.entries(THEME_RECORDS).map(([k, r]) => [k, withThemeDefaults(r as Theme)])));
+
 
 /** The preset names, for the checker and the scaffold. */
 export const THEME_PRESET_NAMES: readonly string[] = Object.keys(THEME_RECORDS);

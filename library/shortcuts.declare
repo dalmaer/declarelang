@@ -1,0 +1,61 @@
+/*
+# Shortcuts
+
+Keyboard shortcuts, declared as data: records with the key that triggers each, the label a
+person reads, and the id the action receives. A set covers the view it is declared on and
+everything inside it. A key press is looked up from the focused view outward: the nearest
+set that declares that key takes it, and the press goes no further. The walk goes on past the
+program — a program running in a desktop window reaches the desktop's shortcuts — so a host
+offers its keys to whatever runs inside it without passing anything down.
+
+```declare
+App [ width = 520, height = 240,
+    saved: number = 0,
+    keys: Shortcuts [ title = "Notes",
+        items = { [ ({ id: "save", key: "⌘S", label: "Save" }), ({ id: "clear", key: "⇧⌘K", label: "Clear" }) ] },
+        picked(id: string) { if (id == "save") app.saved = app.saved + 1 }
+        ],
+    Text [ x = 20, y = 20, text = { "Saved " + app.saved + " times — press ⌘S" } ]
+    ]
+```
+
+A key with a command modifier (⌘, ⌃, ⌥) or a function key works anywhere; a plain key
+(`"?"`) does not fire while a text field has focus — typing is the field's. Nothing fires
+while an open menu or dialog holds the keyboard: its keys are its own. A shortcut's chord is
+not also the browser's (⌘S does not save the page) — except those the browser keeps for
+itself, such as ⌘W and ⌘N in Safari, which a label may still show.
+
+A `MenuBar` declares the keys of its items for its whole program: the menu bar is the
+program's shortcut table, and nothing is declared twice. `Keys.shortcutsInForce()` lists what
+is in force where focus is — a panel of the available shortcuts reads it.
+
+## items
+The shortcut records: `{ id, key, label }`, and `enabled: false` for one that shows but does
+not fire. `key` is spelled with the modifier glyphs in any order — `"⌘S"`, `"⇧⌘Z"`, `"⌥⌘←"`,
+`"F5"` — or in words, `"Cmd+Shift+Z"`. ⌘ is the command key: ⌘ on a Mac, Ctrl elsewhere.
+
+## on
+The view whose subtree the set covers, when that is not the view it is declared on. A
+`MenuBar` sets its own to the App.
+
+## title
+What a panel of shortcuts groups this set's records under.
+
+## picked()
+Receives the id of the shortcut pressed. Override it at the use site.
+
+## onInit
+Registers the set with the keyboard service.
+*/
+
+// a shortcut, as data
+
+schema Shortcut [ id: string, key: string, label?: string, enabled?: boolean ]
+
+class Shortcuts extends Node [
+    items: Shortcut[] = [],
+    on: View? = null,
+    title: string = "",
+    onInit() { Keys.declareShortcuts(this) },
+    picked(id: string) { }
+    ]

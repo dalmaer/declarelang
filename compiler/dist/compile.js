@@ -749,6 +749,28 @@ export async function compile(source, opts = {}) {
         // $provide'd class was silently never spliced. tsc could not object,
         // because the lie was written here. Reuse AutoIncludeHost's shape instead.
         const autoHost = host;
+        // A provided class's file is spliced whole, after the include phase — so
+        // the libraries it includes (a Tooltip is a Floating) are spliced first,
+        // dependency-first and include-once, and its own `include` lines are
+        // blanked (same length, so every position stays true). False when the
+        // file is missing or already in the program.
+        const spliceProvided = async (path) => {
+            const lib = await autoHost.resolveLibrary(path);
+            if (lib === null || lib === undefined || resolved.visited.has(lib.canonical) || libIds.includes(lib.canonical))
+                return false;
+            const deps = [];
+            const src = lib.source.replace(/^[ \t]*include[ \t]*\[([^\]]*)\]/gm, (m, list) => {
+                for (const q of list.matchAll(/"([^"]+)"/g))
+                    deps.push(q[1]);
+                return m.replace(/[^\n]/g, " ");
+            });
+            for (const d of deps)
+                await spliceProvided(d);
+            libSources.push(src);
+            libIds.push(lib.canonical);
+            libSplices.push([]); // a library file has no script splices of its own here
+            return true;
+        };
         if (typeof autoHost.autoincludes === "function" && typeof autoHost.resolveLibrary === "function") {
             const manifest = autoHost.autoincludes();
             const rules = manifest["$provide"];
@@ -769,12 +791,8 @@ export async function compile(source, opts = {}) {
                     if (byName.has(cls) || treeHas(main.root, cls))
                         continue; // the program provides its own
                     const path = manifest[cls];
-                    const lib = typeof path === "string" ? await autoHost.resolveLibrary(path) : null;
-                    if (lib === null || lib === undefined || resolved.visited.has(lib.canonical))
+                    if (typeof path !== "string" || !(await spliceProvided(path)))
                         continue;
-                    libSources.push(lib.source);
-                    libIds.push(lib.canonical);
-                    libSplices.push([]); // a library file has no script splices of its own here
                     provided.push({ cls, comment: typeof r.comment === "string" ? r.comment : `${cls} — provided with the class library` });
                 }
             }
@@ -1051,8 +1069,10 @@ export async function compile(source, opts = {}) {
             // and doing it here keeps the artifact self-contained. The FIRST block
             // carries the merged body, the rest are empty (the imports branch's shape).
             const blocks = [...scripts].sort((a, b) => a.span.start - b.span.start);
+            // comments dropped: the bindings tail goes on the last line, where a
+            // script's own trailing `// …` would swallow it ("A is not defined")
             const js = blocks.map((s) => ts.transpileModule(s.src, {
-                compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, isolatedModules: true },
+                compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext, isolatedModules: true, removeComments: true },
                 reportDiagnostics: false,
             }).outputText.trim()).join("\n;");
             const names = [...new Set(blocks.flatMap((s) => topLevelBindings(s.src)))];

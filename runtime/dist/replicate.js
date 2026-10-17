@@ -483,11 +483,26 @@ export class Replicator {
             }
             // Mirror the order across the seam: walk backwards so each surface
             // lands before its successor's (fresh attach and kept move alike).
-            const ps = this.parent.$surface;
+            let ps = this.parent.$surface;
             if (ps !== null && this.parent.$backend !== null) {
                 let before = this.surfaceAfter(at);
                 for (let i = next.length - 1; i >= 0; i--) {
                     const v = next[i];
+                    // an instance attached after this one may have brought a waiting
+                    // parent in (one that needs its surface while hidden — a field):
+                    // the rest attach to the parent's surface as it is now, before the
+                    // first sibling after them that the parent's coming in placed
+                    if (this.parent.$surface !== ps && this.parent.$surface !== null) {
+                        ps = this.parent.$surface;
+                        before = this.surfaceAfter(at);
+                        for (let j = i + 1; j < next.length; j++) {
+                            const s = next[j].$surface;
+                            if (s !== null && !isDeferred(s)) {
+                                before = s;
+                                break;
+                            }
+                        }
+                    }
                     // CONTAINED per instance: attach first-runs member machinery (a
                     // draw() recording), and a program bug throwing there must cost
                     // exactly its own instance — loudly, with the node's path — never

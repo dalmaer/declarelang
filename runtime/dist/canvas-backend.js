@@ -26,6 +26,7 @@
 // from declared handlers). Rotation/scale inverses — originally left out with
 // the rest — arrived with the compositing arc (2026-08: `invertPoint` below,
 // so the hit walk tells the truth about a turned or scaled surface).
+import { watchSelection } from "./edit-selection.js";
 import { DeclareError } from "./errors.js";
 import { applyH, frontFacing, homography, inFront, invertH } from "./projective.js";
 const FIT_FRAC = { start: 0, center: 0.5, end: 1 };
@@ -707,7 +708,7 @@ class Compositor {
         // One host element paints everything, so the per-view cursor is applied
         // here as the pointer moves (the DOM backend brushes per element), and
         // again when a cursor changes under a still pointer (cursorChanged).
-        () => this.showCursor());
+        () => this.showCursor(), !this.embeddedRoot);
         // Tap-to-dismiss for native editable overlays: a pointerdown that lands on the
         // CANVAS is by definition outside every overlay (they are separate sibling
         // elements), so blur the focused field — mobile Safari won't drop it (and the
@@ -2256,9 +2257,21 @@ class CanvasSurface {
             el.addEventListener("input", () => this.edit?.onInput(self.value));
             el.addEventListener("focus", () => this.edit?.onFocus());
             el.addEventListener("blur", () => this.edit?.onBlur());
+            watchSelection(el, (s, e) => this.edit?.onSelect?.(s, e));
             el.addEventListener("keydown", (e) => {
-                if (!(this.edit?.multiline ?? false) && e.key === "Enter")
+                const k = e;
+                if (k.key !== "Enter" || k.isComposing)
+                    return;
+                const ml = this.edit?.multiline ?? false;
+                if (!ml) {
                     this.edit?.onEnter?.();
+                    return;
+                }
+                // a multi-line field that submits on Return: Shift-Return is the line break
+                if (this.edit?.enterSubmits === true && !k.shiftKey) {
+                    k.preventDefault();
+                    this.edit?.onEnter?.();
+                }
             });
             host.appendChild(el);
             this.editEl = el;
@@ -2353,7 +2366,7 @@ class CanvasSurface {
         let clipR = Infinity;
         let clipB = Infinity;
         let clipped = false;
-        for (let s = this; s !== null; s = s.parent) {
+        for (let s = this, from = null; s !== null; from = s, s = s.parent) {
             if (!s.visible)
                 shown = false;
             // A SCROLLER frame-bounds its subtree exactly as paint does — without
@@ -2370,6 +2383,38 @@ class CanvasSurface {
                     clipR = s.width - ax;
                 if (s.height - ay < clipB)
                     clipB = s.height - ay;
+            }
+            // ...and the scroller's pinned chrome paints over its scrolled content
+            // (the frame-chrome pass), so a field scrolled under a pinned bar is cut
+            // where the bar covers it, as paint is. Chrome is an edge band: a pinned
+            // layer spanning more than half the frame (an overlay stratum) is not.
+            if ((s.scrolls || s.scrollsX) && from !== null && !from.ignoresScroll) {
+                for (const k of s.children) {
+                    if (k === from || !k.ignoresScroll || !k.visible)
+                        continue;
+                    const overX = k.x < ax + this.width && k.x + k.width > ax;
+                    const overY = k.y < ay + this.height && k.y + k.height > ay;
+                    if (overX && k.height < s.height / 2) {
+                        if (k.y <= 0.5) {
+                            clipped = true;
+                            clipT = Math.max(clipT, k.y + k.height - ay);
+                        }
+                        else if (k.y + k.height >= s.height - 0.5) {
+                            clipped = true;
+                            clipB = Math.min(clipB, k.y - ay);
+                        }
+                    }
+                    if (overY && k.width < s.width / 2) {
+                        if (k.x <= 0.5) {
+                            clipped = true;
+                            clipL = Math.max(clipL, k.x + k.width - ax);
+                        }
+                        else if (k.x + k.width >= s.width - 0.5) {
+                            clipped = true;
+                            clipR = Math.min(clipR, k.x - ax);
+                        }
+                    }
+                }
             }
             ax += s.x;
             ay += s.y;
@@ -2750,7 +2795,16 @@ class CanvasSurface {
     travelWith(host) {
         if (host === null) {
             if (this.travelHomeSurface !== null) {
-                this.travelHomeSurface.insertChild(this, null);
+                // out of the host it rode first, or it stays listed there too and is
+                // painted twice — a ghost ring left in a pane focus moved out of
+                const home = this.travelHomeSurface;
+                if (this.parent !== null && this.parent !== home) {
+                    const sib = this.parent.children;
+                    const i = sib.indexOf(this);
+                    if (i >= 0)
+                        sib.splice(i, 1);
+                }
+                home.insertChild(this, null);
                 this.travelHomeSurface = null;
             }
             return;

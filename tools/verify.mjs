@@ -16,8 +16,26 @@
 // usage/toolchain error.
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
-import { compileTracked } from "../compiler/dist/compile-node.js";
-import { programFromCompiled } from "../compiler/dist/program-build.js";
+// The compiler, loaded behind a preflight: on a fresh checkout without
+// `npm install`, a static import died with Node's bare "Cannot find package
+// 'typescript'" before a line of this tool ran.
+let compileTracked, programFromCompiled;
+try {
+  ({ compileTracked } = await import("../compiler/dist/compile-node.js"));
+  ({ programFromCompiled } = await import("../compiler/dist/program-build.js"));
+} catch (e) {
+  const root = resolve(dirname(new URL(import.meta.url).pathname), "..");
+  if (e?.code === "ERR_MODULE_NOT_FOUND" && /compiler\/dist/.test(String(e.message))) {
+    console.error(`declare-verify: the compiler is not built — run \`npm run build\` in ${root}`);
+    process.exit(2);
+  }
+  if (e?.code === "ERR_MODULE_NOT_FOUND") {
+    const pkg = /Cannot find package '([^']+)'/.exec(String(e.message))?.[1] ?? "a dependency";
+    console.error(`declare-verify: ${pkg} is not installed — run \`npm install\` in ${root}, then try again`);
+    process.exit(2);
+  }
+  throw e;
+}
 
 // ── rung model ────────────────────────────────────────────────────────────
 const RUNGS = [

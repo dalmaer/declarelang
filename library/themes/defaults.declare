@@ -1,0 +1,71 @@
+/*
+# Theme defaults
+
+The value every **optional** library token takes when the theme in force does not
+state it. The runtime lays any provided theme over this record, so a library class
+reads `provided("theme").segmentedHeight` and always gets a number: a theme states
+only what it changes, and no read site carries a fallback of its own.
+
+The **required** tokens — the palette (`accent`, `surface`, `text`, `line`,
+`control` and their states) and `controlCornerRadius`, `focusRingStyle` — are not
+here: a missing colour is an error to see, never a light default under a dark theme.
+
+A token whose natural default is another token (`trackFill` is `control` unless a
+theme says otherwise) is not here either; its reader says so with `??`. This record
+is not a preset: no program names it.
+*/
+
+theme ThemeDefaults [
+    accordionFontSize = 14,
+    accordionHeaderHeight = 34,
+    appearanceSwitchSize = 32,
+    buttonHeight = 40,
+    checkboxSize = 20,
+    comboboxHeight = 30,
+    dialogBodyFontSize = 13,
+    dialogButtonLayout = "end",
+    dialogTitleFontSize = 15,
+    dialogWidth = 420,
+    disabledOpacity = 0.45,
+    dragShadow = shadow(0, 4, 14, #00000038),
+    error = #C93429,
+    focusRingGap = 0,
+    focusRingInnerWidth = 0,
+    focusRingWidth = 3,
+    gridCellCornerRadius = 3,
+    gridFontSize = 13,
+    gridHeaderFontSize = 12,
+    gridHeaderHeight = 30,
+    gridRowHeight = 28,
+    menuBarFontSize = 14,
+    menuBarHeight = 25,
+    menuBarTitleCornerRadius = 6,
+    menuCornerRadius = 8,
+    menuFontSize = 13,
+    menuHighlightCornerRadius = 5,
+    menuKeyFontSize = 12,
+    menuRowHeight = 26,
+    menuShadow = shadow(0, 10, 40, #00000038),
+    popoverCornerRadius = 12,
+    popoverShadow = shadow(0, 10, 32, #00000033),
+    progressBarHeight = 8,
+    radioSize = 18,
+    scrimFill = #000000,
+    scrimOpacity = 0.32,
+    segmentedCornerRadius = 8,
+    segmentedFontSize = 13,
+    segmentedHeight = 30,
+    sheetCornerRadius = 16,
+    sheetShadow = shadow(0, 8, 40, #00000040),
+    sliderTrackHeight = 4,
+    switchHeight = 24,
+    switchWidth = 44,
+    toastCornerRadius = 12,
+    toastFontSize = 13,
+    toastShadow = shadow(0, 6, 24, #00000040),
+    tooltipCornerRadius = 4,
+    tooltipFill = #1B2733,
+    tooltipFontSize = 12,
+    tooltipPlacement = "below",
+    tooltipTextColor = #F4F6FA
+    ]

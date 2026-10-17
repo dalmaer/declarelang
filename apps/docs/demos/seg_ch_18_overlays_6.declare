@@ -1,0 +1,6 @@
+App [ width = 360, height = 160, theme = { SanFrancisco },
+    note: Toast [ ],
+    Button [ x = 20, y = 20, label = "Copy link",
+        onClick() { app.note.say("Link copied", null) }
+        ]
+    ]

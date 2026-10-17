@@ -1,0 +1,56 @@
+/*
+# OverlayStrata
+
+**Internal.** The App's overlay layers — `overlays`, then `notice` — made by the first
+`Floating` that opens and kept above everything else the App holds. Menus, popovers,
+dialogs and sheets share the first, in the order they open (a menu opened from a dialog
+paints above the dialog); toasts paint in the second, above them all. It keeps the open
+overlays in the order they opened, so Esc knows which is on top. Not written in a program.
+
+## isOverlayStrata
+**Internal.** The marker a `Floating` finds the layers by.
+
+## stack
+The open overlays, oldest first.
+
+## handled
+The last key event an overlay acted on — so one Esc closes one overlay, however many hear it.
+
+## opened()
+Puts an overlay on top of the stack.
+
+## closedIt()
+Takes an overlay off the stack.
+
+## top()
+The open overlay the keyboard goes to — the one Esc closes — or null: the latest that
+took the keys and still holds them (`Keys.claimant()`). A toast, which takes nothing, is
+never it; nor is a dialog open in one window while focus is in another.
+*/
+
+class OverlayStrata [ width = 100%, height = 100%, ignoreLayout = true,
+    // fixed to the App's viewport, not its content: a dialog opened with the
+    // page scrolled down is on screen, and focus inside it scrolls nothing
+
+    ignoreScroll = true,
+
+    // the layers are transparent to the pointer: what paints in them decides
+
+    pointerEvents = "none",
+    isOverlayStrata: boolean = true,
+    stack: array = [],
+    handled: object = null,
+
+    opened(v: View) { stack = stack.filter((s) => s != v).concat([v]) },
+    closedIt(v: View) { stack = stack.filter((s) => s != v) },
+
+    // the open overlay the keyboard goes to: the latest claim that holds
+
+    top() -> View? {
+        const c = Keys.claimant()
+        return (stack.indexOf(c) >= 0 ? c : null) as View | null
+        },
+
+    overlays: View [ width = 100%, height = 100%, pointerEvents = "none" ],
+    notice: View [ width = 100%, height = 100%, pointerEvents = "none" ]
+    ]

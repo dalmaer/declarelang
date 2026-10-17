@@ -1,0 +1,115 @@
+/*
+# Toast
+
+A short message that appears at the bottom of its context and goes away by itself — "Saved",
+"Copied", "Message deleted · Undo". It takes no focus and blocks nothing: presses beside it
+go where they were aimed, and it stays above an open dialog, still clickable. An optional
+action record (`{ id, label }`) adds one button; its id arrives at `picked`.
+
+```declare
+App [ width = 520, height = 260,
+    toast: Toast [ ],
+    Button [ x = 20, y = 20, label = "Save", onClick() { app.toast.say("Saved", null) } ]
+    ]
+```
+
+## message
+The text it shows.
+
+## action
+The optional action record, `{ id, label }`, or null.
+
+## duration
+How long it stays, in milliseconds.
+
+## say()
+Shows `message`, with an optional action record; a toast already showing takes the new
+message and starts its time again.
+
+## picked()
+Receives the action's id when its button is pressed. Override it at the use site. The button
+takes no focus, so a press on it leaves focus where it was; a program that offers the same
+action from the keyboard gives it a shortcut of its own.
+
+## round
+**Internal.** Which showing is current, so an earlier one's timer does not close a later.
+
+## hostW
+The width of the layer it paints in.
+
+## hostH
+The height of the layer it paints in.
+
+## x
+Centered in its layer.
+
+## y
+Near the bottom of its layer, rising a little as it appears.
+
+## opacity
+Its open blend.
+
+## fill
+The theme's tooltip fill — a toast reads as the same kind of passing note.
+
+## shadow
+A soft shadow that lifts it off whatever is beneath.
+
+## cornerRadius
+From the theme's `toastCornerRadius` (12 by default); its shadow is `toastShadow` and its text size `toastFontSize` (13).
+
+## stroke
+The tooltip's edge, `tooltipStrokeColor`, where the theme gives one: the toast wears the tooltip's colours.
+*/
+
+include [ "floating.declare" ]
+
+include [ "button.declare" ]
+
+class Toast extends Floating [
+    kind = "notice",
+    pressPolicy = "ignore",
+    scrollPolicy = "allow",
+
+    message: string = "",
+    action: object = null,
+    duration: number = 4000,
+    round: number = 0,
+
+    hostW: number = { this.host != null ? this.host.width : app.width },
+    hostH: number = { this.host != null ? this.host.height : app.height },
+
+    x = { (this.hostW - this.width) / 2 },
+    y = { this.hostH - this.height - 24 + 16 * (1 - this.openT) },
+    opacity = { this.openT },
+    cornerRadius = { provided("theme").toastCornerRadius },
+    fill = { provided("theme").tooltipFill },
+    stroke = { provided("theme").tooltipStrokeColor != null ? stroke(1, provided("theme").tooltipStrokeColor) : null },
+    shadow = { provided("theme").toastShadow },
+
+    say(m: string, a: object) {
+        message = m
+        action = a
+        round = round + 1
+        const mine = round
+        this.show()
+        afterDelay(duration, () => { if (this.round == mine) this.close() })
+        },
+
+    picked(id: string) { },
+
+    row: View [ padding = [10, 12, 10, 16],
+        layout: SimpleLayout [ axis = x, spacing = 14, align = center ],
+        Text [ fontSize = { provided("theme").toastFontSize }, wrap = false,
+            textColor = { provided("theme").tooltipTextColor },
+            text = { classroot.message } ],
+
+        // a toast never takes focus — not even from an open dialog, whose
+        // focus a press on the action leaves where it was
+
+        Button [ visible = { classroot.action != null }, focusable = false,
+            label = { classroot.action != null ? "" + classroot.action.label : "" },
+            onClick() { if (classroot.action != null) { const id = "" + classroot.action.id; classroot.close(); classroot.picked(id) } }
+            ]
+        ]
+    ]
