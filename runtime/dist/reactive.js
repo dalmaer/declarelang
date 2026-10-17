@@ -1097,6 +1097,45 @@ export function afterSettle(fn) {
     if (!inSettle)
         schedule();
 }
+/** A region cell whose data has left its dataset (data.ts wakeTree): its
+ *  kernel cell goes back at the close of the settle that woke its readers —
+ *  not before, while the wake is still queued in the ring — if by then no
+ *  rule listens to it. A reader that still reads it (a record moved, or held
+ *  by an attribute) keeps it, and the cell is returned when its data is
+ *  collected (data.ts RETIRE). One still read is looked at again after each
+ *  later settle that retires more: a reader that lags (a deferred rule, a
+ *  hidden view's) lets go of it a frame or more later. Freed, a Cell takes a
+ *  fresh id if read again. */
+const retiring = [];
+let retireArmed = false;
+export function retireCell(c) {
+    if (c.id < 0 || c.owned)
+        return;
+    retiring.push(c);
+    if (!retireArmed) {
+        retireArmed = true;
+        afterSettle(freeRetired);
+    }
+}
+/** Retire the region cells inside a value that has left its place (data.ts
+ *  retireTree; an attribute's old object value, attributes.ts writeRef). */
+let retireValueHook = () => { };
+export function setRetireValue(f) { retireValueHook = f; }
+export function retireValue(v) { if (v !== null && typeof v === "object")
+    retireValueHook(v); }
+function freeRetired() {
+    retireArmed = false;
+    let n = 0;
+    for (const c of retiring) {
+        if (c.id < 0)
+            continue; // freed meanwhile (collected, or retired twice)
+        if (!K.listened(c.id))
+            c.free();
+        else
+            retiring[n++] = c;
+    }
+    retiring.length = n;
+}
 /** Re-evaluate everything invalidated, to quiescence: all value constraints
  *  (phase 0), then draw re-records (phase 1) — looping back if a draw body
  *  wrote reactive state. Then drain the afterSettle steps and deliver change

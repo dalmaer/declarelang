@@ -11,8 +11,9 @@
 // climbs them for every app that ships an assert/states script.
 import { spawn } from "node:child_process";
 import { readdirSync, existsSync, statSync } from "node:fs";
-import { join, resolve, dirname } from "node:path";
+import { join, resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { programDirs, programFile } from "../tools/internal/program-dirs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let pass = 0, fail = 0;
@@ -53,9 +54,7 @@ function assertClean(rep, label) {
 }
 
 // ── every runnable example ───────────────────────────────────────────────────
-const apps = readdirSync(join(ROOT, "apps"))
-  .map((n) => join("apps", n, `${n}.declare`))
-  .filter((f) => existsSync(join(ROOT, f)) && statSync(join(ROOT, f)).isFile());
+const apps = programDirs(ROOT).map((d) => relative(ROOT, programFile(d)));
 
 // A directory whose ENTRY is an HTML page (not a name-matched program) escapes
 // the sweep above; its programs are runnable examples all the same and list

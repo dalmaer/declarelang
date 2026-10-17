@@ -83,6 +83,13 @@ export function mergeShip(a, b) {
     };
 }
 const SHIP_MEMBERS = new Set(["islands", "files", "compiler", "inspector"]);
+/** Each member's words — the registry's values a program may choose (`mac`
+ *  is a host asking for the compiled program, never a program's default). */
+export const FLAG_WORDS = {
+    render: ["dom", "canvas"],
+    kernel: ["wasm", "js"],
+    crawler: ["true", "false"],
+};
 const isDigit = (c) => c >= "0" && c <= "9";
 const isIdentStart = (c) => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
 const isIdentPart = (c) => isIdentStart(c) || isDigit(c);
@@ -1434,6 +1441,49 @@ class Parser {
         this.expect("rbracket", "']'");
         return ship;
     }
+    /** `defaultFlags [` at the current position — the flags declaration (see Flags).
+     *  `defaultFlags` followed by anything else is an ordinary name. */
+    atFlags() {
+        const t = this.tokens[this.i];
+        const u = this.tokens[this.i + 1];
+        return t.kind === "ident" && t.text === "defaultFlags" && u.kind === "lbracket";
+    }
+    /** `'defaultFlags' '[' ( NAME '=' WORD ),* ']'` — the registry's members, each a
+     *  word from its own set, validated HERE so a host reads plain data. */
+    parseFlags() {
+        this.expect("ident", "'defaultFlags'");
+        this.expect("lbracket", "'['");
+        const flags = {};
+        const names = Object.keys(FLAG_WORDS);
+        while (this.peek().kind !== "rbracket" && this.peek().kind !== "eof") {
+            const t = this.peek();
+            if (t.kind !== "ident" || !names.includes(t.text)) {
+                throw new DeclareError(`defaultFlags has no member '${t.text}' — render, kernel, or crawler`, t.pos);
+            }
+            this.next();
+            const name = t.text;
+            if (flags[name] !== undefined)
+                throw new DeclareError(`defaultFlags names '${name}' twice — one entry per member`, t.pos);
+            this.expect("eq", "'='");
+            const v = this.parseLiteral();
+            const words = FLAG_WORDS[name];
+            if (v.kind !== "ident" || !words.includes(v.name)) {
+                throw new DeclareError(`defaultFlags' ${name} is ${words.join(" or ")}`, v.pos);
+            }
+            if (name === "crawler")
+                flags.crawler = v.name === "true";
+            else if (name === "render")
+                flags.render = v.name;
+            else
+                flags.kernel = v.name;
+            if (this.peek().kind === "comma")
+                this.next();
+            else
+                break;
+        }
+        this.expect("rbracket", "']'");
+        return flags;
+    }
     /** `'include' '[' STRING ( ',' STRING )* ','? ']'` — a top-level directive
      *  whose body is Declare's list grammar restricted to quoted paths. Non-string
      *  entries are a positioned error (paths are quoted strings, no bare-token
@@ -1498,6 +1548,8 @@ function parseTopDecls(p) {
     const includeSpans = [];
     const uses = [];
     let ship;
+    let flags;
+    let flagsPos;
     const scripts = [];
     const scriptFiles = [];
     const scriptFileSpans = [];
@@ -1511,6 +1563,13 @@ function parseTopDecls(p) {
             uses.push(...p.parseUseDirective());
         else if (p.atShip())
             ship = mergeShip(ship, p.parseShip());
+        else if (p.atFlags()) {
+            const at = p.peek().pos;
+            if (flags !== undefined)
+                throw new DeclareError(ONE_FLAGS, at);
+            flags = p.parseFlags();
+            flagsPos = at;
+        }
         else if (p.atScriptFiles()) {
             const { refs, span, inline } = p.parseScriptFiles();
             if (inline)
@@ -1535,8 +1594,10 @@ function parseTopDecls(p) {
         else
             break;
     }
-    return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ship, scripts, scriptFiles, scriptFileSpans };
+    return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ship, ...(flags === undefined ? {} : { flags, flagsPos }), scripts, scriptFiles, scriptFileSpans };
 }
+/** A program states its flags once, in whichever of its files. */
+export const ONE_FLAGS = "a program has one defaultFlags block, and this is a second";
 /** Parse a whole Declare source: `include`s and top-level declarations
  *  (classes, themes, style bundles), the root instance, and — ruled
  *  2026-08-06 — declarations may FOLLOW the root too, in any order. The
@@ -1602,6 +1663,9 @@ export function parseProgram(source) {
     const includeSpans = [...before.includeSpans, ...after.includeSpans];
     const uses = [...before.uses, ...after.uses];
     const ship = mergeShip(before.ship, after.ship);
+    if (before.flags !== undefined && after.flags !== undefined)
+        throw new DeclareError(ONE_FLAGS, after.flagsPos);
+    const flags = before.flags ?? after.flags;
     const scripts = [...before.scripts, ...after.scripts];
     const scriptFiles = [...(before.scriptFiles ?? []), ...(after.scriptFiles ?? [])];
     const scriptFileSpans = [...(before.scriptFileSpans ?? []), ...(after.scriptFileSpans ?? [])];
@@ -1612,7 +1676,7 @@ export function parseProgram(source) {
     for (const c of classes)
         lowerExists(c.body);
     lowerExists(root);
-    return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ...(ship === undefined ? {} : { ship }), scripts, scriptFiles, scriptFileSpans, root };
+    return { classes, shapes, themes, styles, fonts, includes, includeSpans, uses, ...(ship === undefined ? {} : { ship }), ...(flags === undefined ? {} : { flags }), scripts, scriptFiles, scriptFileSpans, root };
 }
 /** `exists = { … }` on a child: the child is built while the value is true
  *  and discarded while it is false (its state goes with it). That is exactly

@@ -1,0 +1,1051 @@
+// Tempest — the game: what is in the well, and the rules that move it on by one frame.
+//
+// A frame is one pass of the arcade's main loop, about 27 a second. Depths are whole numbers
+// from 16 at the rim to 240 at the far end, with 256ths below them for what moves smoothly;
+// lanes are 0 to 15 round the well. Given the same controls and the same random numbers, the
+// game unfolds exactly as on the 1981 arcade machine.
+//
+// The arcade has room for 7 enemies in the well, 64 waiting below it, 8 of the player's shots
+// and 4 of the enemies', and 8 explosions; the well holds that many of each, every one in play
+// or not, and something new takes the first one free, counting down from the last. Each one's
+// `id` is its place in its list.
+//
+// The rules are the arcade's own, in its order. A few of its tallies (how many enemies of each
+// kind, how many on the lanes) are kept as the arcade keeps them, not counted afresh, because
+// the arcade's tallies can drift from the truth and the rules read the tallies.
+
+script {
+    function byte(n: number): number { return ((n % 256) + 256) % 256 }
+    function signed(n: number): number { const b = byte(n); return b >= 128 ? b - 256 : b }
+    function word(n: number): number { return ((n % 65536) + 65536) % 65536 }
+    function signed16(n: number): number { const w = word(n); return w >= 32768 ? w - 65536 : w }
+    function signed24(n: number): number { const w = ((n % 0x1000000) + 0x1000000) % 0x1000000; return w >= 0x800000 ? w - 0x1000000 : w }
+
+    // the depths everything is measured between: the rim, where the player is, and the far
+    // end, where the enemies come from
+    const RIM = 0x10
+    const FAR = 0xf0
+
+    // what the main loop can be doing (see Game.run)
+    type Phase = "newGame" | "newLife" | "lifeReady" | "pause" | "playing" | "dropping" | "waveDone" | "arriving"
+        | "lifeLost" | "gameOver" | "toAttract" | "logo" | "chooseSetup" | "choosing"
+
+    // the enemies' kinds, their plans and how a new one starts, as the Enemy record spells them
+    type Kind = Enemy["kind"]
+    type Plan = Enemy["plan"]
+    type Launch = Pick<Enemy, "kind" | "turning" | "cargo" | "fires" | "plan">
+    type BlastKind = Blast["kind"]
+
+    function noneOfEach(): Record<Kind, number> { return { flipper: 0, pulsar: 0, tanker: 0, spiker: 0, fuseball: 0 } }
+    }
+
+schema Controls [ turn: number, fire: boolean, zap: boolean, start: boolean ]
+
+schema Claw [
+    lane: number,
+    position: number,                   // round the rim, 16 to a lane: the spinner moves this
+    depth: number, depthFraction: number,
+    alive: boolean,
+    caught: boolean,                    // killed at the rim by an enemy: still drawn, held
+    dropping: boolean,                  // falling down the well at the end of a wave
+    fallSpeed: number ]                 // in 256ths of a depth a frame
+
+schema Enemy [
+    id: number,
+    inPlay: boolean,
+    kind: "flipper" | "pulsar" | "tanker" | "spiker" | "fuseball",
+    depth: number, depthFraction: number,
+    lane: number,
+    flipping: boolean,                  // turning over from one lane to the next
+    angle: number,                      // which way it faces while flipping, in sixteenths of a turn
+    turning: "cw" | "ccw",              // which way it flips
+    rising: boolean,                    // climbing toward the rim (else going back down)
+    cargo: "none" | "flippers" | "pulsars" | "fuseballs",
+    fires: boolean,
+    fireWait: number,                   // frames until it may fire again
+    resting: boolean,                   // a fuseball arrived on a spoke: it cannot be hit there
+    plan: "climb" | "climbThenFlip" | "climbThenFlip.counting" | "climbThenFlip.flipping"     // what it does, and where in that it has got to
+    | "spiral" | "spiral.flip" | "spiral.flipping"
+    | "spiralBack" | "spiralBack.first" | "spiralBack.flippingA" | "spiralBack.nextA" | "spiralBack.flippingB" | "spiralBack.nextB"
+    | "flipOffSpikes.start" | "flipOffSpikes" | "flipOffSpikes.climbFlip" | "flipOffSpikes.flipping"
+    | "avoid" | "avoid.flipping" | "avoid.after"
+    | "rim" | "rim.waiting" | "rim.flipping"
+    | "spiker"
+    | "fuseball" | "fuseball.crossing" | "fuseball.counting"
+    | "pulsar" | "pulsar.waiting" | "pulsar.watching" | "pulsar.flipping",
+    count: number ]                     // a count its plan keeps (frames, flips)
+
+schema Nymph [ id: number, lane: number, rise: number ]      // rise: frames until it surfaces, 0 = none
+
+schema Shot [ id: number, inPlay: boolean, lane: number, nextLane: number,
+    depth: number, depthFraction: number,
+    spikesHit: number,                  // a player's shot slows after one spike and dies at two
+    used: boolean ]                     // it hit something this frame
+
+schema Blast [ id: number, inPlay: boolean, lane: number, depth: number,
+    kind: "debris" | "player" | "fuseball250" | "fuseball500" | "fuseball750" | "caught",    // a shot or an enemy; the player; a fuseball's points; caught at the rim
+    stage: number ]
+
+schema Playfield [ claw: Claw, enemies[]: Enemy, nymphs[]: Nymph, shots[]: Shot, enemyShots[]: Shot,
+    blasts[]: Blast, spikes[]: number,  // each lane's spike: the depth of its tip, 0 for none
+    spikeMarks[]: number,               // how recently each was grown or shot (0, 1 or 2)
+    stars[]: number ]                   // the depths of the star planes, 0 for none
+
+schema Wave [ wave: number, nymphs: number, spikes: number,
+    flipperPlan: "climb" | "climbThenFlip" | "spiral" | "spiralBack" | "flipOffSpikes" | "avoid",
+    speed: number, spikerSpeed: number, shotSpeed: number,
+    flippers: Range, pulsars: Range, tankers: Range, spikers: Range, fuseballs: Range,
+    tankerCargo[]: "flippers" | "pulsars" | "fuseballs", enemyShots: number, fireDelay: number, pulsarsFire: boolean,
+    pulseRate: number, pulsarReach: number, pulsarWait: number, rimFlipSteps: number,
+    fuseballChasesAtTop: boolean, fuseballChasesAtBottom: boolean, fuseballRestless: number,
+    enemySlots: number ]
+schema Range [ min: number, max: number ]
+
+class Game extends Dataset [ schema = Playfield,
+    machine: Machine,
+    well: Well,
+    waves: Wave[] = [],
+    enemyRules: Enemies [ game = { classroot } ],
+
+    // ── where the game is ──
+
+    phase: Phase = "newGame",           // what the main loop is doing (see run)
+    next: Phase = "newGame",            // what follows a pause
+    pauseLeft: number = 0,
+    pauseSlowly: boolean = false,       // a pause that counts only every other frame
+    screen: "play" | "choose" | "logoBox" | "logo" = "play",       // what is on the screen
+    playing: boolean = false,           // a game, not the attract mode
+    frame: number = 0,                  // counts round at 256
+
+    score: number = 0,
+    bestScore: number = 10101,          // shown at the top: the arcade's table starts full of 10101
+    lives: number = 0,
+    livesPerGame: number = 3,
+    waveIndex: number = 0,              // the wave in play, from 0
+    reached: number = 0,                // the player's wave, from 0 (255: still to choose)
+    bestWave: number = 0,               // the furthest a game reached: the choices offered next
+    bonusFlash: number = 0,             // a new life's flash: frames left of the spokes running through the colors (-1: none)
+    flashing: boolean = { bonusFlash >= 0 },
+    avoidSpikes: boolean = false,       // spikes left at the end of an early wave: a warning, until the claw drops
+
+    // choosing where to start ("rate yourself"): the waves a game may start at, and the bonus
+    // each start earns once its first wave is cleared, in hundreds of points
+
+    startWaves: number[] = [0, 2, 4, 6, 8, 10, 12, 14, 16, 19, 21, 23, 25, 27, 30, 32, 35, 39, 43, 46, 48, 51,
+        55, 59, 62, 64, 72, 80],
+    startBonuses: number[] = [0, 60, 160, 320, 540, 740, 940, 1140, 1340, 1520, 1700, 1880, 2080, 2260, 2480, 2660,
+        3000, 3400, 3820, 4150, 4390, 4720, 5310, 5810, 6240, 6560, 7660, 8980],
+
+    highestChoice: number = 0,
+    choice: number = 0,
+    startBonus: number = 0,             // the choice a game started from, until its first wave is cleared
+    choiceTick: number = 0,             // frames to the next second
+    choiceTime: number = 0,             // seconds left (99 once the time is up)
+
+    // the arcade's tallies
+
+    nymphsLeft: number = 0,
+    onLanes: number = 0,                // enemies on the lanes, not at the rim
+    atRim: number = 0,                  // enemies at the rim, chasing the player
+    kindCount: Record<Kind, number> = { noneOfEach() },
+    shotsFlying: number = 0,
+    enemyShotsFlying: number = 0,
+    blastsGoing: number = 0,
+
+    // the pulse that makes pulsars deadly
+
+    pulse: number = 0,                  // rises and falls through nought: pulsing while at or above it
+    pulseStep: number = 4,
+    pulseOn: boolean = { pulse >= 0 },
+
+    zapsUsed: number = 0,
+    zapTime: number = 0,                // the superzapper's clock: frames since it was set off (0: idle)
+    zapLocked: boolean = false,         // after a wave: the zapper takes no press until the next frame of play
+    stars: "none" | "fading" | "growing" = "none",
+
+    eye: number = 0,                    // the eye's depth, in 256ths: behind the rim is negative
+    eyeDepth: number = { Math.floor(eye / 256) },
+    wellPassed: boolean = { eyeDepth >= FAR },     // the eye has gone past the far end
+    center: number = 0,                 // where the far end's center sits on the screen, in 256ths (signed)
+    centerStep: number = 0,             // how far the center glides each frame of the fly-in
+    eyeStop: number = 0,                // the depth where the eye settles for this well, behind the rim
+    unitDepth: number = 0,              // the distance from the settled eye to the rim: pictures there are full size
+
+    // What this frame did that the picture follows (see pictureFrame): a new well set up, the
+    // well moved on the screen, the eye drawing back from it after the last life, the claw
+    // killed and how.
+
+    wellSetUp: boolean = false,
+    wellMoved: boolean = false,
+    eyeDrawsBack: boolean = false,
+    clawKilled: "shot" | "pulsar" | "fuseball" | "caught" | "" = "",
+
+    // the sounds this frame started ("hush" silences the first four voices), and a count of
+    // the frames that started any
+
+    sounds: string[] = [],
+    soundFrame: number = 0,
+
+    // the controls, as the arcade's interrupts leave them for a frame
+
+    turn: number = 0,                   // spinner steps not yet taken
+    fireHeld: boolean = false,
+    zapHeld: boolean = false,
+    startHeld: boolean = false,
+    pressed: string[] = [],             // buttons pressed and not yet taken: "fire", "zap", "start"
+    pressesHeard: boolean = false,
+
+    // the difficulty of the wave in play (see setDifficulty)
+
+    level: Wave = { waves[0] },
+    speeds: Record<Kind, number> = { noneOfEach() },    // climbing speed by kind, in 256ths of a depth a frame (negative: up)
+    ranges: Record<Kind, number> = { noneOfEach() },    // how near a shot must come to hit, by kind
+    shotSpeed: number = 0,
+    shotRange: number = 0,
+    pulsarSpeed: number = -352,
+
+    // ── power-on ──
+
+    powerOn() {
+        const field = {
+            claw: { lane: 0, position: 0, depth: 0, depthFraction: 0, alive: true, caught: false, dropping: false, fallSpeed: 0 },
+            enemies: Array.from({ length: 7 }, (_, i) => this.emptyEnemy(i)),
+            nymphs: Array.from({ length: 64 }, (_, i) => ({ id: i, lane: 0, rise: 0 })),
+            shots: Array.from({ length: 8 }, (_, i) => this.emptyShot(i)),
+            enemyShots: Array.from({ length: 4 }, (_, i) => this.emptyShot(8 + i)),
+            blasts: Array.from({ length: 8 }, (_, i) => ({ id: i, inPlay: false, lane: 0, depth: 0, kind: "debris", stage: 0 })),
+            spikes: new Array(16).fill(0), spikeMarks: new Array(16).fill(0), stars: new Array(8).fill(0)
+            } as Playfield
+        // the arcade clears its memory at power-on: everything starts from nought
+        phase = "newGame"; next = "newGame"; pauseLeft = 0; pauseSlowly = false; screen = "play"; playing = false; frame = 0
+        score = 0; lives = 0; waveIndex = 0; reached = 0; bestWave = 0; bonusFlash = 0; avoidSpikes = false
+        highestChoice = 0; choice = 0; startBonus = 0; choiceTick = 0; choiceTime = 0
+        nymphsLeft = 0; onLanes = 0; atRim = 0; kindCount = noneOfEach()
+        shotsFlying = 0; enemyShotsFlying = 0; blastsGoing = 0
+        pulse = 0; pulseStep = 0; zapsUsed = 0; zapTime = 0; zapLocked = false; stars = "none"
+        eye = 0; eyeStop = 0; unitDepth = 0; center = 0; centerStep = 0
+        wellSetUp = false; wellMoved = false; eyeDrawsBack = false; clawKilled = ""
+        turn = 0; fireHeld = false; zapHeld = false; startHeld = false; pressed = []; pressesHeard = false
+        sounds = []
+        this.machine.restartChips()
+        this.pictureCleared()
+        this.commit(field)
+        },
+
+    emptyEnemy(id: number) -> Enemy {
+        return { id, inPlay: false, kind: "flipper", depth: 0, depthFraction: 0, lane: 0, flipping: false,
+            angle: 0, turning: "cw", rising: true, cargo: "none", fires: false, fireWait: 0, resting: false,
+            plan: "climb", count: 0 }
+        },
+
+    emptyShot(id: number) -> Shot {
+        return { id, inPlay: false, lane: 0, nextLane: 0, depth: 0, depthFraction: 0, spikesHit: 0, used: false }
+        },
+
+    // ── a frame ──
+
+    step(c: Controls) {
+        const field = this.draft()
+        sounds = []
+        wellSetUp = false; wellMoved = false; eyeDrawsBack = false; clawKilled = ""
+        this.listen(c)
+        this.moveStars(field)
+        pressesHeard = false
+        this.run(field)
+        if (!playing && this.taken("start")) this.begin(field)
+        frame = byte(frame + 1)
+        if (!pressesHeard) pressed = []
+        machine.frameEnds()
+        machine.frameDone(this.flyInLoad())
+        if (sounds.length != 0) soundFrame = soundFrame + 1
+        this.pictureFrame(field)
+        this.asDrawn(field)
+        this.commit(field)
+        },
+
+    // The arcade's picture has a memory of its own, and moves it on as each frame is drawn,
+    // drawing random numbers there too, after the frame's rules. The game says when: the App
+    // connects these to the picture.
+
+    pictureFrame(field: Playfield) { },
+    pictureCleared() { },
+
+    // Two of the game's rules happen as the picture is drawn, so the picture says when: the
+    // logo's box has grown, and the word follows it; and a spike's mark has been drawn, which
+    // ages it (a new mark is drawn twice, then rests).
+
+    logoBoxGrown() { screen = "logo" },
+    spikeMarkDrawn(field: Playfield, lane: number) { field.spikeMarks[lane] = (field.spikeMarks[lane] << 1) & 3 },
+
+    // Two things happen as the arcade draws a frame, so only on a frame it draws: a new life's
+    // flash counts down, and the choose screen reads the spinner a second time.
+
+    asDrawn(field: Playfield) {
+        if (wellSetUp) return
+        if (screen == "play" && flashing) bonusFlash = bonusFlash - 1
+        if (screen == "choose") choice = this.spinChoice(field, choice)
+        },
+
+    // Between frames the arcade's interrupts read the controls: the spinner's steps add up,
+    // and a press is kept until a rule takes it.
+
+    listen(c: Controls) {
+        turn = signed(turn + c.turn)
+        const press = (name: string, down: boolean, was: boolean) => {
+            if (down && !was && !pressed.includes(name)) pressed = [...pressed, name]
+            }
+        press("fire", c.fire, fireHeld)
+        press("zap", c.zap, zapHeld)
+        press("start", c.start, startHeld)
+        fireHeld = c.fire; zapHeld = c.zap; startHeld = c.start
+        },
+
+    taken(name: string) -> boolean {
+        const was = pressed.includes(name)
+        pressed = pressed.filter((p) => p != name)
+        return was
+        },
+
+    run(field: Playfield) {
+        switch (phase) {
+            case "newGame": this.newGame(field); break
+            case "newLife": this.newLife(field); break
+            case "lifeReady": this.lifeReady(); break
+            case "pause": this.pause(field); break
+            case "playing": this.play(field); break
+            case "dropping": this.drop(field); break
+            case "waveDone": this.waveDone(field); break
+            case "arriving": this.arrive(field); break
+            case "lifeLost": this.lifeLost(field); break
+            case "gameOver": this.gameOver(); break
+            case "toAttract": this.toAttract(); break
+            case "logo": this.startLogo(); break
+            case "chooseSetup": this.chooseSetup(field); break
+            case "choosing": this.choose(field); break
+            }
+        },
+
+    // A pause counts down, every frame or every other, while the claw can still move.
+
+    pause(field: Playfield) {
+        if (!pauseSlowly || frame % 2 == 0) {
+            if (pauseLeft > 0) pauseLeft = pauseLeft - 1
+            if (pauseLeft == 0) { phase = next; pauseSlowly = false }
+            }
+        this.moveClaw(field)
+        },
+
+    pauseFor(frames: number, then: Phase) {
+        pauseLeft = frames; next = then; phase = "pause"
+        },
+
+    // ── games, lives and waves ──
+
+    // One press starts a game: the arcade's coin and start button together.
+
+    begin(field: Playfield) {
+        playing = true
+        phase = "newGame"
+        pressed = []
+        },
+
+    newGame(field: Playfield) {
+        this.useWell(field, next == "lifeReady")     // start pressed on the frame a new life began
+        if (playing) score = 0
+        lives = livesPerGame
+        reached = 255
+        stars = "none"
+        this.offerChoices()
+        this.chooseSetup(field)
+        },
+
+    // the furthest choice offered: up to the wave the last game reached, and at least the fifth
+
+    offerChoices() {
+        const starts = startWaves
+        let n = starts.length - 1
+        while (n > 0 && bestWave < starts[n]) n = n - 1
+        highestChoice = Math.max(n, 4)
+        if (playing) bestWave = 0
+        },
+
+    chooseSetup(field: Playfield) {
+        this.placeEye(byte(eyeDepth) - 256)             // (the arcade sets only the eye's whole depths above 256)
+        field.claw.lane = 0; field.claw.position = 0; choice = 0
+        choiceTick = 0
+        let time = 0
+        if (playing) {
+            choiceTick = 20
+            phase = "choosing"
+            screen = "choose"
+            waveIndex = 0
+            time = 10
+            }
+        choiceTime = time
+        turn = 0
+        this.choose(field)
+        },
+
+    // A second is 21 frames here. In the attract mode the time is up at once and a wave from
+    // the first eight is taken at random; in a game, fire chooses, or the time running out.
+
+    choose(field: Playfield) {
+        choiceTick = choiceTick - 1
+        let chosen = false
+        if (choiceTick < 0) {
+            choiceTime = choiceTime == 0 ? 99 : choiceTime - 1
+            if (choiceTime == 99) chosen = true
+            else if (choiceTime == 3) this.sound("countdown")
+            choiceTick = 20
+            }
+        choice = this.spinChoice(field, choice)
+        const now = pressed.filter((p) => p == "fire" || p == "zap" || (choiceTime < 8 && p == "start"))
+        if (chosen || now.length > 0) {
+            pressed = []
+            let start = startWaves[choice]
+            if (!playing) { lives = 1; start = this.random(1) & 7 }
+            startBonus = choice
+            reached = start; waveIndex = start
+            this.setDifficulty()
+            this.enemyRules.newWaveCounts(field)
+            this.resetZapper()
+            phase = "newLife"
+            turn = 0
+            }
+        pressed = pressed.filter((p) => p != "fire" && p != "zap" && p != "start")
+        pressesHeard = true
+        },
+
+    // The spinner moves the choice a column for every 32 steps: the claw's position counts
+    // them, eight to a step, and each time it passes round its 256 the choice moves on one.
+    // (A turn back is counted as a long turn forward, less a column.)
+
+    spinChoice(field: Playfield, v: number) -> number {
+        const sum = field.claw.position + byte(turn * 8)
+        field.claw.position = byte(sum)
+        let n = v + Math.floor(sum / 256) - (turn < 0 ? 1 : 0)
+        turn = 0
+        if (n < 0) n = 0
+        else if (n >= highestChoice) n = highestChoice
+        return n
+        },
+
+    newLife(field: Playfield) {
+        screen = "play"
+        phase = "lifeReady"; next = "lifeReady"
+        waveIndex = reached
+        this.newClaw(field)
+        this.setDifficulty()
+        this.clearWell(field, true)
+        this.machine.restartChips()
+        this.sound("hush")
+        },
+
+    lifeReady() { screen = "play"; this.pauseFor(20, "playing") },
+
+    // A new wave: the counts, the well, and the eye far back, to fly in.
+
+    newWave(field: Playfield) {
+        this.setDifficulty()
+        this.enemyRules.newWaveCounts(field)
+        this.clearWell(field, false)
+        this.resetZapper()
+        this.placeEye(-0x600)
+        field.claw.dropping = false
+        screen = "play"
+        },
+
+    clearWell(field: Playfield, newLife: boolean) {
+        for (const s of [...field.shots, ...field.enemyShots]) s.inPlay = false
+        shotsFlying = 0; enemyShotsFlying = 0
+        this.enemyRules.clearEnemies(field)
+        this.enemyRules.placeNymphs(field)
+        for (const b of field.blasts) b.inPlay = false
+        blastsGoing = 0
+        turn = 0
+        this.useWell(field, newLife)
+        bonusFlash = -1
+        pulse = -1
+        avoidSpikes = false
+        },
+
+    // The well for the player's wave, the eye where it settles, and the well redrawn. A new
+    // life puts the far end's center in place at once; a new wave glides it there during the
+    // fly-in.
+
+    useWell(field: Playfield, newLife: boolean) {
+        well.id = well.shapeFor(byte(reached) + 1, () => this.random(1))
+        const shape = well.shapes[well.id]
+        this.placeEye(-shape.eyeBack)
+        eyeStop = -shape.eyeBack
+        unitDepth = RIM + shape.eyeBack
+        if (newLife) center = shape.center * 256 + (center & 255)
+        else centerStep = byte((word(shape.center) - word(Math.floor(center / 256))) >> 4)
+        wellSetUp = true; wellMoved = true
+        for (let i = 0; i < 16; i++) field.spikeMarks[i] = 0
+        },
+
+    // The eye flies in, 24 depths a frame, until it reaches its place; then play begins
+    // (or, in the attract mode, ends: the attract mode shows one wave).
+
+    arrive(field: Playfield) {
+        field.claw.depth = RIM
+        center = signed24(center + signed(centerStep) * 64)
+        eye = eye + 0x18 * 256
+        if (eyeDepth >= -0x400 && eyeDepth < 0) stars = "fading"     // the stars fade as the well comes near
+        if (eyeDepth >= eyeStop) {
+            this.placeEye(eyeStop)
+            phase = playing ? "playing" : "gameOver"
+            startBonus = 0
+            }
+        wellMoved = true
+        this.moveClaw(field)
+        },
+
+    // the extra time a frame takes flying into a well: 1.6 ticks with the eye far back, 0.4
+    // as it arrives (Machine.frameDone)
+
+    flyInLoad() -> number {
+        if (phase != "arriving") return 0
+        const far = -0x600 * 256, near = eyeStop * 256
+        const p = Math.max(0, Math.min(1, (eye - far) / (near - far)))
+        return 1.6 - 1.2 * p
+        },
+
+    // the eye's whole depth set, its 256ths left as they were
+
+    placeEye(depth: number) { eye = depth * 256 + (eye & 255) },
+
+    // A wave cleared. After the first, a game started further in earns its starting bonus.
+
+    waveDone(field: Playfield) {
+        if (reached < 98) { reached = reached + 1; waveIndex = waveIndex + 1 }
+        phase = "arriving"
+        if (startBonus != 0) { this.addScore(startBonuses[startBonus] * 100); this.sound("bonus") }
+        this.newWave(field)
+        },
+
+    lifeLost(field: Playfield) {
+        pauseLeft = 0
+        lives = lives - 1
+        if (lives == 0) { this.gameOver(); return }
+        next = reached == 255 ? "chooseSetup" : "newLife"
+        phase = "pause"
+        },
+
+    gameOver() {
+        bestWave = reached == 0 ? 0 : reached - 1
+        if (playing && score > bestScore) bestScore = score
+        phase = "toAttract"
+        },
+
+    // Back to the attract mode. The arcade would show its table of high scores here for 320
+    // frames; this program has none, and goes straight on to the logo.
+
+    toAttract() {
+        playing = false
+        phase = "logo"
+        },
+
+    // The logo page lasts 223 frames on the arcade, the word coming to rest for the last two
+    // seconds of them. The port holds it there longer, so the keys under it can be read; the
+    // conformance tests set the hold to nothing, as the arcade has it.
+
+    logoHold: number = 150,             // frames: about five and a half seconds
+
+    startLogo() {
+        this.pauseFor(0xdf + logoHold, "newGame")
+        screen = "logoBox"
+        },
+
+    // ── play ──
+
+    play(field: Playfield) {
+        this.moveClaw(field)
+        this.fire(field)
+        this.zap(field)
+        this.enemyRules.riseNymphs(field)
+        this.enemyRules.moveEnemies(field)
+        this.moveShots(field)
+        this.enemyRules.enemiesFire(field)
+        this.findHits(field)
+        this.burn(field)
+        this.checkEnds(field)
+        },
+
+    drop(field: Playfield) {
+        avoidSpikes = false
+        this.moveClaw(field)
+        this.fall(field)
+        this.burn(field)
+        this.fire(field)
+        this.moveShots(field)
+        if (!field.claw.alive) this.checkEnds(field)
+        },
+
+    // ── the claw ──
+
+    newClaw(field: Playfield) {
+        field.claw = { lane: 14, position: 0xf0, depth: RIM, depthFraction: field.claw.depthFraction, alive: true,
+            caught: false, dropping: false, fallSpeed: field.claw.fallSpeed }
+        },
+
+    // The spinner moves the claw round the rim, at most 31 steps a frame; an open well stops
+    // it at the edges. In the attract mode it steers itself toward the nearest enemy.
+
+    moveClaw(field: Playfield) {
+        const claw = field.claw
+        if (!claw.alive) return
+        let t = 0
+        if (!playing) t = this.steer(field)
+        else { t = Math.max(-31, Math.min(31, turn)); turn = 0 }
+        const to = well.open ? Math.max(0, Math.min(0xef, claw.position - t)) : byte(claw.position - t)
+        if ((to >> 4) != claw.lane) this.sound("click")
+        claw.lane = to >> 4
+        claw.position = to
+        },
+
+    // toward the lane of the enemy nearest the rim, nine steps a frame
+
+    steer(field: Playfield) -> number {
+        let nearest = 255, which = -1
+        for (let i = this.level.enemySlots - 1; i >= 0; i--) {
+            const e = field.enemies[i]
+            if (e.inPlay && e.depth < nearest) { nearest = e.depth; which = i }
+            }
+        if (which < 0) return 0
+        const d = this.lanesBetween(field.claw.lane, field.enemies[which].lane)
+        return d == 0 ? 0 : d > 0 ? -9 : 9
+        },
+
+    // from one lane to another, the shorter way round a closed well (negative: back round)
+
+    lanesBetween(from: number, to: number) -> number {
+        return well.open ? to - from : ((to - from + 8) & 15) - 8
+        },
+
+    // Down the well after a wave: faster each frame, the eye following; a spike in the claw's
+    // lane, reached, kills it. At the bottom, the next wave.
+
+    fall(field: Playfield) {
+        const claw = field.claw
+        if (!claw.alive || !claw.dropping) return
+        if (claw.depth == RIM) this.sound("fallTube")
+        let p = claw.depth * 256 + claw.depthFraction + claw.fallSpeed
+        let out = p >= 65536
+        claw.depth = byte(p >> 8); claw.depthFraction = p & 255
+        if (out || claw.depth >= FAR) { phase = "waveDone"; claw.depth = 0xff; this.sound("fallSpace") }
+        if (claw.depth >= 0x50 && stars == "none") this.startStars(field)
+        const before = eyeDepth
+        eye = eye + claw.fallSpeed
+        if (eyeDepth != before) wellMoved = true
+        claw.fallSpeed = claw.fallSpeed + Math.min(byte(waveIndex * 4), 0x30) + 0x20     // (counted round: from wave 65 the fall begins again as slowly as wave 1's)
+        if (claw.depth < FAR) {
+            const tip = field.spikes[claw.lane]
+            if (tip != 0 && tip < claw.depth) {
+                this.killClaw(field, "pulsar")
+                stars = "none"
+                for (const s of [...field.shots, ...field.enemyShots]) s.inPlay = false
+                shotsFlying = 0; enemyShotsFlying = 0
+                }
+            }
+        },
+
+    // ── shots ──
+
+    // In a game, a shot while fire is held and one of the eight is free. In the attract mode
+    // the claw fires when an enemy or an enemy's shot is in its lane or the next.
+
+    fire(field: Playfield) {
+        const claw = field.claw
+        if (!claw.alive) return
+        let want = false
+        if (!playing) {
+            let near = claw.dropping ? 1 : 0
+            const lanes = [...field.enemyShots.map((s) => s.inPlay ? s.lane : -1), ...field.enemies.map((e) => e.inPlay ? e.lane : -1)]
+            for (const l of lanes) if (l >= 0 && Math.abs(l - claw.lane) < 2) near = near + 1
+            want = near != 0
+            }
+        else want = fireHeld
+        if (!want) return
+        for (let i = 7; i >= 0; i--) {
+            const s = field.shots[i]
+            if (s.inPlay) continue
+            shotsFlying = shotsFlying + 1
+            this.sound("fire")
+            field.shots[i] = { id: i, inPlay: true, lane: claw.lane, nextLane: (claw.lane + 1) & 15, depth: claw.depth,
+                depthFraction: s.depthFraction, spikesHit: 0, used: false }
+            this.hitsFor(field, i)
+            return
+            }
+        },
+
+    // Player's shots go down nine depths a frame (five once slowed by a spike); enemies' come up.
+
+    moveShots(field: Playfield) {
+        for (let i = 3; i >= 0; i--) {
+            const s = field.enemyShots[i]
+            if (!s.inPlay) continue
+            const p = word(s.depth * 256 + s.depthFraction + shotSpeed)
+            s.depthFraction = byte(p)
+            let depth = byte(p >> 8)
+            if (depth < field.claw.depth) {
+                enemyShotsFlying = enemyShotsFlying - 1
+                this.shotReachesRim(field, s)
+                depth = 0
+                }
+            s.depth = depth
+            s.inPlay = depth != 0
+            }
+        for (let i = 7; i >= 0; i--) {
+            const s = field.shots[i]
+            if (!s.inPlay) continue
+            s.depth = byte(s.depth + 9 - (s.spikesHit != 0 ? 4 : 0))
+            this.shotMeetsSpike(field, s)
+            if (s.inPlay && s.depth >= FAR) { shotsFlying = shotsFlying - 1; s.inPlay = false; s.depth = 0 }
+            }
+        },
+
+    shotReachesRim(field: Playfield, s: Shot) {
+        if (s.lane == field.claw.lane && field.claw.alive) this.killClaw(field, "shot")
+        },
+
+    // A shot that reaches a spike's tip cuts the spike back to where the shot is (away
+    // altogether at the far end), for a point; two spikes spend it.
+
+    shotMeetsSpike(field: Playfield, s: Shot) {
+        const tip = field.spikes[s.lane]
+        if (tip != 0 && s.depth >= tip) {
+            field.spikes[s.lane] = s.depth >= FAR ? 0 : s.depth
+            s.spikesHit = s.spikesHit + 1
+            field.spikeMarks[s.lane] = 3
+            this.sound("spikeHit")
+            this.addScore(1)
+            }
+        if (s.spikesHit >= 2) { s.inPlay = false; s.depth = 0; shotsFlying = shotsFlying - 1 }
+        },
+
+    // ── hits ──
+
+    findHits(field: Playfield) {
+        for (let i = 7; i >= 0; i--) if (field.shots[i].inPlay) this.hitsFor(field, i)
+        },
+
+    // One shot against every enemy shot and enemy within reach of its depth: a shot can take
+    // several at once. An enemy is hit on its own lane; one flipping, on the lane it is
+    // flipping over; one sitting exactly at the rim, not at all.
+
+    hitsFor(field: Playfield, i: number) {
+        const s = field.shots[i]
+        const at = s.depth
+        for (let k = level.enemySlots - 1; k >= 0; k--) {
+            const n = field.enemies[k]
+            if (!n.inPlay) continue
+            if (Math.abs(n.depth - at) >= ranges[n.kind]) continue
+            if (n.kind == "fuseball") {
+                if (n.depth != field.claw.depth && s.lane == n.lane && n.flipping) this.hitFuseball(field, s, n)
+                }
+            else if (n.flipping ? n.lane == s.nextLane || n.lane == s.lane : n.depth != field.claw.depth && n.lane == s.lane)
+                this.hitEnemy(field, s, n)
+            }
+        for (let k = 3; k >= 0; k--) {
+            const e = field.enemyShots[k]
+            if (e.inPlay && Math.abs(e.depth - at) < shotRange && e.lane == s.lane) this.shotsCollide(field, s, e)
+            }
+        if (s.used) { s.inPlay = false; s.depth = 0; shotsFlying = shotsFlying - 1; s.used = false; s.spikesHit = 0 }
+        },
+
+    shotsCollide(field: Playfield, s: Shot, e: Shot) {
+        this.sound("explosion")
+        this.startBlast(field, e.depth, e.lane, "debris")
+        e.inPlay = false; e.depth = 0
+        enemyShotsFlying = enemyShotsFlying - 1
+        s.used = true
+        },
+
+    // A fuseball, hit, is worth 250 three times in four, else 500 or 750.
+
+    hitFuseball(field: Playfield, s: Shot, n: Enemy) {
+        s.used = true
+        let r = this.random(2) & 7
+        if (r >= 3) r = 0
+        this.sound("explosion")
+        this.startBlast(field, n.depth, n.lane, (["fuseball250", "fuseball500", "fuseball750"] as BlastKind[])[r])
+        this.enemyRules.kill(field, n.id)
+        this.addScore([250, 500, 750][r])
+        },
+
+    hitEnemy(field: Playfield, s: Shot, n: Enemy) {
+        s.used = true
+        this.destroy(field, n)
+        },
+
+    // An enemy destroyed (by a shot or the superzapper): its explosion, its end, its points.
+
+    destroy(field: Playfield, n: Enemy) {
+        const lane = n.flipping && n.turning == "ccw" ? (n.lane + 15) & 15 : n.lane
+        this.sound("explosion")
+        this.startBlast(field, n.depth, lane, "debris")
+        const id = n.id
+        this.enemyRules.kill(field, id)
+        this.addScore(points[field.enemies[id].kind])
+        },
+
+    points: Record<Kind, number> = { { flipper: 150, pulsar: 200, tanker: 100, spiker: 50, fuseball: 150 } },
+
+    // ── the player's death ──
+
+    // How: an enemy's "shot", a "pulsar" (or a spike in the fall) or a "fuseball", which decide
+    // the death pictures that follow; or "caught" at the rim by a chaser, which goes on from
+    // the pictures already showing.
+
+    killClaw(field: Playfield, how: "shot" | "pulsar" | "fuseball" | "caught") {
+        clawKilled = how
+        this.sound("death")
+        this.startBlast(field, field.claw.depth, field.claw.lane, how == "caught" ? "caught" : "player")
+        field.claw.alive = false
+        field.claw.caught = how == "caught"
+        },
+
+    // ── explosions ──
+
+    // Each kind of explosion grows by its step a frame, and is over at its last stage.
+
+    blastGrowth: Record<BlastKind, number> = { { debris: 3, player: 1, fuseball250: 3, fuseball500: 3, fuseball750: 3, caught: 3 } },
+    blastEnd: Record<BlastKind, number> = { { debris: 0x10, player: 0x15, fuseball250: 0x20, fuseball500: 0x20, fuseball750: 0x20, caught: 0x10 } },
+
+    startBlast(field: Playfield, depth: number, lane: number, kind: BlastKind) {
+        let slot = -1, most = -1, mostAt = 0
+        for (let i = 7; i >= 0; i--) {
+            const b = field.blasts[i]
+            if (!b.inPlay) { slot = i; break }
+            if (b.stage >= most) { most = b.stage; mostAt = i }
+            }
+        if (slot < 0) { blastsGoing = blastsGoing - 1; slot = mostAt }
+        field.blasts[slot] = { id: slot, inPlay: depth != 0, lane, depth, kind, stage: 0 }
+        blastsGoing = blastsGoing + 1
+        },
+
+    burn(field: Playfield) {
+        if (blastsGoing == 0) return
+        blastsGoing = 0
+        for (let i = 7; i >= 0; i--) {
+            const b = field.blasts[i]
+            if (!b.inPlay) continue
+            b.stage = b.stage + blastGrowth[b.kind]
+            if (b.stage >= blastEnd[b.kind]) { b.inPlay = false; b.depth = 0 }
+            else blastsGoing = blastsGoing + 1
+            }
+        },
+
+    // ── the end of a life, the end of a wave ──
+
+    checkEnds(field: Playfield) {
+        const claw = field.claw
+        if (!claw.alive) {
+            if (shotsFlying != 0 || enemyShotsFlying != 0 || blastsGoing != 0) return
+            for (let i = this.level.enemySlots - 1; i >= 0; i--) {
+                const e = field.enemies[i]
+                if (!e.inPlay) continue
+                const d = e.depth + 15
+                e.depth = d >= FAR ? 0 : d
+                e.inPlay = e.depth != 0
+                }
+            let done = false
+            if (lives == 1) {
+                wellMoved = true; eyeDrawsBack = true
+                eye = eye - 0x20 * 256
+                done = eyeDepth < -0x500
+                }
+            else {
+                const d = claw.depth + 15
+                claw.depth = byte(d)
+                done = d >= FAR
+                }
+            if (done) {
+                phase = "lifeLost"
+                for (const s of [...field.shots, ...field.enemyShots]) s.inPlay = false
+                shotsFlying = 0; enemyShotsFlying = 0
+                nymphsLeft = Math.min(byte(onLanes + atRim + nymphsLeft), 63)
+                }
+            return
+            }
+        if (claw.dropping) return
+        if (nymphsLeft == 0 && blastsGoing == 0) {
+            const busy = field.enemies.slice(0, this.level.enemySlots).some((e) => e.inPlay && e.depth >= 0x11)
+            if (!busy) {
+                this.startDrop(field)
+                for (const s of [...field.shots, ...field.enemyShots]) s.inPlay = false
+                shotsFlying = 0; enemyShotsFlying = 0
+                }
+            }
+        },
+
+    startDrop(field: Playfield) {
+        phase = "dropping"
+        field.claw.dropping = true
+        field.claw.fallSpeed = 0x200; field.claw.depthFraction = 0
+        eye = eye - (eye & 255)
+        let spikes = 0
+        for (let i = 15; i >= 0; i--) if (field.spikes[i] != 0) spikes = spikes + 1
+        if (spikes != 0 && waveIndex < 7) { this.pauseFor(30, "dropping"); avoidSpikes = true }
+        zapTime = 0; zapLocked = true
+        },
+
+    // ── the superzapper ──
+
+    resetZapper() { zapsUsed = 0; zapTime = 0; zapLocked = false },
+
+    // Twice a wave: the first time it destroys an enemy every other frame for a while, the
+    // second time just one.
+
+    zap(field: Playfield) {
+        if (playing) {
+            if (zapLocked) zapLocked = false
+            else if (zapTime == 0) {
+                if (field.claw.alive && pressed.includes("zap")) {
+                    if (zapsUsed < 2) { zapsUsed = zapsUsed + 1; zapTime = 1 }
+                    pressed = pressed.filter((p) => p != "zap")
+                    }
+                }
+            else {
+                zapTime = zapTime + 1
+                if (zapTime >= [0, 19, 5, 0, 0][zapsUsed]) zapTime = 0
+                this.zapOne(field)
+                }
+            }
+        pressesHeard = true
+        },
+
+    zapOne(field: Playfield) {
+        if (zapTime < 3 || zapTime % 2 != 0) return
+        for (let i = this.level.enemySlots - 1; i >= 0; i--) {
+            const e = field.enemies[i]
+            if (e.inPlay) { e.cargo = "none"; this.destroy(field, e); return }
+            }
+        zapTime = 0
+        },
+
+    // ── the stars, as the claw falls through space ──
+
+    startStars(field: Playfield) {
+        for (let i = 0; i < 8; i++) field.stars[i] = 0
+        field.stars[7] = FAR
+        stars = "growing"
+        },
+
+    moveStars(field: Playfield) {
+        if (stars == "none") return
+        let any = 0
+        for (let i = 7; i >= 0; i--) {
+            let d = field.stars[i]
+            if (d != 0) {
+                d = d - 7
+                if (d < RIM) d = stars == "growing" ? FAR : 0
+                }
+            else if (stars == "growing") {
+                const after = field.stars[(i + 1) % 8]
+                if (after != 0) d = after < 0xd5 ? FAR : 0
+                }
+            field.stars[i] = d
+            any = any | d
+            }
+        if (any == 0) stars = "none"
+        },
+
+    // ── score ──
+
+    // Points count only in a game; every 20,000 brings another life, up to six. (A starting
+    // bonus of 20,000 or more brings one whatever it lands on, as the arcade compares it.)
+
+    addScore(points: number) {
+        if (!playing) return
+        const big = Math.floor(points / 10000) % 100
+        const crossed = (score % 10000) + (points % 10000) >= 10000
+        score = (score + points) % 1000000
+        const even = Math.floor(score / 10000) % 2 == 0
+        const earned = big >= 2 ? true : big == 1 ? even : crossed && even
+        if (earned && lives < 6) {
+            lives = lives + 1
+            this.sound("bonus")
+            bonusFlash = 0x20
+            }
+        },
+
+    // ── the wave's difficulty ──
+
+    // The wave's record (past wave 98, one of waves 65 to 96 at random, each life). Speeds
+    // are kept as the arcade keeps them: a byte that counts eighths of a depth a frame, up
+    // the well; how near a shot must come to hit follows from the speed.
+
+    setDifficulty() {
+        let n = waveIndex
+        if (n >= 98) n = (this.random(2) & 0x1f) | 0x40
+        level = waves[n]
+        const flipper = this.speedOf(level.speed), spiker = this.speedOf(level.spikerSpeed), shot = this.speedOf(level.shotSpeed)
+        speeds = { flipper, pulsar: pulsarSpeed, tanker: flipper, spiker, fuseball: flipper * 2 }
+        ranges = { flipper: this.rangeOf(flipper), pulsar: this.rangeOf(flipper), tanker: this.rangeOf(flipper),
+            spiker: this.rangeOf(spiker), fuseball: 6 }
+        shotSpeed = shot
+        shotRange = this.rangeOf(shot)
+        pulseStep = level.pulseRate
+        },
+
+    speedOf(b: number) -> number { return (b - 256) * 8 },
+    rangeOf(speed: number) -> number { return (12 - Math.floor(speed / 256)) >> 1 },
+
+    // ── the machine's random numbers ──
+
+    // The arcade has two chips that give random numbers, each its own stream; which one a rule
+    // asks is part of the rule, as much as the order it asks in.
+
+    random(chip: 1 | 2) -> number { return this.machine.random(chip) },
+
+    // a sound, started on the arcade's board (only in a game: the attract mode is silent)
+
+    sound(name: string) { if (playing) sounds = [...sounds, name] },
+
+    // ── the field as data ──
+
+    // A frame's rules work on a copy of the field (draft), in the arcade's order; at the end
+    // of the frame what changed is written back (commit): a field of a record, a number of a
+    // list, or a whole list whose length changed. What did not change is not touched, so only
+    // the views that show what moved are woken.
+
+    draft() -> Playfield {
+        const v = this.value
+        return {
+            claw: { ...v.claw },
+            enemies: v.enemies.map((e) => ({ ...e })),
+            nymphs: v.nymphs.map((n) => ({ ...n })),
+            shots: v.shots.map((s) => ({ ...s })),
+            enemyShots: v.enemyShots.map((s) => ({ ...s })),
+            blasts: v.blasts.map((b) => ({ ...b })),
+            spikes: [...v.spikes], spikeMarks: [...v.spikeMarks], stars: [...v.stars] }
+        },
+    commit(field: Playfield) {
+        const v = this.value
+        this.writeRecord(["claw"], field.claw, v.claw)
+        this.writeRows("enemies", field.enemies, v.enemies)
+        this.writeRows("nymphs", field.nymphs, v.nymphs)
+        this.writeRows("shots", field.shots, v.shots)
+        this.writeRows("enemyShots", field.enemyShots, v.enemyShots)
+        this.writeRows("blasts", field.blasts, v.blasts)
+        this.writeNumbers("spikes", field.spikes, v.spikes)
+        this.writeNumbers("spikeMarks", field.spikeMarks, v.spikeMarks)
+        this.writeNumbers("stars", field.stars, v.stars)
+        },
+    writeRecord(path: (string | number)[], now: object, was: object?) {
+        if (was == null) { this.set(path, now); return }
+        const a = now as Record<string, unknown>, b = was as Record<string, unknown>
+        for (const key of Object.keys(a)) if (a[key] !== b[key]) this.set([...path, key], a[key])
+        },
+    writeRows(list: string, now: object[], was: object[]?) {
+        if (was == null || was.length != now.length) { this.set([list], now); return }
+        now.forEach((r, i) => this.writeRecord([list, i], r, was[i]))
+        },
+    writeNumbers(list: string, now: number[], was: number[]?) {
+        if (was == null || was.length != now.length) { this.set([list], now); return }
+        now.forEach((n, i) => { if (n !== was[i]) this.set([list, i], n) })
+        }
+    ]

@@ -1,0 +1,163 @@
+/*
+## The scenery
+
+The planet's ground, the stars behind it, the volcano, and the scanner that shows the
+whole planet at an eighth of the size.
+*/
+
+schema SmallGround [ row: number, top: number, bottom: number ]      // a row, and the inks of two pairs of pixels
+
+class Scenery extends Rules [ kinds = ["scanner"],
+
+    // ── the ground ──
+
+    // The planet's ground, 2048 pixels round: its row at each pixel (art/ground.json, from the
+    // arcade's own table; reference/tools/export-ground.mjs), and the scanner's small ground —
+    // for each 32 pixels round the planet, the scanner's row and the inks of two pairs of
+    // pixels, one under the other.
+
+    ground: DataSource [ url = "art/ground.json", auto = true, schema = [ rows[]: number, small[]: SmallGround ] ],
+    rows: number[] = { ground.value?.rows ?? [] },
+    smallGround: SmallGround[] = { ground.value?.small ?? [] },
+
+    // the ground's row under a place, as the rules read it (every other pixel's)
+
+    under(x: number) -> number { return rows[(2 * Math.floor(x / 2) + 2047) % 2048] },
+
+    // ── the stars ──
+
+    // Sixteen stars at random places between the scanner and the low ground, taking the
+    // eight colors in turn; fewer are lit while the arcade is behind.
+
+    starsLit: number = 16,
+    newStars() {
+        game.world.stars = []
+        for (let i = 0; i < 16; i++) {
+            let pair = game.chance.draw()
+            while (pair >= 156) pair = game.chance.draw()
+            let row = game.chance.draw()
+            while (row > 160 || row <= game.top) row = game.chance.draw()
+            game.world.stars.push({ id: i, px: 2 * pair, py: row, color: i % 8, lit: true })
+            }
+        starsLit = 16
+        },
+
+    // The stars pass at half the planet's pace; one leaving at a side comes back at the
+    // other. Each frame one star at random takes the next color, and half the time jumps.
+
+    driftStars() {
+        if (game.frozen) return
+        const moved = signed8(Math.floor(game.lastScroll / 4) - Math.floor(game.scroll / 4))
+        game.world.stars.forEach((s, i) => {
+            s.lit = i < starsLit
+            if (!s.lit) return
+            const pair = byte(Math.floor(s.px / 2) + moved)
+            s.px = 2 * (pair < 156 ? pair : pair > 192 ? 155 : 0)
+            })
+        const seed = game.chance.last, s = game.world.stars[Math.floor(seed % 64 / 4)]
+        s.color = (s.color + 1) % 8
+        if (seed % 2 == 1) return
+        s.px = 2 * (seed >= 152 ? seed - 132 : seed)
+        if (game.planetGone) s.py = (game.chance.third % 64) * 3 + game.top
+        },
+
+    // ── the volcano ──
+
+    // One mountain is a volcano. While it is in sight, every so often it throws up one to
+    // three rocks, which fall back under gravity and move with the ground. It rests while
+    // the arcade is behind.
+
+    volcanoLit: boolean = false,
+    eruptionIn: number = 0,
+    erupt() {
+        if (game.frozen) return
+        if (byte(135 - Math.floor(game.scroll / 8)) > 38 || game.clock.behind() || game.planetGone) {
+            if (!volcanoLit) return
+            volcanoLit = false
+            for (const r of game.world.rocks) { r.life = 0; r.shown = false }
+            eruptionIn = 0
+            return
+            }
+        volcanoLit = true
+        const mouth = game.wrapScreen(1085.3125 - game.scroll)
+        for (const r of game.world.rocks) {
+            r.shown = false
+            if (r.life == 0) continue
+            r.life = r.life - 1
+            if (r.life == 0) continue
+            r.x = game.wrapScreen(r.x + r.vx)
+            const pair = Math.floor(game.wrapScreen(r.x + mouth) / 2)
+            r.vy = pair >= 154 ? r.vy : r.vy + 1 / 16
+            r.y = pair >= 154 ? r.y : game.wrapY(r.y + r.vy)
+            if (pair >= 154 || Math.floor(game.wrapY(r.y + 16)) <= 60) { r.life = 0; r.px = 0; continue }
+            r.px = 2 * pair
+            r.shown = true
+            }
+        eruptionIn = countDown(eruptionIn)
+        if (eruptionIn < 128) return
+        eruptionIn = game.chance.second % 64
+        let looks = (game.chance.last % 4) + 1
+        for (const r of game.world.rocks) {
+            if (r.life == 0) {
+                r.x = r.x % 2
+                r.vx = signed8(game.chance.last) / 128
+                r.vy = -game.chance.upTo(3) + game.chance.third / 256
+                r.life = game.chance.third % 64 + 56
+                r.y = 156 + r.y % 1
+                }
+            looks = looks - 1
+            if (looks == 0) break
+            }
+        },
+
+    // ── the scanner ──
+
+    // The scanner's round of eight passes: far things move and come near, near things go
+    // far and spent shots are cleared, then the whole planet is drawn at an eighth of the
+    // size — each thing as four pixels, the ship as a cross, and a small ground. Every
+    // fifth time, with five enemies or fewer left, the enemies show white; the count of
+    // five starts from what the turn's place was left holding. The marks are all rubbed out
+    // and the ground drawn first; then the marks go on, so a picture taken between shows
+    // the ground alone.
+
+    far(t: Turn) { game.bringNear(); this.rest(t, 2, "near") },
+    near(t: Turn) { game.sendFar(); game.shooters.clearSpent(); this.rest(t, 2, "show") },
+    show(t: Turn) {
+        const scans = (t.count ?? game.memory.countLeftIn(t)) + 1
+        t.count = scans > 4 ? 0 : scans
+        const s = game.world.scan
+        game.world.scan = { blips: [], ground: game.planetGone ? s.ground : this.scanGround(), shipPx: s.shipPx, shipPy: 0 }
+        this.goOn(t, "marks")
+        },
+    marks(t: Turn) {
+        this.scan(t.count == 0 && game.director.enemiesLeft() <= 5)
+        this.rest(t, 4, "far")
+        },
+    scanGround() -> number { return Math.floor(game.wrapX(game.scroll - 874) / 32) },
+    scan(highlight: boolean) {
+        const left = game.wrapX(game.scroll - 874)
+        const marks: ScanMark[] = []
+        for (const t of [...game.world.near, ...game.world.far]) {
+            const inks = marksOf[t.kind]
+            if (inks == null) continue
+            const plain = ["hum", "fireball", "baiter", "man", "lander", "gate", "phony gate"].includes(t.kind)
+            marks.push({ id: marks.length, px: 88 + 2 * Math.floor(game.wrapX(t.x - left) / 32), py: Math.floor(t.y / 8) + 3,
+                inks: highlight && !plain ? [9, 9, 9, 9] : inks, gate: t.kind == "gate" || t.kind == "phony gate" })
+            }
+        game.world.scan = { blips: marks, ground: game.planetGone ? game.world.scan.ground : this.scanGround(),
+            shipPx: 2 * (Math.floor(game.world.ship.px / 32) + 71) - 1, shipPy: Math.floor(game.world.ship.py / 8) + 3 }
+        },
+
+    // cleared with the top of the screen, until it next shows (shipPy 0: no cross)
+
+    clearScanner() { game.world.scan = { blips: [], ground: -1, shipPx: 0, shipPy: 0 } },
+
+    // Each kind's mark: four pixels' inks, the top two first. (A star gate's is a hollow
+    // square instead.)
+
+    marksOf: InkLists = { {
+        "man": [6, 6, 6, 6], "lander": [4, 4, 3, 3], "phony lander": [4, 4, 3, 3], "mutant": [12, 12, 3, 3],
+        "firebomber": [10, 12, 12, 10], "fireball": [4, 0, 0, 0], "dynamo": [9, 2, 2, 9], "hum": [9, 0, 0, 0],
+        "gate": [], "phony gate": [], "pod": [12, 12, 12, 12], "swarmer": [2, 4, 2, 4], "bomber": [8, 8, 8, 8],
+        "yllabian": [2, 2, 2, 2], "baiter": [3, 3, 3, 3], "master": [3, 3, 3, 3], "munchy": [3, 3, 0, 0] } }
+    ]

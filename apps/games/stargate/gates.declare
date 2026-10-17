@@ -1,0 +1,96 @@
+/*
+## The star gate
+
+Gates stand a set distance apart round the planet, the first at one of three places. A
+gate's three rings take their colors from where on the planet the screen is (see
+scenery.declare).
+
+The ship flying into one goes through: after a fade to black it comes out where a man is
+being carried off, the highest of them, or else half way round the planet. Carrying four
+men or more, in the first ten waves, and flying the way it faces, it is warped three waves
+on instead; carrying fewer, the strip says how many more are needed. The gate will not take
+the ship again for a while after.
+
+    enter → clearShots → (fade out) → dimmed → look → freeze → (fade in) → out → open
+*/
+
+class Gates extends Rules [ kinds = ["gate", "gate trip"],
+    rings: number[] = [0, 0, 0],        // the rings, outermost first: each a color's number
+    shut: boolean = false,              // the gate will not take the ship just now
+
+    picture(t: Thing) -> string { return "gate" },
+
+    send(count: number) {
+        let x = 682.65625 * ((game.chance.last % 4) == 0 ? 1 : game.chance.last % 4)     // a third of the way round, near enough
+        for (let k = 0; k < count; k++) {
+            const gate = game.newThing("gate")
+            gate.x = x
+            gate.y = (game.chance.draw() % 32) + 92 + gate.y % 1
+            gate.stays = true
+            game.enter(gate)
+            x = game.wrapX(x + 640)
+            }
+        },
+
+    hit(gate: Thing, byShip: boolean) -> boolean {
+        if (byShip && !shut && !game.shipDead && !game.spectacle) game.begin("gate trip", "enter")
+        return false
+        },
+
+    // ── the trip ──
+
+    enter(t: Turn) {
+        t.kept = game.planetGone
+        game.halt(["controls", "motion", "ship", "effects", "planet", "touching"])
+        const carried = game.men.carried
+        if (carried != 0 && game.director.wave <= 10) {
+            if (carried < 4) game.messages.show(carried == 3 ? "one man needed" : "men needed", 4 - carried)
+            else if ((game.world.ship.turnTo < 0) == (game.world.ship.speed < 0)) { game.setPieces.warp(t); return }
+            }
+        game.sleepAll(29)
+        this.rest(t, 1, "clearShots")
+        },
+    clearShots(t: Turn) {
+        game.shooters.dropAll()
+        this.fadeOut(t, 2, "dimmed")
+        },
+    dimmed(t: Turn) {
+        game.wipe()
+        this.comeOut()
+        this.rest(t, 1, "look")
+        },
+    look(t: Turn) {
+        game.bringNear(); game.sendFar()
+        game.scenery.scan(false)
+        game.halt(["controls", "ship", "effects", "touching"], t.kept)
+        this.rest(t, 1, "freeze")
+        },
+    freeze(t: Turn) {
+        game.halt(["controls", "motion", "ship", "effects", "touching"], t.kept)
+        this.fadeIn(t, 2, "out")
+        },
+    out(t: Turn) {
+        game.halt(game.pilot.invisible ? ["ship"] : [], t.kept)
+        shut = true
+        this.rest(t, 40, "open")
+        },
+    open(t: Turn) { shut = false; game.end(t) },
+
+    // Where the ship comes out: a little above the highest man in a lander's grip, near the
+    // side of the screen it is facing from; with none, the planet turns half round.
+
+    comeOut() {
+        const ship = game.world.ship
+        let best: Thing | null = null, top = 255
+        for (const id of game.world.men) {
+            const man = game.thing(id)
+            if (man == null || man.state != "taken" || Math.floor(man.y) > top) continue
+            top = Math.floor(man.y); best = man
+            }
+        if (best == null) { game.scroll = game.wrapX(game.scroll + 1024); return }
+        ship.speed = ship.speed - game.pilot.pace(ship); ship.climb = 0
+        ship.y = Math.max(49, Math.min(104, byte(top - game.chance.last % 8 - 20))) + ship.y % 1
+        ship.x = (ship.facing > 0 ? 64 : 224) + ship.x % 2
+        game.scroll = game.wrapX(best.x - (ship.facing > 0 ? 136 : 168))
+        }
+    ]

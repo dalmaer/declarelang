@@ -24,7 +24,7 @@
 // Ownership is the other half: an author `{ }` constraint owns its slot and a
 // direct write to it is an error (one declarative owner — the silent-clobber
 // bug is unrepresentable); a runtime-supplied derive yields to a direct write.
-import { ACTIVE, Cell, Constraint, S, isSettling, isTracking, kernel, noteWrite, nulls, setPushHook, table, touchCell, trackCell, untracked, workPending, setOwnershipCheck } from "./reactive.js";
+import { ACTIVE, Cell, Constraint, S, isSettling, isTracking, kernel, noteWrite, nulls, retireValue, setPushHook, table, touchCell, trackCell, untracked, workPending, setOwnershipCheck } from "./reactive.js";
 import { DeclareError, at, layoutConflictMessage } from "./errors.js";
 import { THEME_PRESETS } from "./themes.js";
 // Class → its attribute tables. All are prototype-chained objects mirroring
@@ -802,6 +802,8 @@ function writeRef(carrier, name, v, deep = false) {
     (carrier.$attrs ??= Object.create(defaults))[name] = v;
     tableFor(PUSHERS, self.constructor)?.[name]?.(self, v);
     carrier.$cells?.[name]?.changed();
+    if (cur !== v)
+        retireValue(cur); // an object value replaced: the cells its readers made inside it
     noteWrite(self, name, cur, v);
 }
 /** A runtime-side write: a constraint's apply, auto-size, a load result.

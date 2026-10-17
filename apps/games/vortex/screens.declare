@@ -1,0 +1,199 @@
+/*
+# Colors, the score panel and the text screens
+
+Each set of colors is a theme record. As on the arcade, the colors change
+every sixteen levels — blue, red, yellow, cyan, then a set with no tube at all
+(only the claw's lane shows), then green — and the App lays the level's set
+over the dark preset. Every drawing and every text reads its tokens through
+`provided("theme")`, so a new set re-colors the whole screen with no code.
+*/
+
+theme Blue [
+    web = #2D5BFF, claw = #FFE433, flipper = #FF2A3C, tanker = #B44CFF, spiker = #2EEA62,
+    pulsar = #3CE6FF, shot = #FFFFFF, foeShot = #FF8A8A, spike = #2EEA62, blast = #FFFFFF,
+    nymph = #B44CFF, icon = #2D5BFF, ink = #3CE6FF, score = #3CE6FF, title = #FF2A3C, faint = #6A7BB0
+    ]
+
+
+theme Red [
+    web = #FF2A3C, claw = #2EEA62, flipper = #B44CFF, tanker = #3CE6FF, spiker = #FFE433,
+    pulsar = #FFFFFF, shot = #FFFFFF, foeShot = #FFE433, spike = #FFE433, blast = #FFE433,
+    nymph = #3CE6FF, icon = #FF2A3C, ink = #FFE433, score = #FFE433, title = #2EEA62, faint = #B07070
+    ]
+
+
+theme Yellow [
+    web = #FFE433, claw = #3CE6FF, flipper = #2EEA62, tanker = #FF2A3C, spiker = #2D5BFF,
+    pulsar = #FF2A3C, shot = #FFFFFF, foeShot = #FF8A8A, spike = #3CE6FF, blast = #FFFFFF,
+    nymph = #2EEA62, icon = #FFE433, ink = #2EEA62, score = #2EEA62, title = #3CE6FF, faint = #A89A50
+    ]
+
+
+theme Cyan [
+    web = #3CE6FF, claw = #FFE433, flipper = #FF2A3C, tanker = #2EEA62, spiker = #B44CFF,
+    pulsar = #FFE433, shot = #FFFFFF, foeShot = #FF8A8A, spike = #B44CFF, blast = #FFFFFF,
+    nymph = #FF2A3C, icon = #3CE6FF, ink = #FFFFFF, score = #FFE433, title = #FF2A3C, faint = #5A9CA8
+    ]
+
+
+// The invisible tube: its web is drawn in black. The claw's lane still lights.
+
+theme Unseen [
+    web = #000000, claw = #FFE433, flipper = #FF2A3C, tanker = #B44CFF, spiker = #2EEA62,
+    pulsar = #3CE6FF, shot = #FFFFFF, foeShot = #FF8A8A, spike = #2EEA62, blast = #FFFFFF,
+    nymph = #B44CFF, icon = #5A5A6A, ink = #3CE6FF, score = #3CE6FF, title = #FF2A3C, faint = #6A7BB0
+    ]
+
+
+theme Green [
+    web = #2EEA62, claw = #FF2A3C, flipper = #FFE433, tanker = #3CE6FF, spiker = #B44CFF,
+    pulsar = #FFFFFF, shot = #FFFFFF, foeShot = #FFE433, spike = #B44CFF, blast = #FFE433,
+    nymph = #FFE433, icon = #2EEA62, ink = #FFE433, score = #FFE433, title = #3CE6FF, faint = #5AA870
+    ]
+
+
+/*
+## The score panel
+
+Three columns in a row, the outer two a fixed width so the middle one sits on
+the center line. The spare lives are claw marks, one per record of the derived
+`spares` dataset.
+*/
+
+class Hud [ width = 100%, padding = [18, 28, 0, 28],
+    layout: SimpleLayout [ axis = x ],
+
+    left: View [ width = 220,
+        layout: SimpleLayout [ axis = y, spacing = 4 ],
+        score: Text [ fontSize = 30, fontWeight = bold, textColor = { provided("theme").score }, text = { "" + app.score } ],
+        spares: View [ datapath = { app.spares.value },
+            layout: SimpleLayout [ axis = x, spacing = -6 ],
+            ClawMark [ datapath = :lives[], scale = 0.6 ]
+            ],
+        zap: Text [ fontSize = 11, letterSpacing = 2, textColor = { provided("theme").faint },
+            text = { app.zaps == 2 ? "SUPERZAPPER READY" : app.zaps == 1 ? "SUPERZAPPER ×1" : "SUPERZAPPER USED" } ]
+        ],
+    Spacer [ ],
+    middle: View [
+        layout: SimpleLayout [ axis = y, spacing = 2, align = center ],
+        Text [ fontSize = 11, letterSpacing = 3, textColor = { provided("theme").faint }, text = "LEVEL" ],
+        Text [ fontSize = 24, fontWeight = bold, textColor = { provided("theme").ink }, text = { "" + app.level } ]
+        ],
+    Spacer [ ],
+    right: View [ width = 220,
+        layout: SimpleLayout [ axis = y, spacing = 2, align = end ],
+        Text [ fontSize = 11, letterSpacing = 3, textColor = { provided("theme").faint }, text = "HIGH SCORE" ],
+        Text [ fontSize = 24, fontWeight = bold, textColor = { provided("theme").ink }, text = { "" + Math.max(app.hiScore, app.score) } ]
+        ]
+    ]
+
+
+/*
+## The attract screen
+
+The title, the
+keys (one `KeyRow` per record of `help`), and the invitation, blinking on a
+half-second clock. The tube shapes cycle behind it, and every so often the
+demo plays a game.
+*/
+
+class KeyRow [
+    layout: SimpleLayout [ axis = x, spacing = 22 ],
+    Text [ width = 210, textAlign = right, fontWeight = bold, textColor = { provided("theme").claw }, text = :keys ],
+    Text [ width = 210, textColor = { provided("theme").ink }, text = :does ]
+    ]
+
+
+class TitleScreen [ x = center, y = center,
+    layout: SimpleLayout [ axis = y, spacing = 16, align = center ],
+    blink: Time [ tick = 500 ],
+
+    title: Text [ fontSize = 72, fontWeight = bold, letterSpacing = 18,
+        textColor = { provided("theme").title },
+        textShadow = { shadow(0, 0, 18, provided("theme").title) }, text = "VORTEX" ],
+    keys: View [ padding = [18, 0, 18, 0], datapath = { app.help.value },
+        layout: SimpleLayout [ axis = y, spacing = 8 ],
+        KeyRow [ datapath = :keys[] ]
+        ],
+    start: Text [ fontSize = 20, letterSpacing = 6, textColor = { provided("theme").claw },
+        opacity = { Math.floor(classroot.blink.now / 500) % 2 == 0 ? 1 : 0.25 },
+        text = "PRESS RETURN TO START" ]
+    ]
+
+
+/*
+## Rate yourself
+
+Before a game the player picks where to start, from the levels unlocked so
+far: a strip of columns, each a level, its tube in its colors, and the bonus
+for clearing it. The strip slides on a spring to put the choice in the box in
+the middle; a ten-second clock runs out at the bottom.
+*/
+
+class TubeIcon [ width = 56, height = 56,
+    level: number = 1,
+    draw(d: Draw) {
+        const shape = app.tubes.value.shapes[mod(level - 1, 16)]
+        if (shape == null) return
+        glowPen(d, app.paletteFor(level).icon, 2.4)
+        d.beginPath()
+        shape.rim.forEach((p, i) => { if (i == 0) d.moveTo(28 + p.x * 24, 28 + p.y * 24); else d.lineTo(28 + p.x * 24, 28 + p.y * 24) })
+        if (shape.closed) d.closePath()
+        d.stroke()
+        }
+    ]
+
+
+class ChoiceColumn [ width = 120, padding = [14, 0, 14, 0],
+    layout: SimpleLayout [ axis = y, spacing = 8, align = center ],
+    Text [ fontSize = 10, letterSpacing = 3, textColor = { provided("theme").faint }, text = "LEVEL" ],
+    Text [ fontSize = 26, fontWeight = bold, textColor = { provided("theme").ink }, text = { "" + :level } ],
+    TubeIcon [ level = :level ],
+    Text [ fontSize = 10, letterSpacing = 3, textColor = { provided("theme").faint }, text = "BONUS" ],
+    Text [ fontSize = 14, fontWeight = bold, textColor = { provided("theme").flipper }, text = { "" + :bonus } ]
+    ]
+
+
+class ChooseScreen [ x = center, y = center,
+    layout: SimpleLayout [ axis = y, spacing = 14, align = center ],
+    Headline [ text = "RATE YOURSELF" ],
+    Subline [ text = "← → TO CHANGE   ·   FIRE TO SELECT" ],
+    ends: View [ width = 600,
+        layout: SimpleLayout [ axis = x ],
+        Text [ fontSize = 12, letterSpacing = 3, textColor = { provided("theme").flipper }, text = "NOVICE" ],
+        Spacer [ ],
+        Text [ fontSize = 12, letterSpacing = 3, textColor = { provided("theme").flipper }, text = "EXPERT" ]
+        ],
+    window: View [ width = 600, height = 200, clip = true,
+        strip: View [ x = { (2 - app.choiceShown) * 120 }, datapath = { app.choices.value },
+            layout: SimpleLayout [ axis = x ],
+            ChoiceColumn [ datapath = :list[] ]
+            ],
+        box: View [ x = 240, width = 120, height = 200, cornerRadius = 10,
+            stroke = { stroke(2, provided("theme").claw) } ]
+        ],
+    time: Text [ fontSize = 16, letterSpacing = 4, textColor = { provided("theme").claw }, text = { "TIME  " + app.secondsLeft } ]
+    ]
+
+
+/*
+## Cards over play
+
+A level's opening banner, the pause card and the game-over card: each a column
+of `Text`, centered.
+*/
+
+class Notice [ x = center, y = center, padding = [14, 28, 14, 28], cornerRadius = 10, fill = #000000B8,
+    layout: SimpleLayout [ axis = y, spacing = 10, align = center ]
+    ]
+
+
+class Headline extends Text [ fontSize = 40, fontWeight = bold, letterSpacing = 10,
+    textColor = { provided("theme").ink },
+    textShadow = { shadow(0, 0, 12, provided("theme").ink) }
+    ]
+
+
+class Subline extends Text [ fontSize = 14, letterSpacing = 4,
+    textColor = { provided("theme").faint }
+    ]

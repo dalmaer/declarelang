@@ -9,12 +9,14 @@
 // run-page branch, the normalized-equality assertion below would catch it.
 
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
-import { join, dirname, basename } from "node:path";
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { join, dirname, basename, relative, sep } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { test, summarize } from "./harness.mjs";
 import { requestType, REQ, runWrapper, programName, directoryProgram, stubPage, launchTarget, isEntryPage } from "../browser/serve-core.js";
 import { preloadsFor } from "../tools/internal/bake-app-stubs.mjs";
+import { programDirs } from "../tools/internal/program-dirs.mjs";
 
 const params = (q) => new URLSearchParams(q);
 
@@ -184,24 +186,49 @@ await test("stubPage computes main at runtime and hands modifiers to the worker"
 await test("every committed app stub matches the current stubPage template", () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
   const norm = (s) => s.replace(/(declare-boot\.js)\?v=[^"']*/g, "$1?v=");
-  let checked = 0;
-  for (const dir of ["calendar", "desktop", "docs", "homepage", "viewer", "inspector"]) {
-    const f = join(ROOT, "apps", dir, "index.html");
+  let checked = 0, nested = 0;
+  for (const abs of programDirs(ROOT)) {
+    const f = join(abs, "index.html");
     if (!existsSync(f)) continue;
+    const dir = relative(ROOT, abs).split(sep).join("/");     // apps/calendar, apps/games/tempest
+    const toRoot = "../".repeat(dir.split("/").length);
     const committed = readFileSync(f, "utf8");
     const expected = stubPage({
       name: basename(dir),
-      bootUrl: "../../bundles/declare-boot.js?v=",
-      serveCoreUrl: "../../browser/serve-core.js",
-      iconBase: "../../assets/",
-      preloads: preloadsFor(`apps/${dir}/${dir}.declare`, "../../"),
+      bootUrl: `${toRoot}bundles/declare-boot.js?v=`,
+      serveCoreUrl: `${toRoot}browser/serve-core.js`,
+      iconBase: `${toRoot}assets/`,
+      preloads: preloadsFor(`${dir}/${basename(dir)}.declare`, toRoot),
     });
     // committed = one generator marker line + the template (with a stamped ?v=)
     const body = committed.slice(committed.indexOf("\n") + 1);
     assert.equal(norm(body), norm(expected), `${dir}/index.html is stale — run tools/internal/bake-app-stubs.mjs`);
     checked++;
+    if (toRoot.length > 6) nested++;
   }
   assert.ok(checked > 0, "no committed stubs found to check");
+  assert.ok(nested > 0, "no stub below apps/<group>/ checked — the depth case is untested");
+});
+
+// THE TREE RULE: a program directory is any directory under apps/, at any depth, holding
+// its name-matched .declare — inside another program too; a folder without one only groups.
+await test("programDirs finds programs at any depth, and nothing else", () => {
+  const root = mkdtempSync(join(tmpdir(), "program-dirs-"));
+  const make = (rel) => { mkdirSync(join(root, dirname(rel)), { recursive: true }); writeFileSync(join(root, rel), "App [ ]\n"); };
+  make("apps/calendar/calendar.declare");
+  make("apps/calendar/data/events.declare");          // an app's own folder: not a program
+  make("apps/games/tempest/tempest.declare");         // under a group
+  make("apps/games/tempest/sounds/sounds.txt");
+  make("apps/desktop/desktop.declare");
+  make("apps/desktop/notes/notes.declare");           // a tenant inside its host's folder
+  make("apps/v1.2/v1.2.declare");                     // dotted: a file name, never a program dir
+  make("apps/dist/dist.declare");                     // build output: not walked
+  try {
+    const got = programDirs(root).map((d) => relative(root, d).split(sep).join("/"));
+    assert.deepEqual(got, ["apps/calendar", "apps/desktop", "apps/desktop/notes", "apps/games/tempest"]);
+    assert.equal(directoryProgram("/apps/games/tempest/"), "/apps/games/tempest/tempest.declare");
+    assert.equal(directoryProgram("/apps/desktop/notes"), "/apps/desktop/notes/notes.declare");
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 summarize("serve-core parity");

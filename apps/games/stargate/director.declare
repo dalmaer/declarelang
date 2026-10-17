@@ -1,0 +1,497 @@
+/*
+## The director
+
+Stages each ship's attack on the planet. A wave has its settings — how many of each enemy,
+how fast they move and how often they fire — taken from a table by the wave's number,
+with every wave past the eleventh a step harder. The director starts each ship, and then
+every fifteen passes looks at the wave: sends the next squad of landers, a baiter if the
+player dawdles, makes the wave a little harder now and then, and ends it when no enemy is
+left.
+*/
+
+// How many of an enemy a wave sends, for the first wave's easy start and for waves 1 to 11
+// (every fifth wave takes the fifth's, every tenth the tenth's, and the eleventh serves the
+// rest).
+
+schema Squad [ name: "landers" | "bombers" | "pods" | "mutants" | "swarmers" | "yllabians" | "gates" |
+    "firebombers" | "dynamos",
+    waves[]: number ]
+
+// A wave setting for how hard the enemies are: the most and least it may reach, what is
+// added every six hundred frames of a wave and what between waves, and its value for the
+// easy start and waves 1 to 11 (the eleventh serving every wave after).
+
+schema Setting [ name: "squadEvery" | "squadSize" | "landerSpeed" | "landerDropHigh" | "landerDropLow" |
+    "landerShotTime" | "bomberSpeed" | "mutantHop" | "mutantDropHigh" | "mutantDropLow" |
+    "mutantSpeed" | "mutantShotTime" | "swarmerSpeed" | "swarmerShotTime" |
+    "swarmerSwerve" | "baiterEvery" | "baiterShotTime" | "baiterSeek" |
+    "yllabianShotTime" | "yllabianSwerve" | "yllabianSpeed" | "firebomberShots" |
+    "firebomberDodge" | "dynamoShots" | "mineSpeed" | "masterSeek" | "masterShotTime" |
+    "munchyRest" | "munchySpeed" | "munchyDrop",
+    most: number, least: number, during: number, between: number, waves[]: number ]
+
+script {
+    type Counts = Record<Squad["name"], number>       // the enemies still to come
+    type Paces = Record<Setting["name"], number>      // how hard they are
+    type Wave = { toCome: Counts, pace: Paces }
+    }
+
+class Director extends Rules [ kinds = ["director", "death", "blink", "wreck"],
+
+    wave: number = 1,
+    toCome: Counts = { this.none().toCome },     // the enemies still to come
+    pace: Paces = { this.none().pace },           // and the settings in force
+    saved: Wave = { this.none() },                // as they stood when this ship began
+    easyStart: boolean = true,          // the first wave is gentle until the player has scored
+    nextSquadIn: number = 0,
+    baiterIn: number = 0,
+
+    squads: Squad[] = { [
+        { name: "landers",     waves: [11, 11, 10, 10, 18, 0, 17, 17, 17, 17, 0, 18] },
+        { name: "bombers",     waves: [0, 0, 0, 0, 1, 0, 2, 3, 3, 3, 0, 2] },
+        { name: "pods",        waves: [0, 0, 0, 3, 4, 0, 4, 4, 4, 4, 6, 4] },
+        { name: "mutants",     waves: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+        { name: "swarmers",    waves: [0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0] },
+        { name: "yllabians",   waves: [0, 0, 7, 4, 5, 22, 5, 5, 5, 6, 0, 3] },
+        { name: "gates",       waves: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] },
+        { name: "firebombers", waves: [3, 3, 3, 6, 3, 0, 3, 3, 3, 4, 13, 4] },
+        { name: "dynamos",     waves: [2, 2, 2, 2, 3, 6, 3, 3, 3, 3, 0, 4] }
+        ] },
+
+    paces: Setting[] = { [
+        { name: "squadEvery", most: 30, least: 0, during: 0, between: 0,
+            waves: [30, 30, 25, 20, 16, 16, 16, 16, 16, 16, 16, 16] },
+        { name: "squadSize", most: 4, least: 0, during: 0, between: 0,
+            waves: [4, 4, 3, 3, 5, 5, 4, 4, 4, 4, 4, 4] },
+        { name: "landerSpeed", most: 96, least: 0, during: 3, between: 2,
+            waves: [22, 22, 30, 36, 46, 48, 50, 52, 54, 56, 58, 60] },
+        { name: "landerDropHigh", most: 1, least: 0, during: 0, between: 0,
+            waves: [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1] },
+        { name: "landerDropLow", most: 255, least: 0, during: 16, between: 0,
+            waves: [80, 112, 176, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+        { name: "landerShotTime", most: 255, least: 16, during: -4, between: -2,
+            waves: [255, 74, 58, 42, 42, 40, 38, 36, 34, 32, 30, 28] },
+        { name: "bomberSpeed", most: 48, least: 0, during: 0, between: 0,
+            waves: [32, 32, 40, 44, 48, 48, 48, 48, 48, 48, 48, 48] },
+        { name: "mutantHop", most: 3, least: 0, during: 0, between: 0,
+            waves: [1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3] },
+        { name: "mutantDropHigh", most: 1, least: 0, during: 0, between: 0,
+            waves: [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1] },
+        { name: "mutantDropLow", most: 255, least: 0, during: 8, between: 6,
+            waves: [64, 98, 224, 2, 18, 24, 30, 36, 42, 48, 54, 60] },
+        { name: "mutantSpeed", most: 96, least: 0, during: 8, between: 4,
+            waves: [8, 12, 28, 36, 40, 44, 48, 52, 56, 60, 64, 68] },
+        { name: "mutantShotTime", most: 255, least: 8, during: -2, between: -2,
+            waves: [255, 42, 34, 30, 28, 26, 24, 22, 20, 18, 16, 14] },
+        { name: "swarmerSpeed", most: 96, least: 0, during: 8, between: 2,
+            waves: [22, 22, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48] },
+        { name: "swarmerShotTime", most: 40, least: 10, during: -2, between: -1,
+            waves: [25, 25, 25, 25, 24, 23, 22, 21, 20, 19, 18, 17] },
+        { name: "swarmerSwerve", most: 63, least: 0, during: 0, between: 0,
+            waves: [31, 31, 31, 63, 63, 63, 63, 63, 63, 63, 63, 63] },
+        { name: "baiterEvery", most: 255, least: 48, during: -8, between: -4,
+            waves: [240, 212, 196, 164, 148, 144, 140, 138, 137, 136, 135, 134] },
+        { name: "baiterShotTime", most: 20, least: 3, during: -1, between: -1,
+            waves: [15, 15, 13, 12, 10, 9, 8, 7, 6, 5, 4, 3] },
+        { name: "baiterSeek", most: 200, least: 40, during: -12, between: -8,
+            waves: [250, 240, 220, 200, 200, 192, 184, 176, 168, 162, 154, 146] },
+        { name: "yllabianShotTime", most: 255, least: 2, during: 0, between: 0,
+            waves: [255, 96, 12, 6, 5, 4, 4, 4, 4, 4, 4, 3] },
+        { name: "yllabianSwerve", most: 255, least: 0, during: 0, between: 0,
+            waves: [15, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31] },
+        { name: "yllabianSpeed", most: 104, least: 24, during: 1, between: 1,
+            waves: [32, 32, 56, 72, 88, 88, 88, 88, 88, 88, 88, 88] },
+        { name: "firebomberShots", most: 242, least: 208, during: 1, between: 2,
+            waves: [128, 128, 200, 211, 212, 215, 218, 221, 224, 227, 231, 234] },
+        { name: "firebomberDodge", most: 255, least: 0, during: 0, between: 0,
+            waves: [48, 48, 64, 80, 160, 160, 160, 160, 160, 160, 160, 160] },
+        { name: "dynamoShots", most: 255, least: 0, during: 4, between: 8,
+            waves: [40, 40, 56, 80, 80, 248, 80, 96, 112, 128, 144, 160] },
+        { name: "mineSpeed", most: 80, least: 0, during: 2, between: 2,
+            waves: [1, 8, 32, 36, 40, 44, 44, 48, 48, 48, 48, 60] },
+        { name: "masterSeek", most: 255, least: 0, during: 0, between: 0,
+            waves: [240, 240, 224, 208, 192, 176, 168, 160, 152, 144, 136, 128] },
+        { name: "masterShotTime", most: 255, least: 0, during: 0, between: 0,
+            waves: [96, 96, 80, 64, 48, 44, 40, 36, 32, 28, 28, 28] },
+        { name: "munchyRest", most: 255, least: 0, during: 0, between: 0,
+            waves: [16, 16, 16, 15, 14, 13, 12, 11, 10, 9, 8, 8] },
+        { name: "munchySpeed", most: 255, least: 0, during: 0, between: 0,
+            waves: [64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64] },
+        { name: "munchyDrop", most: 255, least: 0, during: 0, between: 0,
+            waves: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] }
+        ] },
+
+    // A wave's settings are its column of the table (the counts of every fifth wave from
+    // the fifth's, of every tenth from the tenth's), with the between-waves change made five
+    // times, and once more for each wave past the eleventh.
+
+    settingsFor(n: number) -> Wave {
+        const column = n > 0 && n % 10 == 0 ? 10 : n > 0 && n % 5 == 0 ? 5 : Math.min(n, 11)
+        const pace = Object.fromEntries(paces.map((s) => [s.name, s.waves[Math.min(n, 11)]])) as Paces
+        for (let k = Math.min(30, 5 + Math.max(0, n - 11)); k > 0; k--) this.shift(pace, "between")
+        return { toCome: Object.fromEntries(squads.map((s) => [s.name, s.waves[column]])) as Counts, pace: pace }
+        },
+    shift(pace: Paces, when: "during" | "between") {
+        for (const s of paces) {
+            const next = pace[s.name] + s[when]
+            if (s[when] >= 0 ? next <= 255 && next <= s.most : next >= 0 && next >= s.least) pace[s.name] = next
+            }
+        },
+    none() -> Wave {
+        return { toCome: Object.fromEntries(squads.map((s) => [s.name, 0])) as Counts,
+            pace: Object.fromEntries(paces.map((s) => [s.name, 0])) as Paces }
+        },
+
+    // a wave's settings come into force, the counts of enemies apart
+
+    adopt(wave: Wave) { pace = { ...wave.pace } },
+    count(name: Squad["name"], by: number) { toCome = { ...toCome, [name]: byte(toCome[name] + by) } },
+    enemiesLeft() -> number {
+        return byte(game.landers.out + toCome.landers + toCome.bombers + toCome.pods + toCome.swarmers + toCome.mutants
+            + toCome.yllabians + toCome.firebombers + toCome.dynamos)
+        },
+
+    newGame() {
+        wave = 1
+        game.men.left = 10; game.men.kept = 10
+        saved = this.settingsFor(1)
+        },
+
+    // ── a ship ──
+
+    // A ship starts: the planet at its beginning, the ship in its place, the turns that keep
+    // the world going; then the top of the screen is cleared and drawn again, and the
+    // playfield cleared once more, before anything shows. A challenge wave (a tenth or fifth
+    // one, untouched) is announced first.
+
+    frameWave: number = 1,              // the wave whose color the scanner's frame is in
+    start(t: Turn) {
+        game.scroll = 0; game.lastScroll = 0
+        game.men.left = game.men.kept
+        frameWave = wave
+        game.world.ship = game.pilot.freshShip()
+        game.shipsLeft = game.shipsLeft - 1
+        game.begin("scanner", "far")
+        game.begin("laser color", "firstLaser")
+        game.begin("flame", "flicker")
+        game.begin("shot color", "flash")
+        game.begin("bomber color", "bombers")
+        game.begin("ground color", "ground")
+        this.goOn(t, "clearPanel")
+        },
+    clearPanel(t: Turn) { game.panelCleared = true; game.scenery.clearScanner(); this.goOn(t, "drawPanel") },
+    drawPanel(t: Turn) { game.panelCleared = false; game.messages.clearStrip(); this.goOn(t, "clearAgain") },
+    clearAgain(t: Turn) {
+        const digit = wave % 10
+        const coming = saved.toCome, others = coming.pods + coming.swarmers + coming.yllabians + coming.dynamos + coming.firebombers
+        if ((digit == 0 && others == 19) || (digit == 5 && others == 36)) {
+            if (digit == 5) game.men.left = 0
+            game.messages.show(digit == 5 ? "yllabian dogfight" : "firebomber showdown", wave)
+            this.rest(t, 128, "land")
+            return
+            }
+        this.goOn(t, "land")
+        },
+
+    // The men back on the ground, and a moment's wait.
+
+    land(t: Turn) {
+        game.wipe()
+        game.halt([], game.men.left == 0)
+        game.begin("men", "walk").count = 0
+        game.men.landAll()
+        game.clock.caughtUp(); game.scenery.starsLit = 16
+        if (game.score == 0) game.messages.show("new game", 0)
+        this.rest(t, 96, "muster")
+        },
+
+    // The wait over, the wave's enemies other than landers take their places. In the first
+    // wave every ship begins with the easy settings.
+
+    muster(t: Turn) {
+        toCome = { ...saved.toCome }; pace = { ...saved.pace }
+        game.landers.out = 0
+        game.baiters.clear()
+        if (wave == 1) { saved = this.settingsFor(0); this.adopt(saved) }
+        if (toCome.swarmers != 0) { const n = toCome.swarmers; this.count("swarmers", -n); game.pods.sendSwarmers(n) }
+        if (toCome.mutants != 0) { const n = toCome.mutants; this.count("mutants", -n); game.landers.sendMutants(n) }
+        if (toCome.pods != 0) game.pods.send(toCome.pods)
+        for (let n = toCome.bombers; n > 0; n = n - Math.min(n, 3)) game.bombers.send(Math.min(n, 3))
+        if (toCome.gates != 0) game.gates.send(toCome.gates)
+        if (toCome.yllabians != 0) { const n = toCome.yllabians; this.count("yllabians", -n); game.yllabians.send(n) }
+        if (toCome.firebombers != 0) game.firebombers.send(toCome.firebombers)
+        if (toCome.dynamos != 0) game.dynamos.send(toCome.dynamos)
+        game.clock.caughtUp(); game.scenery.starsLit = 16
+        t.count = 40
+        baiterIn = pace.baiterEvery
+        nextSquadIn = 1
+        easyStart = true
+        game.powers.scoring = true
+        this.watch(t)
+        },
+
+    // The director's look at the wave, every fifteen passes. It ends the wave when no enemy
+    // is left; sends the next squad of landers when the last have gone or their time is up,
+    // while fewer than eight are out; every six hundred frames makes the wave a little
+    // harder; ends the first wave's easy start once the player has scored; and when every
+    // man left is in the air, flashes the ground and warns of it until one is back down.
+
+    watch(t: Turn) {
+        t.step = "watch"
+        t.wait = 15
+        if (!game.pilot.held.inviso) game.powers.invisoSpent = false
+        if (!game.shipDead) {
+            const left = this.enemiesLeft()
+            if (left == 0) { this.endWave(t); return }
+            if (left <= 8) {
+                const soon = Math.floor(pace.baiterEvery / (left <= 3 ? 4 : 2)) + 1
+                if (soon < baiterIn) baiterIn = soon
+                }
+            baiterIn = countDown(baiterIn)
+            if (baiterIn == 0) {
+                baiterIn = left >= 4 ? pace.baiterEvery : game.chance.upTo(Math.floor(pace.baiterEvery / 4))
+                game.baiters.send()
+                }
+            nextSquadIn = countDown(nextSquadIn)
+            if (nextSquadIn == 0 || game.landers.out == 0) {
+                nextSquadIn = pace.squadEvery
+                if (toCome.landers != 0 && game.landers.out < 8) {
+                    const squad = Math.min(pace.squadSize, toCome.landers)
+                    game.landers.send(squad)
+                    this.count("landers", -squad)
+                    }
+                }
+            }
+        if (game.scenery.starsLit < 16) game.scenery.starsLit = game.scenery.starsLit + 1
+        t.count = t.count! - 1
+        if (t.count == 0) {
+            const harder = { ...pace }
+            this.shift(harder, "during")
+            pace = harder
+            t.count = 40
+            }
+        if (wave == 1 && easyStart && !game.shipDead
+            && (game.men.carried != 0 || game.score >= 2000 || (game.shipsLeft > 1 && game.score >= 1000))) this.endEasyStart()
+        const warned = game.messages.strip == game.messages.table["men in danger"].says && game.messages.stripFor != 0
+        if (game.men.left != 0 && game.men.carried == 0 && ![...game.world.near, ...game.world.far].some((m) => m.kind == "man" && m.state == "ground")) {
+            if (!warned) game.messages.show("men in danger", 0)
+            game.paint(game.ink.ground, game.white)
+            this.rest(t, 5, "alarmOn")
+            }
+        else if (warned) game.messages.stripFor = 1
+        },
+    alarmOn(t: Turn) { game.paint(game.ink.ground, game.white); this.rest(t, 4, "alarmOff") },
+    alarmOff(t: Turn) { game.paint(game.ink.ground, game.black); this.rest(t, 6, "watch") },
+
+    // A blinking message blinks in its color, so many passes on and as many off, until
+    // another message takes the strip.
+
+    blinkOn(t: Turn) {
+        const m = game.messages.table[t.message!]
+        game.paint(game.ink.warning, m.blinkColor!)
+        this.rest(t, m.blinkEvery!, "blinkOff")
+        },
+    blinkOff(t: Turn) {
+        if (!game.messages.showing(t.message!)) { game.end(t); return }
+        game.paint(game.ink.warning, game.black)
+        this.rest(t, game.messages.table[t.message!].blinkEvery!, "blinkOn")
+        },
+
+    // The easy start over, the landers out take new paces and shot times from the first
+    // wave's proper settings.
+
+    endEasyStart() {
+        easyStart = false
+        saved = this.settingsFor(1)
+        this.adopt(saved)
+        for (const turn of game.world.turns) {
+            if (turn.kind != "lander" || turn.step == "drawIn") continue
+            const t = game.thing(turn.thing!)!
+            if (turn.step == "cruise") {
+                const speed = game.chance.upTo(pace.landerSpeed)
+                t.vx = t.vx < 0 ? game.reverseAcross(speed / 32) : speed / 32
+                }
+            t.shotIn = game.chance.upTo(pace.landerShotTime)
+            }
+        },
+
+    // How the wave stands is kept for the next ship; a new ship starts from an empty world.
+
+    save() {
+        saved = { toCome: { ...toCome, landers: byte(toCome.landers + game.landers.out) }, pace: { ...pace } }
+        game.men.kept = game.men.left
+        },
+
+    // Before the next ship the playfield is cleared from its right edge to its left, four
+    // pixel pairs at a time, and then the world is emptied.
+
+    restart(t: Turn) { game.wipeFrom = 304; this.goOn(t, "clearing") },
+    clearing(t: Turn) {
+        game.wipeFrom = game.wipeFrom - 8
+        this.goOn(t, game.wipeFrom > 0 ? "clearing" : "emptied")
+        },
+    emptied(t: Turn) {
+        game.clearPlayfield()
+        game.begin("director", "start")
+        game.clock.passOver(game.world)
+        },
+    advanceWave() {
+        wave = byte(wave + 1)
+        if (wave > 1 && (wave - 1) % 5 == 0) { game.men.left = 10; game.men.kept = 10 }
+        saved = this.settingsFor(wave)
+        },
+
+    // ── the end of a wave ──
+
+    // The wave is over once no man is still falling. Everything stops; the player is paid a
+    // bonus for each man left (a hundred times the wave's number, up to five hundred) and the
+    // next wave begins with a new ship. A dogfight wave, with no planet, pays 2,500.
+
+    endWave(t: Turn) {
+        if (game.world.turns.some((o) => o.kind == "fall")) { t.wait = 15; return }
+        game.halt(["controls", "motion", "ship", "effects", "planet", "touching"])
+        game.clock.endAll(game.world, [t])
+        this.save()
+        this.rest(t, 1, "waveOver")
+        },
+    waveOver(t: Turn) {
+        game.cycles.restart()
+        t.after = "nextShip"
+        this.bonus(t)
+        },
+    bonus(t: Turn) {
+        t.step = "bonus"
+        if (wave % 10 == 5) {
+            game.award(2500)
+            game.paint(game.ink.background, game.black)
+            game.wipe()
+            game.messages.show("dogfight over", wave)
+            this.rest(t, 192, "nextWave")
+            return
+            }
+        game.wipe()
+        game.messages.show("attack wave", wave)
+        this.payMen(t, Math.min(wave, 5))
+        },
+    menPaid: number = 0,                // the men shown on the bonus screen so far
+    payMen(t: Turn, hundreds: number) {
+        game.paint(game.ink.background, game.black)
+        game.messages.show("bonus", hundreds * 100)
+        t.perMan = hundreds
+        menPaid = 0
+        t.count = game.men.left
+        if (t.count == 0) { this.advanceWave(); this.rest(t, 128, "afterBonus"); return }
+        game.award(hundreds * 100)
+        menPaid = 1
+        this.rest(t, 4, "countMen")
+        },
+    countMen(t: Turn) {
+        t.count = t.count! - 1
+        if (t.count != 0) { game.award(t.perMan! * 100); menPaid = menPaid + 1; t.wait = 4; return }
+        this.advanceWave()
+        this.rest(t, 128, "afterBonus")
+        },
+    afterBonus(t: Turn) { t.step = t.after!; this[t.step](t, null) },
+    nextWave(t: Turn) { this.advanceWave(); t.step = t.after!; this[t.step](t, null) },
+    nextShip(t: Turn) { game.shipsLeft = game.shipsLeft + 1; this.restart(t) },
+
+    // ── the ship's end ──
+
+    // The ship is destroyed, unless it has its inviso on. Everything else carries on while it
+    // glows through six colors; then the world stops, and the ship bursts in thirteen
+    // explosions. If that was the last ship the game is over.
+
+    shipHit() {
+        if (game.pilot.invisible) return
+        game.begin("death", "die")
+        game.shipDead = true
+        if (!game.gameOver) game.sound("ship destroyed")      // (asked for as it is touched, ahead of what touched it)
+        },
+    glowColors: number[] = { [rgb(7, 0, 0), rgb(7, 1, 0), rgb(7, 7, 0), rgb(7, 7, 1), rgb(7, 7, 3), rgb(7, 2, 0), 0] },
+    die(t: Turn) {
+        if (game.gameOver) { this.dieInFight(t); return }
+        game.lastScroll = game.scroll       // the planet stops: shots no longer slide across with it
+        game.halt(["controls", "ship", "life"], game.men.left == 0)
+        game.shipShown = false
+        this.save()
+        game.shipGlows = false
+        t.count = 0
+        this.rest(t, 2, "glow")
+        },
+    glow(t: Turn) {
+        if (game.gameOver && t.count == 6) { game.halt(["game", "controls", "ship", "life", "planet"]); game.end(t); return }
+        game.shipGlows = true
+        const color = glowColors[t.count!]
+        if (color != 0) {
+            t.count = t.count! + 1
+            game.paint(game.ink.glow, color); game.paint(game.ink.background, game.black)
+            this.rest(t, 2, "dark")
+            return
+            }
+        game.halt(["controls", "motion", "ship", "life", "planet", "touching"])
+        game.paint(game.ink.background, game.white)
+        this.rest(t, 2, "burst")
+        },
+    dark(t: Turn) { game.shipGlows = false; this.rest(t, 2, "glow") },
+    burst(t: Turn) {
+        game.paint(game.ink.background, game.black)
+        if (game.spectacle) game.endSpectacle()
+        game.shipGlows = false
+        game.clock.endAll(game.world, [t])
+        this.wreckOf(t, Math.floor(game.world.ship.x), Math.floor(game.world.ship.y))
+        t.count = 13
+        game.cycles.restart()
+        this.bursting(t)
+        },
+    bursting(t: Turn) {
+        t.step = "bursting"
+        if (this.burstOnce(t)) this.rest(t, 96, "burstOver")
+        else t.wait = 1
+        },
+
+    // The ship's wreck: its picture bursting, where the ship is drawn. One of its explosions
+    // comes from a random place in it; true once all are done.
+
+    wreckOf(t: Turn, px: number, py: number) -> Thing {
+        const wreck = game.newThing("wreck")
+        t.wreck = wreck
+        t.picture = game.world.ship.turnTo > 0 ? "ship-right-burst" : "ship-left-burst"
+        wreck.px = px - px % 2; wreck.py = py
+        wreck.y = py + wreck.y % 1
+        wreck.x = game.wrapX(wreck.px + py / 128 + game.scroll)       // (the arcade adds the row in, a 128th a row)
+        return wreck
+        },
+    burstOnce(t: Turn) -> boolean {
+        const wreck = t.wreck!
+        game.impact = { px: wreck.px + 2 * (game.chance.third % 8), py: wreck.py + game.chance.second % 4 + 1 }
+        game.effects.explode(t.picture!, wreck)
+        t.count = t.count! - 1
+        return t.count == 0
+        },
+    burstOver(t: Turn) {
+        game.sound("silence")
+        if (this.enemiesLeft() == 0) { t.after = "afterDeath"; this.bonus(t) }
+        else this.afterDeath(t)
+        },
+    afterDeath(t: Turn) {
+        if (game.shipsLeft != 0) { this.restart(t); return }
+        game.haltEverything()
+        game.messages.show("game over", 0)
+        game.sound("silence")
+        this.rest(t, 192, "over")       // twice the arcade's wait, which goes on to its high scores
+        },
+    over(t: Turn) { game.pages.toPages(t) },
+
+    // In a fight between games the ship glows as in a game; then the page bursts it
+    // (pages.declare).
+
+    dieInFight(t: Turn) {
+        game.lastScroll = game.scroll       // (the planet stops before anything else, as in a game)
+        game.halt(["game", "controls", "ship", "life"])
+        game.sound("ship destroyed")
+        t.count = 0
+        this.rest(t, 2, "glow")
+        },
+
+    lastManGone() { game.begin("blast", "wait") }
+    ]

@@ -1,7 +1,7 @@
 {
  "meta": {
   "version": 1,
-  "buildId": "243793f28954",
+  "buildId": "a81c389df420",
   "note": "THE single documentation model — one walkable data structure for every documented element. Read by the docs app, the desktop's embedded docs, the link registry, the eval harness, and any agent. extract.mjs writes the doc tree (reference/roots/tree/guide/tenets) here; this tool augments the SAME file in place with spine/links/meta. One file, no intermediate.",
   "pipeline": {
    "assembledFrom": [
@@ -3040,13 +3040,13 @@
      "mac"
     ],
     "default": "dom",
-    "description": "render through managed DOM, a single <canvas>, or the native Mac host"
+    "description": "render through managed DOM, a single <canvas>, or the native Mac host; unset, the program's flags decide"
    },
    {
     "name": "crawler",
     "kind": "bool",
     "default": false,
-    "description": "embed the crawled document in the host page, for crawlers"
+    "description": "embed the crawled document in the host page, for crawlers; unset, the program's flags decide"
    },
    {
     "name": "kernel",
@@ -3056,7 +3056,7 @@
      "js"
     ],
     "default": "wasm",
-    "description": "the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download)"
+    "description": "the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download); unset, the program's flags decide"
    }
   ],
   "requests": {
@@ -3637,59 +3637,59 @@
    },
    "E799ED5": {
     "message": "'…' is not an RFC 6901 pointer — '~' escapes only as ~0 ('~') or ~1 ('/')",
-    "at": "data.ts:252"
+    "at": "data.ts:275"
    },
    "E027755": {
     "message": "'…' — paths are segments ([\"…\"]) or an RFC 6901 pointer (\"/…\"); the dot-string form retired with Pointer writes (data-paths.md §11)",
-    "at": "data.ts:268"
+    "at": "data.ts:291"
    },
    "E82C830": {
     "message": "this write does not match the schema — …",
-    "at": "data.ts:366"
+    "at": "data.ts:389"
    },
    "E590D31": {
     "message": "'…' refuses this write — … (the write is held to the dataset's schema)",
-    "at": "data.ts:383"
+    "at": "data.ts:406"
    },
    "E4E1296": {
     "message": "'…' refuses this insert — … (the write is held to the dataset's schema)",
-    "at": "data.ts:404"
+    "at": "data.ts:427"
    },
    "EE618FE": {
     "message": "an empty path addresses the whole document — set([], v) replaces it; a structural edit (insert/removeAt/move) needs the path of an array",
-    "at": "data.ts:494"
+    "at": "data.ts:517"
    },
    "E3A14CE": {
     "message": "'…' addresses nothing — …",
-    "at": "data.ts:507"
+    "at": "data.ts:530"
    },
    "E4A0838": {
     "message": "'…' is not an array — structural edits need one",
-    "at": "data.ts:520"
+    "at": "data.ts:543"
    },
    "ECACACC": {
     "message": "[Declare] onLoad on ……'` : \"\"} threw: …",
-    "at": "data.ts:967"
+    "at": "data.ts:990"
    },
    "E359942": {
     "message": "…: a datapath is a place in a dataset — got … (point at an object or array; read leaf fields with :path)",
-    "at": "data.ts:1042"
+    "at": "data.ts:1065"
    },
    "E9DFED0": {
     "message": "…: this value belongs to no Dataset/DataSource — a cursor can only point into declared data",
-    "at": "data.ts:1048"
+    "at": "data.ts:1071"
    },
    "EFD2DDD": {
     "message": "…: this value is no longer anywhere in its dataset",
-    "at": "data.ts:1055"
+    "at": "data.ts:1078"
    },
    "E6BE3C0": {
     "message": "'…' refuses this … — … computes its value with contents, and this part was made by that computation, not taken from a source; the next recompute would replace it. Write the source dataset instead (what a row needs beyond its record, compute in the row)",
-    "at": "data.ts:1085"
+    "at": "data.ts:1108"
    },
    "E4BEB70": {
     "message": "'…' refuses this … — the record … holds is no longer in …",
-    "at": "data.ts:1092"
+    "at": "data.ts:1115"
    },
    "E3F233B": {
     "message": "[Declare] a mask stencil on the DOM renderer must be an Image or a view with draw() — its alpha is what CSS mask-image can take; other stencils mask on the canvas and Mac renderers only.",
@@ -3823,9 +3823,13 @@
     "message": "… — an attribute value is one expression, not statements; move the logic into a method and call it (e.g. { classroot.compute() })",
     "at": "expr.ts:350"
    },
+   "E4D43BA": {
+    "message": "… — \"…\" and \"…\" each have one",
+    "at": "include.ts:257"
+   },
    "E5B7888": {
     "message": "'…' is a library class — … of the program can't take its name; rename yours (the library's is used as '… [ … ]')",
-    "at": "include.ts:397"
+    "at": "include.ts:404"
    },
    "EA09421": {
     "message": "Inspect: no subject app is attached",
@@ -4185,179 +4189,191 @@
    },
    "E8BC335": {
     "message": "unterminated string in { } expression",
-    "at": "parser.ts:518"
+    "at": "parser.ts:547"
    },
    "E20B3D0": {
     "message": "unterminated template literal in { } expression",
-    "at": "parser.ts:528"
+    "at": "parser.ts:557"
    },
    "E3BA705": {
     "message": "unterminated comment in { } expression",
-    "at": "parser.ts:544"
+    "at": "parser.ts:573"
    },
    "E6CDB57": {
     "message": "unterminated { } expression",
-    "at": "parser.ts:549"
+    "at": "parser.ts:578"
    },
    "E32AAFE": {
     "message": "unterminated block comment",
-    "at": "parser.ts:570"
+    "at": "parser.ts:599"
    },
    "EDF300B": {
     "message": "unterminated string",
-    "at": "parser.ts:647"
+    "at": "parser.ts:676"
    },
    "E749792": {
     "message": "unexpected character '…'",
-    "at": "parser.ts:718"
+    "at": "parser.ts:747"
    },
    "E849987": {
     "message": "expected …, got '…'",
-    "at": "parser.ts:746"
+    "at": "parser.ts:775"
    },
    "E2F5724": {
     "message": "'….…' — a member sets this element's OWN attributes, never a child's. Write the attribute on '…' itself, usually as a { } constraint reading the state or flag that drives it",
-    "at": "parser.ts:957"
+    "at": "parser.ts:986"
    },
    "E9D9855": {
     "message": "'… <-> …' binds a DATAPATH — write a :path (… <-> :field), or a { } expression yielding a field NAME. To wire an attribute to another attribute, derive down with a { } constraint and deliver up in an onInput() handler",
-    "at": "parser.ts:980"
+    "at": "parser.ts:1009"
    },
    "EE9BF55": {
     "message": "readonly marks an attribute declaration — a child instance cannot carry it",
-    "at": "parser.ts:1021"
+    "at": "parser.ts:1050"
    },
    "E5F333C": {
     "message": "'readonly' marks an attribute declaration — a child instance cannot carry it",
-    "at": "parser.ts:1043"
+    "at": "parser.ts:1072"
    },
    "E2B1859": {
     "message": "'…: …' declares … TYPE with no value — to set '…' to a value, write '… = … }\" : \"[ … ]\"}'; to declare it with a type, give it one: '…: …\" : \"[number, number]\"} = …'",
-    "at": "parser.ts:1059"
+    "at": "parser.ts:1088"
    },
    "EA4D13F": {
     "message": "'…:' needs a type name — write '…: number' (a primitive or a class), or drop the ':' for an untyped parameter",
-    "at": "parser.ts:1097"
+    "at": "parser.ts:1126"
    },
    "E42786F": {
     "message": "'…' needs a return type name — write '…(…) -> number { … }', or drop the '…' for a method that returns nothing",
-    "at": "parser.ts:1119"
+    "at": "parser.ts:1148"
    },
    "EC9BC04": {
     "message": "'<-' is not a Declare operator — a runtime service is a class member: write '… [ …(…) { … } ]' as a child, in place of '…(…) <- … { … }'",
-    "at": "parser.ts:1134"
+    "at": "parser.ts:1163"
    },
    "E6533D8": {
     "message": "expected the method body '{ … }', got '…'",
-    "at": "parser.ts:1140"
+    "at": "parser.ts:1169"
    },
    "EDC2060": {
     "message": "members are separated by commas — add ',' before '…'",
-    "at": "parser.ts:1165"
+    "at": "parser.ts:1194"
    },
    "E9EA0B5": {
     "message": "expected a value, got '…'",
-    "at": "parser.ts:1224"
+    "at": "parser.ts:1253"
    },
    "E04A326": {
     "message": "'…(' — a schema declares shape, not behavior: no methods, no handlers. Methods live on classes; a record's derived values live in { } constraints that read its fields",
-    "at": "parser.ts:1239"
+    "at": "parser.ts:1268"
    },
    "ECC858C": {
     "message": "'…!' — identity is never declared: a record's 'id' field IS its identity by convention (key = :field overrides an unconventional name); drop the '!'",
-    "at": "parser.ts:1247"
+    "at": "parser.ts:1276"
    },
    "ED28610": {
     "message": "a literal union is all strings or all numbers — '…' mixes them",
-    "at": "parser.ts:1267"
+    "at": "parser.ts:1296"
    },
    "E18CCFD": {
     "message": "a shape field's type is string | number | boolean | any, a schema name (capitalized), a literal union of strings, or a nested [ … ] — not '…'",
-    "at": "parser.ts:1284"
+    "at": "parser.ts:1313"
    },
    "E53F3DD": {
     "message": "'…' is marked an array twice — write '…: …[]' or '…[]: …', not both (a field is one array deep)",
-    "at": "parser.ts:1294"
+    "at": "parser.ts:1323"
    },
    "E9B7802": {
     "message": "'…: … | …' — a schema field has one type; a union is a literal union of strings or of numbers ('status: \"open\" | \"closed\"'), or a type with null ('…: … | null')",
-    "at": "parser.ts:1308"
+    "at": "parser.ts:1337"
    },
    "E8E345D": {
     "message": "'… = …' — a schema field takes no default: a schema declares shape, never values. Defaults belong to attribute declarations ('name: Type = value' on a class), or to the code that builds the record",
-    "at": "parser.ts:1313"
+    "at": "parser.ts:1342"
    },
    "EA1FFF4": {
     "message": "a computed key [( … )] is TypeScript, so its path is written in braces — { :@[(key)] }",
-    "at": "parser.ts:1368"
+    "at": "parser.ts:1397"
    },
    "EDFFABD": {
     "message": "filter selectors ([?…]) are not in the path subset yet (jsonpath-spelling.md §5) — derive the subset in a Dataset [ contents = { … } ] and bind to that",
-    "at": "parser.ts:1371"
+    "at": "parser.ts:1400"
    },
    "E3129C4": {
     "message": "a path index is a plain integer",
-    "at": "parser.ts:1385"
+    "at": "parser.ts:1414"
    },
    "E07DE5F": {
     "message": "a path selector is [index], [start:end:step], [*], or ['name']",
-    "at": "parser.ts:1404"
+    "at": "parser.ts:1433"
    },
    "EEB27CE": {
     "message": "union selectors ([a, b]) are not in the path subset (jsonpath-spelling.md §5) — write separate reads, or derive the set in a Dataset [ contents = { … } ]",
-    "at": "parser.ts:1407"
+    "at": "parser.ts:1436"
    },
    "EB65D4E": {
     "message": "a schema's name is capitalized ('schema …… [ … ]') — it is a type name, like a class's",
-    "at": "parser.ts:1452"
+    "at": "parser.ts:1481"
    },
    "E41A54B": {
     "message": "schemas do not extend — a schema is composed by NESTING (a field typed by another schema: 'owner: Person') or by repeating the fields it shares",
-    "at": "parser.ts:1456"
+    "at": "parser.ts:1485"
    },
    "E088E2A": {
     "message": "'…' is not a host — a script runs on …",
-    "at": "parser.ts:1502"
+    "at": "parser.ts:1531"
    },
    "E538C16": {
     "message": "host = [ ] names no host — list the hosts this script runs on, or drop host to run on every host",
-    "at": "parser.ts:1523"
+    "at": "parser.ts:1552"
    },
    "EB5B2DE": {
     "message": "a script takes file paths and host — script [ \\\"helpers.ts\\\" ], script [ host = browser ] { … }; for inline code on every host, braces alone: script { … }",
-    "at": "parser.ts:1529"
+    "at": "parser.ts:1558"
    },
    "E83D16A": {
     "message": "a script is from files or written here, not both — script [ \\\"a.ts\\\", host = browser ] or script [ host = browser ] { … }",
-    "at": "parser.ts:1537"
+    "at": "parser.ts:1566"
    },
    "EF1BEAC": {
     "message": "script [ ] names no file — script [ \\\"helpers.ts\\\" ], or follow it with the code: script [ host = browser ] { … }",
-    "at": "parser.ts:1547"
+    "at": "parser.ts:1576"
    },
    "EDBDD5F": {
     "message": "a use entry is a class name",
-    "at": "parser.ts:1594"
+    "at": "parser.ts:1623"
    },
    "E783F90": {
     "message": "ship has no member '…' — islands, files, compiler, or inspector",
-    "at": "parser.ts:1625"
+    "at": "parser.ts:1654"
    },
    "E3DAC32": {
     "message": "ship names '…' twice — one entry per member",
-    "at": "parser.ts:1629"
+    "at": "parser.ts:1658"
    },
    "E1EC0FD": {
     "message": "ship's … is a list of quoted paths — … = [ \"…\" ]",
-    "at": "parser.ts:1634"
+    "at": "parser.ts:1663"
    },
    "E3AE548": {
     "message": "ship's … is true or false",
-    "at": "parser.ts:1645"
+    "at": "parser.ts:1674"
+   },
+   "EB958B5": {
+    "message": "defaultFlags has no member '…' — render, kernel, or crawler",
+    "at": "parser.ts:1703"
+   },
+   "E868ACE": {
+    "message": "defaultFlags names '…' twice — one entry per member",
+    "at": "parser.ts:1707"
+   },
+   "EEEB8C3": {
+    "message": "defaultFlags' … is …",
+    "at": "parser.ts:1712"
    },
    "EDD3394": {
     "message": "an include path is a quoted string",
-    "at": "parser.ts:1669"
+    "at": "parser.ts:1737"
    },
    "E20143A": {
     "message": "'…' is a built-in class — a class of the program can't take its name; rename yours",
@@ -4477,7 +4493,7 @@
    },
    "E9CD748": {
     "message": "kernel: settle failed (…)",
-    "at": "reactive.ts:993"
+    "at": "reactive.ts:1024"
    },
    "E3D0EC5": {
     "message": "a selective path replicates its selection fully (windowing over selections is a later increment)",
@@ -5271,6 +5287,20 @@
      ],
      "answer": "  ship [ islands = [\"name\", \"../../other/other\"] ]\n  ship [ files = [\"../../docs/model.json\", \"app.declare\"] ]\n  ship [ compiler = true, inspector = true ]\nStates what a **self-contained package** of this program must carry beyond what its source names. A production build (`declarec`) reads the block; the dev server and the static site, which carry every source and a compiler, read none of it. Each member is a fact about the program, never a build option:\n5 rules the compiler enforces · docs: language/ship · declare.md §4 Composition",
      "slug": "ship"
+    },
+    {
+     "terms": [
+      "defaultFlags",
+      "flags",
+      "default flags",
+      "renderer",
+      "canvas",
+      "kernel",
+      "crawler",
+      "render"
+     ],
+     "answer": "  defaultFlags [ render = canvas ]\n  defaultFlags [ kernel = js, crawler = true ]\nThe program's own defaults for the platform's flags, the same three a request names in its URL (`?render=canvas`) and `declarec` takes as switches (`--render canvas`). A flag the request or the command names wins; one it leaves out, the program's block decides; one neither names takes the platform's default.\n4 rules the compiler enforces · docs: language/defaultFlags · declare.md §4 Composition",
+     "slug": "defaultFlags"
     },
     {
      "terms": [
@@ -11733,6 +11763,151 @@
     "title": "Writing a layout",
     "kind": "guide-section"
    },
+   "language:app": {
+    "path": "docs/declare-model.json",
+    "title": "app",
+    "kind": "form"
+   },
+   "language:arrow": {
+    "path": "docs/declare-model.json",
+    "title": "arrow",
+    "kind": "form"
+   },
+   "language:child": {
+    "path": "docs/declare-model.json",
+    "title": "child",
+    "kind": "form"
+   },
+   "language:class": {
+    "path": "docs/declare-model.json",
+    "title": "class",
+    "kind": "form"
+   },
+   "language:constraint": {
+    "path": "docs/declare-model.json",
+    "title": "constraint",
+    "kind": "form"
+   },
+   "language:constructors": {
+    "path": "docs/declare-model.json",
+    "title": "constructors",
+    "kind": "form"
+   },
+   "language:datapath": {
+    "path": "docs/declare-model.json",
+    "title": "datapath",
+    "kind": "form"
+   },
+   "language:declare": {
+    "path": "docs/declare-model.json",
+    "title": "declare",
+    "kind": "form"
+   },
+   "language:defaultFlags": {
+    "path": "docs/declare-model.json",
+    "title": "defaultFlags",
+    "kind": "form"
+   },
+   "language:extends": {
+    "path": "docs/declare-model.json",
+    "title": "extends",
+    "kind": "form"
+   },
+   "language:font": {
+    "path": "docs/declare-model.json",
+    "title": "font",
+    "kind": "form"
+   },
+   "language:handler": {
+    "path": "docs/declare-model.json",
+    "title": "handler",
+    "kind": "form"
+   },
+   "language:include": {
+    "path": "docs/declare-model.json",
+    "title": "include",
+    "kind": "form"
+   },
+   "language:inlineview": {
+    "path": "docs/declare-model.json",
+    "title": "inlineview",
+    "kind": "form"
+   },
+   "language:instance": {
+    "path": "docs/declare-model.json",
+    "title": "instance",
+    "kind": "form"
+   },
+   "language:key": {
+    "path": "docs/declare-model.json",
+    "title": "key",
+    "kind": "form"
+   },
+   "language:literals": {
+    "path": "docs/declare-model.json",
+    "title": "literals",
+    "kind": "form"
+   },
+   "language:method": {
+    "path": "docs/declare-model.json",
+    "title": "method",
+    "kind": "form"
+   },
+   "language:provided": {
+    "path": "docs/declare-model.json",
+    "title": "provided",
+    "kind": "form"
+   },
+   "language:schema": {
+    "path": "docs/declare-model.json",
+    "title": "schema",
+    "kind": "form"
+   },
+   "language:scope": {
+    "path": "docs/declare-model.json",
+    "title": "scope",
+    "kind": "form"
+   },
+   "language:script": {
+    "path": "docs/declare-model.json",
+    "title": "script",
+    "kind": "form"
+   },
+   "language:set": {
+    "path": "docs/declare-model.json",
+    "title": "set",
+    "kind": "form"
+   },
+   "language:ship": {
+    "path": "docs/declare-model.json",
+    "title": "ship",
+    "kind": "form"
+   },
+   "language:style": {
+    "path": "docs/declare-model.json",
+    "title": "style",
+    "kind": "form"
+   },
+   "language:super": {
+    "path": "docs/declare-model.json",
+    "title": "super",
+    "kind": "form"
+   },
+   "language:theme": {
+    "path": "docs/declare-model.json",
+    "title": "theme",
+    "kind": "form"
+   },
+   "language:twoway": {
+    "path": "docs/declare-model.json",
+    "title": "twoway",
+    "kind": "form"
+   },
+   "language:use": {
+    "path": "docs/declare-model.json",
+    "title": "use",
+    "kind": "form"
+   },
    "operational:building": {
     "path": "docs/operational/building.md",
     "title": "Building for production",
@@ -12212,7 +12387,9 @@
     "guide:collections",
     "guide:data",
     "guide:packaging",
-    "guide:urls"
+    "guide:renderers",
+    "guide:urls",
+    "language:defaultFlags"
    ],
    "docs/guide/01-what-declare-is.md": [
     "App",
@@ -12699,6 +12876,7 @@
     "View.method.draw",
     "View.rotation",
     "guide:embedding",
+    "language:defaultFlags",
     "operational:mac-host"
    ],
    "docs/guide/24-embedding.md": [
@@ -12740,6 +12918,7 @@
     "guide:run-and-check",
     "guide:urls@what-crawlers-see",
     "guide:with-an-llm",
+    "language:defaultFlags",
     "operational:building"
    ],
    "docs/guide/26-with-an-llm.md": [
@@ -12895,7 +13074,8 @@
     "guide:your-own-views"
    ],
    "docs/operational/building.md": [
-    "guide:packaging"
+    "guide:packaging",
+    "language:defaultFlags"
    ],
    "docs/operational/dev-server.md": [
     "operational:building",
@@ -12909,6 +13089,7 @@
     "operational:getting-started"
    ],
    "docs/operational/flags.md": [
+    "language:defaultFlags",
     "operational:dev-server"
    ],
    "docs/operational/format.md": [
@@ -22230,7 +22411,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 299
+    "line": 322
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22251,7 +22432,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 310
+    "line": 333
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22272,7 +22453,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 352
+    "line": 375
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22293,7 +22474,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 395
+    "line": 418
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22314,7 +22495,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 413
+    "line": 436
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22335,7 +22516,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 431
+    "line": 454
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22351,7 +22532,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 450
+    "line": 473
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22367,7 +22548,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 532
+    "line": 555
    },
    "parent": "Dataset",
    "seeAlso": [],
@@ -22792,7 +22973,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 807
+    "line": 830
    },
    "parent": "DataSource",
    "seeAlso": [],
@@ -22810,7 +22991,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 818
+    "line": 841
    },
    "parent": "DataSource",
    "seeAlso": [],
@@ -22831,7 +23012,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 881
+    "line": 904
    },
    "parent": "DataSource",
    "seeAlso": [],
@@ -22852,7 +23033,7 @@
    "api": true,
    "source": {
     "file": "runtime/src/data.ts",
-    "line": 982
+    "line": 1005
    },
    "parent": "DataSource",
    "seeAlso": [],
@@ -48543,7 +48724,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/data.ts",
-      "line": 310
+      "line": 333
      },
      "parent": "Dataset",
      "seeAlso": [],
@@ -48564,7 +48745,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/data.ts",
-      "line": 352
+      "line": 375
      },
      "parent": "Dataset",
      "seeAlso": [],
@@ -48585,7 +48766,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/data.ts",
-      "line": 395
+      "line": 418
      },
      "parent": "Dataset",
      "seeAlso": [],
@@ -48606,7 +48787,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/data.ts",
-      "line": 413
+      "line": 436
      },
      "parent": "Dataset",
      "seeAlso": [],
@@ -48627,7 +48808,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/data.ts",
-      "line": 431
+      "line": 454
      },
      "parent": "Dataset",
      "seeAlso": [],
@@ -49061,7 +49242,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/data.ts",
-      "line": 881
+      "line": 904
      },
      "parent": "DataSource",
      "seeAlso": [],
@@ -49082,7 +49263,7 @@
      "api": true,
      "source": {
       "file": "runtime/src/data.ts",
-      "line": 982
+      "line": 1005
      },
      "parent": "DataSource",
      "seeAlso": [],
@@ -65004,7 +65185,7 @@
    "short": "Renderers and hosts",
    "part": "Where it runs",
    "teaches": {
-    "AppIsland": 3,
+    "AppIsland": 4,
     "DOMIsland": 3,
     "Markdown": 1,
     "Text": 1,
@@ -65584,6 +65765,12 @@
       "gist": "States what a **self-contained package** of this program must carry beyond what its source names."
      },
      {
+      "slug": "defaultFlags",
+      "name": "defaultFlags",
+      "short": "defaultFlags",
+      "gist": "The program's own defaults for the platform's flags, the same three a request names in its URL (`?render=canvas`) and `declarec` takes as switches (`--render canvas`)."
+     },
+     {
       "slug": "script",
       "name": "script",
       "short": "script",
@@ -65634,10 +65821,10 @@
      "App [ members ]"
     ],
     "syntaxText": "App [ members ]",
-    "lead": "A program is one tree, and `App [ … ]` is its root — one per program. With `width` and\n`height` unset it fills its host, which is the common case: the page, the window, the\nisland it is mounted in. Everything else nests inside its brackets, and `app` (lower case)\nnames the running instance from any depth — which makes it the place for the few values\nthe whole app shares, such as the current selection or a mode.\n\nAny instance may declare its own members, the App included — attributes, methods,\nhandlers, children — with no class at all; the compiler synthesizes an anonymous subclass.\nThe top-level forms (`class`, `include`, `use`, `script`, `style`, `theme`, `schema`,\n`ship`) may come before or after it, in any order. Records belong in a `Dataset`, and state\nthat is a thing in its own right in a model class (a class with no `extends`) — the App is\nnot meant to hold every value.",
+    "lead": "A program is one tree, and `App [ … ]` is its root — one per program. With `width` and\n`height` unset it fills its host, which is the common case: the page, the window, the\nisland it is mounted in. Everything else nests inside its brackets, and `app` (lower case)\nnames the running instance from any depth — which makes it the place for the few values\nthe whole app shares, such as the current selection or a mode.\n\nAny instance may declare its own members, the App included — attributes, methods,\nhandlers, children — with no class at all; the compiler synthesizes an anonymous subclass.\nThe top-level forms (`class`, `include`, `use`, `script`, `style`, `theme`, `schema`,\n`ship`, `defaultFlags`) may come before or after it, in any order. Records belong in a `Dataset`, and state\nthat is a thing in its own right in a model class (a class with no `extends`) — the App is\nnot meant to hold every value.",
     "docSegs": [
      {
-      "md": "A program is one tree, and `App [ … ]` is its root — one per program. With `width` and\n`height` unset it fills its host, which is the common case: the page, the window, the\nisland it is mounted in. Everything else nests inside its brackets, and `app` (lower case)\nnames the running instance from any depth — which makes it the place for the few values\nthe whole app shares, such as the current selection or a mode.\n\nAny instance may declare its own members, the App included — attributes, methods,\nhandlers, children — with no class at all; the compiler synthesizes an anonymous subclass.\nThe top-level forms (`class`, `include`, `use`, `script`, `style`, `theme`, `schema`,\n`ship`) may come before or after it, in any order. Records belong in a `Dataset`, and state\nthat is a thing in its own right in a model class (a class with no `extends`) — the App is\nnot meant to hold every value.",
+      "md": "A program is one tree, and `App [ … ]` is its root — one per program. With `width` and\n`height` unset it fills its host, which is the common case: the page, the window, the\nisland it is mounted in. Everything else nests inside its brackets, and `app` (lower case)\nnames the running instance from any depth — which makes it the place for the few values\nthe whole app shares, such as the current selection or a mode.\n\nAny instance may declare its own members, the App included — attributes, methods,\nhandlers, children — with no class at all; the compiler synthesizes an anonymous subclass.\nThe top-level forms (`class`, `include`, `use`, `script`, `style`, `theme`, `schema`,\n`ship`, `defaultFlags`) may come before or after it, in any order. Records belong in a `Dataset`, and state\nthat is a thing in its own right in a model class (a class with no `extends`) — the App is\nnot meant to hold every value.",
       "code": []
      }
     ],
@@ -67385,6 +67572,77 @@
      }
     ]
    },
+   "defaultFlags": {
+    "slug": "defaultFlags",
+    "name": "defaultFlags",
+    "group": "Top level",
+    "family": "declaration",
+    "spec": "§4 Composition",
+    "terms": [
+     "defaultFlags",
+     "flags",
+     "default flags",
+     "renderer",
+     "canvas",
+     "kernel",
+     "crawler",
+     "render"
+    ],
+    "syntax": [
+     "defaultFlags [ render = canvas ]",
+     "defaultFlags [ kernel = js, crawler = true ]"
+    ],
+    "syntaxText": "defaultFlags [ render = canvas ]\ndefaultFlags [ kernel = js, crawler = true ]",
+    "lead": "The program's own defaults for the platform's flags, the same three a request names in its\nURL (`?render=canvas`) and `declarec` takes as switches (`--render canvas`). A flag the request\nor the command names wins; one it leaves out, the program's block decides; one neither names\ntakes the platform's default.\n\n- `render` — `dom` or `canvas`: the renderer a browser runs the program on. A program whose\n  screen is all drawing, redrawn every frame — a game — can run smoother as one canvas.\n- `kernel` — `wasm` or `js`: the reactive kernel a production build carries.\n- `crawler` — `true` or `false`: whether a production build, or a run page on the dev server,\n  embeds the program's crawled content for readers that don't run it.\n\nThe block is read before the program runs, so it says nothing about how the program behaves,\nand the program runs the same whichever values a host uses. A program running as another's\n`AppIsland` takes the outer program's renderer and kernel, and the Mac host runs its own.\n\nA program has at most one block. It may sit in any of the program's files, before or after\nthe root.",
+    "docSegs": [
+     {
+      "md": "The program's own defaults for the platform's flags, the same three a request names in its\nURL (`?render=canvas`) and `declarec` takes as switches (`--render canvas`). A flag the request\nor the command names wins; one it leaves out, the program's block decides; one neither names\ntakes the platform's default.\n\n- `render` — `dom` or `canvas`: the renderer a browser runs the program on. A program whose\n  screen is all drawing, redrawn every frame — a game — can run smoother as one canvas.\n- `kernel` — `wasm` or `js`: the reactive kernel a production build carries.\n- `crawler` — `true` or `false`: whether a production build, or a run page on the dev server,\n  embeds the program's crawled content for readers that don't run it.\n\nThe block is read before the program runs, so it says nothing about how the program behaves,\nand the program runs the same whichever values a host uses. A program running as another's\n`AppIsland` takes the outer program's renderer and kernel, and the Mac host runs its own.\n\nA program has at most one block. It may sit in any of the program's files, before or after\nthe root.",
+      "code": []
+     }
+    ],
+    "gist": "The program's own defaults for the platform's flags, the same three a request names in its URL (`?render=canvas`) and `declarec` takes as switches (`--render canvas`).",
+    "rules": [
+     {
+      "rule": "A member is one of the three.",
+      "says": "defaultFlags has no member 'density' — render, kernel, or crawler",
+      "probe": "defaultFlags [ density = 1 ]\nApp [ ]"
+     },
+     {
+      "rule": "A value is one of its member's words.",
+      "says": "defaultFlags' render is dom or canvas",
+      "probe": "defaultFlags [ render = mac ]\nApp [ ]"
+     },
+     {
+      "rule": "Each member is named once.",
+      "says": "defaultFlags names 'render' twice",
+      "probe": "defaultFlags [ render = dom, render = canvas ]\nApp [ ]"
+     },
+     {
+      "rule": "A program has one block.",
+      "says": "a program has one defaultFlags block, and this is a second",
+      "probe": "defaultFlags [ render = dom ]\ndefaultFlags [ kernel = js ]\nApp [ ]"
+     }
+    ],
+    "related": {
+     "forms": [
+      "ship"
+     ],
+     "classes": [
+      "AppIsland"
+     ],
+     "guide": [
+      {
+       "chapter": "23-renderers",
+       "title": "Renderers and hosts"
+      },
+      {
+       "chapter": "25-packaging",
+       "title": "Packaging for production"
+      }
+     ]
+    },
+    "example": []
+   },
    "script": {
     "slug": "script",
     "name": "script",
@@ -67896,6 +68154,7 @@
    "include",
    "use",
    "ship",
+   "defaultFlags",
    "script",
    "font",
    "style",
@@ -67905,7 +68164,7 @@
   ],
   "docSegs": [
    {
-    "md": "Every form the grammar accepts — 28 of them, in 5 groups. Each is a page: its syntax, what it is, live usage, the rules the compiler enforces in the checker's own words, and what it relates to. `declare.md` is the same language in one file, in order; these are its forms one at a time, for the reader who arrived with a keyword.",
+    "md": "Every form the grammar accepts — 29 of them, in 5 groups. Each is a page: its syntax, what it is, live usage, the rules the compiler enforces in the checker's own words, and what it relates to. `declare.md` is the same language in one file, in order; these are its forms one at a time, for the reader who arrived with a keyword.",
     "code": []
    }
   ]
@@ -73788,7 +74047,7 @@
        "label": "Language form",
        "slug": "app",
        "loc": "language/app",
-       "doc": "# App [ … ]\n\n```declare-fragment\nApp [ members ]\n```\n\nA program is one tree, and `App [ … ]` is its root — one per program. With `width` and\n`height` unset it fills its host, which is the common case: the page, the window, the\nisland it is mounted in. Everything else nests inside its brackets, and `app` (lower case)\nnames the running instance from any depth — which makes it the place for the few values\nthe whole app shares, such as the current selection or a mode.\n\nAny instance may declare its own members, the App included — attributes, methods,\nhandlers, children — with no class at all; the compiler synthesizes an anonymous subclass.\nThe top-level forms (`class`, `include`, `use`, `script`, `style`, `theme`, `schema`,\n`ship`) may come before or after it, in any order. Records belong in a `Dataset`, and state\nthat is a thing in its own right in a model class (a class with no `extends`) — the App is\nnot meant to hold every value.",
+       "doc": "# App [ … ]\n\n```declare-fragment\nApp [ members ]\n```\n\nA program is one tree, and `App [ … ]` is its root — one per program. With `width` and\n`height` unset it fills its host, which is the common case: the page, the window, the\nisland it is mounted in. Everything else nests inside its brackets, and `app` (lower case)\nnames the running instance from any depth — which makes it the place for the few values\nthe whole app shares, such as the current selection or a mode.\n\nAny instance may declare its own members, the App included — attributes, methods,\nhandlers, children — with no class at all; the compiler synthesizes an anonymous subclass.\nThe top-level forms (`class`, `include`, `use`, `script`, `style`, `theme`, `schema`,\n`ship`, `defaultFlags`) may come before or after it, in any order. Records belong in a `Dataset`, and state\nthat is a thing in its own right in a model class (a class with no `extends`) — the App is\nnot meant to hold every value.",
        "preview": "declare-fragment App members A program is one tree, and App … is its root — one per program. With width and height unset it fills its host, which is the common case: the page, the window, the island it is mounted in. Everything else nests i…"
       },
       {
@@ -74000,6 +74259,16 @@
        "loc": "language/ship",
        "doc": "# ship\n\n```declare-fragment\nship [ islands = [\"name\", \"../../other/other\"] ]\nship [ files = [\"../../docs/model.json\", \"app.declare\"] ]\nship [ compiler = true, inspector = true ]\n```\n\nStates what a **self-contained package** of this program must carry beyond what its source\nnames. A production build (`declarec`) reads the block; the dev server and the static site,\nwhich carry every source and a compiler, read none of it. Each member is a fact about the\nprogram, never a build option:\n\n- `islands` — the programs an `AppIsland` may mount when its `program` is *computed*\n  (`program = { app.current }`), spelled as `program` spells them. Each is compiled ahead and\n  shipped beside the app with everything it would carry alone — its data, its own islands,\n  its own `ship` block — once, however many hosts name it. A literal `program = \"name\"`\n  needs no entry.\n- `files` — what the program reads that no literal names, or that lives outside its folder:\n  a docs model two levels up, its own source for a viewer. Each is copied into the package and\n  served from there; the program's paths are untouched. A `.declare` source ships with its\n  highlighted reader form too, so a viewer in the package reads it as on the site. A literal `url = \"data.json\"` beside\n  the program needs no entry.\n- `compiler = true` — the program compiles source at run time (live editing, programs typed\n  in). The package carries the compiler and the library's source; otherwise it carries\n  neither, and an island naming an unbuilt program is a reported error.\n- `inspector = true` — the program answers questions about itself in production: the\n  Inspector (compiled ahead), the `__declare` bridge, source positions, and error prose all\n  ship. It does not imply the compiler.\n\nThe block may appear before or after the root, and an included class may carry its own —\na help panel that reads the docs model says so where it lives — and the program's merged\nblock is the union.",
        "preview": "declare-fragment ship islands = \"name\", \"../../other/other\" ship files = \"../../docs/model.json\", \"app.declare\" ship compiler = true, inspector = true States what a self-contained package of this program must carry beyond what its source na…"
+      },
+      {
+       "name": "defaultFlags",
+       "subtitle": "Top level",
+       "kind": "form",
+       "label": "Language form",
+       "slug": "defaultFlags",
+       "loc": "language/defaultFlags",
+       "doc": "# defaultFlags\n\n```declare-fragment\ndefaultFlags [ render = canvas ]\ndefaultFlags [ kernel = js, crawler = true ]\n```\n\nThe program's own defaults for the platform's flags, the same three a request names in its\nURL (`?render=canvas`) and `declarec` takes as switches (`--render canvas`). A flag the request\nor the command names wins; one it leaves out, the program's block decides; one neither names\ntakes the platform's default.\n\n- `render` — `dom` or `canvas`: the renderer a browser runs the program on. A program whose\n  screen is all drawing, redrawn every frame — a game — can run smoother as one canvas.\n- `kernel` — `wasm` or `js`: the reactive kernel a production build carries.\n- `crawler` — `true` or `false`: whether a production build, or a run page on the dev server,\n  embeds the program's crawled content for readers that don't run it.\n\nThe block is read before the program runs, so it says nothing about how the program behaves,\nand the program runs the same whichever values a host uses. A program running as another's\n`AppIsland` takes the outer program's renderer and kernel, and the Mac host runs its own.\n\nA program has at most one block. It may sit in any of the program's files, before or after\nthe root.",
+       "preview": "declare-fragment defaultFlags render = canvas defaultFlags kernel = js, crawler = true The program's own defaults for the platform's flags, the same three a request names in its URL (?render=canvas) and declarec takes as switches (--render…"
       },
       {
        "name": "script",
@@ -74972,8 +75241,8 @@
      "subtitle": "",
      "kind": "reference",
      "label": "Reference",
-     "doc": "# Compile flags\n\n*Modifiers on a program URL (`?…`), the `declarec` CLI (`--…`), and the JS API — one set of names.*\n\n| flag | what it does | default |\n|---|---|---|\n| `render` | render through managed DOM, a single <canvas>, or the native Mac host | `dom` |\n| `crawler` | embed the crawled document in the host page, for crawlers | `false` |\n| `kernel` | the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download) | `wasm` |",
-     "preview": "Modifiers on a program URL (?…), the declarec CLI (--…), and the JS API — one set of names. flag what it does default --------- render render through managed DOM, a single <canvas, or the native Mac host dom crawler embed the crawled docume…"
+     "doc": "# Compile flags\n\n*Modifiers on a program URL (`?…`), the `declarec` CLI (`--…`), and the JS API — one set of names.*\n\n| flag | what it does | default |\n|---|---|---|\n| `render` | render through managed DOM, a single <canvas>, or the native Mac host; unset, the program's flags decide | `dom` |\n| `crawler` | embed the crawled document in the host page, for crawlers; unset, the program's flags decide | `false` |\n| `kernel` | the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download); unset, the program's flags decide | `wasm` |",
+     "preview": "Modifiers on a program URL (?…), the declarec CLI (--…), and the JS API — one set of names. flag what it does default --------- render render through managed DOM, a single <canvas, or the native Mac host; unset, the program's flags decide d…"
     },
     {
      "name": "Diagnostics",

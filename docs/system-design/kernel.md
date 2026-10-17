@@ -302,7 +302,7 @@ null across the double return, so it sets the kernel's `body_null` byte before
 returning and the landing lands null. The conformance suite holds both kernels
 to the same answers and each to JavaScript's. Measured: 2,000 views driven every
 frame through a `number | null` slot read with `??` run at the cost of a plain
-`number` (my-apps/sweep/nullable-bench.mjs).
+`number`.
 
 ## 11. Closed: choosing the kernel automatically
 

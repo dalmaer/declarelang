@@ -1,0 +1,132 @@
+/*
+## The memory
+
+Where the arcade keeps things and turns, and what their last users leave there. Turns live
+in 85 places and things in 95; effects in sixteen. A new one takes the place freed last,
+and a few rules read what the last user of a place left in it: the fraction of a row a new
+thing starts at, the count to a new mutant's first shot; and, from a second byte of the
+place, where a new scanner's count of five or the notices' colors start.
+*/
+
+class Memory extends Node [
+
+    // ── what the owner supplies ──
+
+    thing(id: number) -> Thing? { return null },
+
+    // ── what a turn leaves behind ──
+
+    // A turn's place is its workspace, and the arcade lays each kind's out its own way: what
+    // sits in the place's first byte and its second when the turn ends is whatever that
+    // kind kept there. A thing's turn keeps where the thing is in the second (its high
+    // byte), unless it counts there.
+
+    leaves(t: Turn, was: number) -> number {
+        const it = this.thing(t.thing ?? 0)
+        switch (t.kind) {
+            case "lander": case "mutant":
+                if (it == null) return was
+                if (it.kind == "mutant") return it.shotIn ?? was
+                const man = this.thing(it.man ?? 0)
+                return man != null && this.holds(man.id) ? this.pageOf(man.id) : was       // where its man is kept
+            case "dynamo": case "hum": case "firebomber": return it?.course ?? was
+            case "fireball": return it?.curve ?? was
+            case "boom": return t.count ?? was
+            case "laser": return t.beam?.fizz ?? was
+            default: return was
+            }
+        },
+    leavesSecond(t: Turn, was: number) -> number {
+        const kept = this.holds(t.thing ?? 0) ? this.pageOf(t.thing!) : was
+        switch (t.kind) {
+            case "scanner": case "notice color": return t.count ?? kept
+            default: return kept
+            }
+        },
+    holds(id: number) -> boolean { return (slotOf[id] ?? -1) >= 0 },
+    pageOf(id: number) -> number { return Math.floor(this.addressOf(id) / 256) },
+
+    // ── turns ──
+
+    places: number[] = [],
+    leftInPlace: number[] = [],
+    countLeftInPlace: number[] = [],
+    slots: number[] = [],               // the free ones
+    slotOf: Values = { {} },            // the one each thing or shot holds, by its id
+    leftInSlot: number[] = [],
+
+    freshPlaces() { places = Array.from({ length: 85 }, (unused, i) => i) },
+    takePlace() -> number {
+        const place = places.length == 0 ? -1 : places[0]
+        places = places.slice(1)
+        return place
+        },
+    givePlace(t: Turn) {
+        if (t.place < 0) return
+        const left = leftInPlace.slice()
+        while (left.length < 85) left.push(255)
+        left[t.place] = byte(this.leaves(t, left[t.place]))
+        leftInPlace = left
+        const counts = countLeftInPlace.slice()
+        while (counts.length < 85) counts.push(0)
+        counts[t.place] = byte(this.leavesSecond(t, counts[t.place]))
+        countLeftInPlace = counts
+        places = [t.place, ...places]
+        },
+    leftIn(t: Turn) -> number { return leftInPlace[t.place] ?? 255 },
+    countLeftIn(t: Turn) -> number { return countLeftInPlace[t.place] ?? 0 },
+
+    // ── effects ──
+
+    // Effects live in sixteen places. The first one's first word keeps the address of the
+    // last thing that appeared through it; the blast leaves its climb there, and the warp its
+    // random bytes, and the warp starts its own from what it finds.
+
+    effectPlaces: number[] = [],
+    firstEffectWord: number = 0,
+    freshEffectPlaces() { effectPlaces = Array.from({ length: 16 }, (unused, i) => i) },
+
+    // A byte of the effects' memory (sixteen places of 64 bytes) as the free ones leave it:
+    // each begins with where the next free one is, and the rest reads 0 here. (The planet's
+    // end takes its blocks' fractions of a row from it.)
+
+    leftInEffects(at: number) -> number {
+        const place = Math.floor(at / 64), i = effectPlaces.indexOf(place)
+        if (at % 64 != 1 || i < 0) return 0
+        const next = effectPlaces[i + 1]
+        return next == null ? 0 : 64 * next % 256        // (the low half of its address)
+        },
+    takeEffectPlace() -> number { const p = effectPlaces[0]; effectPlaces = effectPlaces.slice(1); return p },
+    giveEffectPlace(p: number) { effectPlaces = [p, ...effectPlaces] },
+
+    // ── things ──
+
+    freshSlots() { slots = Array.from({ length: 95 }, (unused, i) => i); slotOf = {}; this.freshEffectPlaces() },
+    takeSlot(id: number) {
+        slotOf = { ...slotOf, [id]: slots.length == 0 ? -1 : slots[0] }
+        slots = slots.slice(1)
+        },
+    giveSlot(id: number, height: number) {
+        const slot = slotOf[id] ?? -1
+        if (slot < 0) return
+        slotOf = { ...slotOf, [id]: -1 }
+        this.letGo(slot, height)
+        },
+
+    // A few things hold a slot that no thing lives in: the next free one, kept a while and
+    // let go at a height of their own.
+
+    holdSlot() -> number { const slot = slots.length == 0 ? -1 : slots[0]; slots = slots.slice(1); return slot },
+    borrowSlot(height: number) { if (slots.length != 0) this.letGo(this.holdSlot(), height) },
+    letGo(slot: number, height: number) {
+        if (slot < 0) return
+        const left = leftInSlot.slice()
+        while (left.length < 95) left.push(0)
+        left[slot] = byte(height * 256)
+        leftInSlot = left
+        slots = [slot, ...slots]
+        },
+    addressOf(id: number) -> number { return (44396 + 23 * (slotOf[id] ?? -1)) % 65536 },      // where in memory its slot is
+    fractionIn(id: number) -> number { return this.fractionAt(slotOf[id] ?? -1) },     // of a pixel
+    fractionAt(slot: number) -> number { return (leftInSlot[slot] ?? 0) / 256 }
+    ]

@@ -17,7 +17,7 @@
 // present is a positioned collision error naming both files, and is skipped
 // (the merged program stays instantiable). Within-file duplicates stay the
 // checker's job, so the main program seeds the origin table with no self-check.
-import { parseLibrary, mergeShip } from "./parser.js";
+import { parseLibrary, mergeShip, ONE_FLAGS } from "./parser.js";
 import { DeclareError } from "./errors.js";
 import { Diag } from "./diagnostics.js";
 /** Cut a source's `include [ … ]` directives out of its text, leaving the rest
@@ -138,6 +138,9 @@ export async function resolveIncludes(program, host, originDir) {
     // …and its `ship [ … ]`: a class that reads a file or mounts a program
     // says so where it lives, and the merged program carries the union.
     let ship = program.ship;
+    // …and the program's `defaultFlags [ … ]`, which it states once, in any one file.
+    let flags = program.flags;
+    let flagsFrom = "the app";
     // A library's `script { … }` helpers travel with it, in include order — the
     // program's own blocks lead, then each library's, so a helper is defined
     // before anything that could reference it downstream.
@@ -230,6 +233,14 @@ export async function resolveIncludes(program, host, originDir) {
                     fonts.push(f);
             uses.push(...lib.uses);
             ship = mergeShip(ship, lib.ship);
+            if (lib.flags !== undefined) {
+                if (flags !== undefined)
+                    errors.push(new DeclareError(`${ONE_FLAGS} — "${from}" and "${flagsFrom}" each have one`, inc.pos));
+                else {
+                    flags = lib.flags;
+                    flagsFrom = from;
+                }
+            }
             scripts.push(...lib.scripts);
             // Its splice-ready source — script files spliced in and include
             // directives cut out, in ONE coordinate-safe pass — after its
@@ -242,7 +253,7 @@ export async function resolveIncludes(program, host, originDir) {
     };
     await walk(program.includes, originDir);
     return {
-        program: { classes, shapes, themes, styles, fonts, includes: [], includeSpans: [], uses: [...new Set(uses)], ...(ship === undefined ? {} : { ship }), scripts, root: program.root },
+        program: { classes, shapes, themes, styles, fonts, includes: [], includeSpans: [], uses: [...new Set(uses)], ...(ship === undefined ? {} : { ship }), ...(flags === undefined ? {} : { flags }), scripts, root: program.root },
         sources,
         sourceIds,
         sourceSplices,
@@ -453,7 +464,7 @@ mainSource) {
         // `uses` is the FOLDED list — the root's plus every included library's
         // (returning the root's alone silently dropped a library's keep-list,
         // which broke by-name construction inside classes).
-        program: { classes, shapes, themes, styles, fonts, includes: [], includeSpans: [], uses: [...new Set(uses)], ...(ship === undefined ? {} : { ship }), scripts, root: program.root },
+        program: { classes, shapes, themes, styles, fonts, includes: [], includeSpans: [], uses: [...new Set(uses)], ...(ship === undefined ? {} : { ship }), ...(program.flags === undefined ? {} : { flags: program.flags }), scripts, root: program.root },
         sources,
         sourceIds,
         sourceSplices,

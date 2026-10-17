@@ -1,0 +1,483 @@
+/*
+# The model
+
+What the game is about, with no views: the shapes of its records, the tube's
+geometry, and the field of play — every nymph, enemy, shot, spike and blast in
+the tube, with the rules they follow.
+
+The one idea to take from this file: **nothing here is stepped per frame.** A
+record says when a thing set out and how fast it goes; where it is *now* is a
+function of the game clock `t`. Records are written only when something
+happens — a nymph surfacing, a flip starting, a hit — and every sprite's
+position is a constraint over its record and `t`.
+*/
+
+
+// ── record shapes ──────────────────────────────────────────────────────────
+
+schema Point [ x: number, y: number ]
+
+// One tube (a well): sixteen lanes. A closed tube has sixteen rim points, an
+// open one seventeen. `vy` is where the far end vanishes, above (−) or below
+// the center, in tube radii. `face` turns the sprites on its lanes round (180)
+// where the rim runs the other way round the tube.
+
+schema Well [ id: number, name: string, closed: boolean, vy: number, face: number, rim[]: Point ]
+
+// The waves: each row holds from level `from` until the next row. How many of
+// each enemy; how fast they climb (depth a second) and the beat between nymphs
+// surfacing (ms); what a tanker may carry; whether flippers fire.
+
+schema Wave [ from: number, flippers: number, tankers: number, spikers: number,
+    fuseballs: number, pulsars: number, speed: number, gap: number, cargo[]: string, fire: boolean ]
+
+// A level a game may start at, and the bonus for clearing it first.
+
+schema Start [ id: number, level: number, bonus: number ]
+
+// A nymph: an enemy waiting at the far end, due to surface at time `due`.
+
+schema Nymph [ id: number, kind: "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar", lane: number, due: number ]
+
+// An enemy. `born` and `speed` give its depth at any time; `from`, `lane` and
+// `flipAt` give its lane (a flip runs from `from` to `lane`, starting at
+// `flipAt`; −1 means it is not flipping). `top` is how high a spiker climbs;
+// `cargo` what a tanker splits into.
+
+schema Foe [ id: number, kind: "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar",
+    lane: number, from: number, flipAt: number, born: number, speed: number, top: number,
+    cargo: "flipper" | "pulsar" | "fuseball" ]
+
+// A shot, the claw's or an enemy's: it leaves depth `from` at time `firedAt`.
+
+schema Shot [ id: number, lane: number, from: number, firedAt: number ]
+
+// A spike: one per lane at most, `h` deep from the far end.
+
+schema Spike [ id: number, lane: number, h: number ]
+
+// What is left where something was hit, `at` the time it happened: a burst,
+// the claw's own big one, or the points a fuseball was worth.
+
+schema Blast [ id: number, kind: "burst" | "big" | "points", lane: number, depth: number, at: number, points: number ]
+
+// A star, for the fall between tubes: a direction out from the center, how far
+// out, and where in its run it starts.
+
+schema Star [ id: number, angle: number, out: number, phase: number ]
+
+// What one step of play came to: the points won, whether the claw died, and
+// the sounds it made.
+
+schema Outcome [ points: number, caught: boolean, sounds[]: string ]
+
+// A place in the tube, projected: the screen point, the lane's width there,
+// and the lane's angle (degrees), turned so a sprite's −y faces out of the tube.
+
+schema Spot [ x: number, y: number, w: number, angle: number ]
+
+
+/*
+## The tube
+
+A class with no view, standing on the current shape record (`datapath`). The
+App wires it to the screen (`cx`, `cy`, `radius`) and the camera (`cam`); it
+answers where any lane and depth fall on the screen.
+
+Depth 0 is the far end, 1 the rim. A depth is a distance `z` from the eye,
+`zFar` at the far end and 1 at the rim, and a point is drawn at scale 1/z.
+The camera moving down the tube is `cam` subtracted from every z.
+*/
+
+class Tube extends Node [
+    rim: Point[] = { :rim ?? [] },
+    closed: boolean = { :closed ?? true },
+    vy: number = { :vy ?? 0 },
+    face: number = { :face ?? 0 },
+    lanes: number = 16,
+    zFar: number = 5,
+
+    cx: number = 0,
+    cy: number = 0,
+    radius: number = 100,
+    cam: number = 0,
+
+    // the scale a point at this depth is drawn at
+
+    scaleAt(depth: number) -> number {
+        const z = this.zFar - (this.zFar - 1) * depth
+        return 1 / Math.max(z - this.cam, 0.06)
+        },
+
+    // the nearest depth still in front of the camera (the rim, unless the
+    // camera has dived past it)
+
+    nearDepth() -> number {
+        return Math.min(1, (this.zFar - (this.cam + 0.3)) / (this.zFar - 1))
+        },
+
+    // any point across the tube (in tube radii from its axis), at a depth
+
+    point(ux: number, uy: number, depth: number) -> Point {
+        const s = this.scaleAt(depth)
+        return ({ x: this.cx + ux * this.radius * s,
+                  y: this.cy + uy * this.radius * s + this.vy * this.radius * (1 - s) })
+        },
+
+    // rim point i, wrapped round a closed tube or held at the ends of an open one
+
+    rimPoint(i: number) -> Point {
+        const n = this.rim.length
+        return this.rim[this.closed ? mod(i, n) : clamp(i, 0, n - 1)] ?? ({ x: 0, y: 0 })
+        },
+    corner(i: number, depth: number) -> Point {
+        const p = this.rimPoint(i)
+        return this.point(p.x, p.y, depth)
+        },
+
+    // the middle of a lane's edge, across the tube (not projected)
+
+    laneMiddle(lane: number) -> Point {
+        const a = this.rimPoint(lane), b = this.rimPoint(lane + 1)
+        return ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 })
+        },
+
+    // the middle of a whole lane, projected
+
+    mid(lane: number, depth: number) -> Spot {
+        const l = this.closed ? mod(lane, this.lanes) : clamp(lane, 0, this.lanes - 1)
+        const a = this.corner(l, depth), b = this.corner(l + 1, depth)
+        return ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, w: Math.hypot(b.x - a.x, b.y - a.y),
+                  angle: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI + this.face })
+        },
+
+    // any lane, fractional ones included: a flip between two lanes, or the
+    // sprung claw, is somewhere between their middles
+
+    at(lane: number, depth: number) -> Spot {
+        const i = Math.floor(lane), f = lane - i
+        const a = this.mid(i, depth)
+        if (f < 0.001) return a
+        const b = this.mid(i + 1, depth)
+        return ({ x: lerp(a.x, b.x, f), y: lerp(a.y, b.y, f), w: lerp(a.w, b.w, f),
+                  angle: a.angle + turnBetween(a.angle, b.angle) * f })
+        },
+
+    // a nymph waiting at the far end: at the center while it is far off, out
+    // toward its lane as it comes due (`ready` 0 → 1)
+
+    nymphAt(lane: number, ready: number) -> Point {
+        const m = this.laneMiddle(lane)
+        return this.point(m.x * ready, m.y * ready, 0)
+        }
+    ]
+
+
+/*
+## The field of play
+
+The records in the tube and their rules, as the dataset's own class. Views bind
+to `field.value` and read positions through `depthOf`, `laneOf` and the rest;
+the App calls the verbs (`lay`, `fire`, `think`, `step`, `zap`, `recall`).
+*/
+
+class Playfield extends Dataset [
+    schema = [ nymphs[]: Nymph, foes[]: Foe, shots[]: Shot, foeShots[]: Shot, spikes[]: Spike, blasts[]: Blast ],
+    nextId: number = 1,
+    flipTime: number = 0.3,        // seconds a flip takes
+    shotSpeed: number = 2.6,       // depth per second, down the tube
+    foeShotSpeed: number = 0.55,   // depth per second, up the tube
+    maxShots: number = 8,
+    maxFoes: number = 7,           // the arcade's room in the tube
+    blastLife: number = 0.5,
+    nymphLead: number = 5,         // seconds a nymph is seen moving out before it surfaces
+
+    // ── where things are now: pure functions of a record and the clock ──
+    //
+    // Each takes the record that may be missing (`Foe?`, `Shot?`): a sprite
+    // whose record has just been removed is asked once more as it retires,
+    // with no record under it, and gets a neutral answer.
+
+    depthOf(f: Foe?, t: number) -> number {
+        if (f == null) return 0
+        const run = (t - f.born) * f.speed
+        if (f.kind == "spiker") return Math.max(0, run <= f.top ? run : 2 * f.top - run)
+        if (f.kind == "fuseball") return clamp(run + 0.05 * Math.sin((t - f.born) * 5), 0, 1)
+        if (f.kind == "pulsar") return clamp(run, 0, 0.85)       // a pulsar stops short of the rim and pulses there
+        return clamp(run, 0, 1)
+        },
+    flipOf(f: Foe?, t: number) -> number {
+        if (f == null || f.flipAt < 0) return 1
+        return clamp((t - f.flipAt) / this.flipTime, 0, 1)
+        },
+    laneOf(f: Foe?, t: number, closed: boolean) -> number {
+        if (f == null) return 0
+        return f.from + laneStep(f.from, f.lane, closed) * this.flipOf(f, t)
+        },
+    laneNow(f: Foe?, t: number) -> number {        // the whole lane it counts as in
+        if (f == null) return 0
+        return this.flipOf(f, t) < 0.5 ? f.from : f.lane
+        },
+
+    // The pulse is the whole tube's, as on the arcade: every pulsar pulses together.
+
+    pulseAt(t: number) -> boolean { return Math.sin(t * 3.2) > 0.55 },
+    pulsing(f: Foe?, t: number) -> boolean { return f != null && f.kind == "pulsar" && this.pulseAt(t) },
+
+    shotDepth(s: Shot?, t: number) -> number { return s == null ? 0 : s.from - (t - s.firedAt) * this.shotSpeed },
+    foeShotDepth(s: Shot?, t: number) -> number { return s == null ? 0 : s.from + (t - s.firedAt) * this.foeShotSpeed },
+
+    // how near a nymph is to surfacing, 0 (far off) to 1 (now)
+
+    readiness(n: Nymph?, t: number) -> number {
+        return n == null ? 0 : clamp(1 - (n.due - t) / this.nymphLead, 0, 1)
+        },
+
+    // a spike is as high as its record says, or as high as the spiker now
+    // laying it, whichever is higher
+
+    spikeHeight(sp: Spike?, t: number) -> number {
+        if (sp == null) return 0
+        let h = sp.h
+        for (const f of this.value.foes) {
+            if (f.kind != "spiker" || f.lane != sp.lane) continue
+            const run = (t - f.born) * f.speed
+            if (run <= f.top) h = Math.max(h, run)
+            }
+        return h
+        },
+    anySpikes() -> boolean { return this.value.spikes.some((s) => s.h > 0.01) },
+
+    // A fuseball is worth more the further down the tube it is shot.
+
+    points(kind: string, depth: number) -> number {
+        if (kind == "fuseball") return depth < 0.4 ? 750 : depth < 0.75 ? 500 : 250
+        return kind == "flipper" ? 150 : kind == "tanker" ? 100 : kind == "spiker" ? 50 : 200
+        },
+
+    // ── verbs ──
+
+    reset() { this.set([], ({ nymphs: [], foes: [], shots: [], foeShots: [], spikes: [], blasts: [] })) },
+
+    newId() -> number { const id = this.nextId; this.nextId = id + 1; return id },
+
+    // A level's nymphs, laid at the far end: the first due at `first`, the
+    // rest a beat apart.
+
+    lay(kinds: Kind[], first: number, gap: number) {
+        const old = this.value.nymphs
+        const due = old.length > 0 ? Math.max(...old.map((n) => n.due)) + gap : first
+        const fresh = kinds.map((k, i) => ({ id: this.newId(), kind: k, lane: rnd(16), due: due + i * gap }))
+        this.set(["nymphs"], old.concat(fresh))
+        },
+
+    surface(n: Nymph, t: number, w: Wave) -> Foe {
+        const pace = n.kind == "tanker" ? 0.8 : n.kind == "spiker" ? 1.4 : n.kind == "pulsar" ? 0.7 : n.kind == "fuseball" ? 0.9 : 1
+        const cargo = (w.cargo[rnd(w.cargo.length)] ?? "flipper") as "flipper" | "pulsar" | "fuseball"
+        return ({ id: this.newId(), kind: n.kind, lane: n.lane, from: n.lane, flipAt: -1,
+                  born: t, speed: w.speed * pace, top: 0.35 + Math.random() * 0.4, cargo: cargo })
+        },
+    ensureSpike(lane: number) {
+        if (!this.value.spikes.some((s) => s.lane == lane))
+            this.set(["spikes", "-"], ({ id: lane + 1, lane: lane, h: 0 }))
+        },
+    fire(lane: number, depth: number, t: number) -> boolean {
+        if (this.value.shots.length >= this.maxShots) return false
+        this.set(["shots", "-"], ({ id: this.newId(), lane: lane, from: depth, firedAt: t }))
+        return true
+        },
+    blast(kind: "burst" | "big" | "points", lane: number, depth: number, t: number, points: number) {
+        this.set(["blasts", "-"], ({ id: this.newId(), kind: kind, lane: lane, depth: depth, at: t, points: points }))
+        },
+
+    // Enemies' decisions, on the brain's beat: start a flip, hop, or fire. At
+    // the rim, flippers and fuseballs close on the claw. Answers how many shots
+    // were fired.
+
+    think(t: number, clawLane: number, closed: boolean, w: Wave) -> number {
+        const foes = this.value.foes
+        let fired = 0
+        for (let i = 0; i < foes.length; i++) {
+            const f = foes[i]
+            if (f.kind == "tanker" || f.kind == "spiker" || this.flipOf(f, t) < 1) continue
+            const d = this.depthOf(f, t)
+            let dir = 0
+            if (d >= 0.85 && (f.kind != "pulsar" || !this.pulseAt(t))) {
+                dir = f.lane == clawLane ? 0 : Math.sign(laneStep(f.lane, clawLane, closed) || 1)
+                if (Math.random() > (f.kind == "pulsar" ? 0.4 : 0.7)) dir = 0
+                }
+            else if (d < 0.85) {
+                const odds = f.kind == "flipper" ? 0.14 : f.kind == "fuseball" ? 0.2 : 0.07
+                if (Math.random() < odds) dir = Math.random() < 0.5 ? -1 : 1
+                }
+            if (dir != 0) {
+                let to = f.lane + dir
+                if (!closed && (to < 0 || to > 15)) to = f.lane - dir
+                this.set(["foes", i, "from"], f.lane)
+                this.set(["foes", i, "lane"], closed ? mod(to, 16) : to)
+                this.set(["foes", i, "flipAt"], t)
+                }
+            else if (w.fire && f.kind == "flipper" && d < 0.85 && this.value.foeShots.length < 3 && Math.random() < 0.04) {
+                this.set(["foeShots", "-"], ({ id: this.newId(), lane: f.lane, from: d, firedAt: t }))
+                fired = fired + 1
+                }
+            }
+        return fired
+        },
+
+    // One step of play, `dt` seconds ending at `t`: which nymphs surfaced, what
+    // the shots hit, what reached the rim, which spikers turned, which blasts
+    // burned out. The claw is in `clawLane` at `clawDepth` (below 1 only while
+    // it flies down). Every write is made at the end, in an order that keeps
+    // indices true: field edits, then removals, then additions.
+
+    step(t: number, dt: number, clawLane: number, clawDepth: number, closed: boolean, alive: boolean, w: Wave) -> Outcome {
+        const v = this.value
+        let points = 0
+        let caught = false
+        const sounds: string[] = []
+        const goneFoes = new Set<number>(), goneShots = new Set<number>(), goneFoeShots = new Set<number>()
+        const spikeH = new Map<number, number>()      // spike index -> new height
+        const edits: [number, string, number][] = []    // foe index, field, value
+        const born: Foe[] = []
+        const blasts: ["burst" | "big" | "points", number, number, number][] = []   // kind, lane, depth, points
+
+        const hitFoe = (f: Foe, d: number, shot: boolean) => {
+            goneFoes.add(f.id)
+            const worth = shot ? this.points(f.kind, d) : 0
+            points += worth
+            sounds.push("explosion")
+            blasts.push(f.kind == "fuseball" && shot ? ["points", this.laneNow(f, t), d, worth] : ["burst", this.laneNow(f, t), d, 0])
+            if (f.kind == "tanker") {                  // a tanker splits into the two it carries
+                for (const side of [-1, 1]) {
+                    let l = f.lane + side
+                    if (!closed && (l < 0 || l > 15)) continue
+                    l = mod(l, 16)
+                    const speed = f.speed * 1.3
+                    born.push(({ id: this.newId(), kind: f.cargo, lane: l, from: f.lane, flipAt: t,
+                                 born: t - Math.min(d, 0.84) / speed, speed: speed, top: 0, cargo: "flipper" }))
+                    }
+                }
+            }
+
+        // nymphs come due: each surfaces in its lane if there is room in the
+        // tube, else waits a little longer
+        const surfaced = new Set<number>()
+        let room = this.maxFoes - v.foes.length
+        const late: [number, number][] = []           // nymph index, new due
+        v.nymphs.forEach((n, i) => {
+            if (n.due > t) return
+            if (room > 0 && alive) { surfaced.add(n.id); born.push(this.surface(n, t, w)); room = room - 1 }
+            else late.push([i, t + 0.6])
+            })
+
+        // the claw's shots: each sweeps the depth it covered this step
+        for (const s of v.shots) {
+            const d = this.shotDepth(s, t)
+            const back = d + this.shotSpeed * dt + 0.03
+            if (d <= 0) { goneShots.add(s.id); continue }
+            const fs = v.foeShots.find((e) => !goneFoeShots.has(e.id) && e.lane == s.lane
+                && this.foeShotDepth(e, t) >= d - 0.05 && this.foeShotDepth(e, t) <= back)
+            if (fs != null) { goneShots.add(s.id); goneFoeShots.add(fs.id); blasts.push(["burst", s.lane, d, 0]); continue }
+            const f = v.foes.find((e) => !goneFoes.has(e.id) && this.laneNow(e, t) == s.lane
+                && this.depthOf(e, t) >= d - 0.05 && this.depthOf(e, t) <= back)
+            if (f != null) { goneShots.add(s.id); hitFoe(f, this.depthOf(f, t), true); continue }
+            const k = v.spikes.findIndex((p) => p.lane == s.lane)
+            if (k >= 0) {
+                const h = spikeH.get(k) ?? this.spikeHeight(v.spikes[k], t)
+                if (h > 0.01 && d <= h) { goneShots.add(s.id); spikeH.set(k, Math.max(0, h - 0.07)); points += 3; sounds.push("spikeHit") }
+                }
+            }
+
+        // enemy shots: past the rim they are gone, and in the claw's lane they kill it
+        for (const s of v.foeShots) {
+            if (goneFoeShots.has(s.id)) continue
+            if (this.foeShotDepth(s, t) >= 1) {
+                goneFoeShots.add(s.id)
+                if (alive && s.lane == clawLane && clawDepth >= 1) caught = true
+                }
+            }
+
+        // the enemies themselves
+        for (let i = 0; i < v.foes.length; i++) {
+            const f = v.foes[i]
+            if (goneFoes.has(f.id)) continue
+            const d = this.depthOf(f, t)
+            const settled = this.flipOf(f, t) >= 1
+            if (f.kind == "tanker" && d >= 1) hitFoe(f, 1, false)
+            else if (f.kind == "spiker") {
+                const run = (t - f.born) * f.speed
+                const k = v.spikes.findIndex((p) => p.lane == f.lane)
+                const turning = run >= f.top && run - f.speed * dt < f.top    // it reached its top this step
+                if (turning && k >= 0 && v.spikes[k].h < f.top && !spikeH.has(k)) spikeH.set(k, f.top)
+                if (run >= 2 * f.top) {                // back at the far end: start again elsewhere
+                    const l = rnd(16)
+                    edits.push([i, "lane", l], [i, "from", l], [i, "born", t])
+                    }
+                }
+            else if (alive && clawDepth >= 1 && settled && f.lane == clawLane) {
+                if ((f.kind == "flipper" || f.kind == "fuseball") && d >= 1) caught = true
+                if (f.kind == "pulsar" && this.pulseAt(t) && d >= 0.5) caught = true
+                }
+            }
+
+        // flying down, a spike in the claw's lane is fatal
+        if (alive && clawDepth < 1) {
+            for (const sp of v.spikes)
+                if (sp.lane == clawLane && (spikeH.get(v.spikes.indexOf(sp)) ?? this.spikeHeight(sp, t)) >= clawDepth) caught = true
+            }
+
+        // the writes
+        for (const [k, h] of spikeH) this.set(["spikes", k, "h"], h)
+        for (const [i, field, value] of edits) this.set(["foes", i, field], value)
+        for (const [i, due] of late) this.set(["nymphs", i, "due"], due)
+        for (const l of edits.filter((e) => e[1] == "lane")) this.ensureSpike(l[2])
+        this.removeWhere("nymphs", surfaced)
+        this.removeWhere("foes", goneFoes)
+        this.removeWhere("shots", goneShots)
+        this.removeWhere("foeShots", goneFoeShots)
+        this.removeWhere("blasts", new Set(v.blasts.filter((b) => t - b.at > this.blastLife * (b.kind == "points" ? 3 : 1)).map((b) => b.id)))
+        for (const f of born) {
+            this.set(["foes", "-"], f)
+            if (f.kind == "spiker") this.ensureSpike(f.lane)
+            }
+        for (const [kind, lane, depth, worth] of blasts) this.blast(kind, lane, depth, t, worth)
+        return ({ points: points, caught: caught, sounds: sounds })
+        },
+
+    removeWhere(list: "nymphs" | "foes" | "shots" | "foeShots" | "blasts", ids: Set<number>) {
+        if (ids.size == 0) return
+        const rows: { id: number }[] = this.value[list]
+        this.set([list], rows.filter((r) => !ids.has(r.id)))
+        },
+
+    // The superzapper: every enemy in the tube (its first use in a level), or
+    // one of them at random (its second).
+
+    zap(all: boolean, t: number) -> number {
+        const foes = this.value.foes
+        if (foes.length == 0) return 0
+        const hit = all ? foes : [foes[rnd(foes.length)]]
+        let points = 0
+        for (const f of hit) {
+            const d = this.depthOf(f, t)
+            points += this.points(f.kind, d)
+            this.blast("burst", this.laneNow(f, t), d, t, 0)
+            }
+        this.removeWhere("foes", new Set(hit.map((f) => f.id)))
+        return points
+        },
+
+    // The claw has died: the enemies in the tube go back down to wait again,
+    // ahead of the nymphs still waiting, and the shots go.
+
+    recall(t: number) {
+        const back = this.value.foes.map((f, i) => ({ id: this.newId(), kind: f.kind, lane: f.lane, due: t + 2.5 + i * 0.7 }))
+        const shift = back.length * 0.7
+        const waiting = this.value.nymphs.map((n) => ({ ...n, due: n.due + shift + 2 }))
+        this.set(["nymphs"], back.concat(waiting))
+        this.set(["foes"], [])
+        this.set(["shots"], [])
+        this.set(["foeShots"], [])
+        }
+    ]

@@ -14,6 +14,8 @@ import { compile as compileCore, carryProgram } from "./compile.js";
 import { nodeIncludeHost } from "./include-node.js";
 import { provideLib } from "./typecheck.js";
 import { DiskTracker } from "./cache-node.js";
+import { parseProgram } from "../../runtime/dist/parser.js";
+import { resolveIncludes } from "../../runtime/dist/include.js";
 // The real lib.*.d.ts sit beside typescript.js — register the disk reader as
 // the checker's standard-library source (consulted lazily, only when a
 // typecheck actually runs).
@@ -65,6 +67,18 @@ export function diskDataResolver(originDir) {
             return raw;
         }
     };
+}
+/** The program's own `defaultFlags [ … ]`, read from its files without compiling it —
+ *  what a host needs before it decides how to serve the program. Undefined when
+ *  it states none, or when its files do not parse (the compile reports that). */
+export async function programFlags(source, originDir) {
+    try {
+        const { program, errors } = await resolveIncludes(parseProgram(source), nodeIncludeHost(LIBRARY_ROOT), originDir);
+        return errors.length > 0 ? undefined : program.flags;
+    }
+    catch {
+        return undefined;
+    }
 }
 /** `compile` with the filesystem include+auto-include host and (when `typecheck`
  *  is set) the real typechecker injected. Drop-in for the previous `compile`

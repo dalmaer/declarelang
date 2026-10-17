@@ -40,7 +40,7 @@
 import { formBody } from "./files.js";
 import { mapUrl } from "./asset-base.js";
 import { Node, authoredName } from "./node.js";
-import { Cell, isTracking, noteOrigin, settle } from "./reactive.js";
+import { Cell, isTracking, noteOrigin, retireCell, setRetireValue, settle } from "./reactive.js";
 import { DeclareError } from "./errors.js";
 import { defineAttributes, setBound } from "./attributes.js";
 import { validateDoc, fieldValueError } from "./data-schema.js";
@@ -48,6 +48,14 @@ import { isArrayDoc } from "./shape-resolve.js";
 // container → per-key region cells. Module-level (identity-keyed, so datasets
 // can never collide) and weak: cells live exactly as long as their data.
 const CELLS = new WeakMap();
+// A region cell holds a kernel cell, which the WeakMap cannot give back: when a
+// container is collected, its cells' kernel ids are returned. Without this a
+// program that replaces records it shows (a game writing its field every frame)
+// leaks kernel cells until the kernel's memory runs out. Freed only once the
+// container is unreachable, so nothing can read or wake those cells again.
+const RETIRE = typeof FinalizationRegistry === "undefined" ? null
+    : new FinalizationRegistry((cells) => { for (const c of cells.values())
+        c.free(); });
 const TAGS = new WeakMap();
 function pathOf(t) {
     if (t.at !== undefined)
@@ -117,8 +125,10 @@ export function trackedView(v) {
 }
 function cellAt(container, key) {
     let cells = CELLS.get(container);
-    if (cells === undefined)
+    if (cells === undefined) {
         CELLS.set(container, (cells = new Map()));
+        RETIRE?.register(container, cells);
+    }
     let cell = cells.get(key);
     if (cell === undefined)
         cells.set(key, (cell = new Cell()));
@@ -147,9 +157,29 @@ function wakeTree(v, data) {
     if (data !== undefined && foreign(data, v))
         return;
     wakeAll(v);
+    const cells = CELLS.get(v);
+    if (cells !== undefined)
+        for (const c of cells.values())
+            retireCell(c);
     for (const k of Object.keys(v))
         wakeTree(v[k], data);
 }
+/** Retire the region cells inside `v`, a value that has left where it was
+ *  read (reactive.ts retireCell: each is freed once no rule listens to it).
+ *  A container is entered only if it has cells: a proxy is reached only by a
+ *  tracked read of its parent, so what was never read costs nothing. */
+function retireTree(v) {
+    if (!isContainer(v))
+        return;
+    const cells = CELLS.get(v);
+    if (cells === undefined)
+        return;
+    for (const c of cells.values())
+        retireCell(c);
+    for (const k of Object.keys(v))
+        retireTree(v[k]);
+}
+setRetireValue(retireTree);
 function tagTree(data, v, path) {
     if (!isContainer(v))
         return;

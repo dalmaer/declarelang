@@ -292,6 +292,9 @@ export declare function untracked<T>(fn: () => T): T;
  *  in the same frame as the change it corrects. Registered outside any
  *  pending settle, it gets a settle of its own. */
 export declare function afterSettle(fn: () => void): void;
+export declare function retireCell(c: Cell): void;
+export declare function setRetireValue(f: (v: unknown) => void): void;
+export declare function retireValue(v: unknown): void;
 export declare function settle(): void;
 /** attributes.ts installs the push sweep (it knows cell → view, slot). */
 export declare function setPushHook(fn: (cells: Uint32Array) => void): void;

@@ -19,16 +19,19 @@ evals/runs/
 # binary is a per-machine build artifact (macOS-only, regenerated with swiftc).
 tools/internal/pointer
 
-# your own scratch apps: the getting-started home (operational:getting-started,
+# your own apps: the getting-started home (operational:getting-started,
 # guide:loop) is yours, local, and never part of the distro — the committed
-# examples live in apps/. RULE: in the main distro checkout my-apps/ stays
-# EMPTY — scratch is fine while working, but it is deleted before any
-# commit/push; anything worth keeping graduates into apps/.
+# examples live in apps/. RULE: my-apps/ holds APPS that are not published —
+# apps in progress, experiments that are themselves apps — and a published
+# port's working record (<app>-port/: its reference material, checks, notes
+# and history). It never holds tests, probes, benchmarks, bug repros or one-off
+# scripts: those live in a session's scratch space and go with it; a test worth
+# keeping goes into test/, a tool into tools/, an eval's output into evals/runs/.
 my-apps/
 
 # Stargate's checked entry: the game plus the arcade recording its checks replay, written
-# beside the game by my-apps/stargate/tools/make-checked.mjs
-apps/stargate/checked.declare
+# beside the game by my-apps/stargate-port/tools/make-checked.mjs
+apps/games/stargate/checked.declare
 
 # misc
 *.log

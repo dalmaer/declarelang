@@ -1,0 +1,243 @@
+/*
+## The clock
+
+How the arcade's processor fits the game's work into its frames. Nothing here is a rule of
+the game; it is what makes this game the same game as the arcade's, turn for turn.
+
+Twice a frame the arcade stops whatever it is doing to move and draw: once as the picture
+starts (`tickHalf`), once with the beam half way down (`midHalf`). In between it works
+through a pass of the rules: what the ship has touched, the effects, a random draw, the
+buttons pressed, and then every turn that has come round, in a fixed order. A pass that
+runs long is interrupted wherever it has got to, and the next begins late, a frame lost.
+
+Played live, the time each piece of work takes is estimated from measurements of the
+arcade. (Checked against a recording, the recording's own schedule is played instead: see
+the reference folder's checked/recording.declare, which listens at `pointReached` and
+`worldChanged`.)
+
+Where things and turns live in the arcade's memory, and what they leave there, is the
+memory's (memory.declare).
+*/
+
+// What a pass is doing: nothing, then each of its stages in order.
+
+script {
+    type Stage = "idle" | "touching" | "effects" | "chance" | "presses" | "turns" | "done"
+    const STAGES: Stage[] = ["idle", "touching", "effects", "chance", "presses", "turns", "done"]
+    function stageAt(s: Stage): number { return STAGES.indexOf(s) }
+    }
+
+class Clock extends Node [
+    memory: Memory,
+
+    // ── what the owner supplies ──
+
+    tickHalf(w: World) { },
+    midHalf(w: World, c: Controls) { },
+    touchShip(w: World) { },
+    updateEffects(w: World) { },
+    drawLots(w: World) { },             // the pass's random draw, and the message strip's time
+    takePresses(w: World) { },
+    play(w: World, t: Turn) { },
+    fallBehind(w: World) { },           // a pass begins behind time
+    lighten(w: World) { },              // … badly behind: throw something out
+    effectBlocks(w: World) -> number { return 0 },
+    isOff(what: Halt) -> boolean { return false },     // what the game has halted
+    starsLit() -> number { return 16 },
+
+    // ── the frame, live ──
+
+    frameTime: number = 16640,          // a frame, in microseconds
+    midway: number = 8192,              // when the mid-frame half begins
+    framesWaiting: number = 0,          // frames counted that no pass has picked up
+    spare: number = 0,                  // time before the next interrupt
+    overrun: number = 0,                // how far the mid-frame half ran into the next frame
+    midStarts: number = 8192,
+    clearAfterLongTurn: boolean = false,
+    split: number = 124,              // where the screen's two bands divide
+
+    live(w: World, c: Controls) {
+        this.work(w)
+        split = Math.min(168, (this.starsLit() == 16 ? 144 : 136) + 4 * Math.floor(Math.max(0, midStarts - midway) / 256))
+        this.midHalf(w, c)
+        let t = midStarts + this.midCost(w)
+        spare = spare + Math.max(0, frameTime - t)
+        overrun = Math.max(0, t - frameTime)
+        this.work(w)
+        this.tickHalf(w)
+        framesWaiting = framesWaiting + 1
+        t = overrun + this.tickCost(w)
+        spare = spare + Math.max(0, midway - t)
+        // (the screen's beam sets each half off; one set off while the last is still waiting is
+        // lost, so a half never starts a whole frame late, however long the halves run)
+        midStarts = midway + (Math.max(t, midway) - midway) % frameTime
+        },
+
+    // The rules use the spare time a piece at a time; a piece longer than there is runs on
+    // past the interrupts and is paid for out of the next frames.
+
+    work(w: World) {
+        while (spare > 0) {
+            if (clearAfterLongTurn) { framesWaiting = 0; clearAfterLongTurn = false }
+            if (stage == "idle") {
+                if (framesWaiting == 0) { spare = 0; return }
+                this.advance(w, "done", 0, false)
+                this.beginPass(w, framesWaiting)
+                framesWaiting = 0
+                }
+            spare = spare - this.nextPiece(w)
+            }
+        },
+    nextPiece(w: World) -> number {
+        const near = w.near.length
+        if (stage == "touching") { this.advance(w, "effects", 0, false); return 293 }
+        if (stage == "effects") {
+            const effects = w.appears.length + w.bursts.length, blocks = this.effectBlocks(w)
+            this.advance(w, "chance", 0, false)
+            return 100 + 508 * effects + 43 * blocks
+            }
+        if (stageAt(stage) < stageAt("turns")) { this.advance(w, "turns", 0, false); return 191 }
+        if (turn >= w.turns.length) { this.nextTurn(w); return 0 }
+        const t = w.turns[turn]
+        if (t.wait != 1) { this.nextTurn(w); return 18 }
+        const kind = t.kind, step = t.step, far = w.far.length, shells = w.shots.length, bursts = w.bursts.length
+        this.nextTurn(w)
+        const started = Math.max(0, w.bursts.length - bursts)
+        if (kind == "director" && (step == "land" || step == "muster")) clearAfterLongTurn = true
+        if (kind == "scanner") return step == "far" ? 98 + 113 * far : step == "near" ? 76 + 46 * near + 24 * shells
+            : step == "show" ? 2400 : 578 + 78 * (near + far)
+        if (kind == "laser") return 357 + 23 * near + 4730 * started
+        return longTurns[kind + "/" + step] ?? turnCosts[kind] ?? 128
+        },
+    tickCost(w: World) -> number {
+        const g = w.seen, shipRow = w.ship.py, below = w.near.filter((t) => t.py > split).length
+        const groundDrawn = g.groundShown && !this.isOff("planet")      // (not while the planet is stopped)
+        return 442 + (groundDrawn ? 4410 : 0) + (this.frozen() ? 0 : 391 + 98 * w.near.length + 335 * below)
+            + (g.shipShown && shipRow > split ? 762 : 0) + (Math.floor(g.scroll / 4) != Math.floor(g.lastScroll / 4) ? 378 : 0)
+        },
+    midCost(w: World) -> number {
+        const g = w.seen, shipRow = w.ship.py, above = w.near.filter((t) => t.py != 0 && t.py <= split).length
+        return 540 + (this.frozen() ? 0 : 519 + 53 * w.near.length + 367 * above + 132 * w.shots.length + 47 * this.starsLit())
+            + (g.shipShown && shipRow <= split ? 701 : 0) + (Math.floor(g.scroll / 4) != Math.floor(g.lastScroll / 4) ? 146 : 0)
+        },
+    frozen() -> boolean { return this.isOff("motion") },
+
+    turnCosts: Values = { { "laser": 483, "lander": 206, "mutant": 196, "dynamo": 164, "firebomber": 161, "hum": 140,
+        "ground color": 143, "men": 123, "bomber color": 98, "turn": 91, "shot color": 82, "laser color": 81, "flame": 77,
+        "director": 432, "boom": 414, "gate trip": 247, "death": 540, "swarmer": 228, "pod boom": 331, "yllabian": 231, "bombers": 136, "ghost": 278, "smart bomb": 90, "inviso": 224 } },
+    longTurns: Values = { { "director/start": 100000, "director/muster": 38400, "dynamo/arrive": 430, "firebomber/arrive": 494,
+        "gate trip/dim": 33300, "gate trip/brighten": 1400, "gate trip/enter": 1400,
+        "death/burstOver": 20000, "death/burst": 4600,
+        // a ship's start: the playfield cleared four pixel pairs at a time, the world emptied; then the
+        // planet and ship set up, the top of the screen cleared and drawn again, the playfield cleared again
+        "death/clearing": 1400, "director/clearing": 1400, "death/emptied": 11000, "director/emptied": 11000,
+        "page/titleDark": 94000,         // the title page's clearing of the whole screen
+        "director/clearPanel": 25000, "director/drawPanel": 10000, "director/clearAgain": 68200, "director/land": 14600,
+        "pod countdown/convention": 3600, "pod countdown/countdown": 1100, "swarmer/aim": 96,
+        "hyperspace/arrive": 141000, "hyperspace/back": 1250, "smart bomb/over": 59900, "inviso/check": 5800, "inviso/count": 1450 } },
+
+    // ── where the rules have got to ──
+
+    // The world has changed (a thing has come or gone, something is halted), or a rule
+    // has come to a point it names in its work. Nothing in play listens; a recording, checked
+    // against, does.
+
+    pointReached: ((w: World, point: string) => void)? = null,
+    worldChanged: ((w: World) => void)? = null,
+    reach(w: World, point: string) { pointReached?.(w, point) },
+    changing(w: World) { worldChanged?.(w) },
+
+    // ── a pass ──
+
+    stage: Stage = "idle",
+    turn: number = -1,                  // whose turn it is, by place in the list
+    turnOver: boolean = false,          // the turn whose it was has ended for good
+    goesOn: boolean = false,            // … or goes straight on to another step, without waiting a pass
+    busy: number = 0,                   // how far behind the passes are running
+
+    // A pass counts how far behind it is: two frames since the last is behind, three badly.
+
+    beginPass(w: World, picked: number) {
+        stage = "touching"; turn = -1
+        if (this.isOff("controls") || this.isOff("motion") || this.isOff("life") || this.isOff("touching")) { busy = 0; return }
+        const count = byte(2 * picked + busy - 4)
+        busy = count >= 128 ? 0 : count
+        if (busy < 2) return
+        this.fallBehind(w)
+        if (busy == 2) return
+        busy = 2
+        this.lighten(w)
+        },
+    behind() -> boolean { return busy >= 2 },
+    caughtUp() { busy = 0 },                // a ship starts afresh
+    overloaded() { busy = 8 },              // the planet's end keeps the arcade reckoning itself behind (so stars are few)
+
+    // the pass goes on to a stage, or among the turns to the one at `index` (and takes it, if done)
+
+    advance(w: World, to: Stage, index: number, done: boolean) {
+        while (stage != "idle" && stageAt(stage) < stageAt("turns") && stageAt(stage) < stageAt(to)) {
+            if (stage == "touching") this.touchShip(w)
+            else if (stage == "effects") this.updateEffects(w)
+            else if (stage == "chance") this.drawLots(w)
+            else { this.takePresses(w); turn = 0 }
+            stage = STAGES[stageAt(stage) + 1]
+            }
+        if (stage != "turns" || stageAt(to) < stageAt("turns")) return
+        if (to == "turns") {
+            while (stage == "turns" && turn < index) this.nextTurn(w)
+            if (done && stage == "turns" && turn == index) { this.nextTurn(w); while (goesOn && stage == "turns" && turn == index) this.nextTurn(w) }
+            }
+        else while (stage == "turns") this.nextTurn(w)
+        },
+    nextTurn(w: World) {
+        if (turn >= w.turns.length) { stage = "idle"; turn = -1; return }
+        const t = w.turns[turn]
+        t.wait = countDown(t.wait)
+        turnOver = false; goesOn = false
+        if (t.wait == 0) this.play(w, t)
+        if (goesOn && !turnOver) { t.wait = 1; return }        // it goes on, in this pass, as the next piece of work
+        if (!turnOver) turn = turn + 1
+        },
+
+    // ── turns ──
+
+    // A new turn comes straight after the one being taken (or first, between passes), in
+    // the place the arcade's memory frees last.
+
+    nextId: number = 1,
+    begin(w: World, kind: TurnKind, step: string) -> Turn {
+        nextId = nextId + 1
+        const t = { id: nextId, kind: kind, step: step, wait: 1, place: memory.takePlace() } as Turn
+        w.turns.splice(turn + 1, 0, t)
+        return t
+        },
+    end(w: World, t: Turn) {
+        const i = w.turns.findIndex((o) => o.id == t.id)
+        if (i < 0) return
+        memory.givePlace(t)
+        w.turns.splice(i, 1)
+        if (i < turn) turn = turn - 1
+        else if (i == turn) turnOver = true
+        },
+
+    // the pass ends here, with the turn being taken
+
+    passOver(w: World) { turn = w.turns.length; turnOver = true },
+
+    // every turn ends but those kept, in the order of the list; the pass goes on from the
+    // first kept, or from `from`
+
+    endAll(w: World, keep: Turn[], from?: Turn) {
+        for (const t of w.turns) if (!keep.includes(t)) memory.givePlace(t)
+        w.turns = w.turns.filter((t) => keep.includes(t))
+        turn = keep.length == 0 ? -1 : w.turns.findIndex((t) => t.id == (from ?? keep[0]).id)
+        },
+
+    // the pass carries on after this turn (or from the start of the list)
+
+    carryOnFrom(w: World, t: Turn?) { turn = t == null ? -1 : w.turns.findIndex((o) => o.id == t.id) },
+
+    // a new game's list: no turn is being taken, and no pass is under way
+
+    restartList() { turn = -1; stage = "idle" }
+    ]

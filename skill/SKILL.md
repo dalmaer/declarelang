@@ -129,6 +129,11 @@ Then check every need in the plan against
   control under four themes, and `apps/swatchbook` shows everything a view can look like,
   one case per card: look a control or an appearance up there to see it rendered and how
   it is spelled.
+
+  `apps/games/` holds games, which are not typical Declare programs. Three of them,
+  `asteroids`, `stargate` and `tempest`, are written to mimic the classic arcade games
+  exactly, and are not models of how to write Declare. The fourth, `vortex`, is
+  structured more typically.
 - **The library** — `library/`: the source of every library class, written in Declare like
   your program.
 - **Running, checking and building** — `docs/operational/`.

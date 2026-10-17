@@ -1,0 +1,688 @@
+// Tempest — the enemies: the nymphs waiting below the well, what rises from them, and what
+// each kind does on its way up.
+//
+// Five kinds. A flipper climbs and flips from lane to lane, in one of six ways that the wave
+// decides. A tanker climbs, and at the top splits into the two it carries. A spiker climbs
+// laying a spike behind it, turns back two-thirds of the way up, and starts again in the lane
+// with the shortest spike. A pulsar climbs only as far as its reach and pulses there, deadly
+// in its lane while the pulse is on, and flips toward the player between pulses. A fuseball
+// rises and sinks along a spoke and crosses to the next spoke now and then.
+//
+// Each enemy follows a plan, a short rhythm of moves and flips, and `plan` says where in it
+// the enemy is. Every frame an enemy carries its plan on until a step that ends its frame:
+// one climb, a flip begun, a flip turned on by a sixteenth. Some events change the plan at
+// once, in the same frame: reaching the rim makes any climber a chaser, which waits and then
+// flips round the rim after the player; a fuseball starting to cross begins counting.
+
+class Enemies extends Node [
+    game: Game,
+
+    // the kinds, in the arcade's order: where it tries one kind after another, it goes from
+    // the last back to the first
+
+    kinds: Kind[] = ["flipper", "pulsar", "tanker", "spiker", "fuseball"],
+
+    // ── a new wave, a new life ──
+
+    newWaveCounts(field: Playfield) {
+        game.nymphsLeft = game.level.nymphs
+        for (let i = 15; i >= 0; i--) field.spikes[i] = game.level.spikes
+        },
+
+    clearEnemies(field: Playfield) {
+        for (const e of field.enemies) { e.inPlay = false; e.depth = 0 }
+        game.onLanes = 0; game.atRim = 0
+        game.kindCount = noneOfEach()
+        },
+
+    // The nymphs wait in bands of sixteen, one to a band's place, each in a random lane.
+    // (With none left the arcade still runs its loop once, and draws a number for nothing.)
+
+    placeNymphs(field: Playfield) {
+        for (const n of field.nymphs) n.rise = 0
+        if (game.nymphsLeft == 0) { game.random(1); return }
+        for (let i = game.nymphsLeft - 1; i >= 0; i--) {
+            const lane = game.random(1) & 15
+            const rise = ((i << 4) & 255) | lane
+            field.nymphs[i] = { id: i, lane, rise: rise == 0 ? 15 : rise }
+            }
+        },
+
+    // ── the nymphs rise ──
+
+    // Each counts down to the surface; one that arrives becomes an enemy, if a slot and a kind
+    // allow, or else waits a frame and stops the rest for this frame. While far down they
+    // drift round a lane every other frame. A lane with a nymph close below it is kept clear,
+    // and so is its mirror lane (the lane as far round the other way from lane 0): another
+    // arriving at either waits.
+
+    riseNymphs(field: Playfield) {
+        let held = game.onLanes + game.atRim > game.level.enemySlots - 1 || game.zapTime != 0 || game.zapLocked
+        const near = new Set<number>()
+        for (let i = 63; i >= 0; i--) {
+            const n = field.nymphs[i]
+            if (n.rise == 0) continue
+            if (!held) {
+                n.rise = n.rise - 1
+                if (n.rise == 0) { if (!this.surface(field, n)) held = true }
+                else if (n.rise == 0x3f && near.has(this.mirrored(n.lane))) n.rise = 0x40
+                }
+            if (n.rise >= 0x40) { if (game.frame % 2 == 0) n.lane = (n.lane + 1) & 15 }
+            else if (n.rise >= 0x20) near.add(this.mirrored(n.lane))
+            }
+        },
+
+    // a lane and its mirror, 15 less it, as one
+
+    mirrored(lane: number) -> number { return Math.min(lane, 15 - lane) },
+
+    surface(field: Playfield, n: Nymph) -> boolean {
+        const k = this.chooseKind(field, n.lane)
+        if (k != null && this.launch(field, FAR, n.lane, k)) {
+            game.nymphsLeft = game.nymphsLeft - 1
+            n.rise = 0
+            return true
+            }
+        n.rise = 1
+        return false
+        },
+
+    // ── what a nymph becomes ──
+
+    // Room for a kind is its wave's most, less those in the well, less two for each tanker
+    // carrying that kind, and no more than the free slots. The arcade counts the room round
+    // at 256, so a kind with room for one, less two for a tanker, has plenty. Kinds below
+    // their least come first; a tanker or a spiker by the lane's spike (a long one calls a
+    // tanker); else the kinds in turn from a random one. A kind whose least is nought never
+    // comes this way.
+
+    chooseKind(field: Playfield, lane: number) -> Launch? {
+        const lv = game.level
+        const allowed: Record<Kind, Range> = { flipper: lv.flippers, pulsar: lv.pulsars, tanker: lv.tankers, spiker: lv.spikers,
+            fuseball: lv.fuseballs }
+        const count = game.kindCount
+        const room = noneOfEach()
+        for (const k of kinds) if (allowed[k].max >= count[k]) room[k] = allowed[k].max - count[k]
+        for (let i = lv.enemySlots - 1; i >= 0; i--) {
+            const e = field.enemies[i]
+            if (e.inPlay && e.cargo != "none") { const k = this.cargoKind(e.cargo); room[k] = (room[k] + 254) % 256 }
+            }
+        const free = (lv.enemySlots - kinds.reduce((n, k) => n + count[k], 0) + 256) % 256
+        for (const k of kinds) if (free < room[k]) room[k] = free
+        const open = kinds.filter((k) => room[k] != 0).length
+        if (open == 0) return null
+        const lastFirst = [...kinds].reverse()
+        if (open == 1) {
+            for (const k of lastFirst) {
+                if (room[k] != 0 && allowed[k].min != 0) { const l = this.launchOf(k, room, lane); if (l != null) return l }
+                }
+            return null
+            }
+        for (const k of lastFirst) {
+            if (room[k] != 0 && count[k] < allowed[k].min) { const l = this.launchOf(k, room, lane); if (l != null) return l }
+            }
+        if (room.spiker != 0 && room.tanker != 0) {
+            const l = this.launchOf(this.spikeTip(field, lane) < 0xcc ? "tanker" : "spiker", room, lane)
+            if (l != null) return l
+            }
+        let i = (game.random(2) & 3) + 1           // from a random kind, pulsar to fuseball, back round the kinds
+        let tries = 4
+        do {
+            const k = kinds[i]
+            if (allowed[k].min != 0 && room[k] != 0) {
+                const l = this.launchOf(k, room, lane)
+                if (l != null) return l
+                tries = lastTankerTry           // the arcade's loop counter is lost in a failed tanker
+                }
+            i = i == 0 ? 4 : i - 1
+            tries = tries - 1
+            } while (tries >= 0)
+        return null
+        },
+
+    lastTankerTry: number = 0,
+
+    cargoKind(c: Enemy["cargo"]) -> Kind { return c == "flippers" ? "flipper" : c == "pulsars" ? "pulsar" : "fuseball" },
+
+    // How a new enemy of a kind starts: flippers with the wave's plan, firing; pulsars
+    // firing only on later waves; a tanker with a cargo there is room for; spikers and
+    // fuseballs alike every wave.
+
+    launchOf(k: Kind, room: Record<Kind, number>, lane: number) -> Launch? {
+        const lv = game.level
+        if (k == "flipper") return { kind: "flipper", turning: "cw", cargo: "none", fires: true, plan: this.planStart(lv.flipperPlan) }
+        if (k == "pulsar") return { kind: "pulsar", turning: "cw", cargo: "none", fires: lv.pulsarsFire, plan: "pulsar" }
+        if (k == "spiker") return { kind: "spiker", turning: "cw", cargo: "none", fires: true, plan: "spiker" }
+        if (k == "fuseball") return { kind: "fuseball", turning: "cw", cargo: "none", fires: false, plan: "fuseball" }
+        const r = game.random(1) & 3
+        let c = r
+        for (let n = 3; n >= 0; n--) {
+            c = c == 0 ? 3 : c - 1
+            const cargo = lv.tankerCargo[c] as Launch["cargo"]
+            if (room[this.cargoKind(cargo)] != 0)
+                return { kind: "tanker", turning: "cw", cargo, fires: true, plan: "climb" }
+            }
+        lastTankerTry = r
+        return null
+        },
+
+    planStart(p: Wave["flipperPlan"]) -> Plan { return p == "flipOffSpikes" ? "flipOffSpikes.start" : p },
+
+    // A new enemy takes the highest free slot. (On an open well there is no sixteenth lane, so
+    // one due there goes to a random even lane.) It keeps the last one's fraction of a depth
+    // and plan count, as the arcade does.
+
+    launch(field: Playfield, depth: number, lane: number, l: Launch) -> boolean {
+        for (let i = game.level.enemySlots - 1; i >= 0; i--) {
+            const e = field.enemies[i]
+            if (e.inPlay) continue
+            let at = lane
+            if (at == 15 && game.well.open) at = game.random(1) & 14
+            field.enemies[i] = { ...e, inPlay: true, kind: l.kind, depth, lane: at, flipping: false, angle: 0,
+                turning: l.turning, rising: true, cargo: l.cargo, fires: l.fires, fireWait: 0, resting: false, plan: l.plan }
+            game.onLanes = game.onLanes + 1
+            game.kindCount = { ...game.kindCount, [l.kind]: game.kindCount[l.kind] + 1 }
+            return true
+            }
+        return false
+        },
+
+    // ── the enemies move ──
+
+    moveEnemies(field: Playfield) {
+        if (field.claw.alive) {
+            for (let i = game.level.enemySlots - 1; i >= 0; i--) if (field.enemies[i].inPlay) this.act(field, i)
+            }
+        this.beat(field)
+        },
+
+    // The pulse rises and falls; it sounds as it goes on and off, and turns at its two ends.
+
+    beat(field: Playfield) {
+        const was = game.pulseOn
+        game.pulse = game.pulse + game.pulseStep
+        if (game.pulseOn != was) {
+            if (!game.pulseOn) game.sound("pulseOff")
+            else if (game.kindCount.pulsar != 0 && field.claw.alive) game.sound("pulseOn")
+            }
+        if (game.pulse >= 15 || game.pulse <= -64) game.pulseStep = -game.pulseStep
+        },
+
+    // One enemy's frame: its plan, step by step, until a step ends the frame. Every plan
+    // reaches a step that ends the frame within a few steps; one that went on would be a
+    // mistake in the plans, so it stops the game rather than freezing it.
+
+    act(field: Playfield, i: number) {
+        const e = field.enemies[i]
+        for (let steps = 0; ; steps++) {
+            if (steps == 64) throw new Error(`enemy ${i}'s plan "${e.plan}" never ends its frame`)
+            if (!this.stepOf(field, e)) return
+            if (field.enemies[i] !== e || !e.inPlay) return       // killed, its slot perhaps taken
+            }
+        },
+
+    // Each case does what its place in the plan does and says whether the frame goes on.
+
+    stepOf(field: Playfield, e: Enemy) -> boolean {
+        switch (e.plan) {
+
+            // climb: up a lane, every frame
+            case "climb":
+                return this.climbing(field, e, "climb")
+
+            // climbThenFlip: eight frames of climbing, then a flip to the next lane, and again
+            case "climbThenFlip":
+                e.count = 8
+                return this.climbing(field, e, "climbThenFlip.counting")
+            case "climbThenFlip.counting":
+                e.count = byte(e.count - 1)
+                if (e.count != 0) return this.climbing(field, e, "climbThenFlip.counting")
+                this.startFlip(field, e); e.plan = "climbThenFlip.flipping"; return false
+            case "climbThenFlip.flipping":
+                if (this.flipStep(field, e)) { e.plan = "climbThenFlip"; return true }
+                return false
+
+            // spiral: climbs while flipping, lane after lane
+            case "spiral":
+                return this.climbing(field, e, "spiral.flip")
+            case "spiral.flip":
+                this.startFlip(field, e); e.plan = "spiral.flipping"; return false
+            case "spiral.flipping": {
+                const done = this.flipStep(field, e)
+                if (this.redirected(e, this.move(field, e))) return true
+                if (done) return this.climbing(field, e, "spiral.flip")
+                return false
+                }
+
+            // spiralBack: two flips one way, three the other, climbing all the while
+            case "spiralBack":
+                return this.climbing(field, e, "spiralBack.first")
+            case "spiralBack.first":
+                e.count = 2; this.startFlip(field, e); e.plan = "spiralBack.flippingA"; return false
+            case "spiralBack.flippingA": {
+                const done = this.flipStep(field, e)
+                if (this.redirected(e, this.move(field, e))) return true
+                if (done) e.plan = "spiralBack.nextA"
+                return false
+                }
+            case "spiralBack.nextA":
+                e.count = byte(e.count - 1)
+                if (e.count != 0) { this.startFlip(field, e); e.plan = "spiralBack.flippingA"; return false }
+                this.reverse(e); e.count = 3; this.startFlip(field, e); e.plan = "spiralBack.flippingB"; return false
+            case "spiralBack.flippingB": {
+                const done = this.flipStep(field, e)
+                if (this.redirected(e, this.move(field, e))) return true
+                if (done) e.plan = "spiralBack.nextB"
+                return false
+                }
+            case "spiralBack.nextB":
+                e.count = byte(e.count - 1)
+                if (e.count != 0) { this.startFlip(field, e); e.plan = "spiralBack.flippingB"; return false }
+                this.reverse(e)
+                return this.climbing(field, e, "spiralBack.first")
+
+            // flipOffSpikes: climbs while beside a spike's length, else flips (rests its first frame)
+            case "flipOffSpikes.start":
+                e.plan = "flipOffSpikes"; return false
+            case "flipOffSpikes":
+                if (this.redirected(e, this.move(field, e))) return true
+                if (this.besideSpike(field, e)) return false
+                this.startFlip(field, e); e.plan = "flipOffSpikes.climbFlip"; return false
+            case "flipOffSpikes.climbFlip":
+                if (this.redirected(e, this.move(field, e))) return true
+                if (this.flipStep(field, e)) { e.plan = "flipOffSpikes"; return false }
+                e.plan = "flipOffSpikes.flipping"; return false
+            case "flipOffSpikes.flipping":
+                e.plan = this.flipStep(field, e) ? "flipOffSpikes" : "flipOffSpikes.flipping"; return false
+
+            // avoid: flips away from the player, then climbs four frames
+            case "avoid":
+                this.headForPlayer(field, e); this.reverse(e); this.startFlip(field, e)
+                e.plan = "avoid.flipping"; return false
+            case "avoid.flipping": {
+                if (this.redirected(e, this.move(field, e))) return true
+                if (this.flipStep(field, e)) { e.count = 4; e.plan = "avoid.after" }
+                return false
+                }
+            case "avoid.after":
+                if (this.redirected(e, this.move(field, e))) return true
+                e.count = byte(e.count - 1)
+                if (e.count != 0) return false
+                e.plan = "avoid"; return true
+
+            // at the rim: four frames to catch the player where it is, then flip round after it
+            case "rim":
+                e.count = 4; this.catchAtRim(field, e); e.plan = "rim.waiting"; return false
+            case "rim.waiting":
+                e.count = byte(e.count - 1)
+                if (e.count != 0) { this.catchAtRim(field, e); return false }
+                this.startFlip(field, e); e.plan = "rim.flipping"; return false
+            case "rim.flipping":
+                e.count = game.level.rimFlipSteps
+                while (true) {
+                    if (this.flipStep(field, e)) { e.plan = "rim"; return true }
+                    e.count = byte(e.count - 1)
+                    if (e.count == 0) return false
+                    }
+
+            // spiker: climbs laying its spike; a spiker turned tanker climbs on as one
+            case "spiker": {
+                const r = this.move(field, e)
+                if (this.redirected(e, r)) return true
+                if (this.laySpike(field, e)) return this.climbing(field, e, "climb")
+                return false
+                }
+
+            // fuseball: rises and sinks, and sometimes crosses to the next spoke
+            case "fuseball":
+                if (this.fuseMove(field, e)) { e.plan = "fuseball.crossing"; return true }
+                this.fuseCatch(field, e); return false
+            case "fuseball.crossing":
+                e.count = 3; this.fuseCatch(field, e); e.plan = "fuseball.counting"; return false
+            case "fuseball.counting":
+                e.count = byte(e.count - 1)
+                if (e.count != 0) { this.fuseCatch(field, e); return false }
+                switch (this.fuseballFlipStep(field, e)) {
+                    case "landed": e.plan = "fuseball"; return true
+                    case "chasing": e.plan = "fuseball.crossing"; return true
+                    case "flipping": e.plan = "fuseball.crossing"; return false
+                    }
+
+            // pulsar: climbs and pulses for a while, then pulses until the pulse fades, then flips toward the player
+            case "pulsar":
+                e.count = game.level.pulsarWait           // (a wait of nought counts round: 256 frames)
+                if (this.redirected(e, this.pulsarMove(field, e))) return true
+                e.plan = "pulsar.waiting"; return false
+            case "pulsar.waiting":
+                e.count = byte(e.count - 1)
+                if (e.count != 0) {
+                    if (this.redirected(e, this.pulsarMove(field, e))) return true
+                    return false
+                    }
+                e.plan = "pulsar.watching"; return true
+            case "pulsar.watching":
+                if (this.pulseSoon()) {
+                    if (this.redirected(e, this.pulsarMove(field, e))) return true
+                    return false
+                    }
+                this.headForPlayer(field, e); this.startFlip(field, e); e.plan = "pulsar.flipping"; return false
+            case "pulsar.flipping":
+                if (this.flipStep(field, e)) { e.plan = "pulsar"; return true }
+                return false
+            }
+        return false
+        },
+
+    // a climb, then the frame ends at `then` (unless the climb changed the plan)
+
+    climbing(field: Playfield, e: Enemy, then: Plan) -> boolean {
+        if (this.redirected(e, this.move(field, e))) return true
+        e.plan = then
+        return false
+        },
+
+    // What a move did besides moving: "rim" (it became a chaser: go on with that plan),
+    // "gone" (a tanker split: this enemy's frame is over), or nothing.
+
+    redirected(e: Enemy, r: string) -> boolean {
+        if (r == "rim") { e.plan = "rim"; return true }
+        if (r == "gone") return true
+        return false
+        },
+
+    // ── moves ──
+
+    move(field: Playfield, e: Enemy) -> string {
+        const speed = game.speeds[e.kind]
+        return e.rising ? this.climb(field, e, speed) : (this.sink(e, speed), "")
+        },
+
+    climb(field: Playfield, e: Enemy, speed: number) -> string {
+        const p = word(e.depth * 256 + e.depthFraction + speed)
+        e.depth = p >> 8; e.depthFraction = p & 255
+        if (e.depth <= field.claw.depth) return this.reachRim(field, e)
+        if (e.depth < 0x20 && e.cargo != "none") { this.kill(field, e.id); return "gone" }
+        return ""
+        },
+
+    sink(e: Enemy, speed: number) -> number {
+        const p = word(e.depth * 256 + e.depthFraction - speed)
+        e.depth = p >> 8; e.depthFraction = p & 255
+        if (e.depth >= FAR) e.depth = 0xf2
+        return e.depth
+        },
+
+    // Reaching the rim: a pulsar goes back down while nymphs are left; one mid-flip finishes
+    // its flip first; anything else becomes a chaser and heads for the player the short way
+    // round — or, if exactly one other chaser is there, the other way, as a flipper.
+
+    reachRim(field: Playfield, e: Enemy) -> string {
+        e.depth = field.claw.depth
+        if (e.kind == "pulsar" && game.nymphsLeft != 0) { e.rising = !e.rising; return "" }
+        if (e.flipping) { e.depth = e.depth + 1; return "" }
+        game.onLanes = game.onLanes - 1
+        if (game.atRim != 1) this.headForPlayer(field, e)
+        else {
+            let other: Enemy | null = null
+            for (let i = game.level.enemySlots - 1; i >= 0; i--) {
+                const o = field.enemies[i]
+                if (o.inPlay && o.id != e.id && o.depth == field.claw.depth) { other = o; break }
+                }
+            e.kind = "flipper"; e.flipping = false
+            e.turning = other != null && other.turning == "ccw" ? "cw" : "ccw"
+            }
+        game.atRim = game.atRim + 1
+        return "rim"
+        },
+
+    headForPlayer(field: Playfield, e: Enemy) {
+        const d = game.lanesBetween(e.lane, field.claw.lane)
+        e.turning = d >= 0 ? "ccw" : "cw"
+        },
+
+    reverse(e: Enemy) { e.turning = e.turning == "cw" ? "ccw" : "cw" },
+
+    // ── flips ──
+
+    // A flip turns the enemy over onto the next lane round, a sixteenth of a turn at a time,
+    // from the direction of its lane's edge to the reverse of the next. On an open well it
+    // turns back at the edges. A fuseball's crossing always takes seven steps.
+
+    startFlip(field: Playfield, e: Enemy) {
+        if (game.well.open) {
+            if (e.turning == "ccw" && e.lane >= 14) e.turning = "cw"
+            else if (e.turning == "cw" && e.lane == 0) e.turning = "ccw"
+            }
+        this.flipFrom(e)
+        },
+
+    flipFrom(e: Enemy) {
+        e.flipping = true
+        if (e.kind == "fuseball") {
+            if (e.turning == "cw") e.angle = 1
+            else { e.lane = (e.lane + 15) & 15; e.angle = 7 }
+            return
+            }
+        if (e.turning == "ccw") e.lane = (e.lane + 1) & 15
+        e.angle = this.edgeAngle(e.turning, e.lane)
+        },
+
+    edgeAngle(turning: string, lane: number) -> number {
+        if (turning == "ccw") return (game.well.angleFrom((lane + 15) & 15) + 8) & 15
+        return game.well.angleFrom(lane)
+        },
+
+    // a step of a flip; true when it has ended
+
+    flipStep(field: Playfield, e: Enemy) -> boolean {
+        e.angle = (e.angle + (e.turning == "cw" ? 1 : -1) + 16) & 15
+        if (this.edgeAngle(e.turning == "cw" ? "ccw" : "cw", e.lane) == e.angle) {
+            e.flipping = false
+            if (e.turning == "cw") e.lane = (e.lane + 15) & 15
+            }
+        return !e.flipping
+        },
+
+    // A step of a fuseball's crossing. It lands on the next spoke after seven, and turns
+    // round to go back the way it came; once no nymphs are left, one landing at the rim at
+    // once crosses again toward the player, and one landing below the rim stops firing.
+
+    fuseballFlipStep(field: Playfield, e: Enemy) -> "flipping" | "landed" | "chasing" {
+        e.angle = (e.angle + (e.turning == "cw" ? 1 : -1) + 16) & 15
+        if ((e.angle & 7) != 0) return "flipping"
+        if (e.angle & 8) e.lane = (e.lane + 1) & 15
+        e.flipping = false
+        e.resting = true
+        e.rising = !e.rising
+        if (game.nymphsLeft == 0) {
+            if (e.depth == field.claw.depth) { this.fuseballChases(field, e); return "chasing" }
+            e.cargo = "none"; e.fires = false
+            }
+        return "landed"
+        },
+
+    // an enemy waiting at the rim catches the player if it is in the same lane
+
+    catchAtRim(field: Playfield, e: Enemy) {
+        if (!e.flipping && e.lane == field.claw.lane && field.claw.alive) game.killClaw(field, "caught")
+        },
+
+    besideSpike(field: Playfield, e: Enemy) -> boolean { return this.spikeTip(field, e.lane) < e.depth },
+
+    // the depth of a lane's spike tip, a lane with none counting as the deepest
+
+    spikeTip(field: Playfield, lane: number) -> number { return field.spikes[lane] == 0 ? 255 : field.spikes[lane] },
+
+    // ── spikers ──
+
+    // The spike in a spiker's lane reaches up to the spiker. Near the top the spiker turns
+    // back; at the far end it starts again in the lane whose spike is shortest (from a random
+    // lane round), and once no nymphs are left it comes up as a tanker carrying flippers.
+    // Answers whether it became a tanker.
+
+    laySpike(field: Playfield, e: Enemy) -> boolean {
+        const lane = e.lane
+        if (field.spikes[lane] == 0) field.spikes[lane] = 0xf1
+        if (e.depth < field.spikes[lane]) { field.spikes[lane] = e.depth; field.spikeMarks[lane] = 2 }
+        if (e.depth < 0x20) { e.rising = false; e.depth = 0x20 }
+        else if (e.depth >= 0xf2) {
+            this.shortestSpike(field, e)
+            e.depth = FAR
+            if (game.nymphsLeft == 0) { e.cargo = "flippers"; e.kind = "tanker"; return true }
+            }
+        return false
+        },
+
+    shortestSpike(field: Playfield, e: Enemy) {
+        let best = 0, at = 0
+        let lane = game.random(2) & 15
+        for (let n = 0; n < 16; n++) {
+            if (!(lane == 15 && game.well.open)) {
+                const tip = this.spikeTip(field, lane)
+                if (tip >= best) { best = tip; at = lane }
+                }
+            lane = lane == 0 ? 15 : lane - 1
+            }
+        e.lane = at
+        e.rising = true
+        },
+
+    // ── pulsars ──
+
+    // A pulsar climbs at its own speed within its reach, at a flipper's beyond it; going down
+    // it turns at its reach (at once once no nymphs are left). While the pulse is on, a pulsar
+    // within its reach kills the player in its lane.
+
+    pulsarMove(field: Playfield, e: Enemy) -> string {
+        let r = ""
+        if (e.rising) r = this.climb(field, e, e.depth >= game.level.pulsarReach ? game.speeds.flipper : game.pulsarSpeed)
+        else {
+            let d = this.sink(e, game.pulsarSpeed)
+            if (game.nymphsLeft == 0) d = 255
+            if (d >= game.level.pulsarReach) e.rising = !e.rising
+            }
+        if (game.pulseOn && e.depth < game.level.pulsarReach && e.lane == field.claw.lane && field.claw.alive)
+            game.killClaw(field, "pulsar")
+        return r
+        },
+
+    // the pulse is on, or comes on within four frames
+
+    pulseSoon() -> boolean { return game.pulseOn || game.pulse + 4 * game.pulseStep >= 0 },
+
+    // ── fuseballs ──
+
+    // Up its spoke and down again. Rising past the rim it stops there; early waves turn back
+    // near the top. At either end it crosses toward the player on later waves, at random on
+    // early ones; part way, a high enough random number sometimes makes it cross anyway.
+    // Answers whether a crossing began.
+
+    fuseMove(field: Playfield, e: Enemy) -> boolean {
+        const lv = game.level
+        if (e.rising) {
+            const p = word(e.depth * 256 + e.depthFraction + game.speeds.fuseball)
+            e.depth = p >> 8; e.depthFraction = p & 255
+            let high = false
+            if (e.depth < field.claw.depth) { e.depth = field.claw.depth; high = true }
+            else {
+                if (game.nymphsLeft == 0) return false
+                high = game.waveIndex < 17 && e.depth < 0x20
+                }
+            if (high) return lv.fuseballChasesAtTop ? this.fuseballChases(field, e) : this.fuseballWanders(field, e)
+            return this.maybeCross(field, e)
+            }
+        const d = this.sink(e, game.speeds.fuseball)
+        if (d >= 0x80) return lv.fuseballChasesAtBottom ? this.fuseballChases(field, e) : this.fuseballWanders(field, e)
+        return this.maybeCross(field, e)
+        },
+
+    maybeCross(field: Playfield, e: Enemy) -> boolean {
+        if ((e.depth & 0x20) == 0) return false
+        if (game.random(2) < game.level.fuseballRestless) return false
+        if (game.level.fuseballChasesAtBottom && e.id % 2 == 1) return this.fuseballChases(field, e)
+        return this.fuseballWanders(field, e)
+        },
+
+    fuseballChases(field: Playfield, e: Enemy) -> boolean {
+        this.headForPlayer(field, e); this.reverse(e)
+        return this.cross(e)
+        },
+
+    fuseballWanders(field: Playfield, e: Enemy) -> boolean {
+        e.turning = (game.random(1) & 0x40) != 0 ? "ccw" : "cw"
+        return this.cross(e)
+        },
+
+    cross(e: Enemy) -> boolean {
+        if (game.well.open) {
+            if (e.turning == "cw" && e.lane >= 15 || e.turning == "ccw" && e.lane == 0) this.reverse(e)
+            }
+        this.flipFrom(e)
+        return true
+        },
+
+    fuseCatch(field: Playfield, e: Enemy) {
+        if (e.depth == field.claw.depth && e.lane == field.claw.lane) game.killClaw(field, "fuseball")
+        },
+
+    // ── an enemy destroyed ──
+
+    // A tanker splits into the two it carries, one each side of its lane, at its depth.
+
+    kill(field: Playfield, id: number) {
+        const e = field.enemies[id]
+        if (e.depth == field.claw.depth && e.kind != "fuseball") game.atRim = game.atRim - 1
+        else game.onLanes = game.onLanes - 1
+        e.inPlay = false
+        const depth = e.depth
+        e.depth = 0
+        game.kindCount = { ...game.kindCount, [e.kind]: game.kindCount[e.kind] - 1 }
+        if (e.cargo == "none") return
+        const childKind = this.cargoKind(e.cargo)
+        let lane = (e.lane + 15) & 15
+        if (lane >= 15 && game.well.open) lane = 0
+        const everyKind = { flipper: 1, pulsar: 1, tanker: 1, spiker: 1, fuseball: 1 }
+        const child = depth < 0x20 ? this.plainLaunch(childKind) : this.launchOf(childKind, everyKind, lane)
+        if (child == null) return
+        if (this.launch(field, depth, lane, child)) {
+            lane = (lane + 2) & 15
+            if (lane == 15 && game.well.open) lane = 14
+            this.launch(field, depth, lane, { ...child, turning: "ccw" })
+            }
+        },
+
+    // what comes out of a tanker split near the top: the kind's plain start
+
+    plainLaunch(kind: Kind) -> Launch {
+        const plan: Record<Kind, Plan> = { flipper: "climb", pulsar: "pulsar", tanker: "climb", spiker: "spiker", fuseball: "fuseball" }
+        return { kind, turning: "cw", cargo: kind == "tanker" ? "flippers" : "none",
+            fires: kind == "flipper" || kind == "tanker" || kind == "spiker", plan: plan[kind] }
+        },
+
+    // ── enemy shots ──
+
+    // An enemy at least 48 deep that can fire, not flipping, its wait over, fires when a random
+    // number beats the odds (longer the more of its shots are already up). The wait counts
+    // down only while the enemy is deep enough to fire.
+
+    enemiesFire(field: Playfield) {
+        if (!field.claw.alive) return
+        const odds = [0x00, 0xe0, 0xf0, 0xfa, 0xff]
+        for (let i = game.level.enemySlots - 1; i >= 0; i--) {
+            const e = field.enemies[i]
+            if (!e.inPlay || e.depth < 0x30 || !e.fires) continue
+            if (e.fireWait > 0) { e.fireWait = e.fireWait - 1; continue }
+            if (e.flipping) continue
+            if (game.random(1) < odds[game.enemyShotsFlying]) continue
+            for (let k = game.level.enemyShots - 1; k >= 0; k--) {
+                const s = field.enemyShots[k]
+                if (s.inPlay) continue
+                field.enemyShots[k] = { ...s, inPlay: true, depth: e.depth, lane: e.lane, nextLane: (e.lane + 1) & 15 }
+                game.sound("enemyShot")
+                e.fireWait = game.level.fireDelay
+                game.enemyShotsFlying = game.enemyShotsFlying + 1
+                break
+                }
+            }
+        }
+    ]

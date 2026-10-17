@@ -30,6 +30,7 @@ import { test, summarize } from "./harness.mjs";
 import { buildProduction } from "../tools/declarec.mjs";
 import { runBehavior, runStates } from "../tools/internal/verify-behave.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
+import { programDirs, programFile } from "../tools/internal/program-dirs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
@@ -45,8 +46,8 @@ const build = (file, opts) => buildProduction(readFileSync(file, "utf8"), { name
 
 // ── 1. the ladder, on the slimmed build ─────────────────────────────────────
 if (!argv.includes("--skip-ladder") && render === "dom") {
-  for (const dir of readdirSync(join(ROOT, "apps")).map((d) => join(ROOT, "apps", d))) {
-    const tests = join(dir, "tests"), file = join(dir, basename(dir) + ".declare");
+  for (const dir of programDirs(ROOT)) {
+    const tests = join(dir, "tests"), file = programFile(dir);
     const assertPath = join(tests, "assert.mjs"), statesPath = join(tests, "states.mjs");
     if (!existsSync(file) || !pick(file) || (!existsSync(assertPath) && !existsSync(statesPath))) continue;
     await test(`ladder, slimmed: ${relative(ROOT, file)}`, async () => {
@@ -69,10 +70,7 @@ if (!argv.includes("--skip-ladder") && render === "dom") {
 // ── 2. the corpus, slim against full ────────────────────────────────────────
 function corpus() {
   const out = [];
-  for (const d of readdirSync(join(ROOT, "apps"))) {
-    const f = join(ROOT, "apps", d, d + ".declare");
-    if (existsSync(f)) out.push(f);
-  }
+  out.push(...programDirs(ROOT).map(programFile));
   const folder = (dir) => existsSync(dir) && statSync(dir).isDirectory() ? readdirSync(dir).filter((f) => f.endsWith(".declare")).map((f) => join(dir, f)) : [];
   out.push(...folder(join(ROOT, "apps/docs/demos")), ...folder(join(ROOT, "apps/homepage/demos")), ...folder(join(ROOT, "test/probe")));
   const reports = join(ROOT, "evals/reports");

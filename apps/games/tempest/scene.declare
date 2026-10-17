@@ -1,0 +1,375 @@
+/*
+## The scene
+
+What the screen shows beyond the game itself: the colors, and what the screen remembers from
+one frame to the next, with the well, the spikes and the nymphs drawn from it. Where a point of
+the well appears is the camera's (camera.declare).
+
+**The screen's memory.** What the screen shows depends on more than the game. The rims are
+drawn where they were last worked out, which they are only when the well moves, and once one
+leaves the screen it is no longer worked out at all; a spike just shot shows a sparkle, chosen
+at random as the screen is drawn; the player's death runs through its own sequence of
+pictures; the choices on the "rate yourself" screen scroll a column a frame toward the one
+chosen; and the logo zooms. `advance`, called at the end of each of the game's frames, moves it
+all on.
+*/
+
+script {
+    // a spike as the screen shows it: its line, and its tip
+    type SpikeSeen = { line: number[], tip: Tip }
+
+    // What each of the screen's sixteen colors is for. A picture names its colors by these,
+    // and where the arcade runs through the colors (a rainbow, a flash), it takes the first
+    // seven in turn.
+    const ROLES = ["white", "claw", "tanker", "flipper", "pulsar", "text", "well", "level", "shots", "splatA", "splatB", "splatC", "nymph"]
+
+    }
+
+// a nymph's dot, a spike's tip
+
+schema Mark [ id: number, x: number, y: number ]
+schema Tip [ id: number, x: number, y: number, size: number, spark: number ]
+
+// ── the waves' colors ──
+
+// Every sixteen waves bring the next set of colors, from the arcade's table: the color each
+// role is drawn in. The arcade has sixteen colors, a number of four bits wired to the tube's
+// guns (low is on): two bits for red, one each for green and blue. Its full red is #FF, its
+// full green and blue #F3; white is all on (#FFF3F3), and its blue is #0000F3.
+
+theme Waves1to16 [ white = #FFF3F3, claw = #FFF300, tanker = #FF00F3, flipper = #FF0000, pulsar = #00F3F3,
+    text = #00F300, well = #0000F3, level = #0000F3, shots = #FFF3F3,
+    splatA = #FFF3F3, splatB = #FFF3F3, splatC = #FFF3F3, nymph = #FF0000
+    ]
+
+
+theme Waves17to32 [ white = #FFF3F3, claw = #00F300, tanker = #0000F3, flipper = #FF00F3, pulsar = #FFF300,
+    text = #00F3F3, well = #FF0000, level = #FF0000, shots = #FFF3F3,
+    splatA = #FFF3F3, splatB = #FFF3F3, splatC = #FFF3F3, nymph = #FFF300
+    ]
+
+
+theme Waves33to48 [ white = #FFF3F3, claw = #0000F3, tanker = #00F3F3, flipper = #00F300, pulsar = #FF00F3,
+    text = #FF0000, well = #FFF300, level = #FFF300, shots = #FFF3F3,
+    splatA = #FFF3F3, splatB = #FFF3F3, splatC = #FFF3F3, nymph = #FF0000
+    ]
+
+
+theme Waves49to64 [ white = #FFF3F3, claw = #0000F3, tanker = #FF00F3, flipper = #00F300, pulsar = #FFF300,
+    text = #FF0000, well = #00F3F3, level = #00F3F3, shots = #FFF3F3,
+    splatA = #FFF3F3, splatB = #FFF3F3, splatC = #FFF3F3, nymph = #FF0000
+    ]
+
+
+theme Waves65to80 [ white = #FFF3F3, claw = #FFF300, tanker = #FF00F3, flipper = #FF0000, pulsar = #00F3F3,
+    text = #00F300, well = #000000, level = #0000F3, shots = #FFF3F3,           // the well is drawn black: invisible
+    splatA = #FFF3F3, splatB = #FFF3F3, splatC = #FFF3F3, nymph = #FF0000
+    ]
+
+
+theme Waves81to99 [ white = #FFF3F3, claw = #FF0000, tanker = #FF00F3, flipper = #FFF300, pulsar = #00F3F3,
+    text = #0000F3, well = #00F300, level = #00F300, shots = #FFF3F3,
+    splatA = #FFF3F3, splatB = #FFF3F3, splatC = #FFF3F3, nymph = #FF0000
+    ]
+
+
+class Scene extends Node [
+    game: Game,
+    well: Well,
+    camera: Camera,
+
+    // what the screen shows: nothing while a new well is set up (its picture waits a frame)
+
+    shows: "play" | "choose" | "logo" | "" = { blank || game.waves.length == 0 || game.value.enemies.length == 0 ? ""
+        : game.screen == "logoBox" ? "logo" : game.screen },
+
+    // ── the screen's memory ──
+
+    blank: boolean = false,             // a new well was set up this frame
+    redraw: boolean = false,            // the well moved: where its rims fall has to be worked out again
+    shownScreen: string = "play",       // the screen the last frame showed
+
+    // As the claw falls, the rims leave the screen. Once the far rim has gone, nothing more of
+    // the well is drawn; once the near one has, it is no longer drawn or worked out, and the
+    // spokes run to where it last was. Each rim is kept as the eye saw it when last worked out.
+
+    farGone: number = 0,                // how many of the far rim's points fell off the screen
+    nearGone: number = 0,               // and of the near rim's
+    farRim: number[][] = [],            // the rims' points, in units from the center
+    nearRim: number[][] = [],
+    nymphRim: number[][] = [],          // the far rim as the nymphs see it, a frame old
+
+    sparks: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],    // a shot spike's sparkle (1 or 2), per lane
+    flashFrom: number = 0,              // where in the colors the spokes start this frame, while a new life flashes
+
+    // The player's death is a sequence of pictures (splats growing and shrinking, then
+    // shrapnel for a pulsar or a spike, or a burst for a fuseball), each held a few frames;
+    // the splats also turn three colors round.
+
+    deathStep: number = 0,              // where in the sequence
+    deathTimer: number = 0,             // frames left of this step
+    deathTimes: number[] = [2, 2, 2, 2, 2, 4, 3, 2, 1, 32, 3, 3, 3, 3, 3, 3, 3],
+    deathPictures: string[] = ["splat.6", "splat.5", "splat.4", "splat.3", "splat.2", "splat.1", "splat.3", "splat.5", "splat.6",
+        "shrapnel", "burst.1", "burst.2", "burst.3", "burst.4", "burst.5", "burst.6", "burst.7"],
+    shrapnelScale: Scale = { { binary: 4, linear: 0x7f } },     // the size the shrapnel will next be drawn at, shrinking as it flies
+    shrapnelNow: Scale = { { binary: 4, linear: 0x7f } },       // and the size it is drawn at this frame
+    colorSwaps: number[] = [],         // the three colors the splat turns round
+    colorsReloaded: boolean = false,   // this frame's death step put the wave's colors back
+
+    firstShown: number = 0,             // the five choices the choose screen shows, first to last
+    lastShown: number = 0,
+    logoFar: number = 0,                // the logo's rainbow, from its near edge to its far one
+    logoNear: number = 0,
+    logoShown: number[] = [0, 0, 0],    // the edges this frame's picture was drawn with, and which picture (0 the border, 1 the word)
+
+    clear() {
+        blank = false; redraw = false; shownScreen = "play"
+        farGone = 0; nearGone = 0; farRim = []; nearRim = []; nymphRim = []
+        sparks = new Array(16).fill(0); flashFrom = 0
+        deathStep = 0; deathTimer = 0; shrapnelScale = { binary: 4, linear: 0x7f }; shrapnelNow = shrapnelScale; colorSwaps = []; colorsReloaded = false
+        firstShown = 0; lastShown = 0; logoFar = 0; logoNear = 0; logoShown = [0, 0, 0]
+        },
+
+    // The game's frame is done: what it did reaches the screen's memory, and the memory moves
+    // on. A spike whose tip is new is drawn again, and one just shot shows one of two sparkles,
+    // chosen at random. In the logo, the rainbow's two edges move.
+
+    advance(field: Playfield) {
+        const how = game.clawKilled
+        if (how != "") {
+            if (how != "caught") deathStep = how == "shot" ? -1 : how == "pulsar" ? 7 : 9
+            deathTimer = 1
+            }
+        if (game.wellSetUp) { farGone = 0; nearGone = 0; colorSwaps = [] }
+        if (game.eyeDrawsBack) nearGone = 0
+        if (game.wellMoved) redraw = true
+        if (game.screen != shownScreen) {
+            if (game.screen == "choose") { firstShown = 0; lastShown = 4 }
+            if (game.screen == "logoBox") { logoFar = 0x19; logoNear = 0x18 }
+            shownScreen = game.screen
+            }
+        blank = game.wellSetUp
+        if (blank) {
+            // At power-on the arcade has a far rim for its nymphs before it has drawn one: the
+            // first well's, as the eye is when it is set up. (Later wells start from the last.)
+            if (farRim.length == 0 && game.screen == "play") farRim = camera.rimFrom(FAR, game.eye, game.center)
+            return
+            }
+        if (game.screen == "play") this.advancePlay(field)
+        else if (game.screen == "choose") {
+            // the five columns shown follow the choice, one column a frame
+            const d = game.choice - firstShown
+            if (d < 0) { firstShown = firstShown - 1; lastShown = lastShown - 1 }
+            else if (d == 0) {
+                if (firstShown > 0) { firstShown = firstShown - 1; lastShown = lastShown - 1 }
+                }
+            else if (lastShown <= game.highestChoice && game.choice >= lastShown) { firstShown = firstShown + 1; lastShown = lastShown + 1 }
+            }
+        else if (game.screen == "logoBox") {
+            logoShown = [logoNear, logoFar, 0]
+            if (logoFar < 0xa0) logoFar = logoFar + 0x14
+            if (logoFar >= 0x50) {
+                logoNear = logoNear + 8
+                if (logoNear >= logoFar) { logoNear = 0xa0; game.logoBoxGrown() }
+                }
+            }
+        else if (game.screen == "logo") {
+            logoShown = [logoNear, logoFar, 1]
+            if (logoNear >= 0x30) logoNear = logoNear - 1
+            if (logoNear < 0x80) logoFar = Math.max(logoFar - 1, logoNear)
+            }
+        },
+
+    advancePlay(field: Playfield) {
+        colorsReloaded = false
+        for (let i = 7; i >= 0; i--) if (field.blasts[i].inPlay && field.blasts[i].kind == "player") this.deathFrame()
+        if (game.flashing) flashFrom = (game.bonusFlash >> 1) & 7
+        nymphRim = farRim                   // the nymphs are drawn before the rims are worked out again
+        if (redraw && farGone == 0) {
+            farRim = camera.rimFrom(FAR, game.eye, game.center)
+            farGone = camera.offScreen(FAR, game.eye, game.center)
+            if (farGone != 0) nearGone = farGone
+            if (nearGone == 0) {
+                const y = camera.nearDepth(game.eye)
+                nearRim = camera.rimFrom(y, game.eye, game.center)
+                nearGone = camera.offScreen(y, game.eye, game.center)
+                }
+            }
+        const lanes = farGone != 0 || game.wellPassed ? 0 : well.open ? 15 : 16
+        const next = [...sparks]
+        for (let i = 0; i < lanes; i++) {
+            const mark = field.spikeMarks[i]
+            if (redraw || mark >= 2) next[i] = field.spikes[i] != 0 && (mark & 1) == 1 ? 1 + ((game.random(1) >> 1) & 1) : 0
+            game.spikeMarkDrawn(field, i)
+            }
+        sparks = next
+        redraw = false
+        },
+
+    // One frame of the death sequence: the step's time runs out, the next step begins, and
+    // its color or size change applies (each frame of the step).
+
+    deathFrame() {
+        deathTimer = byte(deathTimer - 1)
+        if (deathTimer == 0) { deathStep = deathStep + 1; deathTimer = deathTimes[deathStep] ?? 0 }
+        const step = deathStep
+        if (step == 0) colorSwaps = [0xfff3f3, 0xfff300, 0xff0000]               // white, yellow, red
+        else if (step >= 1 && step <= 7) {
+            const c = colorSwaps.length == 3 ? colorSwaps : [0xfff3f3, 0xfff300, 0xff0000]
+            colorSwaps = [c[1], c[2], c[0]]                                   // the three colors turn
+            }
+        else if (step == 8) { colorSwaps = []; shrapnelScale = { binary: 4, linear: 0x7f }; colorsReloaded = true }
+        else if (step == 9) {
+            shrapnelNow = shrapnelScale
+            let linear = shrapnelScale.linear - 0x20, binary = shrapnelScale.binary
+            if (linear < 0) { linear = (linear + 256) & 0x7f; binary = binary - 1 }
+            shrapnelScale = { binary, linear }
+            }
+        },
+
+    // ── colors ──
+
+    // Every sixteen waves bring the next set of colors (the themes above).
+
+    waveColors: Theme[] = { [Waves1to16, Waves17to32, Waves33to48, Waves49to64, Waves65to80, Waves81to99] },
+
+    // each role's color now, as 0xRRGGBB: the wave's, but the player's shots warm as they run
+    // out (yellow, then blue, then red), and the death's splats turn three colors round
+
+    palette: Record<string, number> = { this.paletteNow(game.waveIndex, game.shotsFlying, colorsReloaded, colorSwaps) },
+    paletteNow(wave: number, shots: number, reloaded: boolean, swaps: number[]) -> Record<string, number> {
+        const now: Record<string, number> = { ...waveColors[Math.min(wave >> 4, 5)] }
+        if (!reloaded) now.shots = shots >= 8 ? 0xff0000 : shots >= 6 ? 0x0000f3 : 0xfff300     // (a death step reloads them after the shots are colored)
+        if (swaps.length == 3) [now.splatA, now.splatB, now.splatC] = swaps
+        return now
+        },
+
+    // the role a color of the arcade's runs-through takes (0 to 6; 7 is the flipper's)
+
+    roleAt(n: number) -> string { return n == 7 ? "flipper" : ROLES[n] },
+
+    // a rim's sixteen points, as last worked out (the far one at 240, the near one)
+
+    rim(depth: number) -> number[][] { return this.filled(depth == FAR ? farRim : nearRim) },
+    filled(points: number[][]) -> number[][] { return points.length == 16 ? points : new Array(16).fill([0, 0]) },
+
+    // ── the well ──
+
+    // The spokes, two at a time, far end to rim and back, then the far rim and the near one. A
+    // spoke beside the claw is yellow; one a pulsing pulsar touches flickers; a rim's edge
+    // where a pulsar sits is not drawn.
+
+    wellLines() -> Trace[] {
+        if (farGone != 0 || shows != "play") return []
+        const s = well.shapes[well.id]
+        const far = this.rim(FAR), near = this.rim(0)
+        const spokes = this.spokeColors()
+        const out: Trace[] = []
+        for (let k = 15; k > 0; k = k - 2) {
+            const [a, b, c, d] = camera.legs([far[k], near[k], near[k - 1], far[k - 1]], SMALL)
+            out.push({ ink: spokes[k], i: 12, p: [...a, ...b] }, { ink: spokes[k - 1], i: 12, p: [...c, ...d] })
+            }
+        const lanes = s.open ? 15 : 16
+        for (const [points, hidden] of (nearGone == 0 ? [[far, false], [near, true]] : [[far, false]]) as [number[][], boolean][]) {
+            const order = [15]
+            for (let n = 0; n < lanes; n++) order.push((order[n] + 15) & 15)
+            const at = camera.legs(order.map((i) => points[i]), SMALL)
+            let line: number[] = []
+            for (let n = 1; n <= lanes; n++) {
+                if (hidden && this.pulsarOn(order[n])) { line = []; continue }
+                if (line.length == 0) { line = [...at[n - 1]]; out.push({ ink: "well", i: 12, p: line }) }
+                line.push(...at[n])
+                }
+            }
+        return out
+        },
+
+    spokeColors() -> string[] {
+        const marks = new Array(16).fill(0)
+        const v = game.value
+        if (!v.claw.dropping) {
+            for (const e of v.enemies.slice(0, game.level.enemySlots)) {
+                if (!e.inPlay || e.kind != "pulsar") continue
+                let m = 1
+                if (!e.flipping) {
+                    if (game.pulseOn && e.depth < game.level.pulsarReach) m = 3
+                    marks[(e.lane + 1) & 15] = marks[(e.lane + 1) & 15] | m
+                    }
+                marks[e.lane] = marks[e.lane] | m | 0x80
+                }
+            }
+        // the zapper: the colors in turn, the claw's in place of the eighth
+        const plain = game.zapTime == 0 ? "well" : (game.frame & 7) == 7 ? "claw" : ROLES[game.frame & 7]
+        const claw = v.claw
+        return marks.map((m, x) => {
+            if (m != 0) return (m & 2) ? ROLES[game.frame & 1] : "well"
+            if (claw.depth != 0 && claw.alive && (x == claw.lane || x == ((claw.lane + 1) & 15))) return "claw"
+            if (game.flashing) return this.roleAt((x + flashFrom) & 7)                   // a rainbow round the well
+            return plain
+            })
+        },
+
+    pulsarOn(lane: number) -> boolean {
+        const v = game.value
+        if (v.claw.dropping) return false
+        return v.enemies.slice(0, game.level.enemySlots).some((e) => e.inPlay && e.kind == "pulsar" && e.lane == lane)
+        },
+
+    // The nymphs: dots on the way from the far end's center out toward their lane's far point,
+    // nearer the edge the closer they are to rising; at most nineteen. The beam goes out to
+    // each and back, and the next starts from where it came back to.
+
+    nymphDots: Dataset [ schema = [ dots[]: Mark ], contents = { { dots: classroot.nymphsNow() } } ],
+    nymphsNow() -> Mark[] {
+        if (shows != "play") return []
+        const far = this.filled(nymphRim)
+        const center = signed16(Math.floor(game.center / 256))
+        let at = camera.place([0, center])
+        const dots: Mark[] = []
+        const nymphs = game.value.nymphs
+        for (let i = 63; i >= 0 && dots.length < 19; i--) {
+            const d = nymphs[i].rise
+            if (d == 0) continue
+            const lane = nymphs[i].lane
+            if (d >= 0x50) i = i - 1                // the next one down is passed over
+            const size = sizeOf((d >> 6) + 1, d & 0x3f)
+            const sx = far[lane][0], sz = (far[lane][1] - center) & 0xffff
+            const out = leg(signed16(sx), signed16(sz)), back = leg(signed16(-sx), signed16(-sz))
+            at = [at[0] + out[0] * size, at[1] - out[1] * size]
+            dots.push({ id: dots.length, x: at[0], y: at[1] })
+            at = [at[0] + back[0] * size, at[1] - back[1] * size]
+            }
+        return dots
+        },
+
+    // ── spikes ──
+
+    // Each lane's spike: a line from the middle of the lane's far end up to its tip, and at the
+    // tip a white dot, or a sparkle the frame it is shot.
+
+    spikesShown: boolean = { shows == "play" && farGone == 0 && !game.wellPassed },
+
+    spikeLines() -> Trace[] {
+        if (!spikesShown) return []
+        return this.spikesNow().map((t) => ({ ink: "text", i: 10, p: t.line }))
+        },
+    spikeTips: Dataset [ schema = [ tips[]: Tip ], contents = { { tips: classroot.spikesNow().map((t) => t.tip) } } ],
+
+    spikesNow() -> SpikeSeen[] {
+        if (!spikesShown) return []
+        const s = well.shapes[well.id], v = game.value
+        const far = this.rim(FAR)
+        const out: SpikeSeen[] = []
+        for (let i = 0; i < (s.open ? 15 : 16); i++) {
+            const tip = v.spikes[i]
+            if (tip == 0) continue
+            const n = (i + 1) & 15
+            const base = [(far[i][0] + far[n][0] + 1) >> 1, (far[i][1] + far[n][1] + 1) >> 1]
+            const m = camera.midpoint(i)
+            const [a, b] = camera.legs([base, camera.project(m[0], camera.inFront(tip, game.eye), m[1])], SMALL)
+            const s = camera.scaleAt(tip)
+            out.push({ line: [...a, ...b], tip: { id: i, x: b[0], y: b[1], size: sizeOf(s.binary, s.linear), spark: sparks[i] } })
+            }
+        return out
+        }
+    ]

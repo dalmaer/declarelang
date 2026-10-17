@@ -8,7 +8,7 @@
 // index.html is the ONE curated page; every other program is reached by its program
 // URL (browse-to-run). So this tool no longer generates pages — it is the gate:
 //
-//   - COMPILES every apps/<name>/<name>.declare (and every demo) with the
+//   - COMPILES every program under apps/ (program-dirs.mjs) and every demo with the
 //     Node compiler, failing loudly on any error — the gate the browser's
 //     typecheck-less render path does not provide;
 //   - REPORTS each app's compiled size / gzipped weight / LOC;
@@ -24,6 +24,8 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { compile, compileTracked } from "../../compiler/dist/compile-node.js";
+import { parseLibrary } from "../../runtime/dist/parser.js";
+import { programDirs, programFile } from "./program-dirs.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "../..");
@@ -37,25 +39,31 @@ const fail = (label, c) => {
 
 async function buildExample(name) {
   const dir = path.join(EXAMPLES, name);
-  const appFile = path.join(dir, name + ".declare");
+  const appFile = programFile(dir);
   const src = readFileSync(appFile, "utf8");
 
   // Compile to VALIDATE (and to measure) — the artifact is not emitted.
   const tracked = await compileTracked(src, { originDir: dir, mainId: appFile, props: { render: "dom" } });
-  fail(name + ".declare", tracked);
+  fail(path.basename(appFile), tracked);
 
   const pageWeight = Math.round((RUNTIME_GZ_BYTES + gzipSync(tracked.source).length) / 1024);
   const sourceLines = src.split("\n").filter((l) => { const t = l.trim(); return t !== "" && !t.startsWith("//"); }).length;
 
   // Validate the programs the homepage and the docs run in their islands too: each
   // keeps them in a folder of its own (`demos/`, the two apps' choice of name), and
-  // an island fetches its program ON DEMAND when it first goes live.
+  // an island fetches its program ON DEMAND when it first goes live. A demo with no
+  // root is a library that another demo includes; it is compiled as declarec check
+  // compiles one, with a bare `App [ ]` appended (parseLibrary decides which it is).
   let demos = 0;
   const demoDir = path.join(dir, "demos");
   if ((name === "homepage" || name === "docs") && existsSync(demoDir)) {
     for (const f of readdirSync(demoDir).sort()) {
       if (!f.endsWith(".declare")) continue;
-      fail(`demo ${f}`, await compile(readFileSync(path.join(demoDir, f), "utf8"), {}));
+      const file = path.join(demoDir, f);
+      const demoSrc = readFileSync(file, "utf8");
+      let isLibrary = false;
+      try { parseLibrary(demoSrc); isLibrary = true; } catch { /* a program, or broken as both */ }
+      fail(`demo ${f}`, await compile(isLibrary ? `${demoSrc}\nApp [ ]\n` : demoSrc, { originDir: demoDir, mainId: file }));
       demos++;
     }
   }
@@ -70,9 +78,9 @@ async function buildExample(name) {
 const libSrc = path.join(ROOT, "library");
 const libFiles = existsSync(libSrc) ? readdirSync(libSrc).filter((f) => f.endsWith(".declare")).sort() : [];
 
-const names = readdirSync(EXAMPLES).filter((n) => existsSync(path.join(EXAMPLES, n, `${n}.declare`))).sort();
+const names = programDirs(ROOT).map((d) => path.relative(EXAMPLES, d).split(path.sep).join("/"));
 console.log(`prebuild: validating ${names.length} example(s) · library {${libFiles.join(", ")}}`);
 for (const name of names) {
   const r = await buildExample(name);
-  console.log(`  ${r.name.padEnd(12)} ${(r.program / 1024).toFixed(1).padStart(6)} KB · ${String(r.demos).padStart(2)} demos · ${String(r.pageWeight).padStart(3)} KB gz · ${String(r.sourceLines).padStart(4)} LOC · ${r.deps} dep(s)`);
+  console.log(`  ${r.name.padEnd(16)} ${(r.program / 1024).toFixed(1).padStart(6)} KB · ${String(r.demos).padStart(2)} demos · ${String(r.pageWeight).padStart(3)} KB gz · ${String(r.sourceLines).padStart(4)} LOC · ${r.deps} dep(s)`);
 }

@@ -14,7 +14,8 @@ Two orthogonal axes:
   (`run`, `build`) only.
 
 The program URL is the app's canonical address (OpenLaszlo's `…/app.lzx?lzt=…` model).
-A **directory carries no behavior** — `…/<name>/` is a 404; the `.declare` file is the
+A **directory carries no behavior** of its own — `…/<name>/` is a 404 unless the
+directory-program rule below makes it a program URL; the `.declare` file is the
 address.
 
 ## Requests
@@ -51,6 +52,17 @@ final segment is file-like and never a program directory. On a cold static host 
 service worker yet) a directory URL degrades to the host's 404 exactly as an explicit
 `.declare` URL degrades to raw bytes — the rule exists wherever the platform is
 present, and nowhere else.
+
+The same rule, applied to the tree rather than to one URL, says which directories are
+programs: **every directory under `apps/`, at any depth, that holds its name-matched
+`.declare`** (tools/internal/program-dirs.mjs `programDirs`, the one list the cold
+stubs, the `BUILD_ID` stamp and the program-sweeping tests all read). Nothing stops at
+a program: a program may hold programs of its own (a desktop whose tenants live in its
+folder, `apps/desktop/notes/notes.declare`), each its own address. A directory without
+its name-matched file is only a folder — `apps/games/` groups `apps/games/tempest/` and
+the rest and is itself a 404 on every host. The flip side: a file named after its
+directory *makes* that directory a program, so a file not meant to run on its own must
+not take its directory's name.
 
 ## Modifiers
 

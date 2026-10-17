@@ -1,0 +1,395 @@
+/*
+# What is drawn in the tube
+
+The tube itself (`Web`), and everything placed in it. A `Sprite` is placed by
+constraints over a lane and a depth — `x`, `y`, `scale`, `rotation` and
+`opacity` all come from `app.tube.at(lane, depth)` — and its subclass draws
+its shape once, in a fixed 40×40 box, the lane running left to right across the
+middle and −y facing out of the tube. Motion is attributes; a shape is never
+re-drawn to move it.
+
+Each kind of enemy is its own class, chosen per record by `classFor` where the
+App replicates them.
+*/
+
+
+/*
+## The tube
+
+Drawn whole: the far rim, the near rim, and a line along each lane edge. It reads
+the tube, the camera (through `corner`), and the claw's lane, so it re-records when
+one of them changes — while the claw sits still nothing is re-drawn, and in the
+dive it is re-drawn every frame, as it must be.
+*/
+
+class Web [ width = 100%, height = 100%,
+    lit: number = -1,              // the lane to light, the claw's, or −1
+
+    draw(d: Draw) {
+        const tube = app.tube
+        const n = tube.rim.length
+        const near = tube.nearDepth()
+        if (n == 0 || near <= 0) return
+        const ink = provided("theme").web
+        d.lineWidth = 1.6
+        d.lineJoin = "round"
+        d.shadowBlur = 6
+
+        // the two rims, and a line down each lane edge
+        d.strokeStyle = ink
+        d.shadowColor = ink
+        d.beginPath()
+        for (const depth of [0, near]) {
+            for (let i = 0; i < n; i++) {
+                const p = tube.corner(i, depth)
+                if (i == 0) d.moveTo(p.x, p.y)
+                else d.lineTo(p.x, p.y)
+                }
+            if (tube.closed) d.closePath()
+            }
+        for (let i = 0; i < n; i++) {
+            const a = tube.corner(i, 0), b = tube.corner(i, near)
+            d.moveTo(a.x, a.y)
+            d.lineTo(b.x, b.y)
+            }
+        d.stroke()
+
+        // the claw's lane, lit
+        if (lit < 0) return
+        const glow = provided("theme").claw
+        d.strokeStyle = glow
+        d.shadowColor = glow
+        d.lineWidth = 2
+        d.beginPath()
+        const a0 = tube.corner(lit, 0), a1 = tube.corner(lit, near)
+        const b0 = tube.corner(lit + 1, 0), b1 = tube.corner(lit + 1, near)
+        d.moveTo(a0.x, a0.y)
+        d.lineTo(a1.x, a1.y)
+        d.lineTo(b1.x, b1.y)
+        d.lineTo(b0.x, b0.y)
+        d.stroke()
+        }
+    ]
+
+
+/*
+## Sprites
+*/
+
+class Sprite [ width = 40, height = 40, pivotX = 20, pivotY = 20,
+    laneAt: number = 0,            // fractional between lanes
+    depth: number = 1,
+    turn: number = 0,              // degrees, on top of the lane's own angle
+    ink: Color = white,
+
+    spot: Spot = { app.tube.at(classroot.laneAt, classroot.depth) },
+    x = { spot.x - 20 },
+    y = { spot.y - 20 },
+    scale = { spot.w / 40 },
+    rotation = { spot.angle + turn },
+
+    // brighter as it nears the rim
+
+    opacity = { 0.35 + 0.65 * clamp(depth, 0, 1) }
+    ]
+
+
+// An enemy, on its record. Where it is comes from the field's rules; what it
+// looks like, from its kind's class.
+
+class FoeView extends Sprite [
+    laneAt = { app.field.laneOf(:@, app.t, app.tube.closed) },
+    depth = { app.field.depthOf(:@, app.t) }
+    ]
+
+
+// Flips end over end from lane to lane.
+
+class Flipper extends FoeView [
+    turn = { 180 * app.field.flipOf(:@, app.t) },
+    ink = { provided("theme").flipper },
+    draw(d: Draw) {
+        glowPen(d, ink, 2.4)
+        d.beginPath()
+        d.moveTo(1, 13)
+        d.lineTo(39, 27)
+        d.lineTo(39, 13)
+        d.lineTo(1, 27)
+        d.closePath()
+        d.moveTo(12, 20)
+        d.lineTo(28, 20)
+        d.stroke()
+        }
+    ]
+
+
+// Carries two of something inside, and shows what: a little flipper, pulsar
+// or fuseball in its middle, in that kind's color.
+
+class Tanker extends FoeView [
+    cargo: string = { :cargo ?? "flipper" },
+    ink = { provided("theme").tanker },
+    draw(d: Draw) {
+        const th = provided("theme")
+        glowPen(d, ink, 2.4)
+        d.beginPath()
+        d.moveTo(20, 5)
+        d.lineTo(35, 20)
+        d.lineTo(20, 35)
+        d.lineTo(5, 20)
+        d.closePath()
+        d.stroke()
+        glowPen(d, cargo == "pulsar" ? th.pulsar : cargo == "fuseball" ? th.spiker : th.flipper, 1.8)
+        d.beginPath()
+        if (cargo == "pulsar") {
+            d.moveTo(12, 20)
+            d.lineTo(15, 16)
+            d.lineTo(18, 24)
+            d.lineTo(22, 16)
+            d.lineTo(25, 24)
+            d.lineTo(28, 20)
+            }
+        else if (cargo == "fuseball") {
+            for (let k = 0; k < 5; k++) { d.moveTo(20, 20); d.lineTo(20 + 7 * Math.cos(k * 1.257), 20 + 7 * Math.sin(k * 1.257)) }
+            }
+        else {
+            d.moveTo(12, 17)
+            d.lineTo(28, 23)
+            d.lineTo(28, 17)
+            d.lineTo(12, 23)
+            d.closePath()
+            }
+        d.stroke()
+        }
+    ]
+
+
+// A spiral, turning as it climbs.
+
+class Spiker extends FoeView [
+    turn = { app.t * 540 },
+    ink = { provided("theme").spiker },
+    draw(d: Draw) {
+        glowPen(d, ink, 2.2)
+        d.beginPath()
+        for (let k = 0; k <= 26; k++) {
+            const a = k * 0.55, r = 1 + k * 0.62
+            const px = 20 + r * Math.cos(a), py = 20 + r * Math.sin(a)
+            if (k == 0) d.moveTo(px, py)
+            else d.lineTo(px, py)
+            }
+        d.stroke()
+        }
+    ]
+
+
+// A tangle of colored tendrils, wobbling.
+
+class Fuseball extends FoeView [
+    turn = { Math.sin(app.t * 7) * 40 },
+    draw(d: Draw) {
+        const th = provided("theme")
+        const inks = [th.flipper, th.spiker, th.pulsar, th.claw, th.tanker]
+        for (let k = 0; k < 5; k++) {
+            const a = k * Math.PI * 2 / 5
+            glowPen(d, inks[k], 2.2)
+            d.beginPath()
+            d.moveTo(20, 20)
+            d.quadraticCurveTo(20 + 15 * Math.cos(a + 0.9), 20 + 15 * Math.sin(a + 0.9),
+                               20 + 17 * Math.cos(a), 20 + 17 * Math.sin(a))
+            d.stroke()
+            }
+        }
+    ]
+
+
+// A zigzag that pulses; while it pulses, its lane is live (see `PulseBeam`).
+
+class Pulsar extends FoeView [
+    pulse: boolean = { app.field.pulsing(:@, app.t) },
+    ink = { provided("theme").pulsar },
+    draw(d: Draw) {
+        const amp = pulse ? 11 : 4
+        glowPen(d, ink, pulse ? 3 : 2)
+        d.beginPath()
+        d.moveTo(1, 20)
+        for (let k = 1; k <= 6; k++) d.lineTo(1 + k * 6.3, k == 6 ? 20 : 20 + (k % 2 == 0 ? amp : -amp))
+        d.stroke()
+        }
+    ]
+
+
+// The claw's shot, going down; an enemy's, coming up.
+
+class ShotView extends Sprite [
+    laneAt = :lane,
+    depth = { app.field.shotDepth(:@, app.t) },
+    ink = { provided("theme").shot },
+    draw(d: Draw) {
+        glowPen(d, ink, 2.6)
+        d.beginPath()
+        d.moveTo(20, 13)
+        d.lineTo(27, 20)
+        d.lineTo(20, 27)
+        d.lineTo(13, 20)
+        d.closePath()
+        d.stroke()
+        }
+    ]
+
+
+class FoeShotView extends Sprite [
+    laneAt = :lane,
+    depth = { app.field.foeShotDepth(:@, app.t) },
+    turn = { app.t * 720 },
+    ink = { provided("theme").foeShot },
+    draw(d: Draw) {
+        glowPen(d, ink, 2.6)
+        d.beginPath()
+        d.moveTo(14, 14)
+        d.lineTo(26, 26)
+        d.moveTo(26, 14)
+        d.lineTo(14, 26)
+        d.stroke()
+        }
+    ]
+
+
+// What is left where something was hit, by its kind (`classFor` on the
+// blasts): a burst of rays that grows and fades, the claw's own bigger one,
+// or the points a fuseball was worth, standing upright where it was.
+
+class Remains extends Sprite [
+    laneAt = :lane,
+    depth = :depth,
+    age: number = { app.t - :at }
+    ]
+
+
+class Burst extends Remains [
+    big: boolean = { :kind == "big" },
+    scale = { spot.w / 40 * (0.5 + age * 5) * (big ? 1.6 : 1) },
+    opacity = { clamp(1 - age / app.field.blastLife, 0, 1) },
+    ink = { big ? provided("theme").claw : provided("theme").blast },
+    draw(d: Draw) {
+        glowPen(d, ink, 2)
+        d.beginPath()
+        for (let k = 0; k < 12; k++) {
+            const a = k * Math.PI / 6, r = k % 2 == 0 ? 18 : 10
+            d.moveTo(20 + 4 * Math.cos(a), 20 + 4 * Math.sin(a))
+            d.lineTo(20 + r * Math.cos(a), 20 + r * Math.sin(a))
+            }
+        d.stroke()
+        }
+    ]
+
+
+class PointsPop extends Remains [
+    rotation = 0,
+    scale = 1,
+    opacity = { clamp(1.5 - age / app.field.blastLife / 2, 0, 1) },
+    Text [ x = center, y = center, fontSize = 14, fontWeight = bold, textColor = { provided("theme").shot }, text = { "" + :points } ]
+    ]
+
+
+/*
+## Waiting, and falling
+
+A nymph is a dot at the far end, drifting out toward its lane as it comes due.
+A star streams past while the claw falls from one tube to the next: its
+place is a function of the game clock, so the field moves with no records
+written at all.
+*/
+
+class NymphView [ width = 5, height = 5, cornerRadius = 2.5,
+    ready: number = { app.field.readiness(:@, app.t) },
+    at: Point = { app.tube.nymphAt(:lane ?? 0, classroot.ready) },
+    x = { at.x - 2.5 },
+    y = { at.y - 2.5 },
+    opacity = { 0.25 + 0.75 * ready },
+    fill = { provided("theme").nymph }
+    ]
+
+
+class StarView [ width = 3, height = 3, cornerRadius = 1.5, pivotX = 1.5, pivotY = 1.5,
+    near: number = { fract(:phase + (app.t - app.fallStart) * 0.55) },      // 0 far off, 1 going past
+    z: number = { 1.02 - near },
+    x = { app.tube.cx + Math.cos(:angle) * :out * app.tube.radius * 0.18 / z },
+    y = { app.tube.cy + Math.sin(:angle) * :out * app.tube.radius * 0.18 / z },
+    scale = { 0.6 + near * 1.6 },
+    opacity = { near * app.starsShown },
+    fill = { [provided("theme").web, provided("theme").claw, provided("theme").pulsar, provided("theme").flipper][rowIndex % 4] }
+    ]
+
+
+/*
+## The claw
+
+The player. Its lane is the sprung `app.clawLane`, so a spin glides from lane to
+lane; its depth leaves the rim only in the dive. The shape is its own class
+because the spare lives in the score panel are the same mark.
+*/
+
+class ClawMark [ width = 40, height = 40,
+    draw(d: Draw) {
+        glowPen(d, provided("theme").claw, 2.4)
+        d.beginPath()
+        d.moveTo(0, 26)
+        d.lineTo(7, 12)
+        d.lineTo(20, 18)
+        d.lineTo(33, 12)
+        d.lineTo(40, 26)
+        d.lineTo(31, 18)
+        d.lineTo(20, 23)
+        d.lineTo(9, 18)
+        d.closePath()
+        d.stroke()
+        }
+    ]
+
+
+class Claw extends Sprite [
+    laneAt = { app.clawLane },
+    depth = { app.clawDepth },
+    opacity = 1,
+    mark: ClawMark [ ]
+    ]
+
+
+/*
+## Lines along a lane
+
+A straight line down the middle of a lane, between two depths: a thin view
+whose position, length and angle are constraints over the two projected ends.
+No drawing at all. A spike is one; so is a pulsar's live lane.
+*/
+
+class Beam [ height = 2, pivotX = 0, pivotY = 1,
+    lane: number = 0,
+    near: number = 1,              // the depth it reaches up to; it starts at the far end
+    a: Spot = { app.tube.at(classroot.lane, 0) },
+    b: Spot = { app.tube.at(classroot.lane, classroot.near) },
+    x = { a.x },
+    y = { a.y - 1 },
+    width = { Math.hypot(b.x - a.x, b.y - a.y) },
+    rotation = { Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI }
+    ]
+
+
+class SpikeView extends Beam [
+    lane = :lane,
+    near = { app.field.spikeHeight(:@, app.t) },
+    visible = { near > 0.005 },
+    fill = { provided("theme").spike },
+    shadow = { shadow(0, 0, 6, provided("theme").spike) }
+    ]
+
+
+class PulseBeam extends Beam [
+    lane = { app.field.laneNow(:@, app.t) },
+    near = { app.tube.nearDepth() },
+    visible = { app.field.pulsing(:@, app.t) },
+    opacity = 0.7,
+    fill = { provided("theme").pulsar },
+    shadow = { shadow(0, 0, 8, provided("theme").pulsar) }
+    ]

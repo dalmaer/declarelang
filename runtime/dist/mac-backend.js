@@ -126,13 +126,15 @@ export function peekOps() { return JSON.stringify(ops).length; }
 export function flushOps() {
     payOwedDrawings(); // before the flag drops: its DRAW ops ride this flush
     flushScheduled = false;
-    // LAYOUT HAS SETTLED — re-clamp every scroller before the ops cross. An
-    // empty buffer means nothing moved, so there is nothing to re-clamp — and a
-    // request held for a box changing in the same update (scrollToY's wantY) has
-    // no such change to wait for: it is spent, or a LATER change of the box (a
-    // pane shrinking long after a scroll to the end) would land it, dragging the
-    // offset to an end the program asked for frames ago.
-    if (ops.length === 0) {
+    // LAYOUT HAS SETTLED — re-clamp every scroller before the ops cross. Nothing
+    // to send — no ops, and no geometry records (geometry rides its own buffer,
+    // emitGeom, so a frame that only moves things has records and no ops) — means
+    // nothing moved, so there is nothing to re-clamp — and a request held for a
+    // box changing in the same update (scrollToY's wantY) has no such change to
+    // wait for: it is spent, or a LATER change of the box (a pane shrinking long
+    // after a scroll to the end) would land it, dragging the offset to an end the
+    // program asked for frames ago.
+    if (ops.length === 0 && geomN === 0) {
         for (const sc of scrollers)
             sc.wantY = null;
         return;

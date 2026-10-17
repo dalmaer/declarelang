@@ -1,0 +1,58 @@
+/*
+# The sound board
+
+The arcade's twelve sounds, recorded from its board and already mixed against
+one another, so each plays at its own level. The board has eight voices: a
+sound started on a voice cuts off whatever that voice was playing, which is
+why the pulse, the fall down the tube and the fall through space share one —
+and why `pulseOff`, which is nearly silent, exists: it cuts the pulse.
+
+The game calls `cue(name)`; nothing plays in the attract mode or the demo.
+While the game is paused every clip is muted, and a new life hushes the first
+four voices (the death, the explosions, the shots, the bonus).
+*/
+
+class Clip extends Audio [ inMemory = true,
+    sound: string = "",            // the game's name for it
+    voice: number = 0,
+    source = { "sounds/" + sound + ".m4a" }
+    ]
+
+
+class SoundBoard [ width = 0, height = 0,
+    quiet: boolean = false,        // muted by the player, or while paused
+
+    death: Clip [ sound = "death", voice = 1, muted = { classroot.quiet } ],
+    countdown: Clip [ sound = "countdown", voice = 1, muted = { classroot.quiet } ],
+    explosion: Clip [ sound = "explosion", voice = 2, muted = { classroot.quiet } ],
+    fire: Clip [ sound = "fire", voice = 3, muted = { classroot.quiet } ],
+    bonus: Clip [ sound = "bonus", voice = 4, muted = { classroot.quiet } ],
+    click: Clip [ sound = "click", voice = 5, muted = { classroot.quiet } ],
+    pulseOn: Clip [ sound = "pulseOn", voice = 6, muted = { classroot.quiet } ],
+    pulseOff: Clip [ sound = "pulseOff", voice = 6, muted = { classroot.quiet } ],
+    fallTube: Clip [ sound = "fallTube", voice = 6, muted = { classroot.quiet } ],
+    fallSpace: Clip [ sound = "fallSpace", voice = 6, muted = { classroot.quiet } ],
+    spikeHit: Clip [ sound = "spikeHit", voice = 7, muted = { classroot.quiet } ],
+    enemyShot: Clip [ sound = "enemyShot", voice = 8, muted = { classroot.quiet } ],
+
+    clips() -> Clip[] {
+        return [death, countdown, explosion, fire, bonus, click, pulseOn, pulseOff, fallTube, fallSpace, spikeHit, enemyShot]
+        },
+
+    // Start a sound on its voice, cutting off what that voice was playing.
+
+    cue(name: string) {
+        const clip = this.clips().find((c) => c.sound == name)
+        if (clip == null) return
+        for (const c of this.clips()) if (c.voice == clip.voice && c.playing) c.playing = false
+        clip.play()
+        },
+
+    // A new life: the first four voices fall silent.
+
+    hush() { for (const c of this.clips()) if (c.voice <= 4 && c.playing) c.playing = false },
+
+    // Everything stops (the game is over, or the demo begins).
+
+    stopAll() { for (const c of this.clips()) if (c.playing) c.playing = false }
+    ]

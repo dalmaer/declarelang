@@ -1,0 +1,96 @@
+/*
+## The machine
+
+What the arcade's chips do that is not a rule of the game. The game asks the machine for
+random numbers, and the machine answers as the arcade's two POKEY sound chips do.
+
+Each POKEY holds a 17-bit noise counter that steps once for every cycle of the processor, so
+what a read finds depends on the very cycle it happens on. Played live, the machine keeps the
+processor's time from an estimate of how long the game's work takes, and reads the counter
+there. Checked against a recording, it hands back the arcade's own numbers in the order they
+were drawn instead (see the port's tests/check.mjs). The rules never
+know which.
+
+Holding a chip in reset holds its counter still at all ones. Whenever the game stops and
+restarts the chips (at power-on and for each new life) it reads each one six times while
+they are held, to see that they really are: a check that changes nothing.
+*/
+
+script {
+    // The 17-bit polynomial counter, one bit a cycle, coming round again every 131,071 cycles:
+    // a read takes eight bits of it. Every read it can give is worked out once, here.
+    const NOISE: Uint8Array = (() => {
+        const t = new Uint8Array(131071)
+        let n = 0x1ffff
+        for (let i = 0; i < 131071; i++) {
+            t[i] = (n >> 8) & 0xff
+            n = ((n >> 1) | (((n ^ (n >> 5)) & 1) << 16)) & 0x1ffff
+            }
+        return t
+        })()
+    function noiseAfter(cycles: number): number { return NOISE[cycles % 131071] }
+    }
+
+class Machine extends Node [
+    cycles: number = 0,                 // processor cycles since the chips last restarted
+
+    // a random number from one of the two chips
+
+    random(chip: 1 | 2) -> number {
+        if (replaying) return this.played(chip)
+        cycles = cycles + 97
+        return noiseAfter(cycles + (chip == 2 ? 65536 : 0))
+        },
+
+    // The chips stop and start again, and each is read six times while held.
+
+    restartChips() {
+        for (let i = 0; i < 6; i++) { this.held(1); this.held(2) }
+        cycles = 0
+        },
+
+    // How long a frame lasts, in ticks of the 246 Hz interrupt. The main loop starts a frame
+    // once nine ticks have passed, or when the last frame's work is done if that takes longer.
+    // Measured on MAME: play frames are nine ticks (one in a hundred is ten), while flying into
+    // a new well the arcade works the whole well out again every frame, and frames average 10.6
+    // ticks with the well far away, easing to 9.4 as it arrives. The fractions add up, so
+    // frames come out nine, ten or eleven ticks long.
+
+    tick: number = { 4096 * 12 / 12096000 },        // seconds
+    frameTicks: number = 9,                         // the frame just run
+    spareTicks: number = 0,
+
+    frameDone(heavy: number) {
+        const mean = 9 + heavy
+        spareTicks = spareTicks + mean
+        const n = Math.floor(spareTicks)
+        spareTicks = spareTicks - n
+        frameTicks = Math.max(9, n)
+        cycles = cycles + frameTicks * 6144
+        },
+
+    // ── for checking against a recording ──
+
+    // The conformance tests (the port's tests/check.mjs) set these: the machine
+    // then hands back a recording's draws instead of reading its counters, and notes where
+    // each frame's rules ended. Played live, none of it is used.
+
+    replaying: boolean = false,
+    recorded: number[] = [],            // a recording's draws, chip and number: 0x100 · chip + number
+    nextRecorded: number = 0,
+    mismatches: number = 0,             // draws asked of the other chip than the recording's
+    atFrameEnd: number = 0,             // where the frame's rules ended and its picture began, in the draws
+
+    played(chip: 1 | 2) -> number {
+        const r = recorded[nextRecorded] ?? 0
+        nextRecorded = nextRecorded + 1
+        if (r >> 8 != chip) mismatches = mismatches + 1
+        return r & 0xff
+        },
+
+    held(chip: 1 | 2) {
+        if (replaying) this.played(chip)
+        },
+
+    frameEnds() { atFrameEnd = nextRecorded }
+    ]

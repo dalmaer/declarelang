@@ -5,6 +5,11 @@ saying what it is and what to notice. The six that show a whole program's shape 
 listed in [`skill/SKILL.md`](../skill/SKILL.md): tracker, weather, calendar, birds,
 marketmap and desktop.
 
+`games/` holds four games: faithful ports of Asteroids, Stargate and Tempest, each
+reproducing the arcade frame by frame, and Vortex, Tempest written afresh as a
+Declare program. A folder like `games/` with no program of its own only groups the programs
+below it; see `docs/system-design/requests.md` § The directory-program rule.
+
 Two groups here are not models to copy. `docs`, `homepage` and `architecture` are
 Declare's own site. The three `lzx-*` programs are ports of OpenLaszlo samples from
 2003, faithful to the originals' look and behavior.

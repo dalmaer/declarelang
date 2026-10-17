@@ -134,7 +134,7 @@ clicking the Asteroids window focuses its island, and the game gets the keys.
 | Runtime `focus.ts` | Answers the keyboard program (Rule 1's three cases). Focusing an island whose program already holds focus — its tenant's, or one nested in it — leaves focus where it is, as focusing an iframe keeps the focus inside it |
 | Runtime `island.ts` | The tenant link records the island's tenant and the tenant's island, the path between the two trees |
 | `apps/desktop/desktop.declare` | However a window comes to the front, it takes the keyboard (`WinManager` tracks `frontWin`; `activate` too): a window that runs a program focuses its island; any other window lets go of focus held outside it; with no window in front, focus is released to the desktop |
-| `apps/asteroids/asteroids.declare` | The App is `focusable` and takes focus on a press, so it takes the keyboard in any host |
+| `apps/games/asteroids/asteroids.declare` | The App is `focusable` and takes focus on a press, so it takes the keyboard in any host |
 | The other hosts | The docs previews, the homepage's article and live demos, and the viewer: each island is `focusable` and focused on a press |
 | Reference prose | `Keys`, `Keys.isDown`, `AppIsland`, and the guide's keyboard section |
 

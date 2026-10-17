@@ -1,0 +1,136 @@
+/*
+# Tempest
+
+Atari's 1981 arcade game: the same wells, enemies, rules and patterns, checked against the
+arcade frame by frame as MAME emulates it.
+
+The shape to notice:
+
+- **The game is a dataset with its own rules.** `Game` (game.declare) holds what is in the
+  well as records, and moves it on a frame at a time; the enemies' own rules are
+  enemies.declare. The sixteen wells are well.declare; each wave's difficulty is a record in
+  waves.json.
+- **The arcade's chips are kept apart.** Random numbers come from the machine
+  (machine.declare), which answers as the arcade's sound chips do.
+- **The screen is views of the records.** The well, the claw, each enemy by its kind, the
+  shots, explosions, spikes, nymphs and stars, the panel and the pages between games are each
+  a view (screen.declare), drawn as lines of light (figures.declare) at the place and size the
+  camera gives it (camera.declare: the perspective and the beam), in the colors and with the
+  memory of the scene (scene.declare: what the screen remembers from frame to frame). The
+  pictures, traced from the arcade's vector ROM, are pictures.json.
+  The monitor works in the arcade's pixels and is scaled to the window.
+
+Keys: ← → or A S turn, Space or Return fire, ↓, Z or / superzapper, Return or 1 start, Escape pause.
+
+*This program is new code, written in Declare. It recreates the behavior of Tempest, Atari's
+1981 arcade game, whose original program was written in 6502 assembly language (with Atari's
+"Math Box" for its perspective), and reproduces its look and sound as closely as it can, frame
+by frame. Tempest, its name, artwork, sounds and visual design belong to Atari, Inc. or its
+successors; they are used here only to illustrate and test the Declare language, and no claim
+is made to them. The MIT license of this repository covers this code, not the original game's
+name, artwork or sounds. If you hold rights in this material and object to its being posted
+here, please open an issue on this repository on GitHub, or message me there, and I will remove
+it.*
+*/
+
+include [ "machine.declare", "well.declare", "game.declare", "enemies.declare", "camera.declare", "scene.declare", "figures.declare", "screen.declare", "sound.declare" ]
+
+defaultFlags [ render = canvas ]
+
+App [ fill = black,
+    wavesData: DataSource [ url = "waves.json", auto = true, schema = [ waves[]: Wave ] ],
+    picturesData: DataSource [ url = "pictures.json", auto = true ],
+    ready: boolean = { app.wavesData.loaded && app.picturesData.loaded },
+    paused: boolean = false,
+
+    machine: Machine [ ],
+    well: Well [ ],
+    game: Game [ machine = { app.machine }, well = { app.well }, waves = { app.wavesData.value?.waves ?? [] },
+        pictureFrame(field: Playfield) { app.scene.advance(field) },
+        pictureCleared() { app.scene.clear() }
+        ] { {
+        "claw": { "lane": 0, "position": 0, "depth": 0, "depthFraction": 0, "alive": true, "caught": false,
+            "dropping": false, "fallSpeed": 0 },
+        "enemies": [], "nymphs": [], "shots": [], "enemyShots": [], "blasts": [], "spikes": [], "spikeMarks": [], "stars": []
+        } },
+
+    camera: Camera [ game = { app.game }, well = { app.well }, pictures = { app.picturesData.value ?? {} } ],
+    scene: Scene [ game = { app.game }, well = { app.well }, camera = { app.camera } ],
+    screen: Monitor [ paused = { app.paused } ],
+    speaker: SoundBoard [ game = { app.game }, paused = { app.paused } ],
+
+    // The arcade's controls, on the keyboard. The spinner turns six steps a frame (a lane is
+    // sixteen) while ← or → is held; Return also starts a game, as the coin and the start
+    // button together.
+
+    // A key pressed and let go between two of the game's frames still counts as pressed.
+
+    // Escape pauses a game; any key goes on with it, and that key also counts as pressed, so a
+    // turn or a shot held to go on carries on at once (as in Asteroids and Stargate).
+
+    tapped: string[] = [],
+    keys: Keys [
+        onKeyDown(e: KeyEvent) {
+            if (e.repeat || e.meta || e.ctrl || e.alt) return
+            if (app.paused) { app.paused = false; if (e.key == "Escape") return }
+            else if (e.key == "Escape") { if (app.game.playing) app.paused = true; return }
+            app.tapped = [...app.tapped, e.code]
+            }
+        ],
+
+    // the controls for one of the game's frames, taking the taps that frame has used
+
+    takeControls() -> Controls {
+        const tapped = app.tapped
+        app.tapped = []
+        const down = (...keys: string[]) => keys.some((k) => Keys.isDown(k) || tapped.includes(k))
+        const pressed = (...keys: string[]) => keys.some((k) => tapped.includes(k))
+        let turn = (down("ArrowRight", "KeyS") ? 6 : 0) - (down("ArrowLeft", "KeyA") ? 6 : 0)
+        if (app.game.phase == "choosing") turn = this.chooseTurn(Math.sign(turn), pressed("ArrowRight", "KeyS", "ArrowLeft", "KeyA"))
+        else wantChoice = -1
+        return { turn, fire: down("Space", "Enter"), zap: down("ArrowDown", "KeyZ", "Slash"), start: down("Enter", "Digit1") }
+        },
+
+    // On the "rate yourself" screen the keys step the choice a column at a time — once for a
+    // press, and again every five frames while a key is held, after eight — where the arcade's
+    // knob needs most of a turn for a column. The keys still only turn the spinner: as far as
+    // it takes, a frame at a time, to bring the arcade's own choice to the column wanted.
+
+    wantChoice: number = -1,
+    heldFor: number = 0,
+
+    chooseTurn(dir: number, fresh: boolean) -> number {
+        const g = app.game
+        if (wantChoice < 0) wantChoice = g.choice
+        if (dir == 0) heldFor = 0
+        else {
+            heldFor = fresh ? 0 : heldFor + 1
+            if (fresh || (heldFor >= 8 && (heldFor - 8) % 5 == 0))
+                wantChoice = Math.max(0, Math.min(g.highestChoice, wantChoice + dir))
+            }
+        return wantChoice > g.choice ? 31 : wantChoice < g.choice ? -31 : 0
+        },
+
+    // The arcade's frame is nine or more ticks of its 246 Hz interrupt (the machine says how
+    // many: about 36.6 ms, 27 a second, in play), not a whole number of a display's frames:
+    // time banks between display frames, and the game moves on each time the last frame's
+    // length has gathered.
+
+    // The machine powers on at the first tick after the data has arrived, not when the App is
+    // built: the conformance tests (the port's tests/check.mjs) set up the machine to replay a
+    // recording, which stops the clock, set `started` themselves and power it on, and every
+    // frame after that is theirs to step.
+
+    started: boolean = false,
+    clock: Time [ tick = frame, running = { app.ready && !app.paused && !app.machine.replaying },
+        banked: number = 0,
+        onTick(dt: number) {
+            if (!app.started) { app.game.powerOn(); app.started = true }
+            banked = Math.min(banked + dt, 0.15)
+            while (banked >= app.machine.frameTicks * app.machine.tick) {
+                banked = banked - app.machine.frameTicks * app.machine.tick
+                app.game.step(app.takeControls())
+                }
+            }
+        ]
+    ]

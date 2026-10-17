@@ -1,0 +1,207 @@
+/*
+## What the screen is drawn with
+
+Everything on Tempest's screen is lines of light. `Lit` is a view drawn as such lines, the way
+the arcade's color vector monitor shows them (after the Asteroids port's): a soft bloom in the
+line's color round a bright core of the same color. The arcade sets each line's brightness,
+0 to 15, and the picture follows it as the tube does: a brighter line is brighter, wider and
+blooms further, so a near tanker (14) stands out and a far one (10) is dimmer. A dot is the
+beam resting on one spot, so it is round, and blooms more than a line.
+
+Every view here works in the screen's pixels (scene.declare), and reads two values from the
+screen that holds it: `palette`, each color's role as 0xRRGGBB, and `px`, how much of the
+screen one of the display's own pixels is, which keeps the lines' widths in the display's
+pixels whatever the window's size.
+
+- `Figure` is one of the arcade's pictures, placed at a point and drawn at a size.
+- `ArcadeText` is a line of the arcade's letters; `Message` one of the arcade's own lines.
+- `LaneFigure` is a figure drawn on a lane: the claw, a flipper, a pulsar.
+*/
+
+class Lit [
+    traced: Trace[] = { [] },
+
+    draw(d: Draw) {
+        const palette = provided("palette") as Record<string, number>
+        const px = provided("px") as number
+        const groups = new Map<string, Trace[]>()
+        for (const t of traced) {
+            const key = `${t.ink}:${t.i}:${t.p.length == 2 ? 1 : 0}`
+            const g = groups.get(key)
+            if (g) g.push(t); else groups.set(key, [t])
+            }
+        d.lineCap = "round"
+        d.lineJoin = "round"
+        for (const [key, group] of groups) {
+            const [ink, bright, dot] = key.split(":")
+            let rgb = palette[ink] ?? 0xffffff
+            if (rgb == 0x0000f3) rgb = 0x1e3cf3                         // the blue phosphor is lighter than a screen's pure blue
+            const r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255
+            const color = `rgb(${r},${g},${b})`
+            // a color tube's beam keeps its phosphor's color: the core is only lifted a little
+            const lift = (v: number) => (v + 0.12 * (255 - v)) | 0
+            const core = `rgb(${lift(r)},${lift(g)},${lift(b)})`
+            const level = Number(bright) / 15
+            d.shadowColor = color
+            if (dot == "1") {
+                const light = Number(bright) * 64
+                const spot = (radius: number) => {
+                    d.beginPath()
+                    for (const t of group) { d.moveTo(t.p[0] + radius, t.p[1]); d.arc(t.p[0], t.p[1], radius, 0, 6.2832) }
+                    }
+                spot((1 + 2.5 * Math.min(1, light / 2000)) * px)
+                d.globalAlpha = Math.min(0.85, light / 1500)
+                d.shadowBlur = 8
+                d.fillStyle = color
+                d.fill()
+                spot((0.8 + 0.8 * Math.min(1, light / 1000)) * px)
+                d.globalAlpha = 1 - Math.exp(-light / 150)
+                d.shadowBlur = 2
+                d.fillStyle = core
+                d.fill()
+                continue
+                }
+            d.beginPath()
+            for (const t of group) {
+                d.moveTo(t.p[0], t.p[1])
+                for (let k = 2; k < t.p.length; k += 2) d.lineTo(t.p[k], t.p[k + 1])
+                }
+            d.globalAlpha = 0.5 * level * level
+            d.shadowBlur = 2 + 4 * level
+            d.strokeStyle = color
+            d.lineWidth = (1.4 + 1.6 * level) * px
+            d.stroke()
+            d.globalAlpha = level
+            d.shadowBlur = 0.5 * level
+            d.strokeStyle = core
+            d.lineWidth = (0.9 + 0.6 * level) * px
+            d.stroke()
+            }
+        },
+
+    // its lines, each a segment (a dot's two ends the same), where the view's parent has them:
+    // for the port's conformance tests, which set them beside the arcade's
+
+    lines() -> object[] {
+        const palette = provided("palette") as Record<string, number>
+        const out: object[] = []
+        for (const t of traced) {
+            const rgb = palette[t.ink] ?? 0xffffff
+            const ends = t.p.length == 2 ? [t.p[0], t.p[1], t.p[0], t.p[1]] : t.p
+            for (let k = 0; k + 3 < ends.length; k += 2)
+                out.push({ x0: x + ends[k], y0: y + ends[k + 1], x1: x + ends[k + 2], y1: y + ends[k + 3], rgb, i: t.i })
+            }
+        return out
+        }
+    ]
+
+
+// One of the arcade's pictures, placed at a point of the screen and drawn at a size (pixels
+// to a unit), in a color and a brightness wherever it does not set its own. Its box reaches as
+// far round the point as the picture can at full size.
+
+class Figure extends Lit [
+    picture: string = "",
+    cx: number = 0,
+    cy: number = 0,
+    size: number = 1,
+    ink: string = "white",
+    brightness: number = 12,
+    reach: number = { app.camera.reach(picture) + 8 },
+    x = { cx - reach },
+    y = { cy - reach },
+    width = { 2 * reach },
+    height = { 2 * reach },
+    traced = { app.camera.trace(picture, size, ink, brightness, reach, reach) }
+    ]
+
+
+// A line of the arcade's letters, from the start of its baseline (or, aligned right, to its
+// end): large, or small, in a color. The arcade has no keyboard, so its letters have no arrows or slash: those, after the
+// Asteroids port's, are drawn in its strokes on its grid of 16 × 24.
+
+class ArcadeText extends Lit [
+    text: string = "",
+    cx: number = 0,
+    cy: number = 0,
+    large: boolean = false,
+    align: "left" | "right" = "left",
+    ink: string = "text",
+    brightness: number = -1,            // every stroke as bright as this, if set (the letters are 12)
+    size: number = { large ? LARGE : SMALL },
+    margin: number = 6,
+    x = { (align == "right" ? cx - 24 * size * text.length : cx) - margin },
+    y = { cy - 24 * size - margin },
+    width = { 24 * size * text.length + 2 * margin },
+    height = { 24 * size + 2 * margin },
+    keys: Record<string, PictureArt> = { {
+        "←": { strokes: [{ i: 12, p: [0, 12, 0, 0, 16, 12, 0, 0] }, { i: 12, p: [8, 20, 0, 0, 0, 12, 0, 0, 8, 4, 0, 0] }], end: [24, 0, 0, 0] },
+        "→": { strokes: [{ i: 12, p: [0, 12, 0, 0, 16, 12, 0, 0] }, { i: 12, p: [8, 20, 0, 0, 16, 12, 0, 0, 8, 4, 0, 0] }], end: [24, 0, 0, 0] },
+        "↓": { strokes: [{ i: 12, p: [8, 22, 0, 0, 8, 2, 0, 0] }, { i: 12, p: [0, 10, 0, 0, 8, 2, 0, 0, 16, 10, 0, 0] }], end: [24, 0, 0, 0] },
+        "/": { strokes: [{ i: 12, p: [0, 0, 0, 0, 16, 24, 0, 0] }], end: [24, 0, 0, 0] } } },
+    traced = { this.spell(text, size, ink, brightness) },
+
+    spell(s: string, size: number, ink: string, bright: number) -> Trace[] {
+        const out: Trace[] = []
+        Array.from(s).forEach((ch, k) => {
+            const art = keys[ch] ?? app.camera.pictures[this.letter(ch)]
+            out.push(...tracePicture(art, size, ink, 12, margin + 24 * k * size, margin + 24 * size))
+            })
+        return bright < 0 ? out : out.map((t) => ({ ...t, i: bright }))
+        },
+
+    // the picture of a letter (the arcade has no nought: an O stands for it)
+
+    letter(ch: string) -> string {
+        if (ch == " ") return "char.space"
+        if (ch == "0") return "char.O"
+        if (ch == "©") return "copyright"
+        if (ch == "-") return "dash"
+        return "char." + ch
+        }
+    ]
+
+
+// One of the arcade's lines of text (see Monitor's `messages`): its words, where it starts, its
+// color and size; `then` follows on the same line (a number). `row` moves it up or down.
+
+schema MessageText [ text: string, x: number, y: number, color: string, large?: boolean ]
+
+class Message extends ArcadeText [
+    says: string = "",
+    then: string = "",
+    m: MessageText = { (provided("messages") as Record<string, MessageText>)[says] ?? { text: "", x: 0, y: 0, color: "text" } },
+    row: number = { m.y },
+    text = { m.text + then },
+    cx = { 290 + m.x * 4 * SMALL },
+    cy = { 285 - row * 4 * SMALL },
+    large = { m.large ?? false },
+    ink = { m.color }
+    ]
+
+
+// A figure drawn on a lane (Scene.between): its strokes, in the screen's pixels, and where
+// they start. It sits in a box round that point as large as such a figure can reach.
+
+class LaneFigure extends Lit [
+    ink: string = "flipper",
+    shape: LaneLines = { { x: -1000, y: -1000, p: [] } },
+    x = { shape.x - 140 },
+    y = { shape.y - 140 },
+    width = 280,
+    height = 280,
+    traced = { shape.p.map((p) => ({ ink, i: 12, p: p.map((v, k) => v - (k % 2 == 0 ? shape.x : shape.y) + 140) })) }
+    ]
+
+
+// n as `places` figures, leading noughts left blank (the last always shown)
+
+script {
+    function digits(n: number, places: number): string {
+        let lead = true
+        return Array.from(String(n).padStart(places, "0").slice(0, places)).map((c, k) => {
+            if (c != "0" || k == places - 1) lead = false
+            return lead ? " " : c
+            }).join("")
+        }
+    }

@@ -329,6 +329,10 @@ export interface Program {
      *  production bundle substitutes with a stub. Never set by the parser:
      *  parsing proves syntax, not types. */
     trusted?: boolean;
+    /** The `defaultFlags [ … ]` declaration: the program's own defaults for the
+     *  platform's flags, which a host reads before it builds the app. Absent
+     *  when the program declares none; one per program, across its `include`s. */
+    flags?: Flags;
     /** Stamped `true` once every attribute that its slot's type wires carries the
      *  decision (route.ts): the compiler routes the program it checked, and
      *  instantiate routes any other program before building it. */
@@ -355,6 +359,23 @@ export interface Ship {
  *  state its block before or after the root, and each included class may
  *  bring its own. */
 export declare function mergeShip(a: Ship | undefined, b: Ship | undefined): Ship | undefined;
+/** `defaultFlags [ … ]` — the program's defaults for the platform's flags (the
+ *  registry in compiler/src/flags.ts): each is what the program gets when the
+ *  request, the `declarec` command or the outer program names no value of its
+ *  own. `render` is the renderer a web host mounts it on, `kernel` the
+ *  reactive kernel a build carries, `crawler` whether a build or a run page
+ *  embeds the crawled document. A program running as an island takes the
+ *  outer program's; the Mac host runs its own renderer and kernel. */
+export interface Flags {
+    render?: "dom" | "canvas";
+    kernel?: "wasm" | "js";
+    crawler?: boolean;
+}
+/** Each member's words — the registry's values a program may choose (`mac`
+ *  is a host asking for the compiled program, never a program's default). */
+export declare const FLAG_WORDS: {
+    readonly [K in keyof Flags]-?: readonly string[];
+};
 /** An included file (composition.md §1): a library of top-level declarations
  *  — classes, themes, styles, and its own `include`s — with NO root. It is
  *  not a Program: it never declares an App, so it has no `root`. */
@@ -375,6 +396,10 @@ export interface Library {
     /** …and its own `ship [ … ]`, folded the same way (a class that reads
      *  a file or mounts a program says so where it lives). */
     ship?: Ship;
+    /** …and the program's `defaultFlags [ … ]`, when this file is where it is stated,
+     *  with its position: a program states its flags once, in any of its files. */
+    flags?: Flags;
+    flagsPos?: Pos;
     /** A library may declare its own `script { … }` helpers; the source-merge
      *  folds these into the program's blocks, in include order. */
     scripts: ScriptBlock[];
@@ -387,6 +412,8 @@ export interface Library {
  *  entry tools and tests use for pieces; a whole source goes through
  *  parseProgram (which build()/render() call). */
 export declare function parse(source: string): Element;
+/** A program states its flags once, in whichever of its files. */
+export declare const ONE_FLAGS = "a program has one defaultFlags block, and this is a second";
 /** Parse a whole Declare source: `include`s and top-level declarations
  *  (classes, themes, style bundles), the root instance, and — ruled
  *  2026-08-06 — declarations may FOLLOW the root too, in any order. The

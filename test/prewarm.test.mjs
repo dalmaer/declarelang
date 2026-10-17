@@ -184,6 +184,8 @@ await test("prewarmedEntry discriminates on props — a canvas page is a differe
   assert.ok(prewarmedEntry("apps/calendar/calendar.declare", { render: "dom" }));
   assert.equal(prewarmedEntry("apps/calendar/calendar.declare", { render: "canvas" }), null);
   assert.equal(prewarmedEntry("apps/nope/nope.declare", { render: "dom" }), null);
+  // a request that names no renderer takes the build the list keeps, whatever its renderer
+  assert.equal(prewarmedEntry("apps/games/asteroids/asteroids.declare")?.props.render, "canvas");
 });
 
 // FRESHNESS — the check the browser used to run on every load, kept here where it

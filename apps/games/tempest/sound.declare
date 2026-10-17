@@ -1,0 +1,48 @@
+// The sound board: each of the arcade's sounds, recorded from MAME's emulation of its two POKEY
+// chips, played when the game starts it. The arcade has eight voices, and a sound started on a
+// voice cuts off whatever was playing there (the pulse, the fall down the tube and the fall
+// through space share one). A new life silences the first four. The attract mode is silent.
+
+class Clip extends Audio [ inMemory = true,
+    sound: string = "",                 // the game's name for it
+    voice: number = 0
+    ]
+
+
+class SoundBoard [ width = 0, height = 0,
+    game: Game,
+    paused: boolean = false,
+
+    death: Clip [ source = "sounds/death.m4a", sound = "death", voice = 1 ],
+    countdown: Clip [ source = "sounds/countdown.m4a", sound = "countdown", voice = 1 ],
+    explosion: Clip [ source = "sounds/explosion.m4a", sound = "explosion", voice = 2 ],
+    fire: Clip [ source = "sounds/fire.m4a", sound = "fire", voice = 3 ],
+    bonus: Clip [ source = "sounds/bonus.m4a", sound = "bonus", voice = 4 ],
+    click: Clip [ source = "sounds/click.m4a", sound = "click", voice = 5 ],
+    pulseOn: Clip [ source = "sounds/pulseOn.m4a", sound = "pulseOn", voice = 6 ],
+    pulseOff: Clip [ source = "sounds/pulseOff.m4a", sound = "pulseOff", voice = 6 ],
+    fallTube: Clip [ source = "sounds/fallTube.m4a", sound = "fallTube", voice = 6 ],
+    fallSpace: Clip [ source = "sounds/fallSpace.m4a", sound = "fallSpace", voice = 6 ],
+    spikeHit: Clip [ source = "sounds/spikeHit.m4a", sound = "spikeHit", voice = 7 ],
+    enemyShot: Clip [ source = "sounds/enemyShot.m4a", sound = "enemyShot", voice = 8 ],
+
+    clips() -> Clip[] { return [death, countdown, explosion, fire, bonus, click, pulseOn, pulseOff, fallTube, fallSpace, spikeHit, enemyShot] },
+
+    // each frame's sounds, as the game started them
+
+    cued: number = { game.soundFrame },
+    played: number = 0,                 // the last frame whose sounds were started
+    trackChanges = ["cued", "paused"],
+    onChange() {
+        if (paused) { for (const c of this.clips()) c.playing = false; return }
+        if (cued == played) return      // going on after a pause starts nothing again
+        played = cued
+        for (const name of game.sounds) {
+            if (name == "hush") { for (const c of this.clips()) if (c.voice <= 4) c.playing = false; continue }
+            const clip = this.clips().find((c) => c.sound == name)
+            if (clip == null) continue
+            for (const c of this.clips()) if (c.voice == clip.voice) c.playing = false
+            clip.play()
+            }
+        }
+    ]

@@ -47,8 +47,8 @@ export const PREWARMED = [
   // it is for the INDEXED surfaces.
   { main: "apps/weather/weather.declare", props: { render: "dom" } },
   { main: "apps/marketmap/marketmap.declare", props: { render: "dom" } },
-  { main: "apps/asteroids/asteroids.declare", props: { render: "dom" } },
-  { main: "apps/stargate/stargate.declare", props: { render: "dom" } },
+  { main: "apps/games/asteroids/asteroids.declare", props: { render: "canvas" } },
+  { main: "apps/games/stargate/stargate.declare", props: { render: "canvas" } },
   // off the menu, but the Desktop opens it as a window (a tenant resolves through
   // this same tier), so its first paint keeps the compiler-free path
   { main: "apps/birds/birds.declare", props: { render: "dom" } },
@@ -72,10 +72,14 @@ const BY_MAIN = new Map(PREWARMED.map((p) => [p.main, p]));
 
 /** Is there a committed build for this deploy-relative program? Answered from the
  *  list, with NO request — the whole point. `props` must match the artifact's,
- *  since a canvas-backend page and a dom-backend page are different builds. */
-export function prewarmedEntry(relMain, props = {}) {
+ *  since a canvas-backend page and a dom-backend page are different builds;
+ *  without `props` (a request that names no renderer) the entry is the build the
+ *  list keeps for that program, made with the renderer the program prefers. */
+export function prewarmedEntry(relMain, props) {
   const e = BY_MAIN.get(relMain);
   if (e === undefined) return null;
+  if (props === undefined) return e;              // the request names no renderer: the program's own build
+  props ??= {};
   const want = e.props ?? {};
   const keys = new Set([...Object.keys(want), ...Object.keys(props)]);
   for (const k of keys) if (want[k] !== props[k]) return null;

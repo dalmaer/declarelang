@@ -120,8 +120,10 @@ link, `my-apps/`, a mounted project).
 ### Cold directory URLs — the committed stub
 
 `…/apps/<name>/` — the directory-program form — is the address you publish, and it
-works on a **cold** static host: every program directory under `apps/` carries a
-generated `index.html` (`tools/internal/bake-app-stubs.mjs`), built from the same
+works on a **cold** static host: every program directory under `apps/`, at any depth
+(`apps/games/tempest/` as much as `apps/calendar/`; `tools/internal/program-dirs.mjs`),
+carries a generated `index.html` (`tools/internal/bake-app-stubs.mjs`) whose relative
+paths to the platform are counted from its own depth, built from the same
 shell as the run page both hosts serve (`browser/serve-core.js` — `stubPage()` and
 `runWrapper()` share one template, parameterized only by the script block). It
 differs from the run page exactly where coldness demands it: `main` is computed **at

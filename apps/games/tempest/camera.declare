@@ -1,0 +1,323 @@
+/*
+## The camera
+
+How a point of the well is seen: where it appears on the screen and how large a thing is at its
+depth, and the beam's way of drawing a line. Pure: it reads the game (where the eye is), the
+well and the pictures, and remembers nothing (the screen's memory is the Scene's).
+
+**The screen** is the arcade's, 580 pixels across and 570 down, the center at (290, 285). Places
+across the well and up it are measured in units, and the screen shows a unit as a fixed number
+of pixels at each size a thing can be drawn: 255/512 of a pixel for the well and the small
+letters, about one for the large ones, less the further down the well a thing is.
+
+**Perspective** is the arcade's, worked in whole numbers: a point at depth y appears at its
+offset from the eye × 256 / (y − the eye's depth), the quotient cut to sixteen bits, so a point
+lands on the very pixel it does on the arcade. A thing's size at its depth comes from the same
+division.
+
+**Lines are drawn as the arcade's beam travels.** The beam goes from point to point, and each
+leg lands on a grid of its own: a leg of more than 2048 units goes in steps of 8, one under
+1024 in steps of 4, and so on down. A line's end is where its legs added up, which can be a few
+pixels from where its point is: so the well, the spikes and the nymphs are worked out leg by
+leg (`legs`). The pictures (pictures.json) were traced the same way when they were made.
+
+*/
+
+script {
+    // a figure drawn on a lane: its polylines, in the screen's pixels, and where they start
+    type LaneLines = { x: number, y: number, p: number[][] }
+
+    // where a thing is seen: its place on the screen, its size there (pixels to a unit), and
+    // how bright it is drawn
+    type Seen = { x: number, y: number, size: number, bright: number }
+
+    // a size as the arcade's beam is set to draw at: a binary scale (each step halves it) and
+    // a linear one (256ths off the binary scale's size); sizeOf turns it into pixels to a unit
+    type Scale = { binary: number, linear: number }
+
+    // pixels to a unit at binary scale b and linear scale l: the sizes a thing can be drawn at
+    function sizeOf(b: number, l: number): number { return (255 - l) / 256 / 2 ** b }
+    const SMALL = sizeOf(1, 0)          // the well's size, and the small letters'
+    const LARGE = sizeOf(0, 0)
+
+    // A leg of the beam's travel, (dx, dy) units, as the grid it lands on has it: both doubled
+    // together until either would pass 2047, and then the last three bits dropped.
+    function leg(dx: number, dy: number): number[] {
+        let n = 0
+        while (n < 16 && Math.abs(dx * 2 ** n + 0.5) <= 2047.5 && Math.abs(dy * 2 ** n + 0.5) <= 2047.5) n = n + 1
+        const q = (v: number) => (Math.floor((v * 2 ** n) / 8) * 8) / 2 ** n
+        return [q(dx), q(dy)]
+        }
+
+    // The perspective's division: v·256 by d, keeping `steps` bits of the quotient, as the
+    // arcade's arithmetic does (a d of zero or below goes on regardless).
+    function divide(v: number, d: number, steps: number): number {
+        let t1 = 0, q = (v * 256) & 0xffff
+        const neg = (d & 0x8000) != 0
+        const t0 = neg ? (-d) & 0xffff : d & 0xffff
+        for (let i = 0; i < steps; i++) {
+            const t = (t1 - t0) & 0xffff
+            let bit = 0
+            if ((t & 0x8000) == 0) { t1 = t; bit = 1 }
+            t1 = ((t1 << 1) | (q >> 15)) & 0xffff
+            q = ((q << 1) & 0xffff) | bit
+            }
+        return neg ? (-q) & 0xffff : q
+        }
+
+    // The size for a thing `unit` from the eye at full size, at `distance`: the quotient, put
+    // as the two scales a size is set by.
+    function scaleFor(unit: number, distance: number): Scale {
+        const q = divide(unit, distance & 0xffff, 25)
+        let a = ((q >> 8) - 1) & 255
+        if (a == 0) a = 1
+        let lo = q & 255, b = 0, carry = 0
+        while (carry == 0) {
+            b = b + 1
+            carry = (a >> 7) & 1
+            a = ((a << 1) | (lo >> 7)) & 255
+            lo = (lo << 1) & 255
+            }
+        a = a >> 1
+        return { binary: b, linear: ((a ^ 0x7f) + 1) & 255 }
+        }
+
+    // the brightness for a size: the nearer (larger), the brighter
+    function brightFor(b: number): number { return Math.max(((b ^ 7) << 1) & 255, 0x0a) & 15 }
+
+    // A picture's strokes at a size, in a color and brightness wherever it does not set its
+    // own, drawn from a point (ox, oy) of the view.
+    function tracePicture(art: PictureArt | undefined, size: number, ink: string, bright: number, ox: number, oy: number): Trace[] {
+        if (art == null) return []
+        return art.strokes.map((s) => ({ ink: s.c ?? ink, i: s.i ?? bright,
+            p: s.p.flatMap((v, k) => k % 4 == 0 ? [ox + v * size + s.p[k + 2], oy - (s.p[k + 1] * size + s.p[k + 3])] : []) }))
+        }
+
+    // n eighths of a signed byte d, halving three times as the arcade does
+    function eighthsOf(d: number, n: number): number {
+        let a = 0
+        const v = byte(d)
+        for (let i = 0; i < 3; i++) {
+            if ((n >> i) & 1) a = (a + v) & 255
+            a = (a >> 1) | (a & 0x80)
+            }
+        return signed(a)
+        }
+
+    // A figure's line on the screen, along one axis (a 16-bit difference), as a magnitude of at
+    // most 255 and a sign: a lane wider than that is drawn on as if it were 255 wide. (Across,
+    // a span of exactly 256 back counts as 255.)
+    function spanOf(d: number, across: boolean): { m: number, neg: boolean } {
+        const hi = (d >> 8) & 255, lo = d & 255
+        if ((hi & 0x80) == 0) return { m: hi != 0 ? 0xff : lo, neg: false }
+        if (hi != 0xff) return { m: 0xff, neg: true }
+        const m = (-lo) & 255
+        return { m: across && m == 0 ? 0xff : m, neg: true }
+        }
+    }
+
+// a picture from pictures.json (see the port's tools/make-pictures.mjs)
+
+schema PictureStroke [ c?: string, i?: number, p[]: number ]
+schema PictureArt [ strokes[]: PictureStroke, end[]: number ]
+
+// what a view draws: polylines (or dots, of one point), each in a color and a brightness
+// (0–15), its points x, y, x, y… in the view's pixels
+
+schema Trace [ ink: string, i: number, p[]: number ]
+
+class Camera extends Node [
+    game: Game,
+    well: Well,
+    pictures: Record<string, PictureArt> = { {} },
+
+    // ── where things are ──
+
+    // A point of the well (x and z across it, 0 to 255, y its depth), in units from the center.
+
+    project(x: number, y: number, z: number) -> number[] { return this.projectFrom(x, y, z, game.eye, game.center) },
+
+    projectFrom(x: number, y: number, z: number, eye: number, center: number) -> number[] {
+        let d = (y - Math.floor(eye / 256)) & 0xffff
+        if (d & 0x8000) d = 1
+        const eyeHeight = well.shapes[well.id].eyeHeight
+        const offset = (v: number, by: number, base: number) => {
+            const q = divide(Math.abs(v - by), d, 16)
+            const r = v >= by ? base + q : base - q
+            return v >= by ? (r > 32767 ? 32767 : r) : (r < -32768 ? -32768 : r)
+            }
+        return [offset(x, 0x80, 0), offset(z, eyeHeight, signed16(Math.floor(center / 256)))]
+        },
+
+    // a point in units from the center, on the screen: the beam's one leg out to it
+
+    place(u: number[]) -> number[] {
+        const q = leg(u[0], u[1])
+        return [290 + q[0] * SMALL, 285 - q[1] * SMALL]
+        },
+
+    // The beam's travel from the center through points in units, at a size: where it reaches
+    // each point, leg by leg.
+
+    legs(points: number[][], size: number) -> number[][] {
+        let u = [0, 0], at = [290, 285]
+        return points.map((p) => {
+            const q = leg(p[0] - u[0], p[1] - u[1])
+            u = p
+            at = [at[0] + q[0] * size, at[1] - q[1] * size]
+            return at
+            })
+        },
+
+    rimFrom(depth: number, eye: number, center: number) -> number[][] {
+        const s = well.shapes[well.id]
+        return s.x.map((x, i) => this.projectFrom(x, depth, s.z[i], eye, center).map((v) => v > 0x3ff ? 0x3ff : v < -0x3ff ? -0x3ff : v))
+        },
+
+    // how many of a rim's coordinates fall off the screen
+
+    offScreen(depth: number, eye: number, center: number) -> number {
+        const s = well.shapes[well.id]
+        let n = 0
+        for (let i = 0; i < 16; i++)
+            for (const v of this.projectFrom(s.x[i], depth, s.z[i], eye, center)) if (v > 0x3ff || v < -0x3ff) n = n + 1
+        return n
+        },
+
+    // the near rim, kept a little in front of an eye that has passed it
+
+    nearDepth(eyeAt: number) -> number { return this.inFront(RIM, eyeAt) },
+
+    // a depth kept a little in front of an eye that has gone past it
+
+    inFront(depth: number, eyeAt: number) -> number {
+        const eye = Math.floor(eyeAt / 256)
+        if (eye >= 0 && depth < eye + 0x0c) return Math.min(eye + 0x0f, FAR)
+        return depth
+        },
+
+    // the middle of a lane, across the well
+
+    midpoint(lane: number) -> number[] {
+        const s = well.shapes[well.id], n = (lane + 1) & 15
+        return [(s.x[lane] + s.x[n] + 1) >> 1, (s.z[lane] + s.z[n] + 1) >> 1]
+        },
+
+    // the size a thing is drawn at for its depth: nearer is larger
+
+    scaleAt(y: number) -> Scale {
+        if (y < RIM) return { binary: 1, linear: 0 }
+        return scaleFor(game.unitDepth, y - game.eyeDepth)
+        },
+
+    // A thing at a point of the well: where on the screen, its size there (pixels to a unit)
+    // and its brightness.
+
+    at(x: number, y: number, z: number) -> Seen {
+        const p = this.place(this.project(x, y, z)), s = this.scaleAt(y)
+        return { x: p[0], y: p[1], size: sizeOf(s.binary, s.linear), bright: brightFor(s.binary) }
+        },
+    atLane(lane: number, depth: number) -> Seen {
+        const m = this.midpoint(lane)
+        return this.at(m[0], depth, m[1])
+        },
+
+    // ── figures drawn on a lane ──
+
+    // The claw, the flippers and the pulsars are drawn along the line from one point of the
+    // well to another (the lane's two spokes, or where a flip is heading): each stroke so many
+    // parts along it and so many across. Answers the strokes, in screen pixels, and where they
+    // start.
+
+    between(strokes: number[][], a: number[], b: number[], scale: Scale) -> LaneLines {
+        if (a[1] < game.eyeDepth) return { x: -1000, y: -1000, p: [] }          // behind the eye
+        const pa = this.project(a[0], a[1], a[2]), pb = this.project(b[0], b[1], b[2])
+        const start = this.place(pa), size = sizeOf(scale.binary, scale.linear)
+        const dx = spanOf((pb[0] - pa[0]) & 0xffff, true), dz = spanOf((pb[1] - pa[1]) & 0xffff, false)
+        let at = start, line: number[] = []
+        const lines: number[][] = []
+        for (const [u, w, on] of strokes) {
+            let sx = Math.abs(u) * dx.m, sz = Math.abs(u) * dz.m
+            if ((u < 0) != dx.neg) sx = -sx
+            if ((u < 0) != dz.neg) sz = -sz
+            const px = Math.abs(w) * dx.m, pz = Math.abs(w) * dz.m
+            sx = (w < 0) != dz.neg ? sx + pz : sx - pz
+            sz = (w < 0) != dx.neg ? sz - px : sz + px
+            const q = leg(sx, sz)
+            const next = [at[0] + q[0] * size, at[1] - q[1] * size]
+            if (on == 1) {
+                if (line.length == 0) { line = [...at]; lines.push(line) }
+                line.push(...next)
+                }
+            else line = []
+            at = next
+            }
+        return { x: start[0], y: start[1], p: lines }
+        },
+
+    acrossLane(strokes: number[][], lane: number, depth: number) -> LaneLines {
+        const s = well.shapes[well.id], n = (lane + 1) & 15
+        return this.between(strokes, [s.x[lane], depth, s.z[lane]], [s.x[n], depth, s.z[n]], { binary: 4, linear: 0 })
+        },
+
+    // a flipper or pulsar turning over: drawn from its spoke toward where the flip is heading
+
+    jumpX: number[] = [44, 40, 31, 16, 0, -16, -31, -40, -44, -40, -31, -16, 0, 16, 31, 40],
+    jumpZ: number[] = [0, 16, 31, 40, 44, 40, 31, 16, 0, -16, -31, -40, -44, -40, -31, -16],
+
+    // each well's size for a flipper mid-flip, as [binary, linear]
+
+    flipScale: Scale[] = { [[4, 0], [4, 0], [3, 0x60], [4, 0x40], [4, 0], [4, 0], [3, 0x48], [4, 0x40],
+        [5, 0x50], [4, 0x28], [4, 0x50], [4, 0], [4, 0], [4, 0x50], [4, 0], [5, 0x40]].map(([binary, linear]) => ({ binary, linear })) },
+
+    flipping(strokes: number[][], lane: number, depth: number, angle: number) -> LaneLines {
+        const s = well.shapes[well.id]
+        const x = s.x[lane], z = s.z[lane]
+        const tx = Math.max(0, Math.min(255, x + jumpX[angle])), tz = Math.max(0, Math.min(255, z + jumpZ[angle]))
+        return this.between(strokes, [x, depth, z], [tx, depth, tz], flipScale[well.id])
+        },
+
+    // a fuseball crossing from its spoke to the next: so many eighths of the way
+
+    fuseballAt(lane: number, depth: number, flipping: boolean, angle: number) -> Seen {
+        const s = well.shapes[well.id]
+        let x = s.x[lane], z = s.z[lane]
+        if (flipping) {
+            const n = (lane + 1) & 15
+            x = (x + eighthsOf(s.x[n] - x, angle)) & 255
+            z = (z + eighthsOf(s.z[n] - z, angle)) & 255
+            }
+        return this.at(x, depth, z)
+        },
+
+    // ── stars, while the claw falls through space ──
+
+    // the star planes are seen from an eye of their own, a little way back
+
+    starAt(y: number) -> Seen {
+        const d = (y + 0x18) & 0xffff, h = well.shapes[well.id].eyeHeight
+        const z = signed16(Math.floor(game.center / 256)) + (0x80 >= h ? divide(0x80 - h, d, 16) : -divide(h - 0x80, d, 16))
+        const p = this.place([0, z]), s = scaleFor(0x28, y + 0x18)
+        return { x: p[0], y: p[1], size: sizeOf(s.binary, s.linear), bright: brightFor(s.binary) }
+        },
+
+    // ── pictures ──
+
+    // A picture's strokes at a size, in its color and brightness unless it sets its own, from
+    // a point (ox, oy) of the view drawing it.
+
+    trace(name: string, size: number, ink: string, bright: number, ox: number, oy: number) -> Trace[] {
+        return tracePicture(pictures[name], size, ink, bright, ox, oy)
+        },
+
+    // how far a picture reaches from where it is placed, at full size, in pixels
+
+    reach(name: string) -> number {
+        const art = pictures[name]
+        if (art == null) return 0
+        let r = 0
+        for (const s of art.strokes) for (let k = 0; k < s.p.length; k += 4)
+            r = Math.max(r, Math.abs(s.p[k]) + Math.abs(s.p[k + 2]), Math.abs(s.p[k + 1]) + Math.abs(s.p[k + 3]))
+        return Math.ceil(r)
+        }
+    ]

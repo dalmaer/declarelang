@@ -1,0 +1,633 @@
+/*
+# Vortex
+
+Atari's Tempest (1981), written afresh as a Declare program rather than ported:
+it plays the same game, without chasing the arcade frame by frame (the faithful
+port is `../tempest/`). Keyboard only. You are the claw on the rim of a tube;
+enemies climb from the far end; shoot them down the lanes, clear the wave,
+and fly down the tube to the next one.
+
+How it is put together:
+
+- `model.declare` — the records (`schema`s), the tube's geometry (`Tube`, a
+  class on the current shape record) and the field of play (`Playfield`, the
+  dataset of everything in the tube, with its rules).
+- `sprites.declare` — the tube drawing and the sprites: one class per kind of
+  enemy, each placed by constraints over its record and the game clock.
+- `screens.declare` — the colors per sixteen levels (theme records), the score
+  panel, the attract screen, "rate yourself", and the cards.
+- `sound.declare` — the arcade's sounds on its eight voices.
+- this file — the helpers, the fixed data (tube shapes, waves, starting levels,
+  keys, stars), and the App: where the player is (mode, level,
+  score, lives, the claw), the clocks that drive play, the keyboard, and the
+  tree of views.
+
+A game goes: the attract screen (and now and then a demo) → "rate yourself",
+choosing where to start → each level: the fall through the stars as its tube
+arrives, play, and the dive down the tube when the wave is cleared → game over.
+
+Controls: ← → or A S spin · Space or Return fire · ↓ or Z superzap ·
+Escape pause (any key goes on) · M sound on or off · Return start.
+
+*This program is new code, written in Declare. It recreates the play of Tempest, Atari's
+1981 arcade game, whose original program was written in 6502 assembly language, and uses
+that game's sounds. Tempest, its name, artwork, sounds and visual design belong to Atari,
+Inc. or its successors; they are used here only to illustrate and test the Declare language,
+and no claim is made to them. The MIT license of this repository covers this code, not the
+original game's name, artwork or sounds. If you hold rights in this material and object to
+its being posted here, please open an issue on this repository on GitHub, or message me
+there, and I will remove it.*
+*/
+
+include [ "model.declare" ]
+
+include [ "sprites.declare" ]
+
+include [ "screens.declare" ]
+
+include [ "sound.declare" ]
+
+defaultFlags [ render = canvas ]
+
+// numbers and lanes: functions of their arguments
+
+script {
+    type Kind = "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar"
+
+    function lerp(a: number, b: number, t: number): number { return a + (b - a) * t }
+    function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)) }
+    function mod(v: number, n: number): number { return ((v % n) + n) % n }
+    function rnd(n: number): number { return Math.floor(Math.random() * n) }
+    function fract(v: number): number { return v - Math.floor(v) }
+
+    // a fixed pseudo-random number in [0, 1) for a pair of integers: the same
+    // every time it is asked, so data built from it never changes
+    function hash(i: number, k: number): number { return fract(Math.sin(i * 127.1 + k * 311.7) * 43758.5453) }
+
+    // the signed step from one lane to another: the short way round a closed
+    // tube, straight across an open one
+    function laneStep(from: number, to: number, closed: boolean): number {
+        const d = to - from
+        return closed ? mod(d + 8, 16) - 8 : d
+    }
+
+    // the signed turn from one angle to another, the short way (degrees)
+    function turnBetween(a: number, b: number): number { return mod(b - a + 180, 360) - 180 }
+
+    // blend two 0xRRGGBB colors channel-wise
+    function mix(a: number, b: number, t: number): number {
+        const c = (x: number, y: number) => Math.round(x + (y - x) * t)
+        return (c((a >> 16) & 255, (b >> 16) & 255) << 16) | (c((a >> 8) & 255, (b >> 8) & 255) << 8) | c(a & 255, b & 255)
+    }
+
+    // a glowing vector pen: the arcade's look, set once per stroke
+    function glowPen(d: Draw, ink: number, width: number) {
+        d.strokeStyle = ink
+        d.shadowColor = ink
+        d.shadowBlur = 7
+        d.lineWidth = width * 0.5
+        d.lineCap = "round"
+        d.lineJoin = "round"
+    }
+
+    // a shuffled list of the kinds a wave holds
+    function waveKinds(n: { flippers: number, tankers: number, spikers: number, fuseballs: number, pulsars: number }): Kind[] {
+        const out: Kind[] = []
+        const add = (k: Kind, c: number) => { for (let i = 0; i < c; i++) out.push(k) }
+        add("flipper", n.flippers); add("tanker", n.tankers); add("spiker", n.spikers)
+        add("fuseball", n.fuseballs); add("pulsar", n.pulsars)
+        for (let i = out.length - 1; i > 0; i--) { const j = rnd(i + 1); const s = out[i]; out[i] = out[j]; out[j] = s }
+        // the first two are flippers, so a level opens gently
+        for (let i = 0; i < 2; i++) {
+            const j = out.indexOf("flipper", i)
+            if (j > i) { const s = out[i]; out[i] = out[j]; out[j] = s }
+        }
+        return out
+    }
+    }
+
+
+App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
+
+    /* ## Color
+       The level shown picks the colors (a new set every sixteen levels); the
+       theme is the dark preset with that set laid over it. The App's own fill
+       is black, flashing toward the tube's color for the superzapper and a
+       bonus life. */
+
+    paletteFor(level: number) -> object { return [Blue, Red, Yellow, Cyan, Unseen, Green][mod(Math.floor((level - 1) / 16), 6)] },
+    palette: object = { app.paletteFor(app.shownLevel) },
+    theme = { { ...SanFranciscoDark, ...app.palette } },
+    flash: number = 0,
+    fill = { mix(0x000000, app.palette.claw, app.flash * 0.4) },
+
+    /* ## The fixed data */
+
+    tubes: Dataset [ schema = [ shapes[]: Well ] ] {
+        { "shapes": [
+            { "id": 1, "name": "circle", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0.195, "y": -0.981 }, { "x": 0.556, "y": -0.831 }, { "x": 0.831, "y": -0.556 }, { "x": 0.981, "y": -0.195 }, { "x": 0.981, "y": 0.195 }, { "x": 0.831, "y": 0.556 }, { "x": 0.556, "y": 0.831 }, { "x": 0.195, "y": 0.981 }, { "x": -0.195, "y": 0.981 }, { "x": -0.556, "y": 0.831 }, { "x": -0.831, "y": 0.556 }, { "x": -0.981, "y": 0.195 }, { "x": -0.981, "y": -0.195 }, { "x": -0.831, "y": -0.556 }, { "x": -0.556, "y": -0.831 }, { "x": -0.195, "y": -0.981 } ] },
+            { "id": 2, "name": "square", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": -0.9, "y": -0.9 }, { "x": -0.45, "y": -0.9 }, { "x": 0, "y": -0.9 }, { "x": 0.45, "y": -0.9 }, { "x": 0.9, "y": -0.9 }, { "x": 0.9, "y": -0.45 }, { "x": 0.9, "y": 0 }, { "x": 0.9, "y": 0.45 }, { "x": 0.9, "y": 0.9 }, { "x": 0.45, "y": 0.9 }, { "x": 0, "y": 0.9 }, { "x": -0.45, "y": 0.9 }, { "x": -0.9, "y": 0.9 }, { "x": -0.9, "y": 0.45 }, { "x": -0.9, "y": 0 }, { "x": -0.9, "y": -0.45 } ] },
+            { "id": 3, "name": "plus", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": -0.333, "y": -1 }, { "x": 0, "y": -1 }, { "x": 0.333, "y": -1 }, { "x": 0.333, "y": -0.333 }, { "x": 1, "y": -0.333 }, { "x": 1, "y": 0 }, { "x": 1, "y": 0.333 }, { "x": 0.333, "y": 0.333 }, { "x": 0.333, "y": 1 }, { "x": 0, "y": 1 }, { "x": -0.333, "y": 1 }, { "x": -0.333, "y": 0.333 }, { "x": -1, "y": 0.333 }, { "x": -1, "y": 0 }, { "x": -1, "y": -0.333 }, { "x": -0.333, "y": -0.333 } ] },
+            { "id": 4, "name": "bowtie", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0.055, "y": -0.222 }, { "x": 0.277, "y": -0.331 }, { "x": 0.668, "y": -0.357 }, { "x": 1, "y": -0.159 }, { "x": 1, "y": 0.159 }, { "x": 0.668, "y": 0.357 }, { "x": 0.277, "y": 0.331 }, { "x": 0.055, "y": 0.222 }, { "x": -0.055, "y": 0.222 }, { "x": -0.277, "y": 0.331 }, { "x": -0.668, "y": 0.357 }, { "x": -1, "y": 0.159 }, { "x": -1, "y": -0.159 }, { "x": -0.668, "y": -0.357 }, { "x": -0.277, "y": -0.331 }, { "x": -0.055, "y": -0.222 } ] },
+            { "id": 5, "name": "cross", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0.475, "y": -0.95 }, { "x": 0.831, "y": -0.594 }, { "x": 0.712, "y": -0.237 }, { "x": 0.594, "y": 0.119 }, { "x": 0.95, "y": 0.475 }, { "x": 0.594, "y": 0.831 }, { "x": 0.237, "y": 0.712 }, { "x": -0.119, "y": 0.594 }, { "x": -0.475, "y": 0.95 }, { "x": -0.831, "y": 0.594 }, { "x": -0.712, "y": 0.237 }, { "x": -0.594, "y": -0.119 }, { "x": -0.95, "y": -0.475 }, { "x": -0.594, "y": -0.831 }, { "x": -0.237, "y": -0.712 }, { "x": 0.119, "y": -0.594 } ] },
+            { "id": 6, "name": "triangle", "closed": true, "vy": -0.1, "face": 0,
+              "rim": [ { "x": 0, "y": -1 }, { "x": 0.175, "y": -0.677 }, { "x": 0.351, "y": -0.354 }, { "x": 0.526, "y": -0.031 }, { "x": 0.702, "y": 0.292 }, { "x": 0.877, "y": 0.616 }, { "x": 0.735, "y": 0.75 }, { "x": 0.368, "y": 0.75 }, { "x": 0, "y": 0.75 }, { "x": -0.368, "y": 0.75 }, { "x": -0.735, "y": 0.75 }, { "x": -0.877, "y": 0.616 }, { "x": -0.702, "y": 0.292 }, { "x": -0.526, "y": -0.031 }, { "x": -0.351, "y": -0.354 }, { "x": -0.175, "y": -0.677 } ] },
+            { "id": 7, "name": "clover", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0.134, "y": -0.672 }, { "x": 0.38, "y": -0.569 }, { "x": 0.848, "y": -0.566 }, { "x": 1, "y": -0.199 }, { "x": 0.672, "y": 0.134 }, { "x": 0.569, "y": 0.38 }, { "x": 0.566, "y": 0.848 }, { "x": 0.199, "y": 1 }, { "x": -0.134, "y": 0.672 }, { "x": -0.38, "y": 0.569 }, { "x": -0.848, "y": 0.566 }, { "x": -1, "y": 0.199 }, { "x": -0.672, "y": -0.134 }, { "x": -0.569, "y": -0.38 }, { "x": -0.566, "y": -0.848 }, { "x": -0.199, "y": -1 } ] },
+            { "id": 8, "name": "vee", "closed": false, "vy": -0.8, "face": 180,
+              "rim": [ { "x": -1, "y": 0.1 }, { "x": -0.875, "y": 0.2 }, { "x": -0.75, "y": 0.3 }, { "x": -0.625, "y": 0.4 }, { "x": -0.5, "y": 0.5 }, { "x": -0.375, "y": 0.6 }, { "x": -0.25, "y": 0.7 }, { "x": -0.125, "y": 0.8 }, { "x": 0, "y": 0.9 }, { "x": 0.125, "y": 0.8 }, { "x": 0.25, "y": 0.7 }, { "x": 0.375, "y": 0.6 }, { "x": 0.5, "y": 0.5 }, { "x": 0.625, "y": 0.4 }, { "x": 0.75, "y": 0.3 }, { "x": 0.875, "y": 0.2 }, { "x": 1, "y": 0.1 } ] },
+            { "id": 9, "name": "steps", "closed": false, "vy": -0.9, "face": 180,
+              "rim": [ { "x": -1, "y": -0.2 }, { "x": -0.75, "y": -0.2 }, { "x": -0.75, "y": -0.03 }, { "x": -0.5, "y": -0.03 }, { "x": -0.5, "y": 0.14 }, { "x": -0.25, "y": 0.14 }, { "x": -0.25, "y": 0.31 }, { "x": 0, "y": 0.31 }, { "x": 0, "y": 0.48 }, { "x": 0.25, "y": 0.48 }, { "x": 0.25, "y": 0.31 }, { "x": 0.5, "y": 0.31 }, { "x": 0.5, "y": 0.14 }, { "x": 0.75, "y": 0.14 }, { "x": 0.75, "y": -0.03 }, { "x": 1, "y": -0.03 }, { "x": 1, "y": -0.2 } ] },
+            { "id": 10, "name": "trough", "closed": false, "vy": -0.8, "face": 180,
+              "rim": [ { "x": -1, "y": 0.2 }, { "x": -0.981, "y": 0.337 }, { "x": -0.924, "y": 0.468 }, { "x": -0.831, "y": 0.589 }, { "x": -0.707, "y": 0.695 }, { "x": -0.556, "y": 0.782 }, { "x": -0.383, "y": 0.847 }, { "x": -0.195, "y": 0.887 }, { "x": 0, "y": 0.9 }, { "x": 0.195, "y": 0.887 }, { "x": 0.383, "y": 0.847 }, { "x": 0.556, "y": 0.782 }, { "x": 0.707, "y": 0.695 }, { "x": 0.831, "y": 0.589 }, { "x": 0.924, "y": 0.468 }, { "x": 0.981, "y": 0.337 }, { "x": 1, "y": 0.2 } ] },
+            { "id": 11, "name": "plain", "closed": false, "vy": -1.1, "face": 180,
+              "rim": [ { "x": -1, "y": 0.55 }, { "x": -0.875, "y": 0.55 }, { "x": -0.75, "y": 0.55 }, { "x": -0.625, "y": 0.55 }, { "x": -0.5, "y": 0.55 }, { "x": -0.375, "y": 0.55 }, { "x": -0.25, "y": 0.55 }, { "x": -0.125, "y": 0.55 }, { "x": 0, "y": 0.55 }, { "x": 0.125, "y": 0.55 }, { "x": 0.25, "y": 0.55 }, { "x": 0.375, "y": 0.55 }, { "x": 0.5, "y": 0.55 }, { "x": 0.625, "y": 0.55 }, { "x": 0.75, "y": 0.55 }, { "x": 0.875, "y": 0.55 }, { "x": 1, "y": 0.55 } ] },
+            { "id": 12, "name": "heart", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0.008, "y": -0.514 }, { "x": 0.182, "y": -0.794 }, { "x": 0.609, "y": -0.914 }, { "x": 1, "y": -0.633 }, { "x": 1, "y": -0.15 }, { "x": 0.609, "y": 0.302 }, { "x": 0.182, "y": 0.689 }, { "x": 0.008, "y": 0.955 }, { "x": -0.008, "y": 0.955 }, { "x": -0.182, "y": 0.689 }, { "x": -0.609, "y": 0.302 }, { "x": -1, "y": -0.15 }, { "x": -1, "y": -0.633 }, { "x": -0.609, "y": -0.914 }, { "x": -0.182, "y": -0.794 }, { "x": -0.008, "y": -0.514 } ] },
+            { "id": 13, "name": "star", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0, "y": -1 }, { "x": 0.191, "y": -0.462 }, { "x": 0.707, "y": -0.707 }, { "x": 0.462, "y": -0.191 }, { "x": 1, "y": 0 }, { "x": 0.462, "y": 0.191 }, { "x": 0.707, "y": 0.707 }, { "x": 0.191, "y": 0.462 }, { "x": 0, "y": 1 }, { "x": -0.191, "y": 0.462 }, { "x": -0.707, "y": 0.707 }, { "x": -0.462, "y": 0.191 }, { "x": -1, "y": 0 }, { "x": -0.462, "y": -0.191 }, { "x": -0.707, "y": -0.707 }, { "x": -0.191, "y": -0.462 } ] },
+            { "id": 14, "name": "dubya", "closed": false, "vy": -0.85, "face": 180,
+              "rim": [ { "x": -1, "y": 0 }, { "x": -0.89, "y": 0.198 }, { "x": -0.78, "y": 0.396 }, { "x": -0.67, "y": 0.594 }, { "x": -0.56, "y": 0.791 }, { "x": -0.435, "y": 0.822 }, { "x": -0.29, "y": 0.648 }, { "x": -0.145, "y": 0.474 }, { "x": 0, "y": 0.3 }, { "x": 0.145, "y": 0.474 }, { "x": 0.29, "y": 0.648 }, { "x": 0.435, "y": 0.822 }, { "x": 0.56, "y": 0.791 }, { "x": 0.67, "y": 0.594 }, { "x": 0.78, "y": 0.396 }, { "x": 0.89, "y": 0.198 }, { "x": 1, "y": 0 } ] },
+            { "id": 15, "name": "fan", "closed": false, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0.423, "y": -0.906 }, { "x": 0.699, "y": -0.715 }, { "x": 0.897, "y": -0.442 }, { "x": 0.993, "y": -0.12 }, { "x": 0.976, "y": 0.216 }, { "x": 0.849, "y": 0.528 }, { "x": 0.626, "y": 0.78 }, { "x": 0.332, "y": 0.943 }, { "x": 0, "y": 1 }, { "x": -0.332, "y": 0.943 }, { "x": -0.626, "y": 0.78 }, { "x": -0.849, "y": 0.528 }, { "x": -0.976, "y": 0.216 }, { "x": -0.993, "y": -0.12 }, { "x": -0.897, "y": -0.442 }, { "x": -0.699, "y": -0.715 }, { "x": -0.423, "y": -0.906 } ] },
+            { "id": 16, "name": "infinity", "closed": true, "vy": -0.15, "face": 0,
+              "rim": [ { "x": 0.098, "y": -0.382 }, { "x": 0.422, "y": -0.488 }, { "x": 0.775, "y": -0.4 }, { "x": 1, "y": -0.154 }, { "x": 1, "y": 0.154 }, { "x": 0.775, "y": 0.4 }, { "x": 0.422, "y": 0.488 }, { "x": 0.098, "y": 0.382 }, { "x": -0.098, "y": 0.382 }, { "x": -0.422, "y": 0.488 }, { "x": -0.775, "y": 0.4 }, { "x": -1, "y": 0.154 }, { "x": -1, "y": -0.154 }, { "x": -0.775, "y": -0.4 }, { "x": -0.422, "y": -0.488 }, { "x": -0.098, "y": -0.382 } ] }
+            ] }
+        },
+
+    // Each row holds from its level until the next row's; within a row the
+    // enemies climb a little faster each level.
+
+    waves: Dataset [ schema = [ levels[]: Wave ] ] {
+        { "levels": [
+            { "from": 1,  "flippers": 6,  "tankers": 0, "spikers": 0, "fuseballs": 0, "pulsars": 0, "speed": 0.14, "gap": 1300, "cargo": ["flipper"], "fire": false },
+            { "from": 2,  "flippers": 8,  "tankers": 0, "spikers": 0, "fuseballs": 0, "pulsars": 0, "speed": 0.15, "gap": 1200, "cargo": ["flipper"], "fire": true },
+            { "from": 3,  "flippers": 7,  "tankers": 2, "spikers": 0, "fuseballs": 0, "pulsars": 0, "speed": 0.16, "gap": 1150, "cargo": ["flipper"], "fire": true },
+            { "from": 4,  "flippers": 6,  "tankers": 2, "spikers": 2, "fuseballs": 0, "pulsars": 0, "speed": 0.16, "gap": 1100, "cargo": ["flipper"], "fire": true },
+            { "from": 5,  "flippers": 6,  "tankers": 3, "spikers": 2, "fuseballs": 1, "pulsars": 0, "speed": 0.17, "gap": 1050, "cargo": ["flipper"], "fire": true },
+            { "from": 7,  "flippers": 7,  "tankers": 3, "spikers": 3, "fuseballs": 2, "pulsars": 0, "speed": 0.18, "gap": 1000, "cargo": ["flipper"], "fire": true },
+            { "from": 9,  "flippers": 7,  "tankers": 3, "spikers": 2, "fuseballs": 2, "pulsars": 1, "speed": 0.18, "gap": 950,  "cargo": ["flipper"], "fire": true },
+            { "from": 11, "flippers": 7,  "tankers": 3, "spikers": 2, "fuseballs": 2, "pulsars": 2, "speed": 0.19, "gap": 950,  "cargo": ["flipper"], "fire": true },
+            { "from": 13, "flippers": 8,  "tankers": 3, "spikers": 2, "fuseballs": 3, "pulsars": 3, "speed": 0.20, "gap": 900,  "cargo": ["flipper"], "fire": true },
+            { "from": 17, "flippers": 8,  "tankers": 4, "spikers": 3, "fuseballs": 3, "pulsars": 3, "speed": 0.21, "gap": 900,  "cargo": ["flipper", "pulsar"], "fire": true },
+            { "from": 25, "flippers": 9,  "tankers": 4, "spikers": 3, "fuseballs": 3, "pulsars": 4, "speed": 0.22, "gap": 850,  "cargo": ["flipper", "pulsar"], "fire": true },
+            { "from": 33, "flippers": 9,  "tankers": 4, "spikers": 3, "fuseballs": 4, "pulsars": 4, "speed": 0.23, "gap": 850,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true },
+            { "from": 49, "flippers": 10, "tankers": 4, "spikers": 3, "fuseballs": 4, "pulsars": 4, "speed": 0.24, "gap": 800,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true },
+            { "from": 65, "flippers": 10, "tankers": 5, "spikers": 3, "fuseballs": 4, "pulsars": 5, "speed": 0.25, "gap": 750,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true },
+            { "from": 81, "flippers": 11, "tankers": 5, "spikers": 4, "fuseballs": 5, "pulsars": 5, "speed": 0.26, "gap": 700,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true }
+            ] }
+        },
+
+    // The levels a game may start at, as the arcade offers them, and the bonus
+    // each earns once its first level is cleared.
+
+    starts: Dataset [ schema = [ list[]: Start ] ] {
+        { "list": [
+            { "id": 0, "level": 1, "bonus": 0 }, { "id": 1, "level": 3, "bonus": 6000 }, { "id": 2, "level": 5, "bonus": 16000 },
+            { "id": 3, "level": 7, "bonus": 32000 }, { "id": 4, "level": 9, "bonus": 54000 }, { "id": 5, "level": 11, "bonus": 74000 },
+            { "id": 6, "level": 13, "bonus": 94000 }, { "id": 7, "level": 15, "bonus": 114000 }, { "id": 8, "level": 17, "bonus": 134000 },
+            { "id": 9, "level": 20, "bonus": 152000 }, { "id": 10, "level": 22, "bonus": 170000 }, { "id": 11, "level": 24, "bonus": 188000 },
+            { "id": 12, "level": 26, "bonus": 208000 }, { "id": 13, "level": 28, "bonus": 226000 }, { "id": 14, "level": 31, "bonus": 248000 },
+            { "id": 15, "level": 33, "bonus": 266000 }, { "id": 16, "level": 36, "bonus": 300000 }, { "id": 17, "level": 40, "bonus": 340000 },
+            { "id": 18, "level": 44, "bonus": 382000 }, { "id": 19, "level": 47, "bonus": 415000 }, { "id": 20, "level": 49, "bonus": 439000 },
+            { "id": 21, "level": 52, "bonus": 472000 }, { "id": 22, "level": 56, "bonus": 531000 }, { "id": 23, "level": 60, "bonus": 581000 },
+            { "id": 24, "level": 63, "bonus": 624000 }, { "id": 25, "level": 65, "bonus": 656000 }, { "id": 26, "level": 73, "bonus": 766000 },
+            { "id": 27, "level": 81, "bonus": 898000 }
+            ] }
+        },
+
+    help: Dataset {
+        { "keys": [
+            { "id": 1, "keys": "← →  or  A S", "does": "spin" },
+            { "id": 2, "keys": "SPACE or RETURN", "does": "fire" },
+            { "id": 3, "keys": "↓  or  Z", "does": "superzapper" },
+            { "id": 4, "keys": "ESC  ·  M", "does": "pause  ·  sound" }
+            ] }
+        },
+
+    // the star field for the fall between tubes: fixed, built once from `hash`
+
+    stars: Dataset [ schema = [ list[]: Star ],
+        contents = { { list: Array.from({ length: 80 }, (_, i) => ({ id: i, angle: hash(i, 1) * 6.2832, out: 0.25 + hash(i, 2) * 1.75, phase: hash(i, 3) })) } } ],
+
+    /* ## Where the player is */
+
+    mode: "attract" | "choose" | "warp" | "play" | "zoom" | "dying" | "over" = "attract",
+    demo: boolean = false,         // the attract mode's game, played by the pilot
+    paused: boolean = false,
+    quiet: boolean = false,        // the player turned the sound off
+    level: number = 1,
+    reached: number = 1,           // the furthest level reached: how far "rate yourself" offers
+    score: number = 0,
+    lives: number = 3,
+    zaps: number = 2,              // superzapper uses left this level
+    startBonus: number = 0,        // earned when the first level is cleared
+    showcase: number = 0,          // the tube the attract screen is showing
+
+    // The game clock, in seconds. It runs only while there is play to watch,
+    // so pausing it pauses everything that is a function of it.
+
+    t: number = 0,
+    levelStart: number = 0,
+    fallStart: number = 0,
+    bonusLifeAt: number = -10,
+
+    // The claw: `clawSpot` is the lane it is going to, not wrapped, so the
+    // spring that carries `clawShown` there can cross a closed tube's seam
+    // the short way. `lane` is the whole lane it is in.
+
+    clawSpot: number = 0,
+    clawShown: number = 0,
+    clawSpring: Spring [ attribute = clawShown, to = { app.clawSpot }, stiffness = 900, damping = 50 ],
+    lane: number = { mod(app.clawSpot, 16) },
+    clawLane: number = { app.tube.closed ? mod(app.clawShown, 16) : app.clawShown },
+    clawDepth: number = { 1 - app.dive },
+
+    // held keys repeat: these carry the part of a step not yet taken
+
+    spinCarry: number = 0,
+    fireCarry: number = 0,
+
+    /* ## Derived */
+
+    // The level whose tube and colors are on the screen: the game's, the
+    // choice being made, or the attract screen's showcase, which runs through
+    // the shapes and the color sets (all but the unseen one).
+
+    shownLevel: number = {
+        app.mode == "attract" ? 1 + mod(app.showcase, 16) + 16 * [0, 1, 2, 3, 5][mod(app.showcase, 5)]
+      : app.mode == "choose" ? (app.choices.value.list[app.choice]?.level ?? 1)
+      : app.level },
+    shapeIndex: number = { mod(app.shownLevel - 1, 16) },
+    wave: Wave = { app.waveFor(app.level) },
+    spares: Dataset [ contents = { { lives: Array.from({ length: Math.max(0, app.lives - 1) }, (_, i) => ({ id: i + 1 })) } } ],
+    playing: boolean = { app.mode == "play" || app.mode == "zoom" },
+
+    // the best score of the games played since the page opened
+
+    best: number = 0,
+    hiScore: number = { Math.max(app.best, app.demo ? 0 : app.score) },
+
+    // things that cross into a new state, and the one action each calls for:
+    // the wave is cleared (the dive begins), the chooser's clock reaches three
+    // (the countdown sounds), the pulse comes on or goes off (its sound)
+
+    cleared: boolean = { app.mode == "play" && app.field.value.nymphs.length == 0 && app.field.value.foes.length == 0 },
+    secondsLeft: number = { Math.ceil(app.chooseLeft) },
+    pulseLive: boolean = { app.mode == "play" && app.pulsars.value.list.length > 0 && app.field.pulseAt(app.t) },
+    trackChanges = ["cleared", "secondsLeft", "pulseLive"],
+    onChange(e: ChangeEvent) {
+        for (const c of e.changed) {
+            if (c.name == "cleared" && app.cleared) app.startDive()
+            if (c.name == "secondsLeft" && app.mode == "choose" && app.secondsLeft == 3) app.cue("countdown")
+            if (c.name == "pulseLive") app.cue(app.pulseLive ? "pulseOn" : "pulseOff")
+            }
+        },
+
+    banner: string = {
+        app.mode == "zoom" && app.field.anySpikes() ? "AVOID SPIKES"
+      : app.t - app.bonusLifeAt < 2 ? "BONUS LIFE"
+      : app.mode == "warp" || (app.mode == "play" && app.t - app.levelStart < 4) ? "LEVEL " + app.level
+      : "" },
+    subBanner: string = {
+        !app.banner.startsWith("LEVEL") ? ""
+      : app.startBonus > 0 ? "BONUS " + app.startBonus + " FOR CLEARING IT"
+      : "SUPERZAPPER RECHARGE" },
+
+    waveFor(level: number) -> Wave {
+        const rows = this.waves.value.levels.filter((w) => w.from <= level)
+        const row = rows[rows.length - 1]
+        return ({ ...row, speed: row.speed + 0.003 * (level - row.from) })
+        },
+
+    /* ## Choosing where to start
+       The levels unlocked so far (up to the furthest reached, and at least the
+       first five choices); the choice, and a spring that slides the strip to
+       it; a ten-second clock that runs whenever the chooser is shown and, run
+       out, starts the game at the choice. */
+
+    choices: Dataset [ schema = [ list[]: Start ],
+        contents = { { list: app.starts.value.list.filter((s) => s.level <= Math.max(9, app.reached)) } } ],
+    choice: number = 0,
+    choiceShown: number = 0,
+    choiceSpring: Spring [ attribute = choiceShown, to = { app.choice }, stiffness = 260, damping = 26 ],
+    chooseLeft: number = 10,
+    chooseClock: Animator [ attribute = chooseLeft, from = 10, to = 0, duration = 10000, motion = linear,
+        started = { app.mode == "choose" }, paused = { app.paused },
+        onStop() { if (app.mode == "choose") app.pick() }
+        ],
+
+    /* ## The camera
+       `dive` carries the claw (and the eye) down the tube at the end of a
+       level; `approach` brings each new tube in from the distance while the
+       claw falls through the stars. Both are timed runs, so Animators: the dive
+       starts itself whenever the mode becomes "zoom", and its end begins the
+       next level; the approach's end begins play. */
+
+    dive: number = 0,
+    approach: number = 0,
+    cam: number = { app.dive * (app.tube.zFar - 1) - app.approach },
+    diving: Animator [ attribute = dive, from = 0, to = 1, duration = 2600, motion = quadIn,
+        started = { app.mode == "zoom" }, paused = { app.paused },
+        onStop() { if (app.mode == "zoom") app.levelDone() }
+        ],
+    arriving: Animator [ attribute = approach, from = 16, to = 0, duration = 2600, motion = cubicOut,
+        paused = { app.paused },
+        onStop() { if (app.mode == "warp") app.mode = "play" }
+        ],
+    starsShown: number = { app.mode == "warp" ? clamp(app.approach / 5, 0, 1) : 0 },
+    zapFlash: Animator [ attribute = flash, from = 1, to = 0, duration = 700, motion = quadOut ],
+
+    /* ## The records in play */
+
+    tube: Tube [ datapath = { app.tubes.value.shapes[app.shapeIndex] },
+        cx = { app.width / 2 },
+        cy = { app.height / 2 + 30 },
+        radius = { Math.min(app.width * 0.42, (app.height - 120) * 0.5) },
+        cam = { app.cam } ],
+    field: Playfield [ ] { { "nymphs": [], "foes": [], "shots": [], "foeShots": [], "spikes": [], "blasts": [] } },
+
+    // the pulsars, to light their lanes: a derived dataset holding the field's own records
+
+    pulsars: Dataset [ contents = { { list: app.field.value.foes.filter((f) => f.kind == "pulsar") } } ],
+
+    /* ## Sound */
+
+    board: SoundBoard [ quiet = { app.quiet || app.paused } ],
+    cue(name: string) { if (!demo && mode != "attract") board.cue(name) },
+
+    /* ## Clocks
+       One per frame, for what depends on the frame before: the game clock, held
+       keys, and the step of play. The rest are beats: the enemies' decisions,
+       the demo's pilot, the attract screen's next tube. */
+
+    frame: Time [ tick = frame, running = { (app.mode == "warp" || app.playing || app.mode == "dying") && !app.paused },
+        onTick(dt: number) { app.advance(dt) }
+        ],
+    brain: Time [ tick = 250, running = { app.mode == "play" && !app.paused },
+        onTick() { if (app.field.think(app.t, app.lane, app.tube.closed, app.wave) > 0) app.cue("enemyShot") }
+        ],
+    pilot: Time [ tick = 70, running = { app.demo && app.playing },
+        onTick() { app.steer() }
+        ],
+    carousel: Time [ tick = 3500, running = { app.mode == "attract" },
+        onTick() {
+            app.showcase = app.showcase + 1
+            if (mod(app.showcase, 4) == 0) app.startDemo()
+            else app.arriving.start()
+            }
+        ],
+
+    /* ## The keyboard
+       Discrete keys arrive as events; held keys (spin, fire) are read in the
+       frame step with `Keys.isDown`. */
+
+    keys: Keys [ onKeyDown(e: KeyEvent) { if (!e.repeat) app.press(e.code) }
+        ],
+
+    press(code: string) {
+        const start = code == "Enter" || code == "NumpadEnter"
+        const fireKey = start || code == "Space"
+        const left = code == "ArrowLeft" || code == "KeyA", right = code == "ArrowRight" || code == "KeyS"
+        if (code == "KeyM") { quiet = !quiet; return }
+        if (code == "Escape") { if (!demo && mode != "attract" && mode != "over") paused = !paused; return }
+        if (paused) { paused = false; return }
+        if (mode == "attract" || mode == "over" || demo) { if (start) { if (demo) endDemo(); choose() } return }
+        if (mode == "choose") {
+            if (left || right) {
+                const to = clamp(choice + (right ? 1 : -1), 0, choices.value.list.length - 1)
+                if (to != choice) { choice = to; cue("click") }
+                }
+            else if (fireKey) pick()
+            return
+            }
+        if (!playing) return
+        if (left) { spin(-1); spinCarry = -0.25 }
+        else if (right) { spin(1); spinCarry = -0.25 }
+        else if (fireKey) { fire(); fireCarry = 0 }
+        else if ((code == "ArrowDown" || code == "KeyZ") && mode == "play") superzap()
+        },
+
+    held(codes: string[]) -> boolean { return codes.some((c) => Keys.isDown(c)) },
+
+    /* ## Play */
+
+    advance(dt: number) {
+        t = t + dt
+        if (playing && !demo) {
+            const dir = (held(["ArrowRight", "KeyS"]) ? 1 : 0) - (held(["ArrowLeft", "KeyA"]) ? 1 : 0)
+            if (dir == 0) spinCarry = 0
+            else {
+                spinCarry = spinCarry + dt * 11
+                while (spinCarry >= 1) { spin(dir); spinCarry = spinCarry - 1 }
+                }
+            if (held(["Space", "Enter"])) {
+                fireCarry = fireCarry + dt
+                if (fireCarry >= 0.13) { fire(); fireCarry = 0 }
+                }
+            }
+        const out = field.step(t, dt, lane, clawDepth, tube.closed, playing, wave)
+        addScore(out.points)
+        for (const s of out.sounds) cue(s)
+        if (out.caught) die()
+        else if (demo && t - levelStart > 45) endDemo()
+        },
+
+    spin(dir: number) {
+        const to = tube.closed ? clawSpot + dir : clamp(clawSpot + dir, 0, 15)
+        if (to != clawSpot) { clawSpot = to; cue("click") }
+        },
+    fire() { if (field.fire(lane, clawDepth, t)) cue("fire") },
+    superzap() {
+        if (zaps <= 0) return
+        addScore(field.zap(zaps == 2, t))
+        zaps = zaps - 1
+        zapFlash.start()
+        cue("explosion")
+        },
+
+    // Points; every 20,000 brings another life, up to six.
+
+    addScore(points: number) {
+        if (points == 0) return
+        const before = score
+        score = score + points
+        if (!demo && Math.floor(score / 20000) > Math.floor(before / 20000) && lives < 6) {
+            lives = lives + 1
+            bonusLifeAt = t
+            zapFlash.start()
+            cue("bonus")
+            }
+        },
+
+    /* ## Games, levels and lives */
+
+    choose() {
+        choice = clamp(choice, 0, choices.value.list.length - 1)
+        choiceSpring.arrive()
+        mode = "choose"
+        },
+    pick() {
+        const s = choices.value.list[choice]
+        startGame(s.level, s.bonus, false)
+        },
+    startGame(from: number, bonus: number, isDemo: boolean) {
+        demo = isDemo
+        score = 0
+        lives = isDemo ? 1 : 3
+        level = from
+        startBonus = bonus
+        t = 0
+        paused = false
+        board.stopAll()
+        enterLevel(from)
+        },
+
+    // A level begins with the fall through the stars as its tube arrives; its
+    // nymphs are laid at the far end, the first due soon after play begins.
+
+    enterLevel(n: number) {
+        field.reset()
+        const w = waveFor(n)
+        field.lay(waveKinds(w), t + 3.2, w.gap / 1000)
+        zaps = 2
+        dive = 0
+        levelStart = t
+        fallStart = t
+        reached = Math.max(reached, demo ? 1 : n)
+        clawSpot = tubes.value.shapes[mod(n - 1, 16)].closed ? 0 : 7
+        clawSpring.arrive()
+        arriving.start()
+        mode = "warp"
+        },
+    startDive() { mode = "zoom"; cue("fallTube") },
+    levelDone() {
+        cue("fallSpace")
+        if (startBonus > 0) { addScore(startBonus); startBonus = 0; cue("bonus") }
+        level = level + 1
+        enterLevel(level)
+        },
+    die() {
+        const fromDive = mode == "zoom"
+        mode = "dying"
+        lives = lives - 1
+        field.blast("big", lane, clawDepth, t, 0)
+        field.recall(t)
+        cue("death")
+        afterDelay(2000, () => app.afterDeath(fromDive))
+        },
+    afterDeath(fromDive: boolean) {
+        if (demo) { endDemo(); return }
+        if (lives <= 0) { gameOver(); return }
+        board.hush()
+        if (fromDive) { level = level + 1; enterLevel(level) }
+        else mode = "play"
+        },
+    gameOver() {
+        mode = "over"
+        best = Math.max(best, score)
+        afterDelay(7000, () => { if (app.mode == "over") app.mode = "attract" })
+        },
+
+    /* ## The demo
+       Now and then the attract screen plays a game itself: one life, a level
+       from the first few, steered by a pilot that aims at whatever is nearest
+       the rim. It makes no sound, and Return takes over from it. */
+
+    startDemo() { startGame(1 + 2 * rnd(4), 0, true) },
+    endDemo() {
+        demo = false
+        field.reset()
+        mode = "attract"
+        arriving.start()
+        },
+
+    // The pilot: superzap anything about to reach the claw; otherwise go for
+    // the enemy nearest the rim that is still climbing (never into a lane
+    // where one already waits at the rim), and fire when lined up. In the
+    // dive, step out of a lane with a spike.
+
+    steer() {
+        const v = field.value
+        const depth = (f: Foe) => field.depthOf(f, t)
+        const near = (f: Foe) => Math.abs(laneStep(lane, field.laneNow(f, t), tube.closed)) <= 1
+        if (mode == "play" && zaps > 0 && v.foes.some((f) => depth(f) >= 0.9 && near(f) && f.kind != "spiker")) { superzap(); return }
+        const climbing = v.foes.filter((f) => depth(f) < 0.9 && f.kind != "spiker").sort((a, b) => depth(b) - depth(a))
+        let target = climbing.length > 0 ? field.laneNow(climbing[0], t) : lane
+        if (mode == "zoom" && v.spikes.some((s) => s.lane == lane && field.spikeHeight(s, t) > clawDepth - 0.4)) target = lane + 1
+        const dir = target == lane ? 0 : Math.sign(laneStep(lane, target, tube.closed)) || 1
+        const blocked = v.foes.some((f) => depth(f) >= 0.9 && field.laneNow(f, t) == mod(lane + dir, 16))
+        if (dir != 0 && !blocked) spin(dir)
+        if (v.foes.some((f) => field.laneNow(f, t) == lane) || v.spikes.some((s) => s.lane == lane && s.h > 0)) fire()
+        },
+
+    /* ## The screen
+       Declaration order is stacking order: the stars, the tube, the nymphs, the
+       spikes and lit lanes, the enemies, the shots, the claw, the blasts; then
+       the panel, the screens and the cards over all of it. */
+
+    stage: View [ width = 100%, height = 100%, clip = true,
+        opacity = { app.mode == "attract" ? 0.5 : app.mode == "choose" ? 0.3 : 1 },
+
+        starField: View [ width = 100%, height = 100%, visible = { app.starsShown > 0 }, datapath = { app.stars.value },
+            StarView [ datapath = :list[] ]
+            ],
+        web: Web [ lit = { app.playing || app.mode == "warp" ? app.lane : -1 } ],
+        nymphs: View [ width = 100%, height = 100%, datapath = { app.field.value },
+            NymphView [ datapath = :nymphs[] ]
+            ],
+        lanes: View [ width = 100%, height = 100%, datapath = { app.pulsars.value },
+            PulseBeam [ datapath = :list[] ]
+            ],
+        spikes: View [ width = 100%, height = 100%, datapath = { app.field.value },
+            SpikeView [ datapath = :spikes[] ]
+            ],
+        foes: View [ width = 100%, height = 100%, datapath = { app.field.value },
+            FoeView [ datapath = :foes[],
+                classFor = { :kind == "flipper" ? Flipper : :kind == "tanker" ? Tanker : :kind == "spiker" ? Spiker
+                           : :kind == "fuseball" ? Fuseball : Pulsar } ]
+            ],
+        shots: View [ width = 100%, height = 100%, datapath = { app.field.value },
+            ShotView [ datapath = :shots[] ]
+            ],
+        foeShots: View [ width = 100%, height = 100%, datapath = { app.field.value },
+            FoeShotView [ datapath = :foeShots[] ]
+            ],
+        claw: Claw [ visible = { app.playing || app.mode == "warp" } ],
+        blasts: View [ width = 100%, height = 100%, datapath = { app.field.value },
+            Remains [ datapath = :blasts[], classFor = { :kind == "points" ? PointsPop : Burst } ]
+            ]
+        ],
+
+    hud: Hud [ visible = { app.mode != "attract" && app.mode != "choose" } ],
+
+    title: TitleScreen [ visible = { app.mode == "attract" } ],
+
+    chooser: ChooseScreen [ visible = { app.mode == "choose" } ],
+
+    bannerCard: Notice [ y = { app.height * 0.62 }, visible = { app.banner != "" && !app.demo },
+        Headline [ fontSize = 26, text = { app.banner } ],
+        Subline [ visible = { app.subBanner != "" }, text = { app.subBanner } ]
+        ],
+
+    demoCard: Notice [ y = { app.height - 110 }, visible = { app.demo },
+        Headline [ fontSize = 20, text = "DEMO" ],
+        Subline [ text = "PRESS RETURN TO PLAY" ]
+        ],
+
+    pauseCard: Notice [ visible = { app.paused },
+        Headline [ text = "PAUSED" ],
+        Subline [ text = "PRESS ANY KEY TO GO ON" ]
+        ],
+
+    overCard: Notice [ visible = { app.mode == "over" },
+        Headline [ fontSize = 56, text = "GAME OVER" ],
+        Subline [ text = { "SCORE " + app.score + "   ·   LEVEL " + app.level } ],
+        Subline [ text = "RETURN TO PLAY AGAIN" ]
+        ]
+    ]

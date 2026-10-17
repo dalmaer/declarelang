@@ -1,0 +1,409 @@
+/*
+## The screen
+
+What the arcade's monitor shows, as views of the game's records: the well, the claw, each
+enemy, shot and explosion, the spikes, the nymphs and the stars while a game is played; the
+"rate yourself" page; the logo; the panel of scores and the arcade's lines of text. Each thing is
+a view of its record, drawn at its place and size in the well (scene.declare says where), with
+the lines of figures.declare. Everything is placed in the arcade's own pixels, 580 across and
+570 down, and the monitor scales the whole picture to the window.
+*/
+
+// ── the play screen ──
+
+// The well: its spokes and its two rims.
+
+class WellLines extends Lit [ width = 100%, height = 100%, traced = { app.scene.wellLines() } ]
+
+// A nymph, waiting to rise: a dot.
+
+class NymphDot extends Lit [ x = { :x - 6 }, y = { :y - 6 }, width = 12, height = 12, traced = { [{ ink: "nymph", i: 10, p: [6, 6] }] } ]
+
+// The spikes' lines, and at each tip a dot, or a sparkle the frame it is shot.
+
+class SpikeLines extends Lit [ width = 100%, height = 100%, traced = { app.scene.spikeLines() } ]
+
+class SpikeTip extends Figure [ cx = :x, cy = :y, picture = "dot", ink = "white" ]
+
+class Sparkle extends Figure [ cx = :x, cy = :y, size = :size, picture = { "spark." + :spark } ]
+
+// The claw: one of eight figures, by how far round its lane it has turned.
+
+class ClawView extends LaneFigure [ ink = "claw",
+    visible = { :depth != 0 && :depth < FAR && (:alive || :caught) },
+    poses: number[][][] = { [
+        [[0, -2, 1], [2, -1, 1], [3, 4, 1], [-3, -3, 1], [-1, 0, 1], [0, 2, 1], [2, 1, 1], [-3, -1, 1]],
+        [[1, -2, 1], [7, 2, 1], [-3, 1, 1], [2, -1, 1], [-6, -1, 1], [0, 1, 1], [2, 1, 1], [-3, -1, 1]],
+        [[2, -2, 1], [6, 2, 1], [-3, 1, 1], [2, -1, 1], [-5, -1, 1], [-1, 1, 1], [2, 1, 1], [-3, -1, 1]],
+        [[3, -2, 1], [5, 2, 1], [-3, 1, 1], [2, -1, 1], [-4, -1, 1], [-2, 1, 1], [2, 1, 1], [-3, -1, 1]],
+        [[5, -2, 1], [3, 2, 1], [-3, 1, 1], [2, -1, 1], [-2, -1, 1], [-4, 1, 1], [2, 1, 1], [-3, -1, 1]],
+        [[6, -2, 1], [2, 2, 1], [-3, 1, 1], [2, -1, 1], [-1, -1, 1], [-5, 1, 1], [2, 1, 1], [-3, -1, 1]],
+        [[7, -2, 1], [1, 2, 1], [-3, 1, 1], [2, -1, 1], [0, -1, 1], [-6, 1, 1], [2, 1, 1], [-3, -1, 1]],
+        [[3, 1, 0], [3, -4, 1], [2, 1, 1], [0, 2, 1], [-3, 1, 1], [2, -1, 1], [0, -2, 1], [-1, 0, 1], [-3, 3, 1]]] },
+    shape = { app.camera.acrossLane(poses[(:position >> 1) & 7], :lane, :depth) }
+    ]
+
+
+// ── the enemies, each drawn as its kind is ──
+
+// A flipper and a pulsar are drawn across their lane, or, turning over, toward where the flip
+// is heading. Each stroke is so many parts along the line and so many across.
+
+class Flipper extends LaneFigure [ ink = "flipper",
+    strokes: number[][] = { [[4, 1, 1], [4, -1, 1], [-2, 1, 1], [1, 1, 1], [-3, -1, 1], [-3, 1, 1], [1, -1, 1], [-2, -1, 1]] },
+    shape = { :flipping ? app.camera.flipping(strokes, :lane, :depth, :angle) : app.camera.acrossLane(strokes, :lane, :depth) }
+    ]
+
+
+// A pulsar's zigzag runs from flat to tallest as the pulse rises, and it is white while pulsing.
+
+class Pulsar extends Flipper [
+    ink = { app.game.pulseOn ? "white" : "pulsar" },
+    zigzags: number[][][] = { [
+        [[1, 0, 0], [6, 0, 1]],
+        [[1, 0, 0], [2, -1, 1], [2, 2, 1], [2, -1, 1]],
+        [[1, 0, 0], [1, -1, 1], [1, 2, 1], [1, -2, 1], [1, 2, 1], [1, -2, 1], [1, 1, 1]],
+        [[1, 0, 0], [1, -2, 1], [1, 4, 1], [1, -4, 1], [1, 4, 1], [1, -4, 1], [1, 2, 1]],
+        [[2, -3, 1], [1, 6, 1], [1, -6, 1], [1, 6, 1], [1, -6, 1], [2, 3, 1]]] },
+    rise: number = { Math.floor((app.game.pulse + 64) / 16) },
+    strokes = { zigzags[rise >= 0 && rise < 5 ? rise : 0] }
+    ]
+
+
+// A thing in the middle of its lane, at its depth: its place, its size and brightness there.
+
+class OnLane extends Figure [
+    where: Seen = { app.camera.atLane(:lane, :depth) },
+    cx = { where.x },
+    cy = { where.y },
+    size = { where.size },
+    brightness = { where.bright }
+    ]
+
+
+// A tanker shows what it carries (one that carries nothing looks like the flippers' one); a
+// spiker spins.
+
+class Tanker extends OnLane [ picture = { "tanker." + (:cargo == "none" ? "flippers" : :cargo) } ]
+
+class Spiker extends OnLane [ picture = { "spiker." + (1 + (app.game.frame & 3)) } ]
+
+// A fuseball sits on a spoke, or crosses to the next, and turns as it goes.
+
+class Fuseball extends OnLane [
+    where = { app.camera.fuseballAt(:lane, :depth, :flipping, :angle) },
+    picture = { "fuseball." + (app.game.frame & 3) }
+    ]
+
+
+// ── shots, explosions, stars ──
+
+class EnemyShot extends OnLane [ visible = :inPlay, picture = { "enemyShot." + (1 + (app.game.frame & 3)) } ]
+
+class PlayerShot extends OnLane [ visible = :inPlay, picture = "playerShot" ]
+
+// An explosion, as it grows; the points a fuseball was worth; the spark where an enemy caught
+// the claw.
+
+class Explosion extends OnLane [
+    visible = :inPlay,
+    picture = { :kind == "debris" ? "explosion." + (1 + ((:stage >> 2) & 3)) : :kind == "caught" ? "spark.1"
+        : "fuseballScore." + (:kind == "fuseball250" ? 250 : :kind == "fuseball500" ? 500 : 750) }
+    ]
+
+
+// The player's death, at full size whatever its depth: its picture for this step of the
+// sequence (scene.declare), the shrapnel flying as it shrinks.
+
+class Death extends Figure [
+    visible = :inPlay,
+    where: Seen = { app.camera.atLane(:lane, :depth) },
+    cx = { where.x },
+    cy = { where.y },
+    size = { sizeOf(app.scene.shrapnelNow.binary, app.scene.shrapnelNow.linear) },
+    picture = { app.scene.deathPictures[app.scene.deathStep] ?? "" }
+    ]
+
+
+// A plane of stars, seen as the claw falls through space; in the first waves all in the
+// well's color, later each plane in its own.
+
+class Stars extends Figure [
+    depth: number = { :@ ?? 0 },
+    visible = { depth != 0 },
+    where: Seen = { app.camera.starAt(depth) },
+    cx = { where.x },
+    cy = { where.y },
+    size = { where.size },
+    brightness = { where.bright },
+    ink = { app.game.waveIndex < 5 ? "well" : (rowIndex & 7) == 7 ? "pulsar" : ROLES[rowIndex & 7] },
+    picture = { "star." + (1 + (rowIndex & 3)) }
+    ]
+
+
+// ── the panel ──
+
+// Along the top: the score (large while a game is played), the spare lives, the best score and
+// the wave. Between games, the arcade's own lines; during a game, its warnings and the bonus
+// for the wave chosen.
+
+class SpareLife extends Lit [ width = { 60 * SMALL }, height = 20,
+    spare: boolean = false,
+    traced = { app.camera.trace(spare ? "spareLife" : "noSpareLife", SMALL, "claw", 12, 0, 10) }
+    ]
+
+
+class Panel [ width = 100%, height = 100%,
+    game: Game = { app.game },
+    left: number = { 290 - 448 * SMALL },       // where the score starts
+    top: number = { 285 - 364 * SMALL },
+
+    attract: View [ width = 100%, height = 100%, visible = { !classroot.game.playing },
+        Message [ says = { (classroot.game.frame & 0x20) == 0 ? "insertCoins" : "gameOver" } ],
+        Message [ says = "coinPlay" ],
+        Message [ says = "bonusEvery", then = { digits(20000, 6) } ],
+        Message [ says = "atari" ],
+        Message [ says = "credits", then = { digits(0, 2) } ]
+        ],
+    score: ArcadeText [ cx = { classroot.left }, cy = { classroot.top }, large = { classroot.game.playing },
+        text = { digits(classroot.game.playing ? classroot.game.score : 0, 6) } ],
+    spares: Dataset [ contents = { { lives: [1, 2, 3, 4, 5, 6].map((k) => ({ id: k, spare: k < classroot.game.lives })) } } ],
+    lives: View [ x = { classroot.left }, y = { classroot.top + 16 * SMALL - 10 }, datapath = { classroot.spares.value },
+        layout: SimpleLayout [ axis = x ],
+        SpareLife [ datapath = :lives[], spare = :spare ]
+        ],
+    best: ArcadeText [ cx = { classroot.left + 312 * SMALL }, cy = { classroot.top - 32 * SMALL },
+        text = { digits(classroot.game.bestScore, 6) } ],
+    wave: ArcadeText [ cx = { classroot.left + 456 * SMALL }, cy = { classroot.top + 4 * SMALL }, ink = "level",
+        visible = { classroot.game.playing }, text = { digits(classroot.game.waveIndex + 1, 2) } ],
+
+    Message [ says = "avoidSpikes", visible = { classroot.game.avoidSpikes } ],
+    arriving: View [ width = 100%, height = 100%, visible = { classroot.game.phase == "arriving" && classroot.game.playing },
+        Message [ says = "bonusPoints", visible = { classroot.game.startBonus != 0 },
+            then = { digits(classroot.game.startBonuses[classroot.game.startBonus] * 100, 6) } ],
+        Message [ says = "recharge" ],
+        Message [ says = "levelUp" ]
+        ]
+    ]
+
+
+class PlayScreen [ width = 100%, height = 100%,
+    Panel [ ],
+    WellLines [ ],
+    nymphs: View [ width = 100%, height = 100%, datapath = { app.scene.nymphDots.value },
+        NymphDot [ datapath = :dots[] ]
+        ],
+    field: View [ width = 100%, height = 100%, datapath = { app.game.value },
+        ClawView [ datapath = :claw ],
+        enemies: View [ width = 100%, height = 100%, visible = { !app.game.value.claw.dropping },
+            View [ datapath = :enemies[], visible = { :inPlay && rowIndex < app.game.level.enemySlots },
+                classFor = { :kind == "flipper" ? Flipper : :kind == "pulsar" ? Pulsar : :kind == "tanker" ? Tanker
+                    : :kind == "spiker" ? Spiker : Fuseball } ]
+            ],
+        EnemyShot [ datapath = :enemyShots[] ],
+        PlayerShot [ datapath = :shots[] ],
+        View [ datapath = :blasts[], classFor = { :kind == "player" ? Death : Explosion } ],
+        stars: View [ width = 100%, height = 100%, visible = { app.game.stars != "none" },
+            Stars [ datapath = :stars[] ]
+            ]
+        ],
+    SpikeLines [ ],
+    tips: View [ width = 100%, height = 100%, datapath = { app.scene.spikeTips.value },
+        View [ datapath = :tips[], classFor = { :spark != 0 ? Sparkle : SpikeTip } ]
+        ]
+    ]
+
+
+// ── choosing where to start ("rate yourself") ──
+
+// Five columns of the choices, each its wave, the bonus it earns and a little picture of its
+// well, scrolling a column a frame toward the one chosen; the time left; a box round the
+// choice.
+
+schema Choice [ id: number, x: number, wave: number, bonus: number, well: number ]
+
+// a wave's well, small, in the color of how many times round the shapes it is
+
+class WellIcon extends Lit [
+    wave: number = 0,
+    cx: number = 0,
+    cy: number = 0,
+    x = { cx - 20 },
+    y = { cy - 20 },
+    width = 40,
+    height = 40,
+    colors: string[] = ["well", "flipper", "claw", "pulsar", "white", "text", "text", "text"],
+    traced = { [{ ink: colors[(wave >> 4) & 7], i: 12, p: outlineOf(app.well.shapes[app.well.order[wave % 16]], 20) }] }
+    ]
+
+
+script {
+    // a well's outline, small, round a point (o, o): from its first spoke, round all sixteen
+    function outlineOf(s: WellShape, o: number): number[] {
+        const f = sizeOf(5, 0) * 4
+        const p: number[] = []
+        for (const k of [s.open ? 15 : 0, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0])
+            p.push(o + signed(s.x[k] - 0x80) * f, o - signed(s.z[k] - 0x80) * f)
+        return p
+        }
+    }
+
+class ChoiceColumn [ width = 100%, height = 100%,
+    unit: number = { 4 * SMALL },
+    ArcadeText [ cx = { 290 + (:x - 8) * classroot.unit }, cy = { 285 + 40 * classroot.unit }, text = { digits(:wave + 1, 2) } ],
+    ArcadeText [ cx = { 290 + (:x - 20) * classroot.unit }, cy = { 285 + 70 * classroot.unit }, ink = "flipper",
+        text = { digits(:bonus * 100, 6) } ],
+    WellIcon [ cx = { 290 + :x * classroot.unit }, cy = { 285 + 52 * classroot.unit }, wave = :wave ]
+    ]
+
+
+class ChooseScreen [ width = 100%, height = 100%,
+    game: Game = { app.game },
+    columnX: number[] = [-66, -29, 9, 48, 88],     // in units of four from the center
+    first: number = { app.scene.firstShown },
+    columns: Dataset [ schema = [ columns[]: Choice ], contents = { { columns: [0, 1, 2, 3, 4]
+        .filter((c) => classroot.game.startWaves[classroot.first + c] != undefined)
+        .map((c) => ({ id: c, x: classroot.columnX[c], wave: classroot.game.startWaves[classroot.first + c],
+            bonus: classroot.game.startBonuses[classroot.first + c], well: 0 })) } } ],
+
+    Message [ says = "atari", row = 96 ],
+    Message [ says = "player", then = { digits(1, 2) } ],
+    Message [ says = "rate" ],
+    Message [ says = "spinKnob" ],
+    Message [ says = "pressFire" ],
+    Message [ says = "novice" ],
+    Message [ says = "expert" ],
+    Message [ says = "level" ],
+    Message [ says = "hole" ],
+    Message [ says = "bonus" ],
+    View [ width = 100%, height = 100%, datapath = { classroot.columns.value },
+        ChoiceColumn [ datapath = :columns[] ]
+        ],
+    Message [ says = "time", then = { digits(classroot.game.choiceTime, 2) } ],
+    box: Lit [ width = 100%, height = 100%,
+        traced = { this.around(classroot.columnX[classroot.game.choice - classroot.first] - 0x16) },
+        around(x: number) -> Trace[] {
+            const u = 4 * SMALL, left = 290 + x * u, bottom = 285 + 72 * u, right = left + 0x26 * u, top = bottom - 0x28 * u
+            return [{ ink: "white", i: 14, p: [left, bottom, right, bottom, right, top, left, top, left, bottom] }]
+            }
+        ]
+    ]
+
+
+// ── the logo ──
+
+script {
+    type Copy = { size: number, ink: string }       // one of the logo's copies: its size and color
+    }
+
+// A rainbow: the picture (the screen's border, then the word TEMPEST) drawn again and again at
+// sizes from the near edge to the far one, the nearest in white.
+
+class Rainbow extends Lit [ width = 100%, height = 100%,
+    edges: number[] = { app.scene.logoShown },
+    copies: Copy[] = { this.sizes(edges) },
+    traced = { copies.flatMap((c) => app.camera.trace(edges[2] == 0 ? "logoBorder" : "logoWord", c.size, c.ink, 12, 290, 285)) },
+    sizes(e: number[]) -> Copy[] {
+        const out: Copy[] = []
+        let i = e[0]
+        do {
+            out.push({ size: sizeOf(i >> 5, (i << 2) & 0x7f), ink: i == e[0] ? "white" : app.scene.roleAt((i >> 3) & 7) })
+            i = (i + 2) & 255
+            } while (i < e[1])
+        return out
+        }
+    ]
+
+
+// Under the word: how to start, and the keys, two columns of them, either side of the middle.
+
+schema KeyLine [ id: number, action: string, keys: string ]
+
+class KeyRow [ width = 100%, height = { 40 * SMALL },
+    ArcadeText [ cx = { 290 - 3 * 4 * SMALL }, cy = { 32 * SMALL }, align = "right", text = :action ],
+    ArcadeText [ cx = { 290 + 3 * 4 * SMALL }, cy = { 32 * SMALL }, ink = "pulsar", text = :keys ]
+    ]
+
+
+class LogoScreen [ width = 100%, height = 100%,
+    keyLines: Dataset { { "lines": [
+        { "id": 0, "action": "SPIN", "keys": "← → OR A S" },
+        { "id": 1, "action": "FIRE", "keys": "SPACE OR RETURN" },
+        { "id": 2, "action": "SUPERZAPPER", "keys": "↓ OR Z OR /" },
+        { "id": 3, "action": "PAUSE", "keys": "ESCAPE" } ] } },
+    rainbow: Rainbow [ ],
+
+    // The copyright comes out in the color of the last picture drawn: the arcade sets a color
+    // only when it changes, and its message's color is the one it set for that picture.
+    // (The arcade has it just under the logo; here it sits at the foot of the screen, to make
+    // room for the keys.)
+
+    Message [ says = "atari", ink = { parent.rainbow.copies.at(-1)?.ink ?? "white" } ],
+
+    // the keys, once the word has come to rest
+
+    keys: View [ width = 100%, height = 100%, visible = { app.scene.logoShown[2] == 1 && app.scene.logoShown[0] == app.scene.logoShown[1] },
+        Message [ says = "pressReturn" ],
+        rows: View [ width = 100%, y = { 285 - 2 * 4 * SMALL }, datapath = { classroot.keyLines.value },
+            layout: SimpleLayout [ axis = y ],
+            KeyRow [ datapath = :lines[] ]
+            ]
+        ]
+    ]
+
+
+// ── the monitor ──
+
+// The arcade draws within rows 76 to 540 of its 570: the monitor frames rows 60 to 556, scaled
+// to fit the window and centered in it, which leaves an even margin above and below.
+
+class Monitor [ clip = true,
+    zoom: number = { Math.min(app.width / 580, app.height / 496) },
+    width = 580,
+    height = 496,
+    scale = { zoom },
+    x = { (app.width - 580 * zoom) / 2 },
+    y = { (app.height - 496 * zoom) / 2 },
+    px: number = { 1 / zoom },
+    palette: Record<string, number> = { app.scene.palette },
+    paused: boolean = false,
+
+    // The arcade's lines of text: where each starts (in units of four from the center), the
+    // color it is drawn in, and whether it is large. The last is the port's own.
+
+    messages: Record<string, MessageText> = { {
+        gameOver: { text: "GAME OVER", x: -27, y: 86, color: "text" },
+        player: { text: "PLAYER ", x: -51, y: 26, color: "white", large: true },
+        play: { text: "PLAY", x: -12, y: 56, color: "white" },
+        spinKnob: { text: "SPIN KNOB TO CHANGE", x: -57, y: 0, color: "pulsar" },
+        pressFire: { text: "PRESS FIRE TO SELECT", x: -60, y: -10, color: "claw" },
+        rate: { text: "RATE YOURSELF", x: -39, y: 10, color: "text" },
+        novice: { text: "NOVICE", x: -86, y: -30, color: "flipper" },
+        expert: { text: "EXPERT", x: 74, y: -30, color: "flipper" },
+        bonus: { text: "BONUS", x: -117, y: -70, color: "text" },
+        time: { text: "TIME", x: -24, y: -104, color: "text" },
+        level: { text: "LEVEL", x: -117, y: -40, color: "text" },
+        hole: { text: "HOLE", x: -117, y: -55, color: "text" },
+        insertCoins: { text: "INSERT COINS", x: -36, y: 86, color: "flipper" },
+        coinPlay: { text: "1 COIN 1 PLAY", x: 20, y: -128, color: "text" },
+        atari: { text: "© MCMLXXX ATARI", x: -45, y: -110, color: "level" },
+        credits: { text: "CREDITS ", x: -96, y: -128, color: "text" },
+        bonusPoints: { text: "BONUS ", x: -38, y: -80, color: "flipper" },
+        bonusEvery: { text: "BONUS EVERY ", x: -56, y: -119, color: "pulsar" },
+        avoidSpikes: { text: "AVOID SPIKES", x: -72, y: 0, color: "white", large: true },
+        levelUp: { text: "LEVEL", x: -32, y: 90, color: "level" },
+        recharge: { text: "SUPERZAPPER RECHARGE", x: -60, y: -96, color: "level" },
+        pressReturn: { text: "PRESS RETURN TO START", x: -63, y: 4, color: "flipper" } } },
+
+    arcade: View [ y = -60, width = 580, height = 570,
+        play: PlayScreen [ visible = { app.scene.shows == "play" } ],
+        choose: ChooseScreen [ visible = { app.scene.shows == "choose" } ],
+        logo: LogoScreen [ visible = { app.scene.shows == "logo" } ],
+
+        // paused: the picture dimmed, and the word, large and at full brightness, in the middle
+
+        View [ width = 100%, height = 100%, fill = black, opacity = 0.6, visible = { classroot.paused } ],
+        ArcadeText [ visible = { classroot.paused }, text = "PAUSED", large = true, ink = "white", brightness = 15,
+            cx = { 290 - 72 * LARGE }, cy = { 285 + 12 * LARGE } ]
+        ]
+    ]

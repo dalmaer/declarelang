@@ -24,6 +24,7 @@ import { HeadlessBackend, provideMeasurer, provideTransport, settle } from "../r
 import { buildProgram } from "../runtime/dist/boot.js";
 import { withLiteralSink } from "../runtime/dist/value.js";
 import { kernelReady } from "../runtime/dist/reactive.js";
+import { programDirs, programFile } from "../tools/internal/program-dirs.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 await kernelReady();
@@ -32,7 +33,7 @@ provideTransport(() => Promise.reject(new Error("offline")));
 
 const folder = (dir) => existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".declare")).map((f) => resolve(dir, f)) : [];
 const files = [
-  ...readdirSync(resolve(ROOT, "apps")).map((d) => resolve(ROOT, "apps", d, d + ".declare")).filter(existsSync),
+  ...programDirs(ROOT).map(programFile),
   ...folder(resolve(ROOT, "apps/docs/demos")),
   ...folder(resolve(ROOT, "test/probe")),
 ];

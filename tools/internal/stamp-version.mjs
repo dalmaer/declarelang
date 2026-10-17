@@ -82,12 +82,18 @@ const indexText = existsSync(INDEX_HTML) ? readFileSync(INDEX_HTML, "utf8") : nu
 // so a template change must bump the BUILD_ID (dropping the SW cache bucket) even
 // though apps/ at large is deliberately NOT a hashed input. Hashed and stamped exactly
 // like the root page: `?v=` normalized away before hashing.
+// Every page under apps/, at any depth: the stubs sit in program directories
+// wherever those are (tools/internal/program-dirs.mjs), and a hand-written page
+// that boots the platform (apps/two-way/) is stamped the same way.
 const APPS_DIR = join(ROOT, "apps");
-const stubFiles = existsSync(APPS_DIR)
-  ? readdirSync(APPS_DIR).sort()
-      .map((n) => join(APPS_DIR, n, "index.html"))
-      .filter((f) => existsSync(f))
-  : [];
+function* pagesUnder(dir) {
+  if (!existsSync(dir)) return;
+  for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+    if (e.isDirectory()) { if (!e.name.startsWith(".") && e.name !== "node_modules" && e.name !== "dist") yield* pagesUnder(join(dir, e.name)); }
+    else if (e.name === "index.html") yield join(dir, e.name);
+  }
+}
+const stubFiles = [...pagesUnder(APPS_DIR)];
 
 const h = createHash("sha256");
 // Hash the worker with its BUILD_ID line NORMALIZED, so stamping isn't self-referential.

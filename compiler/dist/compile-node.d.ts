@@ -1,5 +1,6 @@
 import { type CompileOptions, type Compiled } from "./compile.js";
 import type { Closure } from "./closure.js";
+import { type Flags } from "../../runtime/dist/parser.js";
 export type { CompileOptions, Compiled } from "./compile.js";
 export { extractStatic, extractFromProgram, staticHtml, blocksHtml, crawlerDocument } from "./static-html.js";
 export { crawlLocations, crawlDocument, crawlExtract, fragmentHrefs, canonKey, type CrawlDoc, type CrawlOptions } from "./crawl.js";
@@ -17,6 +18,10 @@ export type { Closure, ClosureEntry, Validator, Tracker, Probe } from "./closure
  *  network). The browser twin is a same-origin fetch of the same deployed file, so
  *  the two crawls read the same bytes. */
 export declare function diskDataResolver(originDir: string): (url: string) => unknown;
+/** The program's own `defaultFlags [ … ]`, read from its files without compiling it —
+ *  what a host needs before it decides how to serve the program. Undefined when
+ *  it states none, or when its files do not parse (the compile reports that). */
+export declare function programFlags(source: string, originDir: string): Promise<Flags | undefined>;
 /** `compile` with the filesystem include+auto-include host and (when `typecheck`
  *  is set) the real typechecker injected. Drop-in for the previous `compile`
  *  import. */
