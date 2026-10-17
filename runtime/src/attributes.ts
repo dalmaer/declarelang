@@ -25,7 +25,7 @@
 // direct write to it is an error (one declarative owner — the silent-clobber
 // bug is unrepresentable); a runtime-supplied derive yields to a direct write.
 
-import { ACTIVE, Cell, Constraint, S, isSettling, isTracking, kernel, noteWrite, nulls, setPushHook, table, touchCell, trackCell, untracked, workPending, setOwnershipCheck } from "./reactive.js";
+import { ACTIVE, Cell, Constraint, S, isSettling, isTracking, kernel, noteWrite, nulls, retireValue, setPushHook, table, touchCell, trackCell, untracked, workPending, setOwnershipCheck } from "./reactive.js";
 import { DeclareError, at, layoutConflictMessage, type Where } from "./errors.js";
 import { THEME_PRESETS } from "./themes.js";
 
@@ -864,6 +864,7 @@ function writeRef(carrier: Carrier, name: string, v: unknown, deep = false): voi
   (carrier.$attrs ??= Object.create(defaults) as Record<string, unknown>)[name] = v;
   tableFor(PUSHERS, self.constructor)?.[name]?.(self, v);
   carrier.$cells?.[name]?.changed();
+  if (cur !== v) retireValue(cur);   // an object value replaced: the cells its readers made inside it
   noteWrite(self, name, cur, v);
 }
 
