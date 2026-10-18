@@ -24,29 +24,48 @@ schema Point [ x: number, y: number ]
 
 schema Well [ id: number, name: string, closed: boolean, vy: number, face: number, rim[]: Point ]
 
-// The waves: each row holds from level `from` until the next row. How many of
-// each enemy; how fast they climb (depth a second) and the beat between nymphs
-// surfacing (ms); what a tanker may carry; whether flippers fire.
+// The waves, one row a level: the arcade's own table, in this program's units
+// (depth a second, seconds). How many enemies the wave holds; how the flippers
+// move (`plan`); how fast flippers, tankers and spikers climb and enemy shots
+// fly; how many of each kind may be in the tube at once, and the least before
+// any other kind comes (a kind whose least is nought comes only out of a
+// tanker); the four things a tanker may carry; how many enemy shots may be up,
+// and how long an enemy waits after firing; whether pulsars fire; how high the
+// spikes already stand in every lane; how long a flip round the rim takes; and
+// whether fuseballs chase the claw at the rim.
 
-schema Wave [ from: number, flippers: number, tankers: number, spikers: number,
-    fuseballs: number, pulsars: number, speed: number, gap: number, cargo[]: string, fire: boolean ]
+schema Count [ min: number, max: number ]
+schema Wave [ level: number, enemies: number,
+    plan: "climb" | "climbThenFlip" | "spiral" | "spiralBack" | "flipOffSpikes" | "avoid",
+    speed: number, spikerSpeed: number, shotSpeed: number,
+    flippers: Count, pulsars: Count, tankers: Count, spikers: Count, fuseballs: Count,
+    cargo[]: "flipper" | "pulsar" | "fuseball", shots: number, fireDelay: number, pulsarsFire: boolean,
+    spikes: number, rimFlip: number, fuseballsChase: boolean ]
 
 // A level a game may start at, and the bonus for clearing it first.
 
 schema Start [ id: number, level: number, bonus: number ]
 
-// A nymph: an enemy waiting at the far end, due to surface at time `due`.
+// A nymph: an enemy waiting at the far end, due to surface when the nymphs'
+// own clock reaches `due`. What it becomes is decided as it surfaces.
 
-schema Nymph [ id: number, kind: "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar", lane: number, due: number ]
+schema Nymph [ id: number, lane: number, due: number ]
 
-// An enemy. `born` and `speed` give its depth at any time; `from`, `lane` and
-// `flipAt` give its lane (a flip runs from `from` to `lane`, starting at
-// `flipAt`; −1 means it is not flipping). `top` is how high a spiker climbs;
-// `cargo` what a tanker splits into.
+// An enemy. `born` and `speed` give its depth at any time; `from`, `lane`,
+// `flipAt` and `flipFor` give its lane (a flip runs from `from` to `lane`,
+// starting at `flipAt` and taking `flipFor` seconds; `flipAt` −1 means it is
+// not flipping). `top` is how high a spiker climbs; `cargo` what a tanker
+// splits into. A flipper's way of moving keeps `dir` (the way it flips),
+// `count` (the flips it has made) and `next` (when it next moves); `fireAt` is
+// when it may fire again.
 
 schema Foe [ id: number, kind: "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar",
-    lane: number, from: number, flipAt: number, born: number, speed: number, top: number,
-    cargo: "flipper" | "pulsar" | "fuseball" ]
+    lane: number, from: number, flipAt: number, flipFor: number, born: number, speed: number, top: number,
+    cargo: "flipper" | "pulsar" | "fuseball", dir: number, count: number, next: number, fireAt: number ]
+
+// what a nymph comes up as: a kind, and for a tanker what it carries
+
+schema Launch [ kind: "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar", cargo: "flipper" | "pulsar" | "fuseball" ]
 
 // A shot, the claw's or an enemy's: it leaves depth `from` at time `firedAt`.
 
@@ -184,13 +203,16 @@ the App calls the verbs (`lay`, `fire`, `think`, `step`, `zap`, `recall`).
 class Playfield extends Dataset [
     schema = [ nymphs[]: Nymph, foes[]: Foe, shots[]: Shot, foeShots[]: Shot, spikes[]: Spike, blasts[]: Blast ],
     nextId: number = 1,
-    flipTime: number = 0.3,        // seconds a flip takes
+    frame: number = 0.0366,        // the arcade's frame, seconds: its waits and odds are counted in them
+    flipTime: number = 0.29,       // seconds a flip takes off the rim: eight frames
     shotSpeed: number = 2.6,       // depth per second, down the tube
     foeShotSpeed: number = 0.55,   // depth per second, up the tube
+    pulsarSpeed: number = 0.17,    // depth per second, the same in every wave
     maxShots: number = 8,
     maxFoes: number = 7,           // the arcade's room in the tube
     blastLife: number = 0.5,
     nymphLead: number = 5,         // seconds a nymph is seen moving out before it surfaces
+    risen: number = 0,             // the nymphs' clock: they rise only while there is room in the tube
 
     // ── where things are now: pure functions of a record and the clock ──
     //
@@ -208,7 +230,7 @@ class Playfield extends Dataset [
         },
     flipOf(f: Foe?, t: number) -> number {
         if (f == null || f.flipAt < 0) return 1
-        return clamp((t - f.flipAt) / this.flipTime, 0, 1)
+        return clamp((t - f.flipAt) / f.flipFor, 0, 1)
         },
     laneOf(f: Foe?, t: number, closed: boolean) -> number {
         if (f == null) return 0
@@ -229,8 +251,8 @@ class Playfield extends Dataset [
 
     // how near a nymph is to surfacing, 0 (far off) to 1 (now)
 
-    readiness(n: Nymph?, t: number) -> number {
-        return n == null ? 0 : clamp(1 - (n.due - t) / this.nymphLead, 0, 1)
+    readiness(n: Nymph?) -> number {
+        return n == null ? 0 : clamp(1 - (n.due - this.risen) / this.nymphLead, 0, 1)
         },
 
     // a spike is as high as its record says, or as high as the spiker now
@@ -247,6 +269,20 @@ class Playfield extends Dataset [
         return h
         },
     anySpikes() -> boolean { return this.value.spikes.some((s) => s.h > 0.01) },
+    spikeIn(lane: number, t: number) -> number {
+        const s = this.value.spikes.find((p) => p.lane == lane)
+        return s == null ? 0 : this.spikeHeight(s, t)
+        },
+
+    // the lane with the shortest spike (one of them, where several are as short)
+
+    shortestSpike() -> number {
+        const h = (l: number) => this.value.spikes.find((s) => s.lane == l)?.h ?? 0
+        const lanes = Array.from({ length: 16 }, (_, l) => l)
+        const low = Math.min(...lanes.map(h))
+        const at = lanes.filter((l) => h(l) == low)
+        return at[rnd(at.length)]
+        },
 
     // A fuseball is worth more the further down the tube it is shot.
 
@@ -257,25 +293,119 @@ class Playfield extends Dataset [
 
     // ── verbs ──
 
-    reset() { this.set([], ({ nymphs: [], foes: [], shots: [], foeShots: [], spikes: [], blasts: [] })) },
+    reset() {
+        this.set([], ({ nymphs: [], foes: [], shots: [], foeShots: [], spikes: [], blasts: [] }))
+        risen = 0
+        },
 
     newId() -> number { const id = this.nextId; this.nextId = id + 1; return id },
 
-    // A level's nymphs, laid at the far end: the first due at `first`, the
-    // rest a beat apart.
+    // A wave's nymphs, laid at the far end in bands of sixteen, as the arcade
+    // lays them: the nth of a band is due 16n frames on, and as many more as its
+    // lane's number, so two in different bands may come up together.
 
-    lay(kinds: Kind[], first: number, gap: number) {
-        const old = this.value.nymphs
-        const due = old.length > 0 ? Math.max(...old.map((n) => n.due)) + gap : first
-        const fresh = kinds.map((k, i) => ({ id: this.newId(), kind: k, lane: rnd(16), due: due + i * gap }))
-        this.set(["nymphs"], old.concat(fresh))
+    lay(count: number) {
+        const fresh = Array.from({ length: count }, (_, i) => {
+            const lane = rnd(16)
+            return ({ id: this.newId(), lane: lane, due: risen + frame * (((i % 16) * 16 + lane) || 15) })
+            })
+        this.set(["nymphs"], fresh)
         },
 
-    surface(n: Nymph, t: number, w: Wave) -> Foe {
-        const pace = n.kind == "tanker" ? 0.8 : n.kind == "spiker" ? 1.4 : n.kind == "pulsar" ? 0.7 : n.kind == "fuseball" ? 0.9 : 1
-        const cargo = (w.cargo[rnd(w.cargo.length)] ?? "flipper") as "flipper" | "pulsar" | "fuseball"
-        return ({ id: this.newId(), kind: n.kind, lane: n.lane, from: n.lane, flipAt: -1,
-                  born: t, speed: w.speed * pace, top: 0.35 + Math.random() * 0.4, cargo: cargo })
+    // the spikes some waves start with, as high in every lane
+
+    standSpikes(h: number) { this.set(["spikes"], Array.from({ length: 16 }, (_, l) => ({ id: l + 1, lane: l, h: h }))) },
+
+    // What a nymph coming up in a lane becomes, as the arcade decides it, or
+    // nothing, when no kind has room. A kind's room is its most, less those in
+    // the tube, less two for each tanker carrying it (the arcade counts round at
+    // 256, so a kind left below nought that way has plenty), and no more than the
+    // room left in the tube. Kinds below their least come first, the last kind
+    // first; where a tanker and a spiker both have room, the lane's spike decides
+    // (a tall one calls a tanker); else the kinds in turn from a random one. A
+    // kind whose least is nought never comes this way.
+
+    chooseKind(lane: number, foes: Foe[], w: Wave, t: number) -> Launch? {
+        const kinds: Kind[] = ["flipper", "pulsar", "tanker", "spiker", "fuseball"]
+        const allowed: Record<Kind, Count> = { flipper: w.flippers, pulsar: w.pulsars, tanker: w.tankers, spiker: w.spikers,
+            fuseball: w.fuseballs }
+        const count = (k: Kind) => foes.filter((f) => f.kind == k).length
+        const room: Record<Kind, number> = { flipper: 0, pulsar: 0, tanker: 0, spiker: 0, fuseball: 0 }
+        for (const k of kinds) room[k] = Math.max(0, allowed[k].max - count(k))
+        for (const f of foes) if (f.kind == "tanker") room[f.cargo] = room[f.cargo] >= 2 ? room[f.cargo] - 2 : room[f.cargo] + 254
+        for (const k of kinds) room[k] = Math.min(room[k], Math.max(0, maxFoes - foes.length))
+        const launch = (k: Kind): Launch | null => {
+            if (k != "tanker") return ({ kind: k, cargo: "flipper" })
+            const r = rnd(4)
+            for (let n = 1; n <= 4; n++) {
+                const c = w.cargo[(r + 4 - n) % 4] as Launch["cargo"]
+                if (room[c] > 0) return ({ kind: k, cargo: c })
+                }
+            return null
+            }
+        const first = (ks: Kind[]): Launch | null => {
+            for (const k of ks) { const l = launch(k); if (l != null) return l }
+            return null
+            }
+        const open = kinds.filter((k) => room[k] > 0)
+        if (open.length == 0) return null
+        const lastFirst = [...kinds].reverse()
+        if (open.length == 1) return first(lastFirst.filter((k) => room[k] > 0 && allowed[k].min > 0))
+        const below = first(lastFirst.filter((k) => room[k] > 0 && count(k) < allowed[k].min))
+        if (below != null) return below
+        if (room.spiker > 0 && room.tanker > 0) {
+            const l = launch(this.spikeIn(lane, t) > 0.16 ? "tanker" : "spiker")
+            if (l != null) return l
+            }
+        const from = 1 + rnd(4)
+        return first([0, 1, 2, 3, 4].map((n) => kinds[mod(from - n, 5)]).filter((k) => allowed[k].min > 0 && room[k] > 0))
+        },
+
+    // A new enemy at the far end of a lane. Tankers climb as fast as flippers;
+    // a flipper whose wave has it stop for each flip climbs at half the pace.
+
+    surface(lane: number, t: number, w: Wave, l: Launch) -> Foe {
+        const speed = l.kind == "spiker" ? w.spikerSpeed : l.kind == "pulsar" ? pulsarSpeed
+            : l.kind == "flipper" && w.plan == "climbThenFlip" ? w.speed / 2 : w.speed
+        return ({ id: this.newId(), kind: l.kind, lane: lane, from: lane, flipAt: -1, flipFor: flipTime, born: t, speed: speed,
+                  top: 0.67, cargo: l.cargo, dir: -1, count: 0, next: t + 8 * frame, fireAt: t })
+        },
+
+    // A flipper's next move, as its wave's plan has it: the fields to write.
+    //   climb — straight up the lane;
+    //   climbThenFlip — eight frames' climb, then a flip, and again;
+    //   spiral — flip after flip, one way;
+    //   spiralBack — two flips one way, three the other, and again;
+    //   flipOffSpikes — flip after flip, but not beside a spike as high as it is;
+    //   avoid — a flip away from the claw, then four frames' climb.
+    // At the rim, every flipper waits four frames and then flips round the rim
+    // toward the claw, faster as the waves go on.
+
+    flipperMove(f: Foe, t: number, clawLane: number, closed: boolean, w: Wave) -> Moves {
+        const d = this.depthOf(f, t)
+        if (d >= 1) {
+            if (f.lane == clawLane) return [["next", t + 4 * frame]]
+            return this.flip(f, t, Math.sign(laneStep(f.lane, clawLane, closed)), w.rimFlip, 4, closed)
+            }
+        switch (w.plan) {
+            case "climb": return [["next", f.born + 1 / f.speed]]
+            case "climbThenFlip": return this.flip(f, t, f.dir, flipTime, 8, closed)
+            case "spiral": return this.flip(f, t, f.dir, flipTime, 0, closed)
+            case "spiralBack": return this.flip(f, t, f.count % 5 < 2 ? f.dir : -f.dir, flipTime, 0, closed)
+            case "flipOffSpikes": return this.spikeIn(f.lane, t) >= d ? [["next", t + frame]] : this.flip(f, t, f.dir, flipTime, 0, closed)
+            case "avoid": return this.flip(f, t, -Math.sign(laneStep(f.lane, clawLane, closed) || 1), flipTime, 4, closed)
+            }
+        return []
+        },
+
+    // a flip one lane `dir` (−1 or 1) taking `takes` seconds, and `rest` frames
+    // after it before the next move; on an open tube a flip off the end goes back
+
+    flip(f: Foe, t: number, dir: number, takes: number, rest: number, closed: boolean) -> Moves {
+        let to = f.lane + dir
+        if (!closed && (to < 0 || to > 15)) to = f.lane - dir
+        return [["from", f.lane], ["lane", closed ? mod(to, 16) : to], ["flipAt", t], ["flipFor", takes],
+                ["count", f.count + 1], ["next", t + takes + rest * frame]]
         },
     ensureSpike(lane: number) {
         if (!this.value.spikes.some((s) => s.lane == lane))
@@ -290,26 +420,24 @@ class Playfield extends Dataset [
         this.set(["blasts", "-"], ({ id: this.newId(), kind: kind, lane: lane, depth: depth, at: t, points: points }))
         },
 
-    // Enemies' decisions, on the brain's beat: start a flip, hop, or fire. At
-    // the rim, flippers and fuseballs close on the claw. Answers how many shots
-    // were fired.
+    // Pulsars' and fuseballs' decisions, on the brain's beat: now and then a hop
+    // to the next lane, and near the rim a closing on the claw (a pulsar between
+    // pulses; a fuseball only in the waves where they chase).
 
-    think(t: number, clawLane: number, closed: boolean, w: Wave) -> number {
+    think(t: number, clawLane: number, closed: boolean, w: Wave) {
         const foes = this.value.foes
-        let fired = 0
         for (let i = 0; i < foes.length; i++) {
             const f = foes[i]
-            if (f.kind == "tanker" || f.kind == "spiker" || this.flipOf(f, t) < 1) continue
+            if ((f.kind != "pulsar" && f.kind != "fuseball") || this.flipOf(f, t) < 1) continue
             const d = this.depthOf(f, t)
             let dir = 0
-            if (d >= 0.85 && (f.kind != "pulsar" || !this.pulseAt(t))) {
-                dir = f.lane == clawLane ? 0 : Math.sign(laneStep(f.lane, clawLane, closed) || 1)
-                if (Math.random() > (f.kind == "pulsar" ? 0.4 : 0.7)) dir = 0
+            if (d >= 0.85 && (f.kind == "pulsar" || w.fuseballsChase)) {
+                if (f.kind != "pulsar" || !this.pulseAt(t)) {
+                    dir = f.lane == clawLane ? 0 : Math.sign(laneStep(f.lane, clawLane, closed) || 1)
+                    if (Math.random() > (f.kind == "pulsar" ? 0.4 : 0.7)) dir = 0
+                    }
                 }
-            else if (d < 0.85) {
-                const odds = f.kind == "flipper" ? 0.14 : f.kind == "fuseball" ? 0.2 : 0.07
-                if (Math.random() < odds) dir = Math.random() < 0.5 ? -1 : 1
-                }
+            else if (Math.random() < (f.kind == "fuseball" ? 0.2 : 0.07)) dir = Math.random() < 0.5 ? -1 : 1
             if (dir != 0) {
                 let to = f.lane + dir
                 if (!closed && (to < 0 || to > 15)) to = f.lane - dir
@@ -317,19 +445,15 @@ class Playfield extends Dataset [
                 this.set(["foes", i, "lane"], closed ? mod(to, 16) : to)
                 this.set(["foes", i, "flipAt"], t)
                 }
-            else if (w.fire && f.kind == "flipper" && d < 0.85 && this.value.foeShots.length < 3 && Math.random() < 0.04) {
-                this.set(["foeShots", "-"], ({ id: this.newId(), lane: f.lane, from: d, firedAt: t }))
-                fired = fired + 1
-                }
             }
-        return fired
         },
 
-    // One step of play, `dt` seconds ending at `t`: which nymphs surfaced, what
-    // the shots hit, what reached the rim, which spikers turned, which blasts
-    // burned out. The claw is in `clawLane` at `clawDepth` (below 1 only while
-    // it flies down). Every write is made at the end, in an order that keeps
-    // indices true: field edits, then removals, then additions.
+    // One step of play, `dt` seconds ending at `t`: which nymphs surfaced, how
+    // the flippers moved, what the shots hit, who fired, what reached the rim,
+    // which spikers turned, which blasts burned out. The claw is in `clawLane`
+    // at `clawDepth` (below 1 only while it flies down). Every write is made at
+    // the end, in an order that keeps indices true: field edits, then removals,
+    // then additions.
 
     step(t: number, dt: number, clawLane: number, clawDepth: number, closed: boolean, alive: boolean, w: Wave) -> Outcome {
         const v = this.value
@@ -338,9 +462,11 @@ class Playfield extends Dataset [
         const sounds: string[] = []
         const goneFoes = new Set<number>(), goneShots = new Set<number>(), goneFoeShots = new Set<number>()
         const spikeH = new Map<number, number>()      // spike index -> new height
-        const edits: [number, string, number][] = []    // foe index, field, value
+        const edits: [number, string, number | string][] = []    // foe index, field, value
         const born: Foe[] = []
+        const fired: Shot[] = []
         const blasts: ["burst" | "big" | "points", number, number, number][] = []   // kind, lane, depth, points
+        const playing = alive && clawDepth >= 1
 
         const hitFoe = (f: Foe, d: number, shot: boolean) => {
             goneFoes.add(f.id)
@@ -348,28 +474,43 @@ class Playfield extends Dataset [
             points += worth
             sounds.push("explosion")
             blasts.push(f.kind == "fuseball" && shot ? ["points", this.laneNow(f, t), d, worth] : ["burst", this.laneNow(f, t), d, 0])
-            if (f.kind == "tanker") {                  // a tanker splits into the two it carries
+            if (f.kind == "tanker") {                  // a tanker splits into the two it carries, flipping apart
                 for (const side of [-1, 1]) {
                     let l = f.lane + side
                     if (!closed && (l < 0 || l > 15)) continue
                     l = mod(l, 16)
-                    const speed = f.speed * 1.3
-                    born.push(({ id: this.newId(), kind: f.cargo, lane: l, from: f.lane, flipAt: t,
-                                 born: t - Math.min(d, 0.84) / speed, speed: speed, top: 0, cargo: "flipper" }))
+                    const s = this.surface(l, t, w, { kind: f.cargo, cargo: "flipper" })
+                    born.push(({ ...s, from: f.lane, flipAt: t, born: t - Math.min(d, 0.84) / s.speed, dir: side, next: t + s.flipFor }))
                     }
                 }
             }
 
-        // nymphs come due: each surfaces in its lane if there is room in the
-        // tube, else waits a little longer
+        // the nymphs rise while there is room in the tube: one come due surfaces
+        // as whatever there is room for, or, with room for nothing, waits, and
+        // holds the rest where they are
         const surfaced = new Set<number>()
-        let room = this.maxFoes - v.foes.length
-        const late: [number, number][] = []           // nymph index, new due
-        v.nymphs.forEach((n, i) => {
-            if (n.due > t) return
-            if (room > 0 && alive) { surfaced.add(n.id); born.push(this.surface(n, t, w)); room = room - 1 }
-            else late.push([i, t + 0.6])
-            })
+        let held = !playing || v.foes.length >= this.maxFoes
+        if (!held) {
+            const inTube = v.foes.slice()
+            for (const n of v.nymphs.filter((n) => n.due <= this.risen).sort((a, b) => a.due - b.due)) {
+                const l = inTube.length < this.maxFoes ? this.chooseKind(n.lane, inTube, w, t) : null
+                if (l == null) { held = true; break }
+                const f = this.surface(n.lane, t, w, l)
+                born.push(f)
+                inTube.push(f)
+                surfaced.add(n.id)
+                }
+            }
+        if (!held) this.risen = this.risen + dt
+
+        // flippers move by their wave's plan
+        if (playing) {
+            for (let i = 0; i < v.foes.length; i++) {
+                const f = v.foes[i]
+                if (f.kind != "flipper" || t < f.next || this.flipOf(f, t) < 1) continue
+                for (const [field, value] of this.flipperMove(f, t, clawLane, closed, w)) edits.push([i, field, value])
+                }
+            }
 
         // the claw's shots: each sweeps the depth it covered this step
         for (const s of v.shots) {
@@ -410,9 +551,13 @@ class Playfield extends Dataset [
                 const k = v.spikes.findIndex((p) => p.lane == f.lane)
                 const turning = run >= f.top && run - f.speed * dt < f.top    // it reached its top this step
                 if (turning && k >= 0 && v.spikes[k].h < f.top && !spikeH.has(k)) spikeH.set(k, f.top)
-                if (run >= 2 * f.top) {                // back at the far end: start again elsewhere
-                    const l = rnd(16)
-                    edits.push([i, "lane", l], [i, "from", l], [i, "born", t])
+                if (run >= 2 * f.top) {                // back at the far end: again by the shortest spike, or, with
+                    if (v.nymphs.length == 0)          // no nymphs left, up as a tanker carrying flippers
+                        edits.push([i, "kind", "tanker"], [i, "cargo", "flipper"], [i, "born", t], [i, "speed", w.speed])
+                    else {
+                        const l = this.shortestSpike()
+                        edits.push([i, "lane", l], [i, "from", l], [i, "born", t])
+                        }
                     }
                 }
             else if (alive && clawDepth >= 1 && settled && f.lane == clawLane) {
@@ -427,11 +572,29 @@ class Playfield extends Dataset [
                 if (sp.lane == clawLane && (spikeH.get(v.spikes.indexOf(sp)) ?? this.spikeHeight(sp, t)) >= clawDepth) caught = true
             }
 
+        // enemies fire: one not flipping, not near the rim, its wait over, when a
+        // random number beats the arcade's odds, which lengthen with every shot
+        // already up; at most the wave's number of shots up at once
+        if (playing && !caught) {
+            const odds = [1, 32 / 256, 16 / 256, 6 / 256, 1 / 256]
+            let up = v.foeShots.length - goneFoeShots.size
+            for (let i = 0; i < v.foes.length && up < w.shots; i++) {
+                const f = v.foes[i]
+                const fires = f.kind == "flipper" || f.kind == "tanker" || f.kind == "spiker" || (f.kind == "pulsar" && w.pulsarsFire)
+                if (!fires || goneFoes.has(f.id) || t < f.fireAt || this.flipOf(f, t) < 1) continue
+                const d = this.depthOf(f, t)
+                if (d > 0.857 || Math.random() >= 1 - Math.pow(1 - odds[up], dt / this.frame)) continue
+                fired.push(({ id: this.newId(), lane: f.lane, from: d, firedAt: t }))
+                edits.push([i, "fireAt", t + w.fireDelay])
+                sounds.push("enemyShot")
+                up = up + 1
+                }
+            }
+
         // the writes
         for (const [k, h] of spikeH) this.set(["spikes", k, "h"], h)
         for (const [i, field, value] of edits) this.set(["foes", i, field], value)
-        for (const [i, due] of late) this.set(["nymphs", i, "due"], due)
-        for (const l of edits.filter((e) => e[1] == "lane")) this.ensureSpike(l[2])
+        for (const l of edits.filter((e) => e[1] == "lane" && v.foes[e[0]].kind == "spiker")) this.ensureSpike(l[2] as number)
         this.removeWhere("nymphs", surfaced)
         this.removeWhere("foes", goneFoes)
         this.removeWhere("shots", goneShots)
@@ -441,6 +604,7 @@ class Playfield extends Dataset [
             this.set(["foes", "-"], f)
             if (f.kind == "spiker") this.ensureSpike(f.lane)
             }
+        for (const s of fired) this.set(["foeShots", "-"], s)
         for (const [kind, lane, depth, worth] of blasts) this.blast(kind, lane, depth, t, worth)
         return ({ points: points, caught: caught, sounds: sounds })
         },
@@ -468,16 +632,14 @@ class Playfield extends Dataset [
         return points
         },
 
-    // The claw has died: the enemies in the tube go back down to wait again,
-    // ahead of the nymphs still waiting, and the shots go.
+    // The claw has died: the enemies in the tube go back down among the nymphs
+    // still waiting, all laid again as a wave's are, and the shots go.
 
-    recall(t: number) {
-        const back = this.value.foes.map((f, i) => ({ id: this.newId(), kind: f.kind, lane: f.lane, due: t + 2.5 + i * 0.7 }))
-        const shift = back.length * 0.7
-        const waiting = this.value.nymphs.map((n) => ({ ...n, due: n.due + shift + 2 }))
-        this.set(["nymphs"], back.concat(waiting))
+    recall() {
+        const back = this.value.foes.length + this.value.nymphs.length
         this.set(["foes"], [])
         this.set(["shots"], [])
         this.set(["foeShots"], [])
+        this.lay(back)
         }
     ]

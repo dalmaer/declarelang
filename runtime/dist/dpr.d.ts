@@ -1,3 +1,3 @@
-/** Call `changed` whenever devicePixelRatio changes, for as long as
- *  `alive()` holds. */
-export declare function onDprChange(alive: () => boolean, changed: () => void): void;
+/** Call `changed` whenever devicePixelRatio changes, until the returned
+ *  function is called or `alive()` stops holding. */
+export declare function onDprChange(alive: () => boolean, changed: () => void): () => void;

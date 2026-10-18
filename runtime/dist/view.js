@@ -561,12 +561,16 @@ export class View extends Node {
         this.layout?.rearm();
         if (this.$backend !== null)
             this.$bindExtent();
-        const derives = EXTENT.get(this);
-        if (derives !== undefined) {
+        {
             for (const size of ["width", "height"]) {
-                const d = derives[size];
-                // The ownership check skips a derive an author write displaced.
-                if (d !== undefined && ownerOf(this, size) === d) {
+                // The auto-extent that owns the size NOW — not only the one EXTENT
+                // recorded: one a State or a layout displaced and handed back is the
+                // owner again without being the recorded derive, and it must re-list
+                // too (Cadence's year column kept its desktop height). An author write
+                // or binding owning the size is not an auto-extent, and is skipped.
+                const o = ownerOf(this, size);
+                const d = o !== null && o.isAutoExtent ? o : undefined;
+                if (d !== undefined) {
                     if (d.isNative && !isSettling()) {
                         // outside a settle (a handler's insert, a test): re-list and
                         // re-derive now, as the JS derive does
@@ -581,12 +585,9 @@ export class View extends Node {
                             this.extentRelistQueued = true;
                             afterSettle(() => {
                                 this.extentRelistQueued = false;
-                                const now = EXTENT.get(this);
-                                if (now === undefined)
-                                    return;
                                 for (const s of ["width", "height"]) {
-                                    const n = now[s];
-                                    if (n !== undefined && n.isNative && ownerOf(this, s) === n && n.id >= 0) {
+                                    const n = ownerOf(this, s);
+                                    if (n !== null && n.isAutoExtent && n.isNative && n.id >= 0) {
                                         kernel().extentRewire(n.id, this.$extentWords(s));
                                         n.run();
                                     }
@@ -676,6 +677,19 @@ export class View extends Node {
                 EXTENT.set(this, (derives = {}));
             derives[size] = this.$installKernelExtent(size) ?? markExtent(bindDerived(this, size, () => this.$extentOf(size)));
         }
+    }
+    /** A State or a layout let go of this view's width or height. A size the
+     *  author never set is the content's again: the auto-extent that driver
+     *  displaced — or never let install, when it applied at boot — takes the
+     *  slot, and the parent's auto-extent re-lists its children (it skips a
+     *  child whose size a percent or a flex drives, and this one no longer is).
+     *  True when the slot has an owner again; else the caller restores a value. */
+    $sizeReleased(size) {
+        if (!isSet(this, size))
+            this.$bindExtent();
+        if (this.parent instanceof View)
+            this.parent.$childListChanged();
+        return ownerOf(this, size) !== null;
     }
     extentRelistQueued = false;
     /** THE KERNEL'S AUTO-EXTENT (kernel.md, the layout-pass item): the same

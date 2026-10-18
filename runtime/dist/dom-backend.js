@@ -829,7 +829,7 @@ export class DomSurface {
     /** A blank raster of this drawing was reported: once is enough. */
     blankReported = false;
     /** Set once the drawing raster has ever existed (arms the dpr watch once). */
-    watching = false;
+    unwatchDpr = null;
     gone = false;
     constructor() {
         const el = document.createElement("div");
@@ -1008,10 +1008,9 @@ export class DomSurface {
      *  zoom / display moves; box decoration is CSS and text/<img> re-render
      *  natively, so neither needs it). */
     watchDpr() {
-        if (this.watching)
+        if (this.unwatchDpr !== null)
             return;
-        this.watching = true;
-        onDprChange(() => !this.gone, () => { if (this.drawEl !== null) {
+        this.unwatchDpr = onDprChange(() => !this.gone, () => { if (this.drawEl !== null) {
             if (this.shown)
                 this.rasterize();
             else
@@ -1081,7 +1080,15 @@ export class DomSurface {
         // the `hovered`/`pressed` intrinsics (which consider only `visible`). The
         // gates that mean "not there" are `visible` and `pointerEvents`; an author who
         // wants a fade to become absence writes `visible = { opacity > 0 }`.
-        this.element.style.opacity = String(o);
+        const s = this.element.style;
+        // An opacity that CHANGES (a fade, a sheet's scrim) gets its own layer:
+        // Safari repaints a changed opacity only within the box of whatever moved
+        // with it, so a scrim hung outside its sliding sheet's box dimmed a strip
+        // beside the sheet and left the rest (2026-10-17, Cadence 14). A static
+        // opacity is written once and stays unlayered.
+        if (s.opacity !== "" && s.opacity !== String(o) && s.willChange === "")
+            s.willChange = "opacity";
+        s.opacity = String(o);
     }
     // Scale + rotation compose into ONE CSS transform about one origin — the
     // runtime pushes both calls together (view.ts pushTransform), so the pair
@@ -2774,7 +2781,9 @@ export class DomSurface {
     }
     unwatchVisibility = null;
     destroy() {
-        this.gone = true; // quiets any armed dpr listener
+        this.gone = true;
+        this.unwatchDpr?.();
+        this.unwatchDpr = null;
         this.unwatchVisibility?.();
         this.unwatchVisibility = null;
         this.richObserver?.disconnect();

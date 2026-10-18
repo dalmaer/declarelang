@@ -1,5 +1,5 @@
 ---
 triple:          'arm64-apple-darwin'
-binary-path:     '/Users/temkin/Code/Declare-Optimize/kernel/build/kernel-test'
+binary-path:     '/Users/temkin/Code/Declare/kernel/build/kernel-test'
 relocations:     []
 ...

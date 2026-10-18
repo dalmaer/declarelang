@@ -366,6 +366,7 @@ class Monitor [ clip = true,
     y = { (app.height - 496 * zoom) / 2 },
     px: number = { 1 / zoom },
     palette: Record<string, number> = { app.scene.palette },
+    beam: BeamLook = { app.beam.look },
     paused: boolean = false,
 
     // The arcade's lines of text: where each starts (in units of four from the center), the

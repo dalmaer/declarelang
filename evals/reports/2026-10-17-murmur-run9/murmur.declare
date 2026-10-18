@@ -1,0 +1,255 @@
+/*
+# Murmur
+
+A conversation app: the list of conversations, and one conversation open.
+
+On a phone the list is the home screen and a conversation slides over it; on a
+wide screen the list is a sidebar beside the open conversation. Both are the
+same two surfaces — only where they sit differs, and one sprung number, `slide`,
+carries the phone between them.
+
+How it is put together:
+
+- **The data** is one `Conversations` source (model.declare): the whole served
+  history, written into directly by the live feed (`Wire`) and by sending. The
+  list is a dataset derived from it, so its order is never maintained by hand.
+- **Where the person is** lives here on the App: which conversation is open
+  (`waypoint`, so Back closes it), which voice clip is playing, and what a
+  reaction or photo picker was opened for.
+- **The views**: `InboxRow` for the list (chrome.declare), one
+  `ConversationView` per thread, and a row class per kind of message
+  (messages.declare). Each conversation is built once and kept, which is what
+  lets each keep its own place and its own draft.
+*/
+
+include [ "model.declare", "theme.declare", "messages.declare", "chrome.declare" ]
+
+App [ appName = "Murmur", minWidth = 320, edges = cover,
+    fontFamily = ["system-ui", "-apple-system", "Segoe UI", "Helvetica Neue", "sans-serif"],
+    theme = { { ...(app.dark ? SanFranciscoDark : SanFrancisco), ...(app.dark ? MurmurDark : MurmurLight) } },
+    fill = { provided("theme").background },
+
+    // ── the service ──
+
+    service: string = "http://127.0.0.1:8330/",
+    media(path: string) -> string { return path == "" ? "" : this.service + path },
+
+    convos: Conversations [ url = { app.service + "threads.json" } ],
+    wire: Wire [ url = "ws://127.0.0.1:8330/live", active = { app.convos.loaded }, convos = { app.convos } ],
+    clock: Time [ tick = minute ],
+
+    // ── where the person is ──
+
+    phone: boolean = { app.width < 720 },
+    sideW: number = { app.width < 1100 ? 340 : 380 },
+
+    // the open conversation is a history step: Back closes it, Forward reopens it
+
+    waypoint = "",
+    openId: string = { app.waypoint },
+    openThread(id: string) { if (app.waypoint != id) app.waypoint = id },
+    closeThread() { app.waypoint = "" },
+
+    // on a phone the conversation slides over the list; 0 is the list, 1 the conversation
+
+    slide: number = 0,
+    Spring [ attribute = slide, to = { app.openId != "" ? 1 : 0 }, stiffness = 260, damping = 30 ],
+    convoShown: boolean = { app.openId != "" && (!app.phone || app.slide > 0.96) },
+
+    playing: string = "",               // the voice clip playing, by "thread/message"
+
+    // the message under the top edge of each conversation, for the date shown while scrolling
+
+    tops: object = { {} },
+    noteTop(thread: string, at: string) { this.tops = { ...this.tops, [thread]: at } },
+    topAt(thread: string) -> string { return (this.tops as Record<string, string>)[thread] ?? "" },
+
+    // ── what the views ask ──
+
+    inkOf(person: string) -> number {
+        const inks = provided("theme").inks as number[]
+        return inks[inkIndex(person, inks.length)]
+        },
+
+    lastMineIndex(msgs: Message[]) -> number {
+        for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i].from == this.convos.me) return i
+        return -1
+        },
+
+    // under your latest message: on its way, arrived, or read — and by whom, in a group
+
+    statusOf(thread: string, m: Message, index: number) -> string {
+        if (m.pending ?? false) return "Sending…"
+        const t = this.convos.thread(thread)
+        if (t == null) return ""
+        const readers = this.convos.readersAt(t, index)
+        if (readers.length > 0)
+            return this.convos.isGroup(t) ? "Read by " + readers.map((p) => this.convos.firstName(p)).join(", ") : "Read"
+        return m.sid != null ? "Delivered" : ""
+        },
+
+    // one chip per mark: how many, whether you are among them, and who
+
+    tally(list: Reaction[]) -> object {
+        const out: { emoji: string, count: number, mine: boolean, names: string }[] = []
+        for (const r of list) {
+            let c = out.find((x) => x.emoji == r.emoji)
+            if (c == null) { c = { emoji: r.emoji, count: 0, mine: false, names: "" }; out.push(c) }
+            c.count = c.count + 1
+            c.mine = c.mine || r.person == this.convos.me
+            c.names = c.names + (c.names == "" ? "" : ", ") + this.convos.firstName(r.person)
+            }
+        return out
+        },
+
+    preview(t: Thread, m: Message) -> string {
+        const who = m.from == this.convos.me ? "You: " : this.convos.isGroup(t) ? this.convos.firstName(m.from) + ": " : ""
+        const what = m.kind == "photo" ? "Photo" + (m.alt != null && m.alt != "" ? " · " + m.alt : "")
+                   : m.kind == "voice" ? "Voice message · " + duration(m.durationMs ?? 0)
+                   : m.text ?? ""
+        return who + what
+        },
+    typingLine(t: Thread, typists: string[]) -> string {
+        if (!this.convos.isGroup(t)) return "typing…"
+        const names = typists.map((p) => this.convos.firstName(p))
+        return names.length == 1 ? names[0] + " is typing…" : names.join(" and ") + " are typing…"
+        },
+    memberLine(t: Thread) -> string {
+        return this.convos.others(t).map((p) => this.convos.firstName(p)).join(", ") + " and you"
+        },
+    belowLine(count: number, m: Message?) -> string {
+        const n = count == 1 ? "1 new" : count + " new"
+        if (m == null) return n
+        const words = m.kind == "photo" ? "a photo" : m.kind == "voice" ? "a voice message" : m.text ?? ""
+        return n + " · " + this.convos.firstName(m.from) + ": " + words
+        },
+
+    // ── reacting, sending a photograph, looking at one ──
+
+    pickThread: string = "",
+    pickMsg: Message? = null,
+    pickReaction(v: View, thread: string, m: Message) {
+        this.pickThread = thread
+        this.pickMsg = m
+        this.reactions.showFor(v)
+        },
+    react(thread: string, m: Message?, emoji: string) {
+        if (m != null) this.wire.react(thread, m, emoji)
+        },
+
+    pickPhoto(v: View) { this.photos.showFor(v) },
+    sendPhoto(src: string, alt: string) {
+        this.photos.close()
+        if (this.openId != "") this.wire.sendPhoto(this.openId, src, alt)
+        },
+
+    viewPhoto(src: string, alt: string) {
+        this.viewer.src = src
+        this.viewer.alt = alt
+        this.viewer.show()
+        },
+
+    keys: Keys [
+        onKeyUp(e: KeyEvent) { if (e.key == "Escape" && app.phone && app.openId != "") app.closeThread() }
+        ],
+
+    // ── the list ──
+
+    list: View [ height = { app.height },
+        width = { app.phone ? app.width : app.sideW },
+        x = { app.phone ? -0.28 * app.width * app.slide : 0 },
+        visible = { !app.phone || app.slide < 0.999 },
+        fill = { app.phone ? provided("theme").background : provided("theme").sidebar },
+        stroke = { app.phone ? null : [null, stroke(1, provided("theme").line), null, null] },
+        layout: SimpleLayout [ axis = y ],
+
+        head: View [ width = 100%, padding = { [app.safeTop + 18, 20, 12, 20] },
+            layout: SimpleLayout [ axis = y, spacing = 2 ],
+            word: Text [ fontSize = { app.phone ? 32 : 26 }, fontWeight = bold, letterSpacing = -0.6,
+                textColor = { provided("theme").text }, text = "Murmur" ],
+            tally: Text [ fontSize = 13.5, maxLines = 1,
+                textColor = { app.waiting > 0 ? provided("theme").fresh : provided("theme").textMuted },
+                text = { !app.convos.loaded ? "" : app.waiting == 0 ? "You're all caught up"
+                    : app.waiting == 1 ? "1 conversation has something new" : app.waiting + " conversations have something new" } ]
+            ],
+
+        rows: View [ width = 100%, flexes = true, scrolls = y,
+            padding = { app.phone ? [0, 0, 20, 0] : [0, 8, 20, 8] },
+            datapath = { app.convos.inbox.value },
+            stack: View [ width = 100%, height = { app.rowCount * app.rowH },
+                InboxRow [ datapath = :rows[], height = { app.rowH },
+                    seat: number = 0,
+                    y = { this.seat },
+                    move: Spring [ attribute = seat, to = { rowIndex * app.rowH }, stiffness = 210, damping = 26 ],
+                    onInit() { this.move.arrive() }
+                    ]
+                ]
+            ]
+        ],
+
+    rowH: number = 78,
+    rowCount: number = { app.convos.inbox.value?.rows.length ?? 0 },
+    waiting: number = { (app.convos.inbox.value?.rows ?? []).filter((r) => r.unread > 0).length },
+
+    // ── the open conversation ──
+
+    stage: View [ height = { app.height },
+        width = { app.phone ? app.width : app.width - app.sideW },
+        x = { app.phone ? app.width * (1 - app.slide) : app.sideW },
+        visible = { !app.phone || app.slide > 0.001 },
+        fill = { provided("theme").background },
+        shadow = { app.phone && app.slide < 0.999 ? shadow(-8, 0, 24, 0x00000022) : null },
+
+        idle: View [ x = center, y = center, visible = { app.openId == "" && app.convos.loaded },
+            layout: SimpleLayout [ axis = y, spacing = 6, align = center ],
+            Text [ fontSize = 17, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "Nothing open" ],
+            Text [ fontSize = 14, textColor = { provided("theme").textFaint }, text = "Choose a conversation from the list." ]
+            ],
+
+        threads: View [ width = 100%, height = 100%, datapath = { app.convos.value },
+            ConversationView [ datapath = :threads[] ]
+            ]
+        ],
+
+    // ── before anything has arrived ──
+
+    arriving: View [ width = { app.width }, height = { app.height }, visible = { !app.convos.loaded },
+        fill = { provided("theme").background },
+        mark: View [ x = center, y = center,
+            layout: SimpleLayout [ axis = y, spacing = 10, align = center ],
+            Text [ fontSize = 30, fontWeight = bold, letterSpacing = -0.6, textColor = { provided("theme").text }, text = "Murmur" ],
+            Text [ fontSize = 14, textColor = { provided("theme").textMuted },
+                text = { app.convos.failed ? "The conversations could not be reached." : "Gathering your conversations…" } ]
+            ]
+        ],
+
+    // ── what opens over everything ──
+
+    marks: Dataset { { "marks": [ { "emoji": "❤️" }, { "emoji": "😂" }, { "emoji": "😮" },
+                                  { "emoji": "😢" }, { "emoji": "👍" }, { "emoji": "🔥" } ] } },
+
+    reactions: Popover [ asSheet = false, placement = "above", gap = 6,
+        keys: View [ datapath = { app.marks.value },
+            layout: SimpleLayout [ axis = x, spacing = 2 ],
+            EmojiKey [ datapath = :marks[], key = :emoji, emoji = { :emoji },
+                chosen() {
+                    app.reactions.close()
+                    app.react(app.pickThread, app.pickMsg, this.emoji)
+                    }
+                ]
+            ]
+        ],
+
+    photos: Popover [ placement = "above",
+        Text [ fontSize = 15, fontWeight = semibold, textColor = { provided("theme").text }, text = "Send a photograph" ],
+        grid: View [ width = { app.phone ? app.width - 36 : 4 * 96 + 3 * 8 }, datapath = { app.convos.value },
+            layout: WrappingLayout [ spacing = 8, rowSpacing = 8 ],
+            SendableTile [ datapath = :sendable[], key = :src, src = { :src }, alt = { :alt },
+                side = { app.phone ? Math.floor((app.width - 36 - 3 * 8) / 4) : 96 },
+                press() { app.sendPhoto(this.src, this.alt) }
+                ]
+            ]
+        ],
+
+    viewer: PhotoViewer [ ]
+    ]

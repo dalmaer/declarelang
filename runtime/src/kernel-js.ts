@@ -107,6 +107,7 @@ export function instantiateKernelJS(host: KernelHost, caps: KernelCaps = {}): Ke
 
   const ownerGet = (cell: number): number => ownerOf[cell] - 1;
   const ownerSet = (cell: number, rule: number): void => { ownerOf[cell] = rule + 1; };
+  const FREE_CELL = -2;   // ownerGet of a cell on the free list
   const ring = new Uint32Array(ringCap), ringCount = new Uint32Array(1);
   const trackRing = new Uint32Array(trackCap), trackCount = new Uint32Array(1);
   const active = new Int32Array(1).fill(-1);
@@ -549,10 +550,10 @@ export function instantiateKernelJS(host: KernelHost, caps: KernelCaps = {}): Ke
   const addCellAt = (kind: number, structural: boolean): number => {
     let id: number;
     const reused = cellFree.pop();
-    if (reused !== undefined) id = reused;
-    else { id = ncells++; grow(ncells); }
+    if (reused !== undefined) id = reused;   // keeps its dirty flags: they mark its entries on the dirty lists (kernel.c mark_dirty)
+    else { id = ncells++; grow(ncells); dirtyFlag[id] = 0; kdirtyFlag[id] = 0; }
     kindOf[id] = (kind & 0x7f) | (structural ? 0x80 : 0);
-    ownerOf[id] = 0; setFlag[id] = 0; dirtyFlag[id] = 0; kdirtyFlag[id] = 0;
+    ownerOf[id] = 0; setFlag[id] = 0;
     markOf[id] = 0; cellHead[id] = 0; cellTail[id] = 0; table[id] = 0; nullOf[id] = 0;
     return id;
   };
@@ -796,6 +797,7 @@ export function instantiateKernelJS(host: KernelHost, caps: KernelCaps = {}): Ke
     own: (cell, rule) => {
       if (cell >= ncells || !known(rule)) return ERR_BAD;
       const prior = ownerGet(cell);
+      if (prior === FREE_CELL) return ERR_BAD;   // a free cell (kernel.c: its owner word is the free list's)
       if (prior >= 0 && (rFlags[prior] & F_YIELDING) !== 0) dispose(prior);
       else if (prior >= 0) return ERR_BOUND;
       ownerSet(cell, rule);
@@ -863,9 +865,10 @@ export function instantiateKernelJS(host: KernelHost, caps: KernelCaps = {}): Ke
       }
     },
     freeCell: (cell) => {
-      if (cell >= ncells) return;
+      if (cell >= ncells || ownerGet(cell) === FREE_CELL) return;   // already free: a second free would list it twice
       detachCell(cell);
-      markOf[cell] = 0; dirtyFlag[cell] = 0;
+      markOf[cell] = 0;   // its dirty flags stay with their entries
+      ownerSet(cell, FREE_CELL);
       cellFree.push(cell);
     },
     ring, ringCount, ringCap,

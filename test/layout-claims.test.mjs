@@ -381,4 +381,39 @@ await test("ordinary arithmetic below zero is not a mistake — a closed section
   assert.deepEqual(lines.filter((l) => /is -\d/.test(l)), [], JSON.stringify(lines));
 });
 
+await test("a size a State sets resolves as the same one written on the view does: a percent, a flex, a position", async () => {
+  const app = await boot(`App [ width = 400, height = 300, on: boolean = true,
+    body: View [ width = 400, height = 300, layout: SimpleLayout [ axis = y ],
+      top: View [ width = 100, height = 40 ],
+      col: View [ width = 200, View [ width = 50, height = 50 ],
+        wide: State [ applied = { app.on }, flexes = true ] ] ],
+    pane: View [ width = 400, height = 300,
+      bar: View [ width = 20, View [ width = 20, height = 30 ], wide: State [ applied = { app.on }, height = 50% ] ],
+      dot: View [ width = 20, height = 20, wide: State [ applied = { app.on }, x = center ] ] ] ]`);
+  assert.equal(app.body.col.height, 260, "the flex the State set takes what the column leaves");
+  assert.equal(app.pane.bar.height, 150, "a percent from a State is of the parent");
+  assert.equal(app.pane.dot.x, 190, "x = center from a State centres");
+  app.on = false; settle();
+  assert.equal(app.body.col.height, 50, "released, the size is its content's again, not the number it held");
+  assert.equal(app.pane.bar.height, 30, "and so is the percent's");
+});
+
+await test("a container's auto-extent sees a child that stops flexing (the slot stays in the kernel's table)", async () => {
+  const app = await boot(`App [ width = 400, height = 300, desk: boolean = true,
+    body: View [ width = 400, layout: SimpleLayout [ axis = y ], desk: State [ applied = { app.desk }, height = 300 ],
+      year: View [ width = 400, layout: SimpleLayout [ axis = y ],
+        a: View [ width = 50, height = 40 ],
+        list: View [ width = 100, View [ height = 500, width = 10 ], desk: State [ applied = { app.desk }, flexes = true ] ],
+        desk: State [ applied = { app.desk }, height = 100% ] ] ] ]`);
+  assert.equal(app.body.year.list.height, 260, "flexing in the desk arrangement");
+  for (let i = 0; i < 2; i++) {
+    app.desk = false; settle();
+    assert.equal(app.body.year.list.height, 500, "the list is its content's height");
+    assert.equal(app.body.year.height, 540, "and the column around it grows to hold it");
+    assert.equal(app.body.height, 540, "and so does the body");
+    app.desk = true; settle();
+    assert.equal(app.body.year.height, 300, "back in the desk arrangement");
+  }
+});
+
 summarize("layout-claims");

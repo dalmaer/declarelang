@@ -550,11 +550,23 @@ export function bindPercent(view, name, percent, pos) {
     const inset = axis === "width" ? "insetX" : "insetY";
     if (kernelDerives() && bindKernelExpr(view, name, { code: [...CONTENT_BOX, OP_CONST, 1, OP_MUL, OP_END], paths: [`parent.${axis}`, `parent.${inset}`], consts: [0, percent / 100] }, null, `${cls}.${name} = ${percent}%`, `parent.contentBox(${axis}) * ${percent / 100}`, pos, false, [], true))
         return;
-    const k = new Constraint(`${cls}.${name} = ${percent}%`, () => view.parent.contentBox(axis) * (percent / 100), (v) => setBound(view, name, v));
-    markPercent(k); // auto-extent excludes percent-bound child slots (view.ts)
-    k.sourcePos = sourceAt(pos); // a percent can lose its slot to a layout — name the line
+    const k = percentRule(view, name, percent, pos);
     own(view, name, k);
     k.run();
+}
+/** The JavaScript form of `name = p%`, unowned: what bindPercent installs off
+ *  the kernel, and what a State's percent override drives while it is the top
+ *  of its slot (state.ts) — the same rule either way, so a state's `100%`
+ *  resolves against the parent exactly as a declared one does. */
+export function percentRule(view, name, percent, pos) {
+    const cls = view.constructor.name;
+    const axis = percentAxis(name);
+    if (axis === null)
+        throw new DeclareError(`${cls}.${name} = ${percent}%: no axis to resolve a percent against`, pos);
+    const k = new Constraint(`${cls}.${name} = ${percent}%`, () => (view.parent instanceof View ? view.parent.contentBox(axis) : 0) * (percent / 100), (v) => setBound(view, name, v));
+    markPercent(k); // auto-extent excludes percent-bound child slots (view.ts)
+    k.sourcePos = sourceAt(pos); // a percent can lose its slot to a layout — name the line
+    return k;
 }
 /** The slots a view's 2D transform is made of (View.$localTransform). */
 const TRANSFORM_SLOTS = ["scale", "scaleX", "scaleY", "rotation", "skewX", "skewY"];
@@ -608,8 +620,17 @@ export function bindAlign(view, name, align, pos, transformLater = false) {
         ? { code: [...CONTENT_BOX, OP_LOAD, 2, OP_SUB, OP_END], paths: [`parent.${size}`, `parent.${insetA}`, `this.${size}`], consts: [0] }
         : { code: [...CONTENT_BOX, OP_LOAD, 2, OP_SUB, OP_CONST, 1, OP_DIV, OP_END], paths: [`parent.${size}`, `parent.${insetA}`, `this.${size}`], consts: [0, 2] }, null, `${cls}.${name} = ${align}`, align === "end" ? `parent.contentBox(${size}) - this.${size}` : `(parent.contentBox(${size}) - this.${size}) / 2`, pos, false, [], true))
         return;
+    const k = alignRule(view, name, align, pos, transformed);
+    own(view, name, k);
+    k.run();
+}
+/** The JavaScript form of `name = center | end`, unowned — bindAlign's, and a
+ *  State's position override's (as percentRule). */
+export function alignRule(view, name, align, pos, transformed = mayTransform(view)) {
+    const cls = view.constructor.name;
+    const size = name === "x" ? "width" : "height";
     const k = new Constraint(`${cls}.${name} = ${align}`, () => {
-        const P = view.parent.contentBox(size);
+        const P = view.parent instanceof View ? view.parent.contentBox(size) : 0;
         if (transformed) {
             // the transformed box: its lead offset from the origin, and its extent
             const f = view.footprint();
@@ -622,8 +643,7 @@ export function bindAlign(view, name, align, pos, transformLater = false) {
     }, (v) => setBound(view, name, v));
     markPercent(k); // like a percent: excluded from the parent's auto-extent (no cycle)
     k.sourcePos = sourceAt(pos); // `x = center` meeting a layout's claim names this line
-    own(view, name, k);
-    k.run();
+    return k;
 }
 const DEFERRED = Symbol("deferred");
 /** A DECLARED slot's `{ }` default as a standing rule (attributes.ts

@@ -354,7 +354,11 @@ await test("DataGrid: cell KINDS — an editor, a checkbox, and a select all wri
   assert.deepEqual(app.g.selMenu.items.map((i) => i.id), ["open", "triage", "done"]);
   assert.equal(app.g.selMenu.items[0].checked, true, "the current value wears the check");
   app.g.selMenu.pick("done");
-  await new Promise((r) => setTimeout(r, 5));   // deferred delivery
+  // deferred delivery: afterDelay(0) off the browser is two zero timers (the
+  // frame, then the delay), so wait two of our own, queued behind each — a
+  // fixed 5 ms lost the race when a loaded run stretched the gap between them
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
   settle();
   assert.equal(app.d.value.rows[0].state, "done", "picking writes the record");
   assert.equal(app.g.selMenu.shown, false);

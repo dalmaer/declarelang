@@ -1,0 +1,53 @@
+/*
+## The look
+
+Paper and ink. The page is a warm off-white, what you said is set in a deep
+indigo ink, what others said sits on the paper as white cards, and the one
+colour that is not ink — a vermilion — is spent on exactly one meaning: new.
+Each person gets an ink of their own for their name and initials, the same
+everywhere they appear.
+
+Laid over San Francisco (see `theme` on the App), so the library's popovers
+and dialogs find every token they read.
+*/
+
+theme MurmurLight [
+    background = #F5F1EA, surface = #FFFFFF, line = #E3DCD0,
+    text = #1F1C18, textMuted = #7A7268, textFaint = #ABA397,
+    accent = #2C3E74, accentTextColor = #FFFFFF, accentHovered = #34488A, accentPressed = #24335F,
+    control = #ECE6DC, controlHovered = #E4DDD1, controlPressed = #D9D1C3, controlSelected = #E0E4F0,
+    scrimFill = #1A1712, scrimOpacity = 0.28,
+    popoverShadow = shadow(0, 12, 32, #2A201433),
+
+    sidebar = #EFEAE1, rowSelected = #E4DED3, rowPressed = #E8E2D8,
+    mineFill = #2C3E74, mineText = #F7F4EE, mineMuted = #AEB7D3,
+    theirsFill = #FFFFFF, theirsText = #1F1C18, theirsEdge = #E6E0D5,
+    fresh = #D4502F, freshText = #FFFFFF,
+    chipFill = #FFFFFF, chipEdge = #E3DCD0, chipMineFill = #E6EAF5, chipMineEdge = #9AA8D0,
+    wave = #C9C1B4, waveMine = #6D7DAE, waveDone = #2C3E74, waveDoneMine = #FFFFFF,
+    fieldFill = #FFFFFF, fieldEdge = #DDD5C8,
+    photoWell = #E9E3D9, onInk = #FFFFFF, ring = #EFEAE1,
+    barFill = #F5F1EAE6,
+    inks = [#B0502C, #2E6E5C, #6B4A9E, #A3385F, #2D6699, #87681A, #4E7A28]
+    ]
+
+
+theme MurmurDark [
+    background = #151412, surface = #1F1D1A, line = #2F2C27,
+    text = #EEE9E0, textMuted = #A29A8E, textFaint = #6B645A,
+    accent = #9DB0EE, accentTextColor = #151412, accentHovered = #ADBEF3, accentPressed = #8C9FDD,
+    control = #2A2824, controlHovered = #33302B, controlPressed = #3C3832, controlSelected = #2C3350,
+    scrimFill = #000000, scrimOpacity = 0.5,
+    popoverShadow = shadow(0, 12, 32, #00000080),
+
+    sidebar = #1A1917, rowSelected = #2A2824, rowPressed = #24221F,
+    mineFill = #3A4E8C, mineText = #F3F0EA, mineMuted = #A9B5DA,
+    theirsFill = #26241F, theirsText = #EEE9E0, theirsEdge = #2F2C27,
+    fresh = #F0795A, freshText = #151412,
+    chipFill = #26241F, chipEdge = #36332D, chipMineFill = #2E3757, chipMineEdge = #6C7FBF,
+    wave = #57524A, waveMine = #7E8EC4, waveDone = #C9D3F5, waveDoneMine = #FFFFFF,
+    fieldFill = #1F1D1A, fieldEdge = #36332D,
+    photoWell = #2A2824, onInk = #151412, ring = #1A1917,
+    barFill = #151412E6,
+    inks = [#E58B67, #6CC2A6, #B49AE6, #E37FA2, #78ADE3, #D6B45C, #9BC56F]
+    ]

@@ -132,7 +132,7 @@ struct dk_kernel {
   int      flushing;
   int      pending;
   int      aborted;
-  uint32_t cell_free;         /* free-list head over cell_owner (-2 - next) */
+  uint32_t cell_free;         /* free-list head over cell_owner: FREE_LINK(next), always < -1 */
   uint32_t rule_free;         /* free-list head over Rule.dyn_head           */
   /* REUSE of the code and constant arenas. What the image loaded is never
    * freed; a runtime rule's bytecode, constants and lists return here when the
@@ -141,6 +141,14 @@ struct dk_kernel {
   uint32_t code_free[CODE_CLASSES + 1];      /* per exact length: a freed block's first word links the next */
   uint32_t const_free;                       /* a freed slot holds the next index */
 };
+
+/* A free cell's owner word links the next free cell, and is below -1 for
+ * EVERY free cell — the list's last one too — so "is it free" is one test.
+ * (Until 2026-10-17 it was -2 - next, so the last cell's word was
+ * -2 - NONE = -1, a live unowned cell's: a second free of that cell passed
+ * the "already free" guard and closed the list into a cycle.) */
+#define FREE_LINK(next) (-3 - (int32_t)(next))     /* NONE → -2 */
+#define FREE_NEXT(word) ((uint32_t)(-3 - (word)))   /* -2 → NONE */
 
 /* ── freestanding helpers ───────────────────────────────────────────────── */
 static void zero(void *p, uint32_t n) { uint8_t *b = (uint8_t *)p; for (uint32_t i = 0; i < n; i++) b[i] = 0; }
@@ -448,6 +456,17 @@ static void wake(dk_kernel *k, uint32_t cell) {
   }
 }
 
+/* THE DIRTY LISTS HOLD A CELL AT MOST ONCE: a cell is on dirty_list exactly
+ * while its cell_dirty flag is set (kdirty likewise), and only a drain
+ * (kernel_dirty, kernel_kdirty) or the kdirty pop clears a flag. A cell that
+ * is cleared, freed or reused keeps its flag and its one entry, which reports
+ * it once more at the next drain — a stale report the reader re-reads, never a
+ * second entry — so a list never holds more than ncells ids, and fits its
+ * table. (Until 2026-10-17 freeing, clearing and reusing reset the flag and
+ * left the entry: a recycled cell, dirtied again, was listed again. Nothing
+ * drains dirty_list in a browser — its reader is a native applier — so a long
+ * scroll through a virtualized list ran it past cell_cap, into cell_dyn, the
+ * table after it: subscriber lists corrupted, and a settle that never ended.) */
 static void mark_dirty(dk_kernel *k, uint32_t cell) {
   if (!k->cell_dirty[cell]) { k->cell_dirty[cell] = 1; k->dirty_list[k->ndirty++] = cell; }
 }
@@ -625,6 +644,7 @@ int kernel_write(dk_kernel *k, uint32_t cell, double v) {
 int kernel_own(dk_kernel *k, uint32_t cell, uint32_t rule) {
   if (cell >= k->ncells || rule >= k->nrules) return DK_ERR_BAD;
   int32_t prior = k->cell_owner[cell];
+  if (prior < -1) return DK_ERR_BAD;   /* a free cell: its owner word is the free list's */
   if (prior >= 0 && (k->rules[prior].flags & DK_YIELDING)) { kernel_dispose(k, (uint32_t)prior); }
   else if (prior >= 0) return DK_ERR_BOUND;
   k->cell_owner[cell] = (int32_t)rule;
@@ -791,6 +811,7 @@ int kernel_run(dk_kernel *k, uint32_t rule) {
 void kernel_suspend(dk_kernel *k, uint32_t rule) {
   if (rule >= k->nrules) return;
   Rule *r = &k->rules[rule];
+  if (r->state & ST_DEAD) return;   /* disposed: a freed rule's dyn_head is the free list's link */
   r->state |= ST_SUSPENDED; r->state &= (uint8_t)~ST_QUEUED;
   if (r->kind == DK_DYNAMIC) { unlink_all(k, rule); r->state |= ST_REWIRE; }
 }
@@ -799,6 +820,7 @@ int kernel_resume(dk_kernel *k, uint32_t rule) {
   if (rule >= k->nrules) return DK_ERR_BAD;
   Rule *r = &k->rules[rule];
   if (!(r->state & ST_SUSPENDED)) return DK_OK;
+  if (r->state & ST_DEAD) return DK_OK;   /* disposed while suspended: nothing to run, and running it would free it again */
   r->state &= (uint8_t)~ST_SUSPENDED;
   return run(k, rule);
 }
@@ -903,11 +925,12 @@ int32_t kernel_add_rule(dk_kernel *k, int32_t target, uint8_t kind, uint8_t flag
 /* ── runtime cells, rewiring, state, abort ──────────────────────────────── */
 int32_t kernel_add_cell(dk_kernel *k, uint8_t kind, int structural) {
   uint32_t id;
-  if (k->cell_free != NONE) { id = k->cell_free; k->cell_free = (uint32_t)(-2 - k->cell_owner[id]); }
-  else { if (k->ncells >= k->cell_cap) return DK_ERR_FULL; id = k->ncells++; }
+  if (k->cell_free != NONE) { id = k->cell_free; k->cell_free = FREE_NEXT(k->cell_owner[id]); }
+  else { if (k->ncells >= k->cell_cap) return DK_ERR_FULL; id = k->ncells++; k->cell_dirty[id] = 0; k->cell_kdirty[id] = 0; }
+  /* a reused id keeps its dirty flags: they mark its entries on the dirty lists */
   k->cell_kind[id] = (uint8_t)((kind & 0x7f) | (structural ? 0x80 : 0));
-  k->cell_owner[id] = -1; k->cell_set[id] = 0; k->cell_dirty[id] = 0; k->cell_dyn[id] = NONE; k->cell_dyn_tail[id] = NONE; k->cell_mark[id] = 0;
-  k->cell_elem[id] = NONE; k->slots[id] = 0.0; k->cell_kdirty[id] = 0; k->cell_null[id] = 0;
+  k->cell_owner[id] = -1; k->cell_set[id] = 0; k->cell_dyn[id] = NONE; k->cell_dyn_tail[id] = NONE; k->cell_mark[id] = 0;
+  k->cell_elem[id] = NONE; k->slots[id] = 0.0; k->cell_null[id] = 0;
   return (int32_t)id;
 }
 
@@ -921,9 +944,8 @@ void kernel_free_cell(dk_kernel *k, uint32_t cell) {
     nd->next_rule = k->node_free; k->node_free = n; k->nodes_used--;
     n = next;
   }
-  k->cell_dyn[cell] = NONE; k->cell_dyn_tail[cell] = NONE; k->cell_mark[cell] = 0;
-  if (k->cell_dirty[cell]) k->cell_dirty[cell] = 0;   /* its entry in dirty_list drains harmlessly */
-  k->cell_owner[cell] = -2 - (int32_t)k->cell_free;    /* link into the free list */
+  k->cell_dyn[cell] = NONE; k->cell_dyn_tail[cell] = NONE; k->cell_mark[cell] = 0;   /* its dirty flags stay with their entries (mark_dirty) */
+  k->cell_owner[cell] = FREE_LINK(k->cell_free);    /* link into the free list */
   k->cell_free = cell;
 }
 
@@ -980,7 +1002,7 @@ void kernel_clear_cells(dk_kernel *k, uint32_t base, uint32_t n) {
       nd = next;
     }
     k->cell_dyn[cell] = NONE; k->cell_dyn_tail[cell] = NONE; k->cell_mark[cell] = 0;
-    k->cell_owner[cell] = -1; k->cell_set[cell] = 0; k->cell_dirty[cell] = 0; k->slots[cell] = 0.0; k->cell_null[cell] = 0;
+    k->cell_owner[cell] = -1; k->cell_set[cell] = 0; k->slots[cell] = 0.0; k->cell_null[cell] = 0;   /* dirty flags stay (mark_dirty) */
   }
 }
 
@@ -1119,7 +1141,7 @@ int32_t kernel_vis_add(dk_kernel *k, uint32_t view, uint32_t root_view) {
 }
 
 int kernel_vis_rewire(dk_kernel *k, uint32_t rule) {
-  if (rule >= k->nrules || k->rules[rule].kind != DK_VIS) return DK_ERR_BAD;
+  if (rule >= k->nrules || k->rules[rule].kind != DK_VIS || (k->rules[rule].state & ST_DEAD)) return DK_ERR_BAD;
   unlink_all(k, rule);
   return vis_link_chain(k, rule, k->rules[rule].body, k->rules[rule].elem);
 }

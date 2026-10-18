@@ -45,6 +45,7 @@ const SUITE = [
   "test/override-runtime.test.mjs", // a method replaces a built-in's RUNTIME method; super reaches the runtime's; the method table is pinned
   "test/materialization.test.mjs",
   "test/deferred-dom.test.mjs",    // a view not shown gets no DOM until first shown — and nothing the program can observe changes
+  "test/row-lifetime.test.mjs",    // what a virtualized list drops as it scrolls is collected (nothing the runtime keeps holds it)
   "test/dataschema.test.mjs",
   "test/datasource-failure.test.mjs",
   "test/table.test.mjs",

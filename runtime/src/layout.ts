@@ -188,8 +188,11 @@ export abstract class Layout extends Node implements LayoutStrategy {
    *  layout swap) the slot reverts to this base — the authored cross-axis
    *  literal (`y = 15`) or the class default — instead of stranding whatever
    *  the arrangement last wrote (release() leaves the stored value; the
-   *  restore is ours to make). */
-  private readonly bases = new Map<View, Partial<Record<string, unknown>>>();
+   *  restore is ours to make). Keyed WEAKLY: a child leaves (a discarded row,
+   *  a recycled one) without telling the layout, and a strong key kept every
+   *  child the layout ever placed — a virtualized list held each recycled
+   *  row, its constraints and its cells for the page's lifetime (2026-10-17). */
+  private readonly bases = new WeakMap<View, Partial<Record<string, unknown>>>();
 
   /** Begin arranging `view` (the View.layout pusher's entry). One strategy
    *  arranges one view: a strategy is written per element, and sharing one
@@ -537,6 +540,9 @@ export abstract class Layout extends Node implements LayoutStrategy {
     // (the suspension's other half — the pass skip alone leaves this
     // restore re-stacking every reconcile's rows at their captured bases).
     if (this.view !== null && isWindowedBlock(this.view)) return;
+    // a size the author never set goes back to its content, not to the
+    // number it held at first claim (which would pin it)
+    if ((slot === "width" || slot === "height") && child.$sizeReleased(slot)) return;
     const base = this.bases.get(child);
     if (base !== undefined && slot in base) {
       setBound(child, slot, base[slot]);
@@ -757,6 +763,11 @@ export abstract class Layout extends Node implements LayoutStrategy {
           () => this.place()[c.i]?.[c.key],
           (v) => {
             if (this.view !== null && isWindowedBlock(this.view)) return;
+            // a child that stopped flexing has no size in place() any more; this
+            // claim runs once more before the rearm retires it, and writing that
+            // undefined took the slot out of the kernel's table for good — its
+            // parent's auto-extent stopped seeing it (Cadence's year column)
+            if (v === undefined) return;
             setBound(c.child, c.slot, v);
           }
         );

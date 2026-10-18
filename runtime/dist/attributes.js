@@ -972,6 +972,13 @@ export function freeCells(self) {
         free.push(base);
         carrier.$base = -1; // retired: reads fall through to $attrs from here on
     }
+    else if (base === undefined) {
+        // never allocated a block: retire it all the same, or a read after
+        // teardown (a late handler, a tracked read in the same settle) allocates
+        // a block for a dead node and lists it in BLOCK_VIEW for good — a
+        // recycled row leaked its cells that way (2026-10-17)
+        carrier.$base = -1;
+    }
 }
 /** The constraint (if any) that owns this slot's value. */
 export function ownerOf(self, name) {

@@ -58,7 +58,7 @@ auto-fires), ↓ or Z superzaps, Escape pauses, Return starts.
 | What | Where | Why there |
 |---|---|---|
 | The tube shapes — name, open or closed, the vanishing offset, the rim points | `tubes: Dataset`, a JSON literal, `schema = [ shapes[]: Well ]` | Literal data, read-only. Points are data, not code. |
-| The waves — per level, how many of each enemy and how fast | `waves: Dataset`, a JSON literal, `schema = [ levels[]: Wave ]` | The level design is a table; a level past the table repeats the last row, faster. |
+| The waves — per level, how many enemies, which kinds and how many at once, how flippers move, how fast everything climbs and fires | `waves: DataSource` on `waves.json`, `schema = [ levels[]: Wave ]` | The level design is the arcade's own table, 98 rows, in this program's units; past it, one of rows 65–96 for each level, as the arcade does. |
 | What is in the tube now — enemies, player shots, enemy shots, spikes, bursts | `field: Playfield`, a class that `extends Dataset` | These records have rules (how deep an enemy is now, what a shot hits, what a tanker becomes), and the rules belong to the records' own class (guide 14, "the dataset becomes the class"). |
 | The keys on the attract screen | `help: Dataset` literal | A list of rows is replicated from data, not built in a loop. |
 | The spare-life icons | `spares: Dataset [ contents = { … } ]`, derived from `lives` | A row of icons is replication over a derived dataset. |
@@ -83,10 +83,11 @@ only what genuinely depends on the previous frame: the game clock `t`, the held-
 spin and auto-fire, and the collision sweep (which asks the `Playfield` what happened in
 this step). That is the guide's sanctioned use of `onTick` (integration).
 
-Two other clocks are **periods**, not frames (guide 21's `tick = <ms>`): the spawner
-(`tick = { app.wave.gap }`, one enemy per beat), and the enemies' "brain"
-(`tick = 250`, decisions such as start a flip, fire, hop). A third cycles the tube
-shapes on the attract screen.
+Another clock is a **period**, not a frame (guide 21's `tick = <ms>`): the pulsars'
+and fuseballs' "brain" (`tick = 250`, a hop or a closing on the claw). A second
+cycles the tube shapes on the attract screen. Flippers move and enemies fire in the
+step of play, on the arcade's own waits and odds, each written to the foe's record
+only when it moves or fires.
 
 ### Where the user is (the App)
 
@@ -238,10 +239,12 @@ written only on events):
   `stars` is a fixed derived dataset (built from a pure `hash`); each `StarView`'s
   place is a function of `t`, so nothing is written while they stream. The new
   tube arrives on the `arriving` Animator, whose end begins play.
-- **Nymphs.** The wave is laid at the far end as `nymphs` records, each with a
-  `due` time; a `NymphView` drifts out toward its lane as it comes due, and
-  `Playfield.step` surfaces it (if there is room for it in the tube). This
-  replaced the period spawner, and pausing now holds them too.
+- **Nymphs.** The wave is laid at the far end as `nymphs` records in the arcade's
+  bands of sixteen, each `due` on the nymphs' own clock (`risen`), which runs only
+  while there is room in the tube; a `NymphView` drifts out toward its lane as it
+  comes due, and `Playfield.step` surfaces it as the kind the arcade's rules choose
+  then (`chooseKind`: each kind's least and most at once, seven in the tube, the
+  tankers' cargo counted, the lane's spike deciding between tanker and spiker).
 - **Sixteen tubes; color sets every sixteen levels** (blue, red, yellow, cyan,
   the unseen tube, green), as six theme records; `paletteFor(level)` picks one.
   The unseen tube is just a theme whose `web` is black.

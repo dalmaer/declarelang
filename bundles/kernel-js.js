@@ -83,6 +83,7 @@ function instantiateKernelJS(host, caps = {}) {
   const ownerSet = /* @__PURE__ */ __name((cell, rule) => {
     ownerOf[cell] = rule + 1;
   }, "ownerSet");
+  const FREE_CELL = -2;
   const ring = new Uint32Array(ringCap), ringCount = new Uint32Array(1);
   const trackRing = new Uint32Array(trackCap), trackCount = new Uint32Array(1);
   const active = new Int32Array(1).fill(-1);
@@ -824,12 +825,12 @@ ${new Error().stack ?? ""}`);
     else {
       id = ncells++;
       grow(ncells);
+      dirtyFlag[id] = 0;
+      kdirtyFlag[id] = 0;
     }
     kindOf[id] = kind & 127 | (structural ? 128 : 0);
     ownerOf[id] = 0;
     setFlag[id] = 0;
-    dirtyFlag[id] = 0;
-    kdirtyFlag[id] = 0;
     markOf[id] = 0;
     cellHead[id] = 0;
     cellTail[id] = 0;
@@ -1224,6 +1225,8 @@ ${new Error().stack ?? ""}`);
       if (cell >= ncells || !known(rule))
         return ERR_BAD;
       const prior = ownerGet(cell);
+      if (prior === FREE_CELL)
+        return ERR_BAD;
       if (prior >= 0 && (rFlags[prior] & F_YIELDING) !== 0)
         dispose(prior);
       else if (prior >= 0)
@@ -1330,11 +1333,11 @@ ${new Error().stack ?? ""}`);
       }
     }, "clearCells"),
     freeCell: /* @__PURE__ */ __name((cell) => {
-      if (cell >= ncells)
+      if (cell >= ncells || ownerGet(cell) === FREE_CELL)
         return;
       detachCell(cell);
       markOf[cell] = 0;
-      dirtyFlag[cell] = 0;
+      ownerSet(cell, FREE_CELL);
       cellFree.push(cell);
     }, "freeCell"),
     ring,

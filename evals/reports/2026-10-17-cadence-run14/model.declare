@@ -1,0 +1,253 @@
+/*
+## The model
+
+The training history as the service holds it, and everything that is true of it
+whoever is looking: this week, the streak, the week's shape, the day-by-day
+totals the year is drawn from, and what a typical session of each sport looks
+like (which is what a new session starts as). Every write lands in these
+records, so everything derived from them follows in the same settle.
+*/
+
+
+// dates as day numbers (days since 1970-01-01), formatting, colour: functions of their arguments
+
+script {
+    const DAY_MS = 86400000
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    const SPORT_NAMES: Record<string, string> = { run: "Run", ride: "Ride", lift: "Lift", swim: "Swim" }
+
+    function clamp(v: number, a: number, b: number): number { return Math.max(a, Math.min(b, v)) }
+
+    function dayNum(iso: string): number {
+        if (iso.length < 10) return 0
+        return Math.round(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))) / DAY_MS)
+    }
+    function isoOf(n: number): string { return new Date(n * DAY_MS).toISOString().slice(0, 10) }
+    function weekdayOf(n: number): number { return (new Date(n * DAY_MS).getUTCDay() + 6) % 7 }    // Monday is 0
+    function monthOf(n: number): number { return new Date(n * DAY_MS).getUTCMonth() }
+    function yearOf(n: number): number { return new Date(n * DAY_MS).getUTCFullYear() }
+    function dateOf(n: number): number { return new Date(n * DAY_MS).getUTCDate() }
+    function monthName(m: number): string { return MONTHS[m] }
+    function weekdayName(i: number): string { return WEEKDAYS[i] }
+
+    // "3h 40m", "45m"
+    function duration(min: number): string {
+        const m = Math.max(0, Math.round(min))
+        const h = Math.floor(m / 60)
+        return h > 0 ? h + "h " + (m % 60) + "m" : m + "m"
+    }
+    function km(k: number): string { return k.toFixed(1) + " km" }
+    function bpm(b: number): string { return Math.round(b) + " bpm" }
+    function sportName(s: string): string { return SPORT_NAMES[s] ?? s }
+
+    // "Today", "Yesterday", "Mon 3 Aug", "Mon 3 Aug 2025"
+    function dayLabel(n: number, today: number): string {
+        if (n == today) return "Today"
+        if (n == today - 1) return "Yesterday"
+        const base = weekdayName(weekdayOf(n)) + " " + dateOf(n) + " " + monthName(monthOf(n))
+        return yearOf(n) == yearOf(today) ? base : base + " " + yearOf(n)
+    }
+    function longDate(n: number): string {
+        return weekdayName(weekdayOf(n)) + " " + dateOf(n) + " " + monthName(monthOf(n)) + " " + yearOf(n)
+    }
+    // "Yesterday · Tue 4 Aug 2026"
+    function whenever(n: number, today: number): string {
+        const rel = n == today ? "Today · " : n == today - 1 ? "Yesterday · " : ""
+        return rel + longDate(n)
+    }
+    function shortDate(n: number, withYear: boolean): string {
+        return dateOf(n) + " " + monthName(monthOf(n)) + (withYear ? " " + yearOf(n) : "")
+    }
+
+    // the period a window of days covers, said the way a person would
+    function periodLabel(a: number, b: number): string {
+        if (b - a > 75) {
+            const y = yearOf(a) != yearOf(b)
+            return monthName(monthOf(a)) + (y ? " " + yearOf(a) : "") + " – " + monthName(monthOf(b)) + " " + yearOf(b)
+        }
+        return shortDate(a, yearOf(a) != yearOf(b)) + " – " + shortDate(b, true)
+    }
+
+    // "6:52", "1:02:10"
+    function clockTime(secs: number): string {
+        const s = Math.max(0, Math.floor(secs))
+        const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, r = s % 60
+        const two = (v: number) => (v < 10 ? "0" : "") + v
+        return h > 0 ? h + ":" + two(m) + ":" + two(r) : m + ":" + two(r)
+    }
+
+    function feel(effort: number): string {
+        return effort <= 2 ? "Easy" : effort <= 4 ? "Steady" : effort <= 6 ? "Solid" : effort <= 8 ? "Hard" : "All out"
+    }
+
+    function median(xs: number[], fallback: number): number {
+        if (xs.length == 0) return fallback
+        const s = [...xs].sort((a, b) => a - b)
+        return s[Math.floor(s.length / 2)]
+    }
+
+    // blend two 0xRRGGBB colours channel-wise
+    function mix(a: number, b: number, t: number): number {
+        const c = (x: number, y: number) => Math.round(x + (y - x) * t)
+        return (c((a >> 16) & 255, (b >> 16) & 255) << 16) | (c((a >> 8) & 255, (b >> 8) & 255) << 8) | c(a & 255, b & 255)
+    }
+
+    // The one accent means effort: an easy session is barely there, a hard one shouts.
+    function effortInk(effort: number, calm: number, accent: number): number {
+        return mix(calm, accent, Math.pow(clamp((effort - 2) / 7, 0, 1), 1.15))
+    }
+
+    // the chart's window, kept inside the history and between a week and all of it
+    function clampSpan(span: number, total: number): number { return clamp(span, 7, Math.max(7, total)) }
+    function clampStart(start: number, span: number, first: number, end: number): number {
+        const pad = Math.min(10, span * 0.15)
+        const lo = first - pad, hi = end + pad - span
+        return hi < lo ? (lo + hi) / 2 : clamp(start, lo, hi)
+    }
+    }
+
+
+schema Session [ id: string, date: string, sport: "run" | "ride" | "lift" | "swim", minutes: number,
+    distanceKm?: number, effort: number, heartAvg?: number, note?: string ]
+
+schema Live [ id: string, date: string, sport: string, startedSecondsAgo: number, minutes: number,
+    distanceKm?: number, heartNow: number, effort: number ]
+
+// a day of the history, as the year is drawn from it: its total, its hardest
+// effort, and each session in it
+
+schema Part [ id: string, min: number, eff: number ]
+schema DayTotal [ min: number, eff: number, parts[]: Part ]
+
+// a day of this week, as its bar shows it
+
+schema WeekDay [ n: number, letter: string, minutes: number, effort: number, count: number,
+    today: boolean, future: boolean, last: string ]
+
+// what a typical session of one sport looks like
+
+schema Typical [ minutes: number, effort: number, kmPerMin: number ]
+
+
+class Sessions extends DataSource [ url = "http://127.0.0.1:8320/api/sessions", auto = true,
+    schema = [ sessions[]: Session ],
+
+    all() -> Session[] { return this.value?.sessions ?? [] },
+    byId(id: string) -> Session? { return this.all().find((s) => s.id == id) ?? null },
+
+    // newest first; of two on one day, the one logged later
+
+    latest() -> Session? {
+        return this.all().reduce((a: Session | null, s) => (a == null || s.date > a.date || (s.date == a.date && s.id > a.id) ? s : a), null)
+        },
+    firstDay() -> number { const a = this.all(); return a.length == 0 ? 0 : dayNum(a[a.length - 1].date) },
+
+    // this week runs Monday to today
+
+    weekCount(today: number) -> number {
+        const from = isoOf(today - weekdayOf(today)), to = isoOf(today)
+        return this.all().filter((s) => s.date >= from && s.date <= to).length
+        },
+    weekMinutes(today: number) -> number {
+        const from = isoOf(today - weekdayOf(today)), to = isoOf(today)
+        return this.all().filter((s) => s.date >= from && s.date <= to).reduce((t, s) => t + s.minutes, 0)
+        },
+
+    // consecutive days with a session, counting back from today — or from
+    // yesterday, while today has nothing in it yet
+
+    streak(today: number) -> number {
+        const days = new Set(this.all().map((s) => dayNum(s.date)))
+        let n = days.has(today) ? today : today - 1
+        let count = 0
+        while (days.has(n)) { count = count + 1; n = n - 1 }
+        return count
+        },
+
+    weekShape(today: number) -> object {
+        const monday = today - weekdayOf(today)
+        const days: WeekDay[] = []
+        for (let i = 0; i < 7; i++) {
+            const iso = isoOf(monday + i)
+            const on = this.all().filter((s) => s.date == iso)
+            days.push({ n: monday + i, letter: "MTWTFSS"[i], count: on.length,
+                        minutes: on.reduce((t, s) => t + s.minutes, 0),
+                        effort: on.reduce((e, s) => Math.max(e, s.effort), 0),
+                        today: monday + i == today, future: monday + i > today,
+                        last: on.length > 0 ? on[0].id : "" })
+            }
+        return { days: days }
+        },
+
+    // one entry per day from the first session to today
+
+    totals(today: number) -> object {
+        const first = this.firstDay()
+        const days: DayTotal[] = []
+        for (let n = first; n <= today; n++) days.push({ min: 0, eff: 0, parts: [] })
+        for (const s of this.all()) {
+            const i = dayNum(s.date) - first
+            if (i < 0 || i >= days.length) continue
+            days[i].min = days[i].min + s.minutes
+            days[i].eff = Math.max(days[i].eff, s.effort)
+            days[i].parts.push({ id: s.id, min: s.minutes, eff: s.effort })
+            }
+        return { first: first, days: days }
+        },
+
+    typical(sport: string) -> Typical {
+        const of = this.all().filter((s) => s.sport == sport).slice(0, 30)
+        const paced = of.filter((s) => s.distanceKm != null && s.minutes > 0)
+        return { minutes: Math.round(median(of.map((s) => s.minutes), 45) / 5) * 5,
+                 effort: median(of.map((s) => s.effort), 5),
+                 kmPerMin: median(paced.map((s) => (s.distanceKm ?? 0) / s.minutes), 0) }
+        },
+
+    // what they usually do on this day of the week, over the last few months
+
+    usualSport(today: number) -> string {
+        const counts: Record<string, number> = { run: 0, ride: 0, lift: 0, swim: 0 }
+        for (const s of this.all()) {
+            const n = dayNum(s.date)
+            if (today - n > 120) break
+            counts[s.sport] = counts[s.sport] + (weekdayOf(n) == weekdayOf(today) ? 3 : 1)
+            }
+        return Object.keys(counts).reduce((a, b) => (counts[b] > counts[a] ? b : a), "run")
+        },
+
+    // where one session sits against everything else
+
+    hardness(s: Session) -> string {
+        const others = this.all().filter((o) => o.id != s.id)
+        if (others.length == 0) return "Your only session"
+        const easier = others.filter((o) => o.effort < s.effort).length / others.length
+        const harder = others.filter((o) => o.effort > s.effort).length / others.length
+        return easier >= harder ? "Harder than " + Math.round(100 * easier) + "% of sessions"
+                                : "Easier than " + Math.round(100 * harder) + "% of sessions"
+        },
+    standing(s: Session) -> string {
+        const same = this.all().filter((o) => o.sport == s.sport && o.id != s.id)
+        const before = same.filter((o) => o.date < s.date)
+        const bigger = before.find((o) => o.minutes >= s.minutes)
+        const name = sportName(s.sport).toLowerCase()
+        if (before.length == 0) return "Your first " + name + " on record"
+        if (bigger == null) return "Your longest " + name + " on record"
+        const gap = dayNum(s.date) - dayNum(bigger.date)
+        if (gap >= 21) return "Longest " + name + " since " + shortDate(dayNum(bigger.date), true)
+        const longer = same.filter((o) => o.minutes > s.minutes).length
+        return "Longer than " + Math.round(100 * (1 - longer / Math.max(1, same.length))) + "% of your " + name + "s"
+        },
+
+    // writes: the service's reply is the record, placed newest first
+
+    put(s: Session) {
+        const rest = this.all().filter((o) => o.id != s.id)
+        const i = rest.findIndex((o) => o.date < s.date || (o.date == s.date && o.id < s.id))
+        this.set(["sessions"], [...rest.slice(0, i < 0 ? rest.length : i), s, ...rest.slice(i < 0 ? rest.length : i)])
+        },
+    drop(id: string) {
+        const at = this.all().findIndex((o) => o.id == id)
+        if (at >= 0) this.removeAt(["sessions"], at)
+        }
+    ]

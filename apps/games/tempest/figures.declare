@@ -8,10 +8,10 @@ line's color round a bright core of the same color. The arcade sets each line's 
 blooms further, so a near tanker (14) stands out and a far one (10) is dimmer. A dot is the
 beam resting on one spot, so it is round, and blooms more than a line.
 
-Every view here works in the screen's pixels (scene.declare), and reads two values from the
-screen that holds it: `palette`, each color's role as 0xRRGGBB, and `px`, how much of the
+Every view here works in the screen's pixels (scene.declare), and reads three values from the
+screen that holds it: `palette`, each color's role as 0xRRGGBB; `px`, how much of the
 screen one of the display's own pixels is, which keeps the lines' widths in the display's
-pixels whatever the window's size.
+pixels whatever the window's size; and `beam`, how the beam looks (beam.declare).
 
 - `Figure` is one of the arcade's pictures, placed at a point and drawn at a size.
 - `ArcadeText` is a line of the arcade's letters; `Message` one of the arcade's own lines.
@@ -24,6 +24,7 @@ class Lit [
     draw(d: Draw) {
         const palette = provided("palette") as Record<string, number>
         const px = provided("px") as number
+        const beam = provided("beam") as BeamLook
         const groups = new Map<string, Trace[]>()
         for (const t of traced) {
             const key = `${t.ink}:${t.i}:${t.p.length == 2 ? 1 : 0}`
@@ -32,31 +33,32 @@ class Lit [
             }
         d.lineCap = "round"
         d.lineJoin = "round"
+        d.globalCompositeOperation = beam.additive ? "lighter" : "source-over"
         for (const [key, group] of groups) {
             const [ink, bright, dot] = key.split(":")
             let rgb = palette[ink] ?? 0xffffff
             if (rgb == 0x0000f3) rgb = 0x1e3cf3                         // the blue phosphor is lighter than a screen's pure blue
             const r = (rgb >> 16) & 255, g = (rgb >> 8) & 255, b = rgb & 255
             const color = `rgb(${r},${g},${b})`
-            // a color tube's beam keeps its phosphor's color: the core is only lifted a little
-            const lift = (v: number) => (v + 0.12 * (255 - v)) | 0
+            // a color tube's beam keeps its phosphor's color: the core is lifted toward white
+            const lift = (v: number) => (v + beam.core * (255 - v)) | 0
             const core = `rgb(${lift(r)},${lift(g)},${lift(b)})`
-            const level = Number(bright) / 15
+            const level = Math.min(1, beam.gain * Number(bright) / 15)
             d.shadowColor = color
             if (dot == "1") {
-                const light = Number(bright) * 64
+                const light = beam.gain * Number(bright) * 64
                 const spot = (radius: number) => {
                     d.beginPath()
                     for (const t of group) { d.moveTo(t.p[0] + radius, t.p[1]); d.arc(t.p[0], t.p[1], radius, 0, 6.2832) }
                     }
-                spot((1 + 2.5 * Math.min(1, light / 2000)) * px)
-                d.globalAlpha = Math.min(0.85, light / 1500)
-                d.shadowBlur = 8
+                spot(beam.width * (1 + 2.5 * Math.min(1, light / 2000)) * px)
+                d.globalAlpha = Math.min(1, 2 * beam.glow * Math.min(0.85, light / 1500))
+                d.shadowBlur = 8 * beam.spread
                 d.fillStyle = color
                 d.fill()
-                spot((0.8 + 0.8 * Math.min(1, light / 1000)) * px)
+                spot(beam.width * (0.8 + 0.8 * Math.min(1, light / 1000)) * px)
                 d.globalAlpha = 1 - Math.exp(-light / 150)
-                d.shadowBlur = 2
+                d.shadowBlur = 2 * beam.spread
                 d.fillStyle = core
                 d.fill()
                 continue
@@ -66,15 +68,21 @@ class Lit [
                 d.moveTo(t.p[0], t.p[1])
                 for (let k = 2; k < t.p.length; k += 2) d.lineTo(t.p[k], t.p[k + 1])
                 }
-            d.globalAlpha = 0.5 * level * level
-            d.shadowBlur = 2 + 4 * level
             d.strokeStyle = color
-            d.lineWidth = (1.4 + 1.6 * level) * px
+            if (beam.halo > 0) {                                        // the tube's glass scatters a little of the light wide
+                d.globalAlpha = beam.halo * level
+                d.shadowBlur = beam.spread * (8 + 10 * level)
+                d.lineWidth = beam.width * (3 + 3 * level) * px
+                d.stroke()
+                }
+            d.globalAlpha = Math.min(1, beam.glow * level * level)
+            d.shadowBlur = beam.spread * (2 + 4 * level)
+            d.lineWidth = beam.width * (1.4 + 1.6 * level) * px
             d.stroke()
             d.globalAlpha = level
-            d.shadowBlur = 0.5 * level
+            d.shadowBlur = 0.5 * level * beam.spread
             d.strokeStyle = core
-            d.lineWidth = (0.9 + 0.6 * level) * px
+            d.lineWidth = beam.width * (0.9 + 0.6 * level) * px
             d.stroke()
             }
         },

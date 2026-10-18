@@ -49,7 +49,7 @@ include [ "game.declare", "screen.declare", "panel.declare", "page-views.declare
 
 defaultFlags [ render = canvas ]
 
-App [ fill = black,
+App [ appName = "Stargate", fill = black,
 
     shapes: DataSource [ url = "art/shapes.json", auto = true ],
     pictures: Image [ visible = false, source = "art/pictures.png" ],   // every picture, one under another

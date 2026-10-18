@@ -45,7 +45,7 @@ include [ "game.declare", "art.declare", "sounds.declare" ]
 
 defaultFlags [ render = canvas ]
 
-App [ fill = black,
+App [ appName = "Asteroids", fill = black,
     // the field before power-on, which fills it
 
     game: Game [ highScore = 32460 ] { { "rocks": [], "shots": [], "saucerShots": [],

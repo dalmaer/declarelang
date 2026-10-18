@@ -80,7 +80,7 @@ import { THEME_PRESETS } from "./themes.js";
 import { compileBody, compileExpr, withScriptScope, evalScript } from "./expr.js";
 import { coerce, coerceToken, isPercent, isAlign, nullablePrimitive } from "./value.js";
 import { defineAttributes, noteUseSiteSet, recordDeclarations, setBound, provideWrite, declaredRules } from "./attributes.js";
-import { bindConstraint, bindDeclDefault, provideBind, bindPercent, bindAlign, bindData, bindDatapath, bindCursor, isTransformSlot } from "./bind.js";
+import { bindConstraint, bindDeclDefault, provideBind, bindPercent, bindAlign, percentRule, alignRule, bindData, bindDatapath, bindCursor, isTransformSlot } from "./bind.js";
 import { bindTwoWay, bindTwoWayDynamic } from "./editor.js";
 import { Replicator } from "./replicate.js";
 import { classOfFor, KindedReplicator } from "./class-for.js";
@@ -1532,9 +1532,14 @@ function constructState(el, outer, ctx, parentEl) {
         }
         else {
             const value = r.value;
+            const pos = a.value.pos;
+            // a percent or a position literal resolves against the parent as the
+            // same one declared on the view does — not stored as the literal
             overrides.push({
                 slot,
-                make: (t) => new Constraint(`${t.constructor.name}.${slot} (state ${label})`, () => value, (v) => setBound(t, slot, v)),
+                make: isPercent(value) ? (t) => percentRule(t, slot, value.percent, pos)
+                    : isAlign(value) && (slot === "x" || slot === "y") ? (t) => alignRule(t, slot, value.align, pos)
+                        : (t) => new Constraint(`${t.constructor.name}.${slot} (state ${label})`, () => value, (v) => setBound(t, slot, v)),
             });
         }
     }

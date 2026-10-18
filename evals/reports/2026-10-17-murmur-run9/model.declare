@@ -1,0 +1,265 @@
+/*
+## The model
+
+Everything the service says lives in one `Conversations` source: the people, the
+photographs that may be sent, and every thread with its whole history. Nothing
+fetches it again, so the live feed writes straight into it — a new message is
+an append, a reaction a write to one record, a read mark a write to `lastSeen`.
+
+What is true of the records whoever is looking (who someone is, what is unread,
+which thread moved last) is a method here. Where the person using the app is
+looking lives on the App.
+*/
+
+// times and names: functions of their arguments
+
+script {
+    const DAY_MS = 86400000
+
+    function dayStart(t: number): number {
+        const d = new Date(t)
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+    }
+    function daysAgo(iso: string, now: number): number {
+        return Math.round((dayStart(now) - dayStart(Date.parse(iso))) / DAY_MS)
+    }
+    function sameDay(a: string, b: string): boolean { return dayStart(Date.parse(a)) == dayStart(Date.parse(b)) }
+    function minutesApart(a: string, b: string): number { return Math.abs(Date.parse(b) - Date.parse(a)) / 60000 }
+
+    function clock(iso: string): string {
+        return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    }
+
+    // the heading over a day in a conversation: near days by name, far ones in full
+    function dayHeading(iso: string, now: number): string {
+        const n = daysAgo(iso, now), d = new Date(iso)
+        if (n <= 0) return "Today"
+        if (n == 1) return "Yesterday"
+        if (n < 7) return d.toLocaleDateString([], { weekday: "long" })
+        if (d.getFullYear() == new Date(now).getFullYear())
+            return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })
+        return d.toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })
+    }
+
+    // the stamp in the conversation list: as short as it can be and still be exact
+    function listStamp(iso: string, now: number): string {
+        const n = daysAgo(iso, now), d = new Date(iso)
+        if (n <= 0) return clock(iso)
+        if (n == 1) return "Yesterday"
+        if (n < 7) return d.toLocaleDateString([], { weekday: "short" })
+        if (d.getFullYear() == new Date(now).getFullYear()) return d.toLocaleDateString([], { month: "short", day: "numeric" })
+        return d.toLocaleDateString([], { month: "short", day: "numeric", year: "2-digit" })
+    }
+
+    function duration(ms: number): string {
+        const s = Math.max(0, Math.round(ms / 1000))
+        return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0")
+    }
+
+    function initials(name: string): string {
+        const w = name.trim().split(/\s+/)
+        return ((w[0]?.[0] ?? "") + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase()
+    }
+
+    // a person's place in the theme's list of inks, stable for the session
+    function inkIndex(id: string, n: number): number {
+        let h = 0
+        for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
+        return Math.abs(h) % n
+    }
+
+    // one frame of the live feed, as the service sends it
+    interface Frame {
+        t: string; ref?: string; thread?: string; person?: string; state?: string
+        message?: any; emoji?: string; through?: string
+    }
+    function parseFrame(data: string): Frame { return JSON.parse(data) as Frame }
+    }
+
+
+schema Reaction [ person: string, emoji: string ]
+
+// `sid` and `pending` are this app's own: a message sent this session keeps the
+// id it was shown under, and learns the service's id when the service answers
+
+schema Message [ id: string, from: string, at: string, kind: "text" | "photo" | "voice",
+    text?: string, src?: string, alt?: string, durationMs?: number, peaks?: number[],
+    reactions?: Reaction[], sid?: string, pending?: boolean ]
+schema Person [ id: string, name: string, avatar?: string ]
+schema Sendable [ src: string, alt: string ]
+schema Thread [ id: string, title?: string, participants: string[], lastSeen: string, messages[]: Message ]
+
+// the conversation list's row: the thread itself, wrapped with what the list orders and marks by
+
+schema InboxEntry [ id: string, thread: Thread, last: Message, unread: number ]
+
+// live facts the history does not carry: who is writing, and how far each person has read
+
+schema Typing [ thread: string, person: string ]
+schema ReadMark [ thread: string, person: string, through: string ]
+
+
+class Conversations extends DataSource [ auto = true,
+    schema = [ me: string, people[]: Person, sendable[]: Sendable, threads[]: Thread ],
+
+    me: string = { this.value?.me ?? "" },
+    typing: Typing[] = [],
+    reads: ReadMark[] = [],
+
+    // ── who and where ──
+
+    threads() -> Thread[] { return this.value?.threads ?? [] },
+    threadIndex(id: string) -> number { return this.threads().findIndex((t) => t.id == id) },
+    thread(id: string) -> Thread? { return this.threads().find((t) => t.id == id) ?? null },
+    person(id: string) -> Person? { return (this.value?.people ?? []).find((p) => p.id == id) ?? null },
+    nameOf(id: string) -> string { return id == this.me ? "You" : this.person(id)?.name ?? "Someone" },
+    firstName(id: string) -> string { return this.nameOf(id).split(" ")[0] },
+    others(t: Thread) -> string[] { return t.participants.filter((p) => p != this.me) },
+    isGroup(t: Thread) -> boolean { return t.participants.length > 2 },
+    titleOf(t: Thread) -> string {
+        return t.title ?? this.others(t).map((p) => this.isGroup(t) ? this.firstName(p) : this.nameOf(p)).join(", ")
+        },
+
+    // the newest messages are where every lookup lands, so search from the end
+    // (a message sent this session answers to both of its ids)
+
+    indexOf(t: Thread, id: string) -> number {
+        for (let i = t.messages.length - 1; i >= 0; i--)
+            if (t.messages[i].id == id || t.messages[i].sid == id) return i
+        return -1
+        },
+    unread(t: Thread) -> number {
+        const seen = this.indexOf(t, t.lastSeen)
+        let n = 0
+        for (let i = t.messages.length - 1; i > seen; i--) if (t.messages[i].from != this.me) n++
+        return n
+        },
+
+    // ── the list, most recent activity first ──
+
+    inbox: Dataset [ schema = [ rows[]: InboxEntry ], contents = { classroot.order() } ],
+    order() -> object {
+        const rows = this.threads().filter((t) => t.messages.length > 0)
+            .map((t) => ({ id: t.id, thread: t, last: t.messages[t.messages.length - 1], unread: this.unread(t) }))
+        rows.sort((a, b) => Date.parse(b.last.at) - Date.parse(a.last.at))
+        return { rows: rows }
+        },
+
+    // ── writes ──
+
+    append(thread: string, m: Message) {
+        const i = this.threadIndex(thread)
+        if (i >= 0) this.set(["threads", i, "messages", "-"], m)
+        },
+
+    // the service has the message we already show: give it its real id and time
+
+    confirm(thread: string, localId: string, m: Message) {
+        const i = this.threadIndex(thread), t = this.thread(thread)
+        if (t == null) return
+        const j = this.indexOf(t, localId)
+        if (j < 0) return
+        this.set(["threads", i, "messages", j, "sid"], m.id)
+        this.set(["threads", i, "messages", j, "at"], m.at)
+        this.set(["threads", i, "messages", j, "pending"], false)
+        },
+
+    // a mark is attached once per person — the same mark twice is still one
+
+    addReaction(thread: string, message: string, person: string, emoji: string) {
+        const i = this.threadIndex(thread), t = this.thread(thread)
+        if (t == null) return
+        const j = this.indexOf(t, message)
+        if (j < 0) return
+        const now = t.messages[j].reactions ?? []
+        if (now.some((r) => r.person == person && r.emoji == emoji)) return
+        this.set(["threads", i, "messages", j, "reactions"], [...now, { person: person, emoji: emoji }])
+        },
+
+    markSeen(thread: string) {
+        const i = this.threadIndex(thread), t = this.thread(thread)
+        if (t == null || t.messages.length == 0) return
+        const last = t.messages[t.messages.length - 1].id
+        if (t.lastSeen != last) this.set(["threads", i, "lastSeen"], last)
+        },
+
+    setTyping(thread: string, person: string, on: boolean) {
+        const rest = this.typing.filter((w) => !(w.thread == thread && w.person == person))
+        this.typing = on ? [...rest, { thread: thread, person: person }] : rest
+        },
+    typists(thread: string) -> string[] { return this.typing.filter((w) => w.thread == thread).map((w) => w.person) },
+
+    markRead(thread: string, person: string, through: string) {
+        this.reads = [...this.reads.filter((r) => !(r.thread == thread && r.person == person)),
+                      { thread: thread, person: person, through: through }]
+        },
+
+    // the people who have read at least as far as the message at `index`
+
+    readersAt(t: Thread, index: number) -> string[] {
+        return this.reads.filter((r) => r.thread == t.id && this.indexOf(t, r.through) >= index).map((r) => r.person)
+        }
+    ]
+
+
+/*
+## The live feed
+
+A socket, open while the history is loaded. Each frame is written into the
+conversations as it arrives; sending is the same socket the other way. A send
+is shown at once — the message is appended before the frame leaves — and the
+service's `sent` answer only confirms it.
+*/
+
+class Wire extends Socket [
+    convos: Conversations? = null,
+    nextRef: number = 1,
+
+    onMessage(e: StreamMessage) {
+        const c = this.convos
+        if (c == null) return
+        const f = parseFrame(e.data)
+        if (f.t == "message" && f.thread != null) {
+            c.append(f.thread, f.message as Message)
+            c.setTyping(f.thread, (f.message as Message).from, false)
+        } else if (f.t == "sent" && f.ref != null) {
+            const thread = f.ref.slice(0, f.ref.indexOf(":")), local = "local-" + f.ref, m = f.message as Message
+            c.confirm(thread, local, m)
+
+            // marks you left before the service knew the message's id go now
+            const t = c.thread(thread)
+            const shown = t == null ? null : t.messages[c.indexOf(t, local)]
+            for (const r of shown?.reactions ?? [])
+                if (r.person == c.me) this.send(JSON.stringify({ t: "react", thread: thread, message: m.id, emoji: r.emoji }))
+        } else if (f.t == "reaction" && f.thread != null && f.message != null) {
+            c.addReaction(f.thread, f.message as string, f.person ?? "", f.emoji ?? "")
+        } else if (f.t == "composing" && f.thread != null) {
+            c.setTyping(f.thread, f.person ?? "", f.state == "start")
+        } else if (f.t == "seen" && f.thread != null) {
+            c.markRead(f.thread, f.person ?? "", f.through ?? "")
+            }
+        },
+
+    // the ref carries the thread, so the answer finds its message without a lookup table
+
+    sendText(thread: string, text: string) {
+        const ref = thread + ":" + this.nextRef
+        this.nextRef = this.nextRef + 1
+        this.convos?.append(thread, { id: "local-" + ref, from: this.convos.me, at: new Date().toISOString(),
+                                      kind: "text", text: text, pending: true })
+        this.send(JSON.stringify({ t: "send", ref: ref, thread: thread, kind: "text", text: text }))
+        },
+    sendPhoto(thread: string, src: string, alt: string) {
+        const ref = thread + ":" + this.nextRef
+        this.nextRef = this.nextRef + 1
+        this.convos?.append(thread, { id: "local-" + ref, from: this.convos.me, at: new Date().toISOString(),
+                                      kind: "photo", src: src, alt: alt, pending: true })
+        this.send(JSON.stringify({ t: "send", ref: ref, thread: thread, kind: "photo", src: src }))
+        },
+    react(thread: string, m: Message, emoji: string) {
+        const c = this.convos
+        if (c == null) return
+        c.addReaction(thread, m.id, c.me, emoji)
+        if (!(m.pending ?? false)) this.send(JSON.stringify({ t: "react", thread: thread, message: m.sid ?? m.id, emoji: emoji }))
+        }
+    ]

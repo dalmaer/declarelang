@@ -816,7 +816,7 @@ export class DomSurface implements Surface {
   /** A blank raster of this drawing was reported: once is enough. */
   private blankReported = false;
   /** Set once the drawing raster has ever existed (arms the dpr watch once). */
-  private watching = false;
+  private unwatchDpr: (() => void) | null = null;
   private gone = false;
 
   constructor() {
@@ -995,9 +995,8 @@ export class DomSurface implements Surface {
    *  zoom / display moves; box decoration is CSS and text/<img> re-render
    *  natively, so neither needs it). */
   private watchDpr(): void {
-    if (this.watching) return;
-    this.watching = true;
-    onDprChange(
+    if (this.unwatchDpr !== null) return;
+    this.unwatchDpr = onDprChange(
       () => !this.gone,
       () => { if (this.drawEl !== null) { if (this.shown) this.rasterize(); else this.drawOwed = true; } }
     );
@@ -1066,7 +1065,14 @@ export class DomSurface implements Surface {
     // the `hovered`/`pressed` intrinsics (which consider only `visible`). The
     // gates that mean "not there" are `visible` and `pointerEvents`; an author who
     // wants a fade to become absence writes `visible = { opacity > 0 }`.
-    this.element.style.opacity = String(o);
+    const s = this.element.style;
+    // An opacity that CHANGES (a fade, a sheet's scrim) gets its own layer:
+    // Safari repaints a changed opacity only within the box of whatever moved
+    // with it, so a scrim hung outside its sliding sheet's box dimmed a strip
+    // beside the sheet and left the rest (2026-10-17, Cadence 14). A static
+    // opacity is written once and stays unlayered.
+    if (s.opacity !== "" && s.opacity !== String(o) && s.willChange === "") s.willChange = "opacity";
+    s.opacity = String(o);
   }
 
   // Scale + rotation compose into ONE CSS transform about one origin — the
@@ -2647,7 +2653,9 @@ export class DomSurface implements Surface {
   private unwatchVisibility: (() => void) | null = null;
 
   destroy(): void {
-    this.gone = true; // quiets any armed dpr listener
+    this.gone = true;
+    this.unwatchDpr?.();
+    this.unwatchDpr = null;
     this.unwatchVisibility?.();
     this.unwatchVisibility = null;
     this.richObserver?.disconnect();

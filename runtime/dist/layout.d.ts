@@ -62,7 +62,10 @@ export declare abstract class Layout extends Node implements LayoutStrategy {
      *  layout swap) the slot reverts to this base — the authored cross-axis
      *  literal (`y = 15`) or the class default — instead of stranding whatever
      *  the arrangement last wrote (release() leaves the stored value; the
-     *  restore is ours to make). */
+     *  restore is ours to make). Keyed WEAKLY: a child leaves (a discarded row,
+     *  a recycled one) without telling the layout, and a strong key kept every
+     *  child the layout ever placed — a virtualized list held each recycled
+     *  row, its constraints and its cells for the page's lifetime (2026-10-17). */
     private readonly bases;
     /** Begin arranging `view` (the View.layout pusher's entry). One strategy
      *  arranges one view: a strategy is written per element, and sharing one

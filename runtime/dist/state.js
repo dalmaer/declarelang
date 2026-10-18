@@ -87,13 +87,22 @@ function popOverride(view, slot, priority) {
     // Stack empty: restore the displaced base and drop the side-table entry.
     map.delete(slot);
     disown(view, slot); // clear the just-disposed top's lingering owner record
-    if (s.baseOwner !== null) {
+    // A displaced AUTO-EXTENT is not resumed but re-installed (below): its
+    // kernel rule gave up the cell when it was suspended and does not take it
+    // back, so a resumed one went on holding the size it had when the state
+    // applied (Cadence's year column, 822 for 4,226 of content).
+    if (s.baseOwner !== null && s.baseOwner.isAutoExtent)
+        s.baseOwner.dispose();
+    else if (s.baseOwner !== null) {
         own(view, slot, s.baseOwner);
         s.baseOwner.resume();
+        return;
     }
-    else {
-        setBound(view, slot, s.baseValue);
-    }
+    // a size the author never set is the content's again (not the number it
+    // held when the state applied, which would pin it)
+    if ((slot === "width" || slot === "height") && view.$sizeReleased(slot))
+        return;
+    setBound(view, slot, s.baseValue);
 }
 // ── The State node ──────────────────────────────────────────────────────────
 export class State extends Node {

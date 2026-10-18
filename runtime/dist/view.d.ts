@@ -425,6 +425,13 @@ export declare class View extends Node {
      *  zero-cost default; Dataset children are not geometry). Protected so the
      *  App can retarget it from content to its host. */
     protected $bindExtent(): void;
+    /** A State or a layout let go of this view's width or height. A size the
+     *  author never set is the content's again: the auto-extent that driver
+     *  displaced — or never let install, when it applied at boot — takes the
+     *  slot, and the parent's auto-extent re-lists its children (it skips a
+     *  child whose size a percent or a flex drives, and this one no longer is).
+     *  True when the slot has an owner again; else the caller restores a value. */
+    $sizeReleased(size: "width" | "height"): boolean;
     private extentRelistQueued;
     /** THE KERNEL'S AUTO-EXTENT (kernel.md, the layout-pass item): the same
      *  max over the children's footprints as extentOf, evaluated natively over

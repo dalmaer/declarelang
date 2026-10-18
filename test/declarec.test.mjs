@@ -454,8 +454,18 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // the keyboard, focus given back when the panel closes) — measured 130.6 KB.
   // A build whose model program could not be used from the keyboard was never
   // a smaller build; it was a mouse-only one.
+  //
+  // 131 → 132 KB (2026-10-18, the heap-growth and Cadence fixes): one shared
+  // devicePixelRatio query that a surface leaves at teardown, a layout's bases
+  // keyed weakly and a retired node's cells retired even when it never took a
+  // block (each held every recycled row for the page's lifetime); a State's
+  // percent and position resolved as a declared one, an auto-extent displaced
+  // by a State re-installed rather than resumed, a released size returned to
+  // its content; a changing opacity on its own layer for Safari — measured
+  // 131.0 KB. A build whose list grew by 5 MB per hundred scroll jumps was
+  // never a smaller build; it was a leaking one.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 131 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 132 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 

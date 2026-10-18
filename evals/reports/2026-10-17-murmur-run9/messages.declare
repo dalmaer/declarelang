@@ -1,0 +1,333 @@
+/*
+## A message
+
+One row per message, and the row decides from its neighbours how it reads:
+a heading where the day changes (or the time, after an hour's silence), the
+sender's name where a run of theirs begins in a group, their face where the
+run ends, and bubble corners that pinch where two messages of one run touch.
+Nothing about grouping is stored — move a message and its neighbours re-decide.
+
+Each kind of message is its own class; `MessageRow` is the frame they share,
+and their content goes into its `bubble`.
+*/
+
+class MessageRow [ width = 100%, defaultplacement = bubble,
+
+    // what the conversation provides to every row in it
+
+    msgs: Message[] = { provided("msgs") },
+    threadId: string = { provided("threadId") },
+    group: boolean = { provided("group") },
+    maxW: number = { provided("bubbleMax") },
+
+    // the record, and its neighbours in the conversation
+
+    rec: Message = { :@ },
+    prev: Message? = { rowIndex > 0 ? msgs[rowIndex - 1] : null },
+    next: Message? = { rowIndex >= 0 && rowIndex < msgs.length - 1 ? msgs[rowIndex + 1] : null },
+
+    mine: boolean = { :from == app.convos.me },
+    newDay: boolean = { prev == null || !sameDay(prev.at, :at) },
+    lull: boolean = { prev != null && !newDay && minutesApart(prev.at, :at) > 60 },
+    joinsPrev: boolean = { prev != null && !newDay && !lull && prev.from == :from && minutesApart(prev.at, :at) < 6 },
+    joinsNext: boolean = { next != null && next.from == :from && sameDay(next.at, :at) && minutesApart(:at, next.at) < 6 },
+    showName: boolean = { group && !mine && !joinsPrev },
+    hasFace: boolean = { group && !mine },
+
+    // a kind says how its content sits in the bubble
+
+    inset: Inset = [8, 12, 9, 12],
+    framed: boolean = true,
+
+    // what the sender learns about a message of theirs, under their latest one
+
+    isLastMine: boolean = { mine && app.lastMineIndex(msgs) == rowIndex },
+    status: string = { isLastMine ? app.statusOf(threadId, rec, rowIndex) : "" },
+
+    padding = { [joinsPrev ? 2 : newDay || lull ? 6 : 8, 0, 0, 0] },
+    layout: SimpleLayout [ axis = y, spacing = 3, align = { classroot.mine ? "end" : "start" } ],
+
+    // tell the conversation which message sits under its top edge, for the date it shows while
+    // scrolling (a row recycled for another message tells it again, though it never left the edge)
+
+    atTop: boolean = { this.y <= provided("readTop") && this.y + this.height > provided("readTop") },
+    stamp: string = { :at },
+    trackChanges = ["atTop", "stamp"],
+    onChange() { if (atTop) app.noteTop(threadId, stamp) },
+
+    mark: DayMark [ exists = { classroot.newDay || classroot.lull },
+        text = { classroot.newDay ? dayHeading(:at, app.clock.now) + " · " + clock(:at) : clock(:at) } ],
+
+    who: Text [ exists = { classroot.showName }, padding = [4, 0, 0, 48], fontSize = 12.5, fontWeight = semibold,
+        maxLines = 1, textColor = { app.inkOf(:from) }, text = { app.convos.nameOf(:from) } ],
+
+    line: View [ padding = [0, 16, 0, 12],
+        layout: SimpleLayout [ axis = x, spacing = 6, align = end ],
+
+        addBefore: ReactButton [ exists = { classroot.mine }, row = { classroot } ],
+        face: View [ exists = { classroot.hasFace }, width = 30, height = 30,
+            Avatar [ person = { :from }, size = 30, visible = { !classroot.joinsNext } ]
+            ],
+
+        bubble: View [ clip = true,
+            padding = { classroot.framed ? classroot.inset : 0 },
+            fill = { !classroot.framed ? null : classroot.mine ? provided("theme").mineFill : provided("theme").theirsFill },
+            stroke = { classroot.framed && !classroot.mine ? stroke(1, provided("theme").theirsEdge) : null },
+            textColor = { classroot.mine ? provided("theme").mineText : provided("theme").theirsText },
+            opacity = { classroot.rec.pending ?? false ? 0.75 : 1 },
+
+            // the corners where a run's bubbles meet are tight; the outer ones round
+
+            cornerRadius = { classroot.mine
+                ? [18, classroot.joinsPrev ? 6 : 18, classroot.joinsNext ? 6 : 18, 18]
+                : [classroot.joinsPrev ? 6 : 18, 18, 18, classroot.joinsNext ? 6 : 18] },
+
+            onHold(e: PointerEvent) { app.pickReaction(this, classroot.threadId, classroot.rec) },
+            onContextMenu(e: PointerEvent) { app.pickReaction(this, classroot.threadId, classroot.rec) }
+            ],
+
+        addAfter: ReactButton [ exists = { !classroot.mine }, row = { classroot } ]
+        ],
+
+    reacts: Reactions [ exists = { (:reactions ?? []).length > 0 },
+        padding = { [0, 16, 0, classroot.hasFace ? 48 : 12] },
+        threadId = { classroot.threadId }, rec = { classroot.rec } ],
+
+    note: Text [ exists = { classroot.status != "" }, padding = [1, 16, 0, 16], fontSize = 11.5,
+        textColor = { provided("theme").textMuted }, text = { classroot.status } ]
+    ]
+
+
+class TextRow extends MessageRow [
+    words: Text [ fontSize = { app.phone ? 16 : 15 }, lineHeight = 1.36,
+        width = { Math.min(Math.ceil(measureText(:text ?? "", providedTextStyle(({ fontSize: this.fontSize }))).width) + 1,
+                           classroot.maxW - 24) },
+        text = { :text ?? "" } ]
+    ]
+
+
+class PhotoRow extends MessageRow [ framed = false,
+    pic: PhotoThumb [ src = { :src ?? "" }, alt = { :alt ?? "" }, maxW = { classroot.maxW },
+        mine = { classroot.mine }, joinsPrev = { classroot.joinsPrev }, joinsNext = { classroot.joinsNext } ]
+    ]
+
+
+class VoiceRow extends MessageRow [ inset = [8, 14, 8, 8],
+    player: VoicePlayer [ clipId = { classroot.threadId + "/" + :id }, src = { :src ?? "" },
+        durationMs = { :durationMs ?? 0 }, peaks = { :peaks ?? [] }, mine = { classroot.mine } ]
+    ]
+
+
+// the heading over a new day, or over the first message after a long silence
+
+class DayMark extends Text [ width = 100%, padding = [14, 16, 8, 16], textAlign = center,
+    fontSize = 11.5, fontWeight = semibold, letterSpacing = 0.2, maxLines = 1,
+    textColor = { provided("theme").textMuted }
+    ]
+
+
+/*
+## Photographs
+
+A photograph's shape is unknown until it arrives, and they run from 9:16 to 3:1.
+The box takes the picture's own proportion — as wide as the column allows, as
+tall as a cap allows, whichever binds first — so nothing is cropped or stretched.
+Until the bitmap lands it holds a 4:3 well with the caption the service gave,
+and the conversation keeps the reader's place when the real size replaces it.
+*/
+
+class PhotoThumb extends Control [
+    src: string = "",
+    alt: string = "",
+    maxW: number = 280,
+    mine: boolean = false,
+    joinsPrev: boolean = false,
+    joinsNext: boolean = false,
+
+    aspect: number = { this.pic.loaded && this.pic.naturalHeight > 0 ? this.pic.naturalWidth / this.pic.naturalHeight : 4 / 3 },
+    width = { Math.round(Math.min(maxW, (app.phone ? 300 : 340) * aspect)) },
+    height = { Math.round(this.width / aspect) },
+    clip = true,
+    fill = { provided("theme").photoWell },
+    cornerRadius = { mine
+        ? [18, joinsPrev ? 6 : 18, joinsNext ? 6 : 18, 18]
+        : [joinsPrev ? 6 : 18, 18, 18, joinsNext ? 6 : 18] },
+    tooltipLabel = { alt },
+
+    caption: Text [ x = center, y = center, width = { parent.width - 32 }, textAlign = center, maxLines = 3,
+        fontSize = 12.5, textColor = { provided("theme").textFaint }, text = { classroot.alt },
+        visible = { !classroot.pic.loaded } ],
+    pic: Image [ width = 100%, height = 100%, stretches = both, source = { app.media(classroot.src) },
+        opacity = { this.loaded ? 1 : 0 } ],
+    sheen: View [ width = 100%, height = 100%, fill = #000000, opacity = { classroot.pressed ? 0.12 : 0 } ],
+
+    press() { app.viewPhoto(src, alt) }
+    ]
+
+
+/*
+## Voice
+
+A voice message is its waveform. The service's peaks are drawn as bars; what has
+been heard is inked in, what hasn't is faint, so its length and progress are one
+picture. The waveform is the scrubber: press anywhere on it to go there, drag to
+search, and the time beside it follows your finger. Arrow keys step five seconds.
+Only one clip plays at a time — `app.playing` names it, and every other clip is
+quiet because it is not the one named.
+*/
+
+class VoicePlayer [ height = 40,
+    clipId: string = "",
+    src: string = "",
+    durationMs: number = 0,
+    peaks: number[] = [],
+    mine: boolean = false,
+
+    on: boolean = { app.playing == clipId },
+    head: number = 0,                                   // seconds heard, moving smoothly
+    total: number = { durationMs / 1000 },
+    frac: number = { total > 0 ? Math.max(0, Math.min(1, head / total)) : 0 },
+    begun: boolean = { on || head > 0 },
+
+    layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
+
+    audio: Audio [ source = { app.media(classroot.src) }, playing = { classroot.on },
+        onEnded() { app.playing = ""; classroot.head = 0 }
+        ],
+    Time [ exists = { classroot.on }, tick = frame,
+        onTick(dt: number) {
+            const next = classroot.head + dt, heard = classroot.audio.position
+            classroot.head = Math.abs(next - heard) > 0.35 ? heard : Math.min(next, classroot.total)
+            }
+        ],
+
+    seek(f: number) {
+        head = Math.max(0, Math.min(1, f)) * total
+        audio.position = head
+        },
+    toggle() { app.playing = on ? "" : clipId },
+
+    btn: PlayButton [ playing = { classroot.on }, mine = { classroot.mine },
+        press() { classroot.toggle() }
+        ],
+    wave: Waveform [ peaks = { classroot.peaks }, frac = { classroot.frac }, mine = { classroot.mine },
+        live = { classroot.begun },
+        width = { app.phone ? 150 : 180 },
+        seekTo(f: number) { classroot.seek(f) },
+        step(ds: number) { classroot.seek((classroot.head + ds) / Math.max(classroot.total, 0.001)) }
+        ],
+    time: Text [ width = 36, fontSize = 12.5, numeralWidth = tabular, maxLines = 1,
+        textColor = { classroot.mine ? provided("theme").mineMuted : provided("theme").textMuted },
+        text = { duration((classroot.begun ? classroot.head : classroot.total) * 1000) } ]
+    ]
+
+
+class PlayButton extends Control [ width = 32, height = 32, cornerRadius = 16,
+    playing: boolean = false,
+    mine: boolean = false,
+    fill = { mine ? provided("theme").mineText : provided("theme").accent },
+    opacity = { pressed ? 0.8 : 1 },
+    tooltipLabel = { playing ? "Pause" : "Play" },
+    draw(d: Draw) {
+        d.fillStyle = mine ? provided("theme").mineFill : provided("theme").accentTextColor
+        if (playing) {
+            d.fillRect(11, 10, 3.5, 12)
+            d.fillRect(17.5, 10, 3.5, 12)
+        } else {
+            d.beginPath()
+            d.moveTo(12.5, 9.5)
+            d.lineTo(23, 16)
+            d.lineTo(12.5, 22.5)
+            d.closePath()
+            d.fill()
+            }
+        }
+    ]
+
+
+class Waveform extends Control [ height = 32, claim = x,
+    peaks: number[] = [],
+    frac: number = 0,
+    mine: boolean = false,
+    live: boolean = false,          // begun: the playhead is shown
+    seekTo(f: number) { },
+    step(ds: number) { },
+
+    tooltipLabel = "Drag to choose a point",
+    onPointerDown(e: PointerEvent) { this.seekTo(e.x / this.width) },
+    onPointerMove(e: PointerEvent) { if (this.pressed) this.seekTo(e.x / this.width) },
+    onKeyDown(e: KeyEvent) {
+        if (e.key == "ArrowRight") this.step(5)
+        else if (e.key == "ArrowLeft") this.step(-5)
+        },
+    press() { },
+
+    draw(d: Draw) {
+        const n = peaks.length, w = d.w, h = d.h
+        if (n == 0) return
+        const t = provided("theme")
+        const gap = 1.5, bar = Math.max(1.5, (w - gap * (n - 1)) / n)
+        const cut = frac * w
+        for (let i = 0; i < n; i++) {
+            const x = i * (bar + gap)
+            const bh = Math.max(3, peaks[i] * (h - 6))
+            d.fillStyle = x + bar / 2 <= cut && live
+                ? (mine ? t.waveDoneMine : t.waveDone)
+                : (mine ? t.waveMine : t.wave)
+            d.fillRect(x, (h - bh) / 2, bar, bh)
+            }
+        if (live) {
+            d.fillStyle = mine ? t.waveDoneMine : t.waveDone
+            d.beginPath()
+            d.arc(Math.max(4, Math.min(w - 4, cut)), h / 2, pressed ? 6 : 4, 0, Math.PI * 2, false)
+            d.fill()
+            }
+        }
+    ]
+
+
+/*
+## Reactions
+
+Under the bubble, one chip per mark, counting the people who left it — yours
+outlined, so you can see what you said. Pressing a chip adds your mark to it.
+*/
+
+class Reactions [
+    threadId: string = "",
+    rec: Message? = null,
+    tallied: Dataset [ contents = { { chips: app.tally(classroot.rec?.reactions ?? []) } } ],
+    datapath = { this.tallied.value },
+    layout: SimpleLayout [ axis = x, spacing = 4 ],
+    ReactionChip [ datapath = :chips[], key = :emoji,
+        press() { app.react(classroot.threadId, classroot.rec, :emoji) }
+        ]
+    ]
+
+
+class ReactionChip extends Control [ height = 26, padding = [0, 8, 0, 7], cornerRadius = 13,
+    fill = { :mine ? provided("theme").chipMineFill : provided("theme").chipFill },
+    stroke = { stroke(1, :mine ? provided("theme").chipMineEdge : provided("theme").chipEdge) },
+    opacity = { pressed ? 0.7 : 1 },
+    tooltipLabel = { :names },
+    layout: SimpleLayout [ axis = x, spacing = 4, align = center ],
+    Text [ fontSize = 13, text = { :emoji } ],
+    Text [ fontSize = 12, fontWeight = semibold, numeralWidth = tabular, visible = { :count > 1 },
+        textColor = { provided("theme").textMuted }, text = { "" + :count } ]
+    ]
+
+
+// the reveal-on-hover way to react, for a mouse; a finger holds the bubble instead
+
+class ReactButton extends Control [ width = 28, height = 28, cornerRadius = 14,
+    row: MessageRow? = null,
+    visible = { !app.touchDevice },
+    opacity = { (row?.hovered ?? false) || this.focused ? 1 : 0 },
+    fill = { hovered ? provided("theme").control : null },
+    tooltipLabel = "React",
+    SmileIcon [ x = center, y = center, iconSize = 18, ink = { provided("theme").textMuted } ],
+    press() {
+        const r = row
+        if (r != null) app.pickReaction(r.line.bubble, r.threadId, r.rec)
+        }
+    ]

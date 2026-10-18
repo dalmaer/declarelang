@@ -302,7 +302,7 @@ written at all.
 */
 
 class NymphView [ width = 5, height = 5, cornerRadius = 2.5,
-    ready: number = { app.field.readiness(:@, app.t) },
+    ready: number = { app.field.readiness(:@) },
     at: Point = { app.tube.nymphAt(:lane ?? 0, classroot.ready) },
     x = { at.x - 2.5 },
     y = { at.y - 2.5 },

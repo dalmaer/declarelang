@@ -1,0 +1,65 @@
+/*
+## How the beam looks
+
+The lines of light (figures.declare) are drawn to a look that can be set while the game runs:
+how far and how strongly each line blooms, a faint wide halo round it, how wide the beam is,
+how nearly white its core, how bright it all is, and whether lines add up where they cross,
+as light does on the tube. `Beam` holds the settings as records, each with its range and its
+value in two looks, Rich and Plain; `look` is the record the screen draws with. C shows the
+panel that sets them.
+*/
+
+schema Setting [ id: string, label: string, value: number, min: number, max: number, rich: number, plain: number ]
+schema BeamLook [ glow: number, spread: number, halo: number, width: number, core: number, gain: number, additive: boolean ]
+
+class Beam extends Dataset [ schema = [ settings[]: Setting ],
+    additive: boolean = true,
+    look: BeamLook = { this.lookOf(classroot.value.settings, additive) },
+    lookOf(settings: Setting[], additive: boolean) -> BeamLook {
+        const v = (id: string) => settings.find((s) => s.id == id)?.value ?? 0
+        return { glow: v("glow"), spread: v("spread"), halo: v("halo"), width: v("width"), core: v("core"), gain: v("gain"), additive }
+        },
+
+    // one of the two looks, every setting at once
+
+    choose(look: "rich" | "plain") {
+        classroot.value.settings.forEach((s, i) => this.set(["settings", i, "value"], s[look]))
+        additive = look == "rich"
+        }
+    ]
+
+
+// The panel: a slider for each setting, with its value, the crossing lines, and the two looks.
+
+class BeamPanel [ width = 260, theme = { SanFranciscoDark }, textColor = { SanFranciscoDark.text },
+    beam: Beam,
+    Card [ width = 100%, datapath = { classroot.beam.value },
+        Text [ fontWeight = semibold, text = "Beam" ],
+        SettingRow [ datapath = :settings[] ],
+        Checkbox [ label = "Lines add where they cross", checked = { classroot.beam.additive },
+            input(v: boolean) { classroot.beam.additive = v }
+            ],
+        looks: View [ width = 100%,
+            layout: SimpleLayout [ axis = x, spacing = 8 ],
+            Button [ label = "Rich",
+                onClick() { classroot.beam.choose("rich") }
+                ],
+            Button [ label = "Plain",
+                onClick() { classroot.beam.choose("plain") }
+                ]
+            ],
+        Text [ fontSize = 11, textColor = { SanFranciscoDark.textMuted }, text = "C hides this panel" ]
+        ]
+    ]
+
+
+class SettingRow [ width = 100%,
+    layout: SimpleLayout [ axis = y, spacing = 2 ],
+    head: View [ width = 100%,
+        Text [ fontSize = 12, text = :label ],
+        Text [ x = end, fontSize = 12, textColor = { SanFranciscoDark.textMuted }, text = { (:value as number).toFixed(2) } ]
+        ],
+    Slider [ width = 100%, min = :min, max = :max, value = :value,
+        input(v: number) { :value = v }
+        ]
+    ]

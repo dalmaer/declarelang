@@ -409,6 +409,32 @@ await bothAgree("a freed cell's subscribers survive, minus that edge", (K, h, r)
   r("out", K.table[out]);
 });
 
+// The free list's LAST cell once looked live to the "already free" guard (its
+// owner word was -2 - NONE = -1), so a second free of it closed the list into a
+// cycle and one id went to two owners. (2026-10-17)
+await bothAgree("a cell freed twice is handed out once", (K, h, r) => {
+  const a = K.addCell(0, false), b = K.addCell(0, false);
+  K.freeCell(b); K.freeCell(a);   // b is now the free list's last cell
+  K.freeCell(b);
+  const ids = [K.addCell(0, false), K.addCell(0, false), K.addCell(0, false)];
+  r("ids", ids.join(","));
+  r("distinct", new Set(ids).size);
+  assert.equal(new Set(ids).size, 3, "three cells, three ids");
+});
+
+// Freeing or reusing a cell once reset its dirty flag and left its entry, so a
+// recycled cell dirtied again was listed again: undrained, the C kernel's list
+// ran past its table into the next one. (2026-10-17: a long scroll through a
+// virtualized list, then a settle that never returned.)
+await bothAgree("the dirty list holds a recycled cell once", (K, h, r) => {
+  K.dirty();
+  let c = K.addCell(0, false);
+  for (let i = 0; i < 50; i++) { K.set(c, i + 1); K.freeCell(c); c = K.addCell(0, false); }
+  const d = Array.from(K.dirty());
+  r("dirty", d.join(","));
+  assert.equal(d.length, new Set(d).size, "no cell listed twice");
+});
+
 await bothAgree("a REF cell carries the wake but no value", (K, h, r) => {
   const ref = K.addCell(1, false), out = K.addCell(0, false);   // kind 1 = REF
   const rule = K.addRule(out, KIND.BODY, 0, [ref], 0);

@@ -5,7 +5,9 @@ Atari's Tempest (1981), written afresh as a Declare program rather than ported:
 it plays the same game, without chasing the arcade frame by frame (the faithful
 port is `../tempest/`). Keyboard only. You are the claw on the rim of a tube;
 enemies climb from the far end; shoot them down the lanes, clear the wave,
-and fly down the tube to the next one.
+and fly down the tube to the next one. Its waves are the arcade's: how many
+enemies, which kinds and how many at once, how they move, how fast they climb
+and fire, and when they come up (waves.json, the arcade's own table).
 
 How it is put together:
 
@@ -17,8 +19,8 @@ How it is put together:
 - `screens.declare` — the colors per sixteen levels (theme records), the score
   panel, the attract screen, "rate yourself", and the cards.
 - `sound.declare` — the arcade's sounds on its eight voices.
-- this file — the helpers, the fixed data (tube shapes, waves, starting levels,
-  keys, stars), and the App: where the player is (mode, level,
+- this file — the helpers, the fixed data (tube shapes, starting levels, keys,
+  stars; the waves from waves.json), and the App: where the player is (mode, level,
   score, lives, the claw), the clocks that drive play, the keyboard, and the
   tree of views.
 
@@ -54,6 +56,9 @@ defaultFlags [ render = canvas ]
 script {
     type Kind = "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar"
 
+    // the fields a move of an enemy writes, each with its new value
+    type Moves = [string, number][]
+
     function lerp(a: number, b: number, t: number): number { return a + (b - a) * t }
     function clamp(v: number, lo: number, hi: number): number { return Math.max(lo, Math.min(hi, v)) }
     function mod(v: number, n: number): number { return ((v % n) + n) % n }
@@ -88,21 +93,6 @@ script {
         d.lineWidth = width * 0.5
         d.lineCap = "round"
         d.lineJoin = "round"
-    }
-
-    // a shuffled list of the kinds a wave holds
-    function waveKinds(n: { flippers: number, tankers: number, spikers: number, fuseballs: number, pulsars: number }): Kind[] {
-        const out: Kind[] = []
-        const add = (k: Kind, c: number) => { for (let i = 0; i < c; i++) out.push(k) }
-        add("flipper", n.flippers); add("tanker", n.tankers); add("spiker", n.spikers)
-        add("fuseball", n.fuseballs); add("pulsar", n.pulsars)
-        for (let i = out.length - 1; i > 0; i--) { const j = rnd(i + 1); const s = out[i]; out[i] = out[j]; out[j] = s }
-        // the first two are flippers, so a level opens gently
-        for (let i = 0; i < 2; i++) {
-            const j = out.indexOf("flipper", i)
-            if (j > i) { const s = out[i]; out[i] = out[j]; out[j] = s }
-        }
-        return out
     }
     }
 
@@ -160,28 +150,10 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
             ] }
         },
 
-    // Each row holds from its level until the next row's; within a row the
-    // enemies climb a little faster each level.
+    // The arcade's waves, one row a level to 98 (waves.json); past them, one of
+    // the 65th to 96th, fixed for each level.
 
-    waves: Dataset [ schema = [ levels[]: Wave ] ] {
-        { "levels": [
-            { "from": 1,  "flippers": 6,  "tankers": 0, "spikers": 0, "fuseballs": 0, "pulsars": 0, "speed": 0.14, "gap": 1300, "cargo": ["flipper"], "fire": false },
-            { "from": 2,  "flippers": 8,  "tankers": 0, "spikers": 0, "fuseballs": 0, "pulsars": 0, "speed": 0.15, "gap": 1200, "cargo": ["flipper"], "fire": true },
-            { "from": 3,  "flippers": 7,  "tankers": 2, "spikers": 0, "fuseballs": 0, "pulsars": 0, "speed": 0.16, "gap": 1150, "cargo": ["flipper"], "fire": true },
-            { "from": 4,  "flippers": 6,  "tankers": 2, "spikers": 2, "fuseballs": 0, "pulsars": 0, "speed": 0.16, "gap": 1100, "cargo": ["flipper"], "fire": true },
-            { "from": 5,  "flippers": 6,  "tankers": 3, "spikers": 2, "fuseballs": 1, "pulsars": 0, "speed": 0.17, "gap": 1050, "cargo": ["flipper"], "fire": true },
-            { "from": 7,  "flippers": 7,  "tankers": 3, "spikers": 3, "fuseballs": 2, "pulsars": 0, "speed": 0.18, "gap": 1000, "cargo": ["flipper"], "fire": true },
-            { "from": 9,  "flippers": 7,  "tankers": 3, "spikers": 2, "fuseballs": 2, "pulsars": 1, "speed": 0.18, "gap": 950,  "cargo": ["flipper"], "fire": true },
-            { "from": 11, "flippers": 7,  "tankers": 3, "spikers": 2, "fuseballs": 2, "pulsars": 2, "speed": 0.19, "gap": 950,  "cargo": ["flipper"], "fire": true },
-            { "from": 13, "flippers": 8,  "tankers": 3, "spikers": 2, "fuseballs": 3, "pulsars": 3, "speed": 0.20, "gap": 900,  "cargo": ["flipper"], "fire": true },
-            { "from": 17, "flippers": 8,  "tankers": 4, "spikers": 3, "fuseballs": 3, "pulsars": 3, "speed": 0.21, "gap": 900,  "cargo": ["flipper", "pulsar"], "fire": true },
-            { "from": 25, "flippers": 9,  "tankers": 4, "spikers": 3, "fuseballs": 3, "pulsars": 4, "speed": 0.22, "gap": 850,  "cargo": ["flipper", "pulsar"], "fire": true },
-            { "from": 33, "flippers": 9,  "tankers": 4, "spikers": 3, "fuseballs": 4, "pulsars": 4, "speed": 0.23, "gap": 850,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true },
-            { "from": 49, "flippers": 10, "tankers": 4, "spikers": 3, "fuseballs": 4, "pulsars": 4, "speed": 0.24, "gap": 800,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true },
-            { "from": 65, "flippers": 10, "tankers": 5, "spikers": 3, "fuseballs": 4, "pulsars": 5, "speed": 0.25, "gap": 750,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true },
-            { "from": 81, "flippers": 11, "tankers": 5, "spikers": 4, "fuseballs": 5, "pulsars": 5, "speed": 0.26, "gap": 700,  "cargo": ["flipper", "pulsar", "fuseball"], "fire": true }
-            ] }
-        },
+    waves: DataSource [ url = "waves.json", auto = true, schema = [ levels[]: Wave ] ],
 
     // The levels a game may start at, as the arcade offers them, and the bonus
     // each earns once its first level is cleared.
@@ -300,9 +272,12 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
       : "SUPERZAPPER RECHARGE" },
 
     waveFor(level: number) -> Wave {
-        const rows = this.waves.value.levels.filter((w) => w.from <= level)
-        const row = rows[rows.length - 1]
-        return ({ ...row, speed: row.speed + 0.003 * (level - row.from) })
+        const rows = this.waves.value?.levels ?? []
+        const row = rows[level <= rows.length ? level - 1 : 64 + Math.floor(hash(level, 7) * 32)]
+        return row ?? ({ level: 0, enemies: 0, plan: "climb", speed: 0, spikerSpeed: 0, shotSpeed: 0,
+            flippers: { min: 0, max: 0 }, pulsars: { min: 0, max: 0 }, tankers: { min: 0, max: 0 }, spikers: { min: 0, max: 0 },
+            fuseballs: { min: 0, max: 0 }, cargo: [], shots: 0, fireDelay: 0, pulsarsFire: false, spikes: 0, rimFlip: 0,
+            fuseballsChase: false })
         },
 
     /* ## Choosing where to start
@@ -350,7 +325,7 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
         cy = { app.height / 2 + 30 },
         radius = { Math.min(app.width * 0.42, (app.height - 120) * 0.5) },
         cam = { app.cam } ],
-    field: Playfield [ ] { { "nymphs": [], "foes": [], "shots": [], "foeShots": [], "spikes": [], "blasts": [] } },
+    field: Playfield [ foeShotSpeed = { app.wave.shotSpeed } ] { { "nymphs": [], "foes": [], "shots": [], "foeShots": [], "spikes": [], "blasts": [] } },
 
     // the pulsars, to light their lanes: a derived dataset holding the field's own records
 
@@ -370,7 +345,7 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
         onTick(dt: number) { app.advance(dt) }
         ],
     brain: Time [ tick = 250, running = { app.mode == "play" && !app.paused },
-        onTick() { if (app.field.think(app.t, app.lane, app.tube.closed, app.wave) > 0) app.cue("enemyShot") }
+        onTick() { app.field.think(app.t, app.lane, app.tube.closed, app.wave) }
         ],
     pilot: Time [ tick = 70, running = { app.demo && app.playing },
         onTick() { app.steer() }
@@ -489,12 +464,14 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
         },
 
     // A level begins with the fall through the stars as its tube arrives; its
-    // nymphs are laid at the far end, the first due soon after play begins.
+    // nymphs are laid at the far end, to rise once play begins, and some waves
+    // start with spikes already standing.
 
     enterLevel(n: number) {
         field.reset()
         const w = waveFor(n)
-        field.lay(waveKinds(w), t + 3.2, w.gap / 1000)
+        field.lay(w.enemies)
+        if (w.spikes > 0) field.standSpikes(w.spikes)
         zaps = 2
         dive = 0
         levelStart = t
@@ -517,7 +494,7 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
         mode = "dying"
         lives = lives - 1
         field.blast("big", lane, clawDepth, t, 0)
-        field.recall(t)
+        field.recall()
         cue("death")
         afterDelay(2000, () => app.afterDeath(fromDive))
         },

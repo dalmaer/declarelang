@@ -67,7 +67,7 @@ export declare class DomSurface implements Surface {
     /** A blank raster of this drawing was reported: once is enough. */
     private blankReported;
     /** Set once the drawing raster has ever existed (arms the dpr watch once). */
-    private watching;
+    private unwatchDpr;
     private gone;
     constructor();
     private posX;

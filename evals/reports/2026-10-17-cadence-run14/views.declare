@@ -1,0 +1,387 @@
+/*
+## The look
+
+Ink and paper, and one accent that means effort. Everything else is type: big
+figures in a heavy weight, small spaced capitals for what they are.
+*/
+
+theme CadenceLight [
+    background = #F2EFE9, surface = #FAF8F4, line = #DDD7CC,
+    text = #15120E, textMuted = #6F685E, textFaint = #A9A296,
+    accent = #F2461B, accentTextColor = #FFFFFF, accentHovered = #E03E15, accentPressed = #C93611,
+    control = #E7E2D9, controlHovered = #DFD9CE, controlPressed = #D3CCC0, controlSelected = #15120E,
+    segmentedSelectedFill = #FAF8F4,
+    calm = #CEC7BA
+    ]
+
+
+theme CadenceDark [
+    background = #121110, surface = #1B1917, line = #2F2C28,
+    text = #F2EFE9, textMuted = #9D968A, textFaint = #5F594F,
+    accent = #FF5A2C, accentTextColor = #FFFFFF, accentHovered = #FF6B40, accentPressed = #FF7C55,
+    control = #252320, controlHovered = #2D2A26, controlPressed = #37332E, controlSelected = #F2EFE9,
+    segmentedSelectedFill = #37332E,
+    calm = #46413A
+    ]
+
+
+// the small spaced capitals that name a figure
+
+class Caption extends Text [ fontSize = 11, fontWeight = semibold, letterSpacing = 1.5, wrap = false,
+    textTransform = uppercase, textColor = { provided("theme").textMuted }
+    ]
+
+
+/*
+## Controls
+
+Big, thumb-sized, and choices rather than typing: a chip for one of a few, a
+round nudge for more or less.
+*/
+
+class Choice extends Control [ height = 56, cornerRadius = 14,
+    label: string = "",
+    on: boolean = false,
+    picked() { },
+    press() { this.picked() },
+    fill = { on ? provided("theme").text : pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : provided("theme").control },
+    t: TextLabel [ x = center, fontSize = 17, fontWeight = semibold, wrap = false,
+        textColor = { classroot.on ? provided("theme").background : provided("theme").text }, text = { classroot.label } ]
+    ]
+
+
+// one step of the effort scale, wearing its own colour
+
+class EffortCell extends Control [ height = 56, cornerRadius = 10, clip = true,
+    level: number = 1,
+    on: boolean = false,
+    picked() { },
+    press() { this.picked() },
+    ink: number = { effortInk(level, provided("theme").calm, provided("theme").accent) },
+    fill = { on ? ink : pressed ? provided("theme").controlPressed : provided("theme").control },
+    band: View [ y = end, width = 100%, height = 5, fill = { classroot.ink }, visible = { !classroot.on } ],
+    t: TextLabel [ x = center, fontSize = { classroot.on ? 22 : 16 }, fontWeight = { classroot.on ? "extrabold" : "semibold" }, wrap = false,
+        textColor = { classroot.on ? (classroot.level >= 6 ? 0xFFFFFF : provided("theme").text) : provided("theme").textMuted },
+        text = { "" + classroot.level } ]
+    ]
+
+
+class Nudge extends Control [ width = 60, height = 60, cornerRadius = 30,
+    glyph: "minus" | "plus" | "left" | "right" = "plus",
+    nudged() { },
+    press() { this.nudged() },
+    fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : provided("theme").control },
+    opacity = { disabled ? 0.35 : 1 },
+    MinusIcon [ x = center, y = center, iconSize = 20, ink = { provided("theme").text }, visible = { classroot.glyph == "minus" } ],
+    PlusIcon [ x = center, y = center, iconSize = 20, ink = { provided("theme").text }, visible = { classroot.glyph == "plus" } ],
+    ChevronIcon [ x = center, y = center, iconSize = 20, ink = { provided("theme").text }, visible = { classroot.glyph == "left" || classroot.glyph == "right" },
+        dir = { classroot.glyph == "left" ? "left" : "right" } ]
+    ]
+
+
+// a value set by nudging it down or up, the value itself set large between
+
+class Adjuster [ width = 100%, height = 64,
+    value: string = "",
+    size: number = 34,            // the value's size, shrinking if it would meet the nudges
+    less: "minus" | "left" = "minus",
+    more: "plus" | "right" = "plus",
+    canLess: boolean = true,
+    canMore: boolean = true,
+    stepped(dir: number) { },
+    down: Nudge [ x = 0, glyph = { classroot.less }, disabled = { !classroot.canLess },
+        nudged() { classroot.stepped(-1) }
+        ],
+    shown: TextLabel [ x = center, fontWeight = extrabold, letterSpacing = { -classroot.size * 0.03 }, wrap = false,
+        fontSize = { classroot.size * app.fitLine(classroot.width - 2 * 68, classroot.size, 1, classroot.value, "") },
+        numeralWidth = tabular, text = { classroot.value } ],
+    up: Nudge [ x = end, glyph = { classroot.more }, disabled = { !classroot.canMore },
+        nudged() { classroot.stepped(1) }
+        ]
+    ]
+
+
+// a pressable line of text — "Edit", "Delete", "Now"
+
+class TextAction extends Control [ height = 44, padding = [0, 4, 0, 4],
+    label: string = "",
+    tone: number = 0,
+    acted() { },
+    press() { this.acted() },
+    t: TextLabel [ fontSize = 15, fontWeight = semibold, wrap = false,
+        textColor = { classroot.tone != 0 ? classroot.tone : provided("theme").text },
+        opacity = { classroot.pressed ? 0.55 : 1 }, text = { classroot.label } ]
+    ]
+
+
+/*
+## The week's shape
+
+A day of this week: a bar as tall as the day's training, as hot as its hardest
+session. The scale is fixed (two and a half hours fills it), so a light week
+looks light. A day with something in it opens its latest session.
+*/
+
+class WeekBar extends Control [ height = 100%, cornerRadius = 8,
+    width = { (parent.width - 6 * 8) / 7 },
+    disabled = { :count == 0 },
+    press() { app.select(:last) },
+
+    room: number = { this.height - 46 },
+    barH: number = { Math.min(1, :minutes / 150) * this.room },
+    shownH: number = 0,
+    Spring [ attribute = shownH, to = { classroot.barH }, stiffness = 170, damping = 22 ],
+
+    amount: Text [ x = center, y = { classroot.height - 30 - classroot.shownH - 18 }, fontSize = 11, fontWeight = semibold, wrap = false,
+        numeralWidth = tabular, textColor = { provided("theme").textMuted }, opacity = { :count > 0 ? 1 : 0 },
+        text = { duration(:minutes) } ],
+    bar: View [ x = center, width = { Math.min(36, classroot.width * 0.62) }, cornerRadius = 5,
+        y = { classroot.height - 26 - Math.max(2, classroot.shownH) }, height = { Math.max(2, classroot.shownH) },
+        fill = { :count > 0 ? effortInk(:effort, provided("theme").calm, provided("theme").accent) : provided("theme").line } ],
+    letter: Text [ x = center, y = end, fontSize = 13, wrap = false,
+        fontWeight = { :today ? "extrabold" : "medium" },
+        textColor = { :today ? provided("theme").text : :future ? provided("theme").textFaint : provided("theme").textMuted },
+        text = { :letter } ]
+    ]
+
+
+/*
+## A session in a list
+
+One line: when, what, how long, how far, how hard. The effort is a disc in the
+accent, so a hard session is seen before it is read.
+*/
+
+class EffortDot [ width = 34, height = 34, cornerRadius = 17,
+    effort: number = 1,
+    fill = { effortInk(effort, provided("theme").calm, provided("theme").accent) },
+    TextLabel [ x = center, fontSize = 14, fontWeight = extrabold, wrap = false,
+        textColor = { classroot.effort >= 6 ? 0xFFFFFF : provided("theme").text }, text = { "" + classroot.effort } ]
+    ]
+
+
+class SessionRow extends Control [ width = 100%, height = 60, padding = [0, 12, 0, 12], cornerRadius = 10,
+    press() { app.select(:id) },
+    fill = { app.selectedId == :id ? provided("theme").control : pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : null },
+    layout: SimpleLayout [ axis = x, spacing = 12, align = center ],
+    when: Text [ width = { app.phone ? 84 : 120 }, fontSize = 13, wrap = false, textColor = { provided("theme").textMuted },
+        text = { dayLabel(dayNum(:date), app.todayN) } ],
+    what: Text [ fontSize = 17, fontWeight = semibold, wrap = false, text = { sportName(:sport) } ],
+    Spacer [ ],
+    far: Text [ fontSize = 14, wrap = false, numeralWidth = tabular, textColor = { provided("theme").textMuted },
+        text = { :distanceKm != null ? km(:distanceKm ?? 0) : "" } ],
+    long: Text [ width = 66, textAlign = right, fontSize = 17, fontWeight = semibold, wrap = false, numeralWidth = tabular,
+        text = { duration(:minutes) } ],
+    EffortDot [ effort = :effort ]
+    ]
+
+
+/*
+## The year
+
+All of the history as one surface, under the hand. The window onto it is two
+numbers on the App — the first day shown and how many days are shown — and the
+drawing maps every day through them. A drag pans it, two fingers or a trackpad
+pinch open and close it, and none of it waits for a release: under the hand the
+window is written directly (`app.handTo`), and only the presets glide.
+
+Bars are a day's minutes, hot by its hardest effort; opened far enough, each day
+splits into its sessions, and a tap on one opens it.
+*/
+
+class YearChart [ clip = true,
+    axisH: number = 40,
+    full: number = 150,           // minutes that fill the height
+
+    grab: number = 0,
+    pinching: boolean = false,
+    pinchSpan: number = 0,
+    pinchDay: number = 0,
+
+    perDay: number = { this.width / Math.max(1, app.viewSpan) },
+    dayAtX(x: number) -> number { return Math.floor(app.viewStart + x / this.perDay) },
+
+    // which session is under a point: a split day by its segment, else the day's hardest
+
+    sessionAt(x: number, y: number) -> string {
+        const t = app.daily.value
+        if (t == null) return ""
+        const day = t.days[this.dayAtX(x) - t.first]
+        if (day == null || day.parts.length == 0) return ""
+        if (this.perDay >= 10) {
+            let base = this.height - this.axisH
+            for (const p of day.parts) {
+                const h = this.barHeight(p.min)
+                if (y >= base - h - 2 && y <= base) return p.id
+                base = base - h - 2
+                }
+            }
+        return [...day.parts].sort((a, b) => b.eff - a.eff)[0].id
+        },
+    barHeight(min: number) -> number { return Math.min(1.15, min / this.full) * (this.height - this.axisH - 30) },
+
+    onPointerDown(e: PointerEvent) { grab = app.viewStart },
+    onPointerMove(e: PointerEvent) { if (!pinching) app.handTo(grab - e.deltaX / perDay, app.viewSpan) },
+    onPointerUp(e: PointerUpEvent) { pinching = false },
+    onClick(e: PointerEvent) { const id = sessionAt(e.x, e.y); if (id != "") app.select(id) },
+
+    onPinchStart(e: PinchEvent) { pinching = true; pinchSpan = app.viewSpan; pinchDay = app.viewStart + e.x / perDay },
+    onPinch(e: PinchEvent) {
+        const span = pinchSpan / e.scale
+        app.handTo(pinchDay - e.x / this.width * span, span)
+        },
+
+    // a trackpad: sideways pans, a pinch (or a plain wheel) opens and closes about the pointer
+
+    onWheel(e: WheelEvent) {
+        if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && !e.pinch) {
+            app.handTo(app.viewStart + e.deltaX / perDay, app.viewSpan)
+            return
+            }
+        const span = app.viewSpan * Math.exp(e.deltaY * (e.pinch ? 0.012 : 0.0025))
+        const at = app.viewStart + e.x / perDay
+        app.handTo(at - e.x / this.width * span, span)
+        },
+
+    draw(d: Draw) {
+        const t = app.daily.value
+        if (t == null) return
+        const th = provided("theme")
+        const start = app.viewStart, span = app.viewSpan
+        const per = d.w / span
+        const base = d.h - this.axisH
+        const bw = Math.max(1.2, Math.min(per * 0.66, 44))
+        const split = per >= 10
+        const small: TextStyle = { fontSize: 11, fontWeight: "semibold", letterSpacing: 0.6, textColor: th.textMuted }
+        const faint: TextStyle = { fontSize: 11, fontWeight: "medium", textColor: th.textFaint }
+
+        // Opened up, a bar is a day (split into its sessions once there is room);
+        // closed down to a season, days fold into weeks. Between the two they
+        // cross-fade, so a pinch never sees the drawing jump.
+        const daily = clamp((per - 3) / 3, 0, 1)
+
+        // months: a hairline at each first, named under it — with the month's
+        // hours once there is room, so the hardest month can be found by eye
+        for (let n = Math.floor(start) - 31; n <= Math.ceil(start + span); n++) {
+            if (dateOf(n) != 1) continue
+            const x = (n - start) * per
+            d.fillStyle = th.line
+            d.fillRect(Math.round(x), 0, 1, base)
+            const m = monthOf(n)
+            const name = monthName(m).toUpperCase() + (m == 0 ? " ’" + ("" + yearOf(n)).slice(2) : "")
+            if (per * 30 > 26) d.fillText(name, x + 5, base + 18, small)
+            if (per * 30 > 34 && per < 16) {
+                let total = 0
+                for (let i = n; i == n || dateOf(i) != 1; i++) total = total + (t.days[i - t.first]?.min ?? 0)
+                if (total > 0) d.fillText(Math.round(total / 60) + "h", x + 5, base + 33, faint)
+                }
+            }
+        if (per >= 16) {
+            for (let n = Math.floor(start); n <= Math.ceil(start + span); n++) {
+                if (dateOf(n) == 1) continue
+                const x = (n - start) * per
+                d.fillText("" + dateOf(n), x + per / 2 - (dateOf(n) >= 10 ? 6 : 3), base + 18, weekdayOf(n) == 0 ? small : faint)
+                }
+            }
+
+        // the weeks
+        if (daily < 1) {
+            d.globalAlpha = 1 - daily
+            const wb = Math.max(2, per * 7 - Math.max(1, per * 1.6))
+            for (let mon = Math.floor(start) - weekdayOf(Math.floor(start)) - 7; mon <= start + span; mon = mon + 7) {
+                let min = 0, load = 0, has = false
+                for (let i = mon; i < mon + 7; i++) {
+                    const day = t.days[i - t.first]
+                    if (day == null) continue
+                    for (const p of day.parts) { min = min + p.min; load = load + p.min * p.eff; has = true }
+                    }
+                if (!has) continue
+                const h = Math.max(2, Math.min(1.15, min / (this.full * 4)) * (base - 30))
+                d.fillStyle = effortInk(load / min, th.calm, th.accent)
+                d.fillRect((mon - start) * per + (per * 7 - wb) / 2, base - h, wb, h)
+                }
+            d.globalAlpha = 1
+            }
+
+        // the days
+        if (daily > 0) d.globalAlpha = daily
+        for (let n = Math.floor(start) - 1; n <= Math.ceil(start + span) && daily > 0; n++) {
+            const day = t.days[n - t.first]
+            if (day == null || day.parts.length == 0) continue
+            const x = (n - start) * per + (per - bw) / 2
+            if (split) {
+                let y = base
+                for (const p of day.parts) {
+                    const h = Math.max(3, this.barHeight(p.min))
+                    d.fillStyle = effortInk(p.eff, th.calm, th.accent)
+                    d.fillRect(x, y - h, bw, h)
+                    if (p.id == app.selectedId) {
+                        d.strokeStyle = th.text
+                        d.lineWidth = 2
+                        d.strokeRect(x - 2, y - h - 2, bw + 4, h + 4)
+                        }
+                    y = y - h - 2
+                    }
+                } else {
+                const h = Math.max(2, this.barHeight(day.min))
+                d.fillStyle = effortInk(day.eff, th.calm, th.accent)
+                d.fillRect(x, base - h, bw, h)
+                if (day.parts.some((p) => p.id == app.selectedId)) {
+                    d.fillStyle = th.text
+                    d.fillRect(x + bw / 2 - 1, base - h - 9, 2, 5)
+                    }
+                }
+            }
+        d.globalAlpha = 1
+
+        // the baseline, and today
+        d.fillStyle = th.text
+        d.fillRect(0, base, d.w, 1)
+        const tx = (app.todayN - start + 0.5) * per
+        d.fillRect(tx - 1, base, 2, 7)
+        }
+    ]
+
+
+/*
+## A session, opened
+
+A figure and what it is; and the session among all the others — every session
+as a dot by how long and how hard, this one ringed.
+*/
+
+class Stat [
+    caption: string = "",
+    value: string = "",
+    tone: number = 0,
+    layout: SimpleLayout [ axis = y, spacing = 2 ],
+    Text [ fontSize = 34, fontWeight = extrabold, letterSpacing = -1, wrap = false, numeralWidth = tabular,
+        textColor = { classroot.tone != 0 ? classroot.tone : provided("theme").text }, text = { classroot.value } ],
+    Caption [ text = { classroot.caption } ]
+    ]
+
+
+class Standing [
+    draw(d: Draw) {
+        const th = provided("theme")
+        const all = app.sessions.all()
+        const me = app.picked
+        const most = Math.max(60, ...all.map((s) => s.minutes))
+        const at = (min: number, eff: number) => [6 + (min / most) * (d.w - 12), d.h - 14 - ((eff - 1) / 9) * (d.h - 22)]
+        d.fillStyle = th.line
+        d.fillRect(0, d.h - 8, d.w, 1)
+        for (const s of all) {
+            const p = at(s.minutes, s.effort)
+            d.fillStyle = s.sport == me?.sport ? th.textMuted : th.line
+            d.fillRect(p[0] - 1.5, p[1] - 1.5, 3, 3)
+            }
+        if (me == null) return
+        const p = at(me.minutes, me.effort)
+        d.fillStyle = effortInk(me.effort, th.calm, th.accent)
+        d.beginPath(); d.arc(p[0], p[1], 7, 0, Math.PI * 2, false); d.fill()
+        d.strokeStyle = th.text; d.lineWidth = 2
+        d.beginPath(); d.arc(p[0], p[1], 10, 0, Math.PI * 2, false); d.stroke()
+        d.fillText("longer →", d.w - 56, d.h, { fontSize: 11, textColor: th.textFaint })
+        d.fillText("harder ↑", 6, 11, { fontSize: 11, textColor: th.textFaint })
+        }
+    ]

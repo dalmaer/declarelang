@@ -20,7 +20,8 @@ The shape to notice:
   pictures, traced from the arcade's vector ROM, are pictures.json.
   The monitor works in the arcade's pixels and is scaled to the window.
 
-Keys: ← → or A S turn, Space or Return fire, ↓, Z or / superzapper, Return or 1 start, Escape pause.
+Keys: ← → or A S turn, Space or Return fire, ↓, Z or / superzapper, Return or 1 start, Escape pause,
+C the panel that sets how the beam looks.
 
 *This program is new code, written in Declare. It recreates the behavior of Tempest, Atari's
 1981 arcade game, whose original program was written in 6502 assembly language (with Atari's
@@ -33,11 +34,11 @@ here, please open an issue on this repository on GitHub, or message me there, an
 it.*
 */
 
-include [ "machine.declare", "well.declare", "game.declare", "enemies.declare", "camera.declare", "scene.declare", "figures.declare", "screen.declare", "sound.declare" ]
+include [ "machine.declare", "well.declare", "game.declare", "enemies.declare", "camera.declare", "scene.declare", "figures.declare", "beam.declare", "screen.declare", "sound.declare" ]
 
 defaultFlags [ render = canvas ]
 
-App [ fill = black,
+App [ appName = "Tempest", fill = black,
     wavesData: DataSource [ url = "waves.json", auto = true, schema = [ waves[]: Wave ] ],
     picturesData: DataSource [ url = "pictures.json", auto = true ],
     ready: boolean = { app.wavesData.loaded && app.picturesData.loaded },
@@ -59,6 +60,21 @@ App [ fill = black,
     screen: Monitor [ paused = { app.paused } ],
     speaker: SoundBoard [ game = { app.game }, paused = { app.paused } ],
 
+    // how the beam looks, and the panel that sets it (beam.declare), shown and hidden by C
+
+    beam: Beam [ ] { {
+        "settings": [
+            { "id": "glow", "label": "Bloom", "value": 0.85, "min": 0, "max": 1.5, "rich": 0.85, "plain": 0.5 },
+            { "id": "spread", "label": "Bloom spread", "value": 1.6, "min": 0, "max": 4, "rich": 1.6, "plain": 1 },
+            { "id": "halo", "label": "Halo", "value": 0.2, "min": 0, "max": 1, "rich": 0.2, "plain": 0 },
+            { "id": "width", "label": "Beam width", "value": 1.25, "min": 0.4, "max": 3, "rich": 1.25, "plain": 1 },
+            { "id": "core", "label": "White core", "value": 0.4, "min": 0, "max": 1, "rich": 0.4, "plain": 0.12 },
+            { "id": "gain", "label": "Brightness", "value": 1, "min": 0.4, "max": 2, "rich": 1, "plain": 1 }
+            ]
+        } },
+    tuning: boolean = false,
+    beamPanel: BeamPanel [ x = { app.width - 276 }, y = 16, beam = { app.beam }, visible = { app.tuning } ],
+
     // The arcade's controls, on the keyboard. The spinner turns six steps a frame (a lane is
     // sixteen) while ← or → is held; Return also starts a game, as the coin and the start
     // button together.
@@ -74,6 +90,7 @@ App [ fill = black,
             if (e.repeat || e.meta || e.ctrl || e.alt) return
             if (app.paused) { app.paused = false; if (e.key == "Escape") return }
             else if (e.key == "Escape") { if (app.game.playing) app.paused = true; return }
+            if (e.code == "KeyC") { app.tuning = !app.tuning; return }
             app.tapped = [...app.tapped, e.code]
             }
         ],

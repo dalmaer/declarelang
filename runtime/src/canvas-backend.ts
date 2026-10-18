@@ -536,6 +536,7 @@ class ScrollLoop {
 
 class Compositor {
   private canvas: HTMLCanvasElement | null = null;
+  private unwatchDpr: (() => void) | null = null;
   /** Where the pointer last was over the canvas (its own coordinates), or null
    *  off it — where the cursor is asked again when one changes under a still
    *  pointer (a key that hides it, a pause that shows it). */
@@ -681,7 +682,7 @@ class Compositor {
     for (const s of [...this.editables]) s.remountEditable();
     // Even an idle tree must re-rasterize crisply when the user zooms or
     // moves the window between displays; a destroyed root ends the watch.
-    onDprChange(
+    this.unwatchDpr = onDprChange(
       () => this.canvas !== null,
       () => this.invalidate()
     );
@@ -1037,7 +1038,9 @@ class Compositor {
     this.canvas?.remove();
     this.strut?.remove();
     this.strut = null;
-    this.canvas = null; // also quiets the dpr watch
+    this.canvas = null;
+    this.unwatchDpr?.();
+    this.unwatchDpr = null;
     this.ctx = null;
     this.root = null;
     this.editables.clear();
