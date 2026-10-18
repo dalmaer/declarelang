@@ -28,7 +28,7 @@ runtime/src, compiler/src  ──tsc──▶  */dist
 */dist                     ──build-boot, build-compiler──▶  bundles/declare-*.js
 bundles/declare-compiler.js
   + runtime/dist, browser  ──build-mac──▶  mac-host/.build/bundles/declare-*-mac.js
-mac-host/Sources           ──swift build, codesign──▶  .build/release/DeclareMac
+mac-host/Sources           ──swift build, codesign──▶  <release bin>/DeclareMac
 all of the above           ──build-mac-app──▶  Declare Mac.app
 ```
 
@@ -73,8 +73,9 @@ nothing until the app lives there**. The in-tree fallback runs fine — it simpl
 the handler.
 
 **There is one app per tree, and every harness drives it.** There is deliberately no
-second "dev build": `mac-host/.build/release/DeclareMac` is a SwiftPM intermediate, never
-run directly. The gates, the conformance suite and `test/mac-shell.test.mjs` all launch
+second "dev build": the release `DeclareMac` is a SwiftPM intermediate, never run directly.
+The build scripts find it where `swift build -c release --show-bin-path` says, not through
+SwiftPM's `.build/release` symlink, whose target moves between SwiftPM versions. The gates, the conformance suite and `test/mac-shell.test.mjs` all launch
 the installed app (`mac-host/app.mjs` is the one place that answers "where is it?"), so
 what they measure is what ships. A second tree on the same machine builds and drives its
 own app under its own name (`DECLARE_MAC_APP="Declare Mac Overlay"`), with its own bundle

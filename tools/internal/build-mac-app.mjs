@@ -80,7 +80,10 @@ const VARIANT = APP_NAME === "Declare Mac" ? "" : "." + APP_NAME.toLowerCase().r
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const MAC = path.join(ROOT, "mac-host");
-const BIN = path.join(MAC, ".build/release/DeclareMac");
+// The release binary's real folder, from SwiftPM (build.sh asks the same way):
+// `.build/release` is a symlink whose target moves between SwiftPM versions.
+const BIN = path.join(execFileSync("swift", ["build", "-c", "release", "--show-bin-path"],
+  { cwd: MAC, encoding: "utf8" }).trim(), "DeclareMac");
 
 const say = (m) => process.stdout.write(m + "\n");
 const die = (m) => { process.stderr.write("\n✗  " + m + "\n"); process.exit(1); };
@@ -94,7 +97,7 @@ const die = (m) => { process.stderr.write("\n✗  " + m + "\n"); process.exit(1)
 const bundleInputs = (out) => MAC_BUNDLES.find((b) => b.out === out)?.inputs;
 
 const BAKE = [
-  { from: "mac-host/.build/release/DeclareMac", to: `Contents/MacOS/${APP_NAME}`,
+  { from: path.relative(ROOT, BIN), to: `Contents/MacOS/${APP_NAME}`,
     inputs: ["mac-host/Sources", "mac-host/Package.swift", "mac-host/build.sh", "kernel/src", "kernel/include"] },
   { from: "browser/mac-env.js", to: "Contents/Resources/mac-env.js" },
   // the app's own bundles, built just below into mac-host/.build/bundles/ (never committed):

@@ -10,7 +10,7 @@
 #
 # This was invisible for as long as the bundled app had the same problem (fixed
 # in 896a99ca), and it outlived that fix: bundle.sh signs the .app, and nothing
-# signed the bare `.build/release/DeclareMac` that the dev loop, the conformance
+# signed the bare release `DeclareMac` that the dev loop, the conformance
 # suite and the gates all run. So every JS-side number those produced was an
 # interpreter's. The startup assertion in Bridge.assertJIT is what found it.
 #
@@ -20,7 +20,11 @@
 set -e
 cd "$(dirname "$0")"
 
-BIN=".build/release/DeclareMac"
+# The binary's real folder, from SwiftPM itself. `.build/release` is a symlink
+# SwiftPM makes, and its target has moved between SwiftPM versions (it is now
+# .build/out/Products/Release); a symlink also breaks in copies and archives of
+# the tree. Asking is a second, and nothing of ours goes through the link.
+BIN="$(swift build -c release --show-bin-path)/DeclareMac"
 
 # ⚠ CHECK THE BINARY MOVED, not just the exit status. `swift build` can report
 # a COMPILE ERROR and still exit 0 (observed 2026-08-17: "cannot find 'front' in
