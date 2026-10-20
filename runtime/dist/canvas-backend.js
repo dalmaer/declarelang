@@ -2369,7 +2369,9 @@ class CanvasSurface {
         let clipR = Infinity;
         let clipB = Infinity;
         let clipped = false;
+        let top = this;
         for (let s = this, from = null; s !== null; from = s, s = s.parent) {
+            top = s;
             if (!s.visible)
                 shown = false;
             // A SCROLLER frame-bounds its subtree exactly as paint does — without
@@ -2433,10 +2435,15 @@ class CanvasSurface {
         // one geometry, applied to every overlay this surface carries — the
         // editable field and/or a foreign island's box (both are host-level
         // siblings the compositor's own clip never touches)
+        // On a page root the canvas is fixed at the viewport and ax/ay are viewport
+        // coordinates, the page's scroll already taken out — so the overlay is fixed
+        // too; absolute, the browser would scroll it with the page a second time.
+        const position = top.pageRoot ? "fixed" : "absolute";
         for (const el of [this.editEl, this.embedEl]) {
             if (el === null)
                 continue;
             const st = el.style;
+            st.position = position;
             st.left = ax + "px";
             st.top = ay + "px";
             st.width = this.width + "px";

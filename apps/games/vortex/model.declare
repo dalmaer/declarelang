@@ -338,7 +338,7 @@ class Playfield extends Dataset [
             if (k != "tanker") return ({ kind: k, cargo: "flipper" })
             const r = rnd(4)
             for (let n = 1; n <= 4; n++) {
-                const c = w.cargo[(r + 4 - n) % 4] as Launch["cargo"]
+                const c = w.cargo[(r + 4 - n) % 4]
                 if (room[c] > 0) return ({ kind: k, cargo: c })
                 }
             return null

@@ -1168,7 +1168,7 @@ export function shapeFieldTsType(f) {
         : f.fields !== undefined ? shapeObjectText(f.fields)
             : f.tokens !== undefined ? f.tokens.map((t) => JSON.stringify(t)).join(" | ")
                 : (f.type ?? "any");
-    return f.array ? `${base}[]` : base;
+    return f.array ? (f.tokens !== undefined && f.tokens.length > 1 ? `(${base})[]` : `${base}[]`) : base;
 }
 export function shapeObjectText(fields) {
     return `{ ${fields.map((f) => `${f.name}${f.optional ? "?" : ""}: ${shapeFieldTsType(f)}`).join("; ")} }`;

@@ -158,7 +158,7 @@ class Enemies extends Node [
         let c = r
         for (let n = 3; n >= 0; n--) {
             c = c == 0 ? 3 : c - 1
-            const cargo = lv.tankerCargo[c] as Launch["cargo"]
+            const cargo = lv.tankerCargo[c]
             if (room[this.cargoKind(cargo)] != 0)
                 return { kind: "tanker", turning: "cw", cargo, fires: true, plan: "climb" }
             }

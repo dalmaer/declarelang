@@ -336,3 +336,13 @@ field's. Only menus: a group control's few members gain little from it.
   Declare's focus — Tab in a dialog jumped to the page once a sibling re-ordered (the ring
   re-hosting). Moves now keep focus (`keepingFocus`), and a blur a move causes is not
   passed on.
+
+## After the merge
+
+- `scaffold.ts` (`shapeFieldTsType`): a schema field that is a list of words —
+  `cargo[]: "flipper" | "pulsar" | "fuseball"` — was typed `"flipper" | "pulsar" |
+  "fuseball"[]`, which TypeScript reads as one word or a list of the last. An item read
+  from the list arrived as a plain string, and a bare word written to the list
+  type-checked. The words are now bracketed, `("flipper" | "pulsar" | "fuseball")[]`;
+  nothing else changes. A program that wrote a word where the list belongs now gets a
+  DECLARE6001. The casts Tempest and Vortex needed for their tanker cargo are gone.

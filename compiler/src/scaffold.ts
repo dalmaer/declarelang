@@ -1183,7 +1183,7 @@ export function shapeFieldTsType(f: SchemaDecl["fields"][number]): string {
     : f.fields !== undefined ? shapeObjectText(f.fields)
     : f.tokens !== undefined ? f.tokens.map((t) => JSON.stringify(t)).join(" | ")
     : (f.type ?? "any");
-  return f.array ? `${base}[]` : base;
+  return f.array ? (f.tokens !== undefined && f.tokens.length > 1 ? `(${base})[]` : `${base}[]`) : base;
 }
 
 export function shapeObjectText(fields: readonly SchemaDecl["fields"][number][]): string {

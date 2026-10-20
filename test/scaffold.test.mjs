@@ -348,4 +348,17 @@ await test("a schema readOnly slot is `readonly` in the typed surface too", asyn
   assert.deepEqual(await errs(`App [ width = 1, height = 1, v: View [ ], onClick() { this.v.width = 5 } ]`), "");
 });
 
+await test("a schema list of words types each item as one of the words", async () => {
+  const errs = async (src) => ((await compile(src, {})).errors ?? []).map((e) => e.message).join("\n");
+  const head = `schema Row [ many[]: "a" | "b" ]\n`;
+  // an item reaches a place that takes one of the words
+  assert.deepEqual(await errs(head + `App [ width = 1, height = 1,
+    rows: Dataset [ schema = Row ] { { "many": ["a", "b"] } },
+    pick(k: "a" | "b") -> number { return 1 },
+    onClick() { this.pick(this.rows.value.many[1]) } ]`), "");
+  // and a bare word is not a list
+  assert.match(await errs(head + `App [ width = 1, height = 1,
+    onClick() { const r: Row = { many: "a" } } ]`), /not assignable/);
+});
+
 summarize("scaffold");

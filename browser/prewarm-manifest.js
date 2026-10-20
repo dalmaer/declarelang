@@ -49,6 +49,9 @@ export const PREWARMED = [
   { main: "apps/marketmap/marketmap.declare", props: { render: "dom" } },
   { main: "apps/games/asteroids/asteroids.declare", props: { render: "canvas" } },
   { main: "apps/games/stargate/stargate.declare", props: { render: "canvas" } },
+  // the other two games: off the menu, linked to directly
+  { main: "apps/games/tempest/tempest.declare", props: { render: "canvas" } },
+  { main: "apps/games/vortex/vortex.declare", props: { render: "canvas" } },
   // off the menu, but the Desktop opens it as a window (a tenant resolves through
   // this same tier), so its first paint keeps the compiler-free path
   { main: "apps/birds/birds.declare", props: { render: "dom" } },
