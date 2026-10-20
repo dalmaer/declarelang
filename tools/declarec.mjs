@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // declarec — Declare's production build (the emit half + CLI).
 //
-//   node tools/declarec.mjs <app.declare> [-o dist] [--canvas] [--crawler] [--extract] [--kernel wasm|js] [--debug] [--why] [--quiet]
+//   node tools/declarec.mjs <app.declare> [-o dist] [--render=dom|canvas] [--crawler=true|false] [--kernel=wasm|js] [--extract] [--debug] [--why] [--sizes [--json]] [--quiet]
 //   node tools/declarec.mjs check <file.declare…> [--json]   # compile + report, emit nothing
 //
 // Precompiles an app (compiler/dist/declarec.js: parse + resolve + typecheck at
@@ -12,7 +12,7 @@
 // can produce (and cache) the same artifact on demand.
 
 import { readFile, writeFile, mkdir, cp, rm, readdir } from "node:fs/promises";
-import { existsSync, statSync, realpathSync } from "node:fs";
+import { existsSync, statSync, realpathSync, readFileSync } from "node:fs";
 import { dirname, resolve, basename, join, relative, sep, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
@@ -25,7 +25,7 @@ import { stripPos } from "../compiler/dist/program-build.js";
 import { CAPABILITIES, neededCapabilities, standIn, subsetModule } from "../compiler/dist/capabilities.js";
 import { REGISTRY_MANIFEST } from "../runtime/dist/registry.js";
 
-import { parseArgvFlags, DEFAULT_FLAGS } from "../compiler/dist/flags.js";
+import { parseArgvFlags, FLAG_SPECS, FLAG_NAMES, flagWords } from "../compiler/dist/flags.js";
 import { highlight } from "../compiler/dist/highlight.js";
 import { compile as compileFull, crawlExtract, diskDataResolver, crawlerDocument } from "../compiler/dist/compile-node.js";
 import { parseLibrary } from "../runtime/dist/parser.js";
@@ -75,7 +75,8 @@ async function minifyBodies(program) {
     }, () => {})
   );
   const method = (m) => jobs.push(
-    esbuild.transform(`function __d(${m.params.join(",")}){\n${m.body}\n}`, { minifyWhitespace: true }).then((t) => {
+    // a parameter is `{ name, type }`; the wrapper takes its name (the type was checked)
+    esbuild.transform(`function __d(${m.params.map((q) => typeof q === "string" ? q : q.name).join(",")}){\n${m.body}\n}`, { minifyWhitespace: true }).then((t) => {
       const a = t.code.indexOf("{");
       const b = t.code.lastIndexOf("}");
       if (a > 0 && b > a) m.body = t.code.slice(a + 1, b);
@@ -312,7 +313,7 @@ async function compilerFiles() {
  *  runtime's per-text memo made them do. A program whose scripts import modules
  *  compiles them into a bundled module with no name list, so its script names
  *  are not knowable here: the whole program ships as text, as before. */
-async function precompileBodies(program) {
+async function precompileBodies(program, made = {}) {
   await import(join(RUNTIME, "services.js"));   // the body services, so the helper names are the runtime's full list
   const { bodyScopeNames } = await import(join(RUNTIME, "expr.js"));
   const { rewriteDatapaths } = await import(join(RUNTIME, "datapath.js"));
@@ -372,6 +373,8 @@ async function precompileBodies(program) {
   walk(program);
   const scriptFns = scripts.map((sc) => `function() { ${sc.src}\n }`);
   scripts.forEach((sc, i) => { sc.src = "\u0000" + i; sc.compiled = true; });   // each token evaluates alone
+  // the functions each token names, for the sizes report to weigh
+  made.fns = fns; made.scriptFns = scriptFns;
   return `function $makeBodies($d, $s) {\n${prelude}\nreturn [\n${fns.join(",\n")}\n];\n}\n` +
     `const $scripts = [${scriptFns.join(",\n")}];\n` +
     `providePrecompiled($makeBodies, $scripts, ${JSON.stringify([...keyed].sort((a, b) => a - b))});\n`;
@@ -383,29 +386,6 @@ export async function buildProduction(source, opts = {}) {
   // The build's closure props: every flag that shapes the ARTIFACT (a change
   // to any invalidates a cache exactly like a file change), plus whatever the
   // caller adds (the server contributes its toolchain fingerprint).
-  // ⚠ `--render mac` IS NOT A BUILD TARGET, and must not silently become one.
-  // Two different constructs share the word "mac" and only one of them is a
-  // declarec job:
-  //   • the mac RUNTIME — declare-mac.js, the JS the native host loads as its
-  //     world. Built into the Mac app by the app build (npm run build:mac), not
-  //     per program.
-  //   • "package this program as a Mac app" — a standalone .app carrying the
-  //     program. A separate construct, still to be designed.
-  // Until the second exists, refuse: this used to fall through a two-way ternary
-  // and emit a DOM build — a page importing DomBackend that the native host
-  // cannot boot at all. A wrong artifact is worse than a refusal.
-  if (opts.render === "mac") {
-    const why =
-      "--render mac is not a build target.\n"
-      + "  The native host loads the mac RUNTIME bundle, which the Mac app carries,\n"
-      + "  built in when the app is built:   npm run build:mac\n"
-      + "  Packaging a program as a standalone .app is a separate construct, not implemented.";
-    // `report` is what the CLI prints; it must not be "" or the `??` below it
-    // selects the empty string and the reason vanishes.
-    return { ok: false, errors: [{ message: why }], warnings: [], diagnostics: [],
-             report: why, closure: null, files: [], sizes: null };
-  }
-
   // Each flag: the value asked for (a --flag, a request's ?flag), else the
   // program's own default (its `defaultFlags [ … ]`, known once it compiles), else the
   // platform's. A build asked for none is keyed as such, so it never stands in
@@ -413,6 +393,7 @@ export async function buildProduction(source, opts = {}) {
   const asked = opts.render === "canvas" || opts.render === "dom" ? opts.render : undefined;
   const askedKernel = opts.kernel === "js" || opts.kernel === "wasm" ? opts.kernel : undefined;
   const askedCrawler = typeof opts.crawler === "boolean" ? opts.crawler : undefined;
+  const askedAccessibility = typeof opts.accessibility === "boolean" ? opts.accessibility : undefined;
   const props = {
     render: asked ?? "program",
     slim: String(opts.slim !== false),
@@ -422,6 +403,7 @@ export async function buildProduction(source, opts = {}) {
     stripPos: String(opts.stripPos ?? true),
     typecheck: "true",   // always on — a mandatory phase of the one compile (docs/system-design/requests.md)
     crawler: askedCrawler === undefined ? "program" : String(askedCrawler),
+    accessibility: askedAccessibility === undefined ? "program" : String(askedAccessibility),
     // the corpus gate's build: the `__declare` bridge aboard, nothing else changed
     ...(opts.bridge ? { bridge: "true" } : {}),
     ...(opts.keepAll ? { keepAll: "true" } : {}),
@@ -434,7 +416,7 @@ export async function buildProduction(source, opts = {}) {
   // Positions ride the compile and are stripped AFTER the program's own ship
   // block is read: an inspectable package keeps them (the Inspector's "why"
   // names a line; so does an error), a plain one does not.
-  const built = await compileProgram(source, { originDir: opts.originDir, stripPos: false, mainId, props, facts: true });
+  const built = await compileProgram(source, { originDir: opts.originDir, stripPos: false, mainId, props, facts: true, accessibility: askedAccessibility });
   if (built.program === null) {
     return { ok: false, errors: built.errors, warnings: built.warnings, diagnostics: built.diagnostics, report: built.report, closure: built.closure, files: [], sizes: null };
   }
@@ -444,10 +426,13 @@ export async function buildProduction(source, opts = {}) {
   // clean for the minifier. The backend is a build choice: DOM (managed
   // elements) or Canvas (one <canvas>, the app painted by the runtime's own
   // display list). Only the chosen backend is bundled.
+  // which file each declaration came from, read while the positions are still on
+  const declared_in = opts.sizes ? declarationFiles(built.program) : null;
   const flags = built.program.flags ?? {};
   const render = asked ?? flags.render ?? "dom";
   const kernel = askedKernel ?? flags.kernel ?? "wasm";
   const crawler = askedCrawler ?? flags.crawler ?? false;
+  const accessibility = askedAccessibility ?? flags.accessibility ?? true;
   const canvas = render === "canvas";
   const backend = canvas
     ? { cls: "CanvasBackend", file: "canvas-backend.js" }
@@ -483,8 +468,12 @@ export async function buildProduction(source, opts = {}) {
   // "PRECOMPILED BODIES"). Done on a COPY — built.program stays the compiled
   // program every other consumer of this result reads.
   const shipped = opts.precompile === false ? built.program : JSON.parse(JSON.stringify(built.program));
-  const precompiled = opts.precompile === false ? null : await precompileBodies(shipped);
-  const programJson = JSON.stringify(shipped, opts.debug ? undefined : compactValue);
+  const made = {};
+  const precompiled = opts.precompile === false ? null : await precompileBodies(shipped, made);
+  // the program's `defaultFlags` were for this build, and are spent: a package
+  // has its renderer, kernel and layer already, so it does not carry them
+  const { flags: _spent, ...carried } = shipped;
+  const programJson = JSON.stringify(opts.debug ? shipped : carried, opts.debug ? undefined : compactValue);
   // services.js, NOT index.js. The entry needs the `{ }`-body service wiring
   // (Focus/Keys/Themes/Inspect) and nothing else the barrel re-exports. esbuild
   // can only drop a re-export when the module behind it is side-effect-free,
@@ -643,6 +632,8 @@ export async function buildProduction(source, opts = {}) {
       __DECLARE_KERNEL__: JSON.stringify(kernel),
       // the developer's checks stay in a --debug build (build-flags.d.ts)
       __DECLARE_PRODUCTION__: opts.debug ? "false" : "true",
+      // the accessibility layer, or none of it (build-flags.d.ts)
+      __DECLARE_ACCESSIBILITY__: String(accessibility),
     },
     write: false, legalComments: "none", metafile: true,
     plugins: [...(slim ? [slimPlugin] : []), capabilityPlugin, ...(opts.debug || ship.inspector ? [] : [errorCodePlugin])],
@@ -650,7 +641,7 @@ export async function buildProduction(source, opts = {}) {
   const appJs = result.outputFiles[0].text;
   const moduleName = `app.${shortHash(appJs)}.js`;
 
-  // `--crawler`: the extracted static document (docs/system-design/capabilities.md §5) baked
+  // `--crawler=true`: the extracted static document (docs/system-design/capabilities.md §5) baked
   // into the host element — content for crawlers and AI readers that never run
   // the script; the entry above clears it before mount. The build's own compile
   // is executed headlessly and extracted. `extract` (the CLI's --extract) runs
@@ -677,9 +668,9 @@ export async function buildProduction(source, opts = {}) {
       }),
       new Promise((_, reject) => {
         const t = setTimeout(() => reject(new Error(
-          `--crawler: the crawl of ${name} did not finish within ${CRAWL_DEADLINE_MS / 1000}s — ` +
+          `--crawler=true: the crawl of ${name} did not finish within ${CRAWL_DEADLINE_MS / 1000}s — ` +
           `the app's own code runs during extraction, so a data source that never settles or an ` +
-          `unbounded location set hangs it. Fix the app, or build without --crawler (only indexed ` +
+          `unbounded location set hangs it. Fix the app, or build with --crawler=false (only indexed ` +
           `surfaces need the baked document).`)), CRAWL_DEADLINE_MS);
         t.unref?.(); // the watchdog itself must never hold the process open
       }),
@@ -690,7 +681,7 @@ export async function buildProduction(source, opts = {}) {
     if (crawler && ex && ex.title) pageTitle = ex.title;
   }
 
-  // A crawler block (--crawler) is removed BEFORE first paint by a synchronous classic
+  // A crawler block (--crawler=true) is removed BEFORE first paint by a synchronous classic
   // script — so a human never flashes the bare extraction while the async app module
   // loads, while a non-JS crawler still reads it in the served HTML. Not CSS-hidden:
   // same content for every agent, presentation swaps at mount (progressive enhancement,
@@ -724,6 +715,14 @@ export async function buildProduction(source, opts = {}) {
   return {
     ok: true, errors: [], warnings: built.warnings, diagnostics: built.diagnostics, report: built.report,
     closure: built.closure, program: built.program, sizes, metafile: result.metafile, extract,
+    // what the build is made of and what each part weighs (--sizes, ?sizes)
+    ...(opts.sizes ? { sizesReport: await sizesReport({
+      name, built, shipped: opts.debug ? shipped : carried, made, declaredIn: declared_in, programJson, precompiled, metafile: result.metafile, appJs, html, sizes,
+      needed, absent, settings: { render, kernel, accessibility },
+      beside: [...tenants.map((t) => ({ file: "programs/" + t.key + ".json", what: "island " + t.name, gzip: gz(t.contents) })),
+               ...(inspector === null ? [] : [{ file: "programs/" + inspector.key + ".json", what: "the Inspector", gzip: gz(inspector.contents) }]),
+               ...shippedFiles.map((f) => ({ file: f.file, what: f.path, gzip: gz(f.contents) }))],
+    }) } : {}),
     usedClasses: built.usedClasses, slim, kernel, render,
     // what the build carries beyond its core, and why; what it left out
     // `absent`: left out, a stand-in in their place; `cut`: tables shipped with
@@ -747,6 +746,152 @@ export async function buildProduction(source, opts = {}) {
       compiler: ship.compiler,
     },
   };
+}
+
+// ── THE SIZES REPORT (declarec --sizes, the dev server's ?sizes) ─────────────
+// What a production build is made of and what each part weighs, compressed.
+// The parts are measured: the program, its precompiled bodies, the kernel, the
+// page; the runtime is the rest of the bundle. The program is measured as it
+// ships: its JSON, and its bodies as functions minified as the bundle minifies
+// them. Within a part, each piece's
+// share is an ESTIMATE — gzip compresses a piece against its neighbors, so a
+// piece has no compressed size of its own. A declaration's share is what the
+// program compresses to with it less what it compresses to without it (what
+// removing it would save), scaled so the pieces sum to the program; a module's
+// is its share of the runtime's bytes.
+
+const DECLARATION_KINDS = [["classes", "class"], ["shapes", "schema"], ["themes", "theme"], ["styles", "style"], ["fonts", "font"], ["scripts", "script"]];
+
+/** Each declaration's file, by kind and index; "" for the program's own. */
+function declarationFiles(program) {
+  return Object.fromEntries(DECLARATION_KINDS.map(([k]) => [k, (program[k] ?? []).map((d) => d.pos?.file ?? "")]));
+}
+
+/** A module's name as the capability table spells it: `view`, `browser/host-client`. */
+function moduleName(input) {
+  const m = /(?:^|[/\\])(runtime[/\\]dist|browser)[/\\](.+)\.js$/.exec(input);
+  if (m === null) return input;
+  return (m[1] === "browser" ? "browser/" : "") + m[2].replace(/\\/g, "/");
+}
+
+async function sizesReport({ name, built, shipped, made, declaredIn, programJson, precompiled, metafile, appJs, html, sizes, needed, absent, settings, beside }) {
+  const part = (raw, gzip) => ({ raw, gzip });
+  // the bodies as the bundle carries them: minified whole, local names and all
+  const small = async (code) => (await esbuild.transform(code, { minify: true, target: "es2022" })).code;
+  const bodies = precompiled === null ? "" : await small(precompiled);
+  const fns = await Promise.all((made.fns ?? []).map((f) => small(`x=${f}`)));
+  const scriptFns = await Promise.all((made.scriptFns ?? []).map((f) => small(`x=${f}`)));
+
+  // the program's pieces: every declaration, the App's tree, and the tables
+  // the build writes beside them — each as it ships, with the functions its
+  // bodies were precompiled to (a function two pieces share goes to the first)
+  const taken = new Set();
+  const fnsOf = (x, script) => {
+    let out = "";
+    const take = (t) => { if (typeof t !== "string" || t.charCodeAt(0) !== 0) return; const i = +t.slice(1); if (script) out += scriptFns[i] ?? ""; else if (!taken.has(i)) { taken.add(i); out += fns[i] ?? ""; } };
+    const walk = (v) => {
+      if (v === null || typeof v !== "object") return;
+      if (Array.isArray(v)) { v.forEach(walk); return; }
+      if (v.kind === "code") take(v.src);
+      if (Array.isArray(v.methods)) for (const m of v.methods) take(m?.body);
+      for (const k of Object.keys(v)) walk(v[k]);
+    };
+    if (script) take(x.src); else walk(x);
+    return out;
+  };
+  const pieces = [];
+  for (const [k, kind] of DECLARATION_KINDS)
+    (shipped[k] ?? []).forEach((d, i) => pieces.push({ kind, name: d.name ?? (kind === "script" ? "script" : "?"), file: declaredIn[k][i], json: JSON.stringify(d, compactValue) + fnsOf(d, kind === "script") }));
+  pieces.push({ kind: "tree", name: shipped.root.tag, file: "", json: JSON.stringify(shipped.root, compactValue) + fnsOf(shipped.root, false) });
+  const rest = Object.fromEntries(Object.entries(shipped).filter(([k]) => k !== "root" && k !== "flags" && !DECLARATION_KINDS.some(([d]) => d === k)));
+  pieces.push({ kind: "tables", name: "the program's tables", file: "", json: JSON.stringify(rest, compactValue) + fnsOf(rest, false) });
+  const programPart = part(programJson.length + bodies.length, gz(programJson) + (bodies === "" ? 0 : gz(bodies)));
+  const rawSum = pieces.reduce((t, p) => t + p.json.length, 0);
+  const whole = gz(pieces.map((p) => p.json).join(""));
+  const gzOf = pieces.map((_, i) => Math.max(0, whole - gz(pieces.filter((__, j) => j !== i).map((p) => p.json).join(""))));
+  const gzSum = gzOf.reduce((t, g) => t + g, 0);
+  const shared = pieces.map((p, i) => ({ kind: p.kind, name: p.name, file: p.file,
+    raw: Math.round(p.json.length * programPart.raw / rawSum), gzip: Math.round(gzOf[i] * programPart.gzip / gzSum) }));
+
+  // the files the program was made from, each with how it came in and what of it ships
+  const files = (built.compiled?.sources ?? [{ file: "", how: "program", by: null }]).map((src) => {
+    const mine = shared.filter((p) => p.file === src.file);
+    return { file: src.file === "" ? `${name}.declare` : src.file, how: src.how, by: src.by, ...(src.name === undefined ? {} : { name: src.name }),
+      raw: mine.reduce((t, p) => t + p.raw, 0), gzip: mine.reduce((t, p) => t + p.gzip, 0),
+      pieces: mine.map(({ kind, name, raw, gzip }) => ({ kind, name, raw, gzip })).sort((a, b) => b.gzip - a.gzip) };
+  });
+
+  // the runtime: every module in the bundle but the entry (which is the program)
+  const inputs = Object.entries(Object.values(metafile.outputs)[0].inputs);
+  const entry = `${name}.entry.js`;
+  const capOf = new Map(CAPABILITIES.flatMap((c) => c.modules.map((m) => [m, c])));
+  const cut = new Set(absent.filter((c) => c.subset !== undefined).map((c) => c.id));
+  const left = new Set(absent.map((c) => c.id));
+  const modules = inputs.filter(([f]) => !f.endsWith(entry)).map(([f, v]) => {
+    const module = moduleName(f), cap = capOf.get(module);
+    const status = cap === undefined ? "core" : cut.has(cap.id) ? "cut" : left.has(cap.id) ? "stand-in" : "aboard";
+    return { module, raw: v.bytesInOutput, status, ...(cap === undefined ? {} : { capability: cap.id }),
+      ...(status === "aboard" ? { reason: needed.get(cap.id) } : {}) };
+  });
+  // the kernel is a base64 literal, which compresses unlike code: measured on its own
+  const kernelModule = modules.find((m) => m.module === "kernel-wasm");
+  const kernel = kernelModule === undefined ? part(0, 0) : part(kernelModule.raw, gz(readFileSync(join(RUNTIME, "kernel-wasm.js"), "utf8")));
+  const page = part(html.length, sizes.htmlGzip);
+  const runtimeRaw = modules.reduce((t, m) => t + m.raw, 0) - kernel.raw;
+  const runtime = part(runtimeRaw, Math.max(0, sizes.appGzip - programPart.gzip - kernel.gzip));
+  const runtimeModules = modules.filter((m) => m !== kernelModule);
+  for (const m of runtimeModules) m.gzip = Math.round(m.raw * runtime.gzip / Math.max(1, runtimeRaw));
+  runtimeModules.sort((a, b) => b.raw - a.raw);
+
+  return {
+    program: `${name}.declare`, settings,
+    total: part(appJs.length + html.length, sizes.totalGzip),
+    parts: { program: programPart, runtime, kernel, page },
+    files, modules: runtimeModules,
+    capabilities: {
+      aboard: Object.fromEntries(needed),
+      left: absent.filter((c) => c.subset === undefined).map((c) => ({ id: c.id, describe: c.describe })),
+      cut: absent.filter((c) => c.subset !== undefined).map((c) => ({ id: c.id, describe: c.describe })),
+    },
+    // fetched beside the bundle when needed, never part of the total
+    beside,
+  };
+}
+
+/** The sizes report as text, for a terminal. */
+export function renderSizes(r) {
+  const k = (n) => (n / 1024).toFixed(1).padStart(6) + " KB";
+  const why = (f) => f.how === "program" ? "the program"
+    : f.how === "provided" ? `provided: ${f.name}`
+    : f.how === "auto" ? `for ${f.name}${f.by === null ? "" : `, named in ${f.by}`}`
+    : `included by ${f.by ?? "the program"}`;
+  const w = Math.max(...r.files.map((f) => f.file.length), ...r.modules.map((m) => m.module.length)) + 2;
+  const s = r.settings;
+  const out = [
+    `${r.program} — ${k(r.total.gzip).trim()} gzip, ${k(r.total.raw).trim()} raw (${s.render}, ${s.kernel} kernel, accessibility ${s.accessibility ? "on" : "off"})`,
+    "",
+    `  program  ${k(r.parts.program.gzip)}   its declarations, tree and bodies`,
+    `  runtime  ${k(r.parts.runtime.gzip)}   ${r.modules.length} modules`,
+    `  kernel   ${k(r.parts.kernel.gzip)}`,
+    `  page     ${k(r.parts.page.gzip)}   index.html`,
+    "",
+    "Files — each one's share of the program (estimated)",
+  ];
+  for (const f of [...r.files].sort((a, b) => b.gzip - a.gzip)) {
+    out.push(`  ${f.file.padEnd(w)}${k(f.gzip)}   ${why(f)}`);
+    const shown = f.pieces.filter((p) => p.gzip >= 51).slice(0, 10), more = f.pieces.length - shown.length;
+    if (shown.length > 0) out.push(`  ${"".padEnd(w)}          ${shown.map((p) => `${p.name} ${(p.gzip / 1024).toFixed(1)}`).join(", ")}${more > 0 ? `, and ${more} smaller` : ""}`);
+  }
+  out.push("", "Runtime — each module's share (estimated)");
+  const say = (m) => m.status === "core" ? "" : m.status === "aboard" ? `${m.capability}: ${m.reason}` : m.status === "cut" ? `${m.capability}: cut to what the program names` : `${m.capability}: left out, a stand-in`;
+  for (const m of r.modules) if (m.status !== "stand-in") out.push(`  ${m.module.padEnd(w)}${k(m.gzip)}   ${say(m)}`);
+  const stand = r.modules.filter((m) => m.status === "stand-in");
+  if (stand.length > 0) out.push(`  ${`${stand.length} stand-ins`.padEnd(w)}${k(stand.reduce((t, m) => t + m.gzip, 0))}   for what was left out: ${r.capabilities.left.map((c) => c.id).join(", ")}`);
+  if (r.beside.length > 0) {
+    out.push("", "Beside the bundle — fetched when needed, not in the total");
+    for (const b of r.beside) out.push(`  ${b.file.padEnd(w)}${k(b.gzip)}   ${b.what}`);
+  }
+  return out.join("\n");
 }
 
 // Dev-only siblings that must never land in a production build (they'd clobber
@@ -778,8 +923,8 @@ async function copyAssets(srcDir, outDir) {
  *  copied assets). The shared emit used by the CLI and the dev server. Returns
  *  the buildProduction result plus `{ outDir, moduleName, assets }`. On a compile
  *  error, returns `{ ok:false, errors }` and writes nothing. */
-export async function writeProduction({ source, name = "app", srcDir = null, outDir, stripPos = true, render, slim = true, crawler, extract = false, kernel, props }) {
-  const out = await buildProduction(source, { name, originDir: srcDir, stripPos, render, slim, crawler, extract, kernel, props });
+export async function writeProduction({ source, name = "app", srcDir = null, outDir, stripPos = true, render, slim = true, crawler, extract = false, kernel, accessibility, props, sizes = false }) {
+  const out = await buildProduction(source, { name, originDir: srcDir, stripPos, render, slim, crawler, extract, kernel, accessibility, props, sizes });
   if (!out.ok) return out;
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
@@ -929,13 +1074,13 @@ async function checkFiles(files, { json, quiet }) {
 
 async function cli(argv) {
   // CLI-only switches (output dir, quiet, and the artifacts --highlight / --extract);
-  // the three MODIFIERS --render/--canvas, --crawler and --kernel share the canonical model (flags.ts),
-  // so they mean exactly what the same names mean as server/browser URL modifiers. A
+  // the MODIFIERS (--render=…, --crawler=…, --kernel=…) are the one registry (runtime/src/flags.ts),
+  // spelled and valued exactly as in a URL and in a program's defaultFlags. A
   // build always slims + strips positions + typechecks (docs/system-design/requests.md §"Removed
   // knobs"); --debug is the one escape hatch, for debugging the emitter — it keeps
   // source positions AND the full registry.
   const passthrough = [];
-  let outDir = null, quiet = false, doHighlight = false, doExtract = false, debug = false, json = false, why = false;
+  let outDir = null, quiet = false, doHighlight = false, doExtract = false, debug = false, json = false, why = false, sizes = false;
   const raw = argv.slice(2);
   // `check` is a SUBCOMMAND (first positional), not a flag: it does a different
   // job — report, emit nothing — and takes many files where a build takes one.
@@ -949,6 +1094,7 @@ async function cli(argv) {
     else if (a === "--debug") debug = true;
     else if (a === "--json") json = true;
     else if (a === "--why") why = true;
+    else if (a === "--sizes") sizes = true;
     else passthrough.push(a);
   }
   if (isCheck) {
@@ -960,10 +1106,16 @@ async function cli(argv) {
     process.exit(await checkFiles(files, { json, quiet }));
   }
   // declarec is always a build; a flag it is not given, the program's own flags decide
-  const { flags, rest } = parseArgvFlags(passthrough, { ...DEFAULT_FLAGS, render: undefined, kernel: undefined, crawler: undefined });
+  const modifiers = FLAG_SPECS.map((s) => `[--${s.name}=${flagWords(s).join("|")}]`).join(" ");
+  let parsed;
+  try { parsed = parseArgvFlags(passthrough, Object.fromEntries(FLAG_NAMES.map((n) => [n, undefined]))); }
+  catch (e) { console.error(`declarec: ${e.message}`); process.exit(2); }
+  const { flags, rest } = parsed;
+  const unknown = rest.filter((a) => a.startsWith("-"));
+  if (unknown.length > 0) { console.error(`declarec: no switch ${unknown.join(", ")} — ${modifiers} [-o dist] [--extract] [--debug] [--why] [--sizes [--json]] [--quiet]`); process.exit(2); }
   const input = rest.find((a) => !a.startsWith("-")) ?? null;
   if (input === null) {
-    console.error("usage: declarec <app.declare> [-o dist] [--canvas] [--crawler] [--extract] [--kernel wasm|js] [--debug] [--why] [--quiet]");
+    console.error(`usage: declarec <app.declare> [-o dist] ${modifiers} [--extract] [--debug] [--why] [--sizes [--json]] [--quiet]`);
     console.error("       declarec check <file.declare…> [--json]            # compile + report, emit nothing");
     console.error("       declarec --highlight <app.declare> [-o out.json]   # the reader's segments (JSON)");
     process.exit(2);
@@ -997,7 +1149,7 @@ async function cli(argv) {
 
   const source = await readFile(srcPath, "utf8");
   const t0 = Date.now();
-  const out = await writeProduction({ source, name, srcDir, outDir, render: flags.render, crawler: flags.crawler, extract: doExtract, stripPos: !debug, slim: !debug, kernel: flags.kernel });
+  const out = await writeProduction({ source, name, srcDir, outDir, render: flags.render, crawler: flags.crawler, extract: doExtract, stripPos: !debug, slim: !debug, kernel: flags.kernel, accessibility: flags.accessibility, sizes });
   const ms = Date.now() - t0;
 
   if (!out.ok) {
@@ -1020,8 +1172,11 @@ async function cli(argv) {
     }
   }
 
+  // --sizes --json: the report alone, for a file or another tool
+  if (sizes && json) { console.log(JSON.stringify(out.sizesReport, null, 1)); return; }
   const assets = out.assets;
-  if (!quiet) {
+  if (sizes) console.log(renderSizes(out.sizesReport));
+  if (!quiet && !sizes) {
     console.log(`declarec ✓ ${name} → ${outDir}  (${ms} ms)`);
     console.log(`  ${out.moduleName}`);
     console.log(`    program JSON   ${kb(out.sizes.programRaw)}  (embedded)`);

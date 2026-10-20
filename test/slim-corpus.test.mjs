@@ -18,7 +18,7 @@
 //      pixels and page errors, or the bundler's output changed what a program does.
 //
 // Not part of `npm test` (a browser, and minutes): `node test/slim-corpus.test.mjs
-// [--only <substring>] [--skip-ladder] [--skip-corpus] [--render canvas]
+// [--only <substring>] [--skip-ladder] [--skip-corpus] [--render=canvas]
 // [--compare target]`, and before a release.
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -36,8 +36,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const argv = process.argv.slice(2);
 const only = argv.includes("--only") ? argv[argv.indexOf("--only") + 1] : null;
 const pick = (file) => only === null || file.includes(only);
-// `--render canvas`: the same gate on canvas builds (the ladder's baselines are the DOM's)
-const render = argv.includes("--render") ? argv[argv.indexOf("--render") + 1] : "dom";
+// `--render=canvas`: the same gate on canvas builds (the ladder's baselines are the DOM's)
+const render = argv.find((a) => a.startsWith("--render="))?.slice("--render=".length) ?? "dom";
 // `--compare target`: the corpus built at the shipped language target against the
 // previous one (ES2020), slimmed both times — the same program must behave the same
 const compare = argv.includes("--compare") ? argv[argv.indexOf("--compare") + 1] : "slim";

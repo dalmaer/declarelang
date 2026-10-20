@@ -49,8 +49,6 @@ export interface Materialize {
  *  the decision the author is making. §1's doctrine is untouched — a matched
  *  record HAS an instance either way; the policy only governs construction. */
 export type VirtualizePolicy = boolean | (() => boolean);
-/** The replication blocks under `view` — the kernel door for layout
- *  strategies, AT traversal, the inspector, and navigate-to-record. */
 export declare function blocksOf(view: View): readonly Replicator[];
 /** The inspector's diagnostic payload (materialization.md §3.6 — the trust
  *  requirement): is it windowed, the logical and materialized counts, the
@@ -162,6 +160,13 @@ export declare class Replicator {
         view: View;
         index: number;
     }[];
+    /** The records any part of which is in view in the nearest scroller (or the
+     *  window, at the top), as logical indices — {-1, -1} when none is: the
+     *  window's own range, windowed, else read off the rows' places. Tracked. */
+    measureInView(): {
+        first: number;
+        last: number;
+    };
     /** Navigate-to-logical-record (materialization.md §3.5 — required by the
      *  observer boundary): scroll so the record at `index` materializes —
      *  app-level search's landing and the AT-traversal path. Imperative (a

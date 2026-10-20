@@ -43,7 +43,7 @@ repository on GitHub, or message me there, and I will remove it.*
 
 include [ "game.declare", "art.declare", "sounds.declare" ]
 
-defaultFlags [ render = canvas ]
+defaultFlags [ render = canvas, accessibility = false ]
 
 App [ appName = "Asteroids", fill = black,
     // the field before power-on, which fills it

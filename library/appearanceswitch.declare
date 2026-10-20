@@ -52,6 +52,9 @@ The theme's control radius, capped at half the height.
 ## fill
 Nothing at rest — the icon stands on the surface beneath it — the control's hover
 tint under the pointer, and its pressed tint while held.
+
+## accessibilityChecked
+Follows `dark`: to a screen reader the sun and the moon are one switch, "Dark appearance".
 */
 
 include [ "control.declare" ]
@@ -63,6 +66,12 @@ class AppearanceSwitch extends Control [
     height = { this.width },
     cornerRadius = { Math.min(provided("theme").controlCornerRadius, height / 2) },
     dark: boolean = false,
+
+    // a sun or a moon to the eye; to a screen reader, a switch for dark appearance
+
+    accessibilityRole = switch,
+    accessibilityLabel = "Dark appearance",
+    accessibilityChecked = { dark },
 
     input(v: boolean) { dark = v },
 

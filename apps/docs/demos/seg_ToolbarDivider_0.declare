@@ -1,0 +1,8 @@
+App [ width = 300, height = 80,
+    Toolbar [ x = 20, y = 20, accessibilityLabel = "Edit",
+        ToolButton [ label = "Cut" ],
+        ToolButton [ label = "Copy" ],
+        ToolbarDivider [ ],
+        ToolButton [ label = "Undo" ]
+        ]
+    ]

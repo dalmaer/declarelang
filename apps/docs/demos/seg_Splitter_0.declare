@@ -1,0 +1,12 @@
+App [ width = 600, height = 300, fill = { provided("theme").surface },
+    row: View [ width = 100%, height = 100%,
+        layout: SimpleLayout [ axis = x ],
+        side: View [ width = { app.row.split.value }, height = 100%, fill = { provided("theme").background },
+            Text [ x = 16, y = 16, text = "Mailboxes" ]
+            ],
+        split: Splitter [ value = 200, min = 120, max = 400, accessibilityLabel = "Sidebar width" ],
+        main: View [ width = { app.row.width - app.row.side.width - app.row.split.width }, height = 100%,
+            Text [ x = 16, y = 16, text = "Message" ]
+            ]
+        ]
+    ]

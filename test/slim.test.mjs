@@ -15,7 +15,7 @@ import {
 } from "../runtime/dist/registry.js";
 import { compileProgram, usedClassNames } from "../compiler/dist/declarec.js";
 import { buildProduction } from "../tools/declarec.mjs";
-import { parseFlags, parseArgvFlags, DEFAULT_FLAGS } from "../compiler/dist/flags.js";
+import { parseFlags, parseArgvFlags, DEFAULT_FLAGS, FLAG_SPECS, flagWords } from "../compiler/dist/flags.js";
 import { inlineAppPage } from "./harness.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
 import { settled } from "./settle.mjs";
@@ -128,9 +128,13 @@ test("URL modifiers: defaults when absent", () => {
   const f = parseFlags(P({}), DEFAULT_FLAGS);
   assert.equal(f.render, "dom"); assert.equal(f.crawler, false);
 });
-test("URL modifiers: ?render=canvas and ?crawler", () => {
-  const f = parseFlags(P({ render: "canvas", crawler: "" }), DEFAULT_FLAGS);
+test("URL modifiers: ?render=canvas and ?crawler=true", () => {
+  const f = parseFlags(P({ render: "canvas", crawler: "true" }), DEFAULT_FLAGS);
   assert.equal(f.render, "canvas"); assert.equal(f.crawler, true);
+});
+test("URL modifiers: a boolean is the word true or false, nothing else", () => {
+  for (const w of ["", "1", "yes", "on"]) assert.equal(parseFlags(P({ crawler: w }), DEFAULT_FLAGS).crawler, false, `?crawler=${w}`);
+  assert.equal(parseFlags(P({ crawler: "0" }), { ...DEFAULT_FLAGS, crawler: true }).crawler, true, "?crawler=0 is not false");
 });
 test("URL modifiers: a malformed enum / boolean falls back to the base", () => {
   assert.equal(parseFlags(P({ render: "wat" }), DEFAULT_FLAGS).render, "dom");
@@ -141,15 +145,31 @@ test("URL modifiers: the removed knobs are ignored (not flags anymore)", () => {
   assert.equal(f.slim, undefined); assert.equal(f.stripPos, undefined);
   assert.equal(f.typecheck, undefined); assert.equal(f.prod, undefined);
 });
-test("argv modifiers: --canvas + --crawler, input left in rest", () => {
-  const { flags, rest } = parseArgvFlags(["--canvas", "--crawler", "app.declare"], DEFAULT_FLAGS);
+test("argv modifiers: --render=canvas --crawler=true, input left in rest", () => {
+  const { flags, rest } = parseArgvFlags(["--render=canvas", "--crawler=true", "app.declare"], DEFAULT_FLAGS);
   assert.equal(flags.render, "canvas"); assert.equal(flags.crawler, true);
   assert.deepEqual(rest, ["app.declare"]);
 });
-test("argv modifiers: removed/CLI-owned switches pass through to rest", () => {
-  const { flags, rest } = parseArgvFlags(["--no-slim", "--debug", "--render", "canvas"], DEFAULT_FLAGS);
+test("argv modifiers: a modifier is --name=value, and any other spelling of it is an error naming that form", () => {
+  for (const a of [["--render", "canvas"], ["--crawler"], ["--crawler=1"], ["--render=wat"]]) {
+    assert.throws(() => parseArgvFlags(a, DEFAULT_FLAGS), /write --(render|crawler)=/, a.join(" "));
+  }
+});
+test("argv modifiers: switches that are not modifiers pass through to rest", () => {
+  const { flags, rest } = parseArgvFlags(["--debug", "--canvas", "--render=canvas"], DEFAULT_FLAGS);
   assert.equal(flags.render, "canvas");
-  assert.ok(rest.includes("--no-slim")); assert.ok(rest.includes("--debug"));
+  assert.deepEqual(rest, ["--debug", "--canvas"]);
+});
+test("one registry, three surfaces: every modifier's every word reads the same in a URL, to declarec, and in defaultFlags", () => {
+  for (const spec of FLAG_SPECS) {
+    for (const w of flagWords(spec)) {
+      const url = parseFlags(P({ [spec.name]: w }), DEFAULT_FLAGS)[spec.name];
+      const cli = parseArgvFlags([`--${spec.name}=${w}`], DEFAULT_FLAGS).flags[spec.name];
+      assert.deepEqual(cli, url, `--${spec.name}=${w} vs ?${spec.name}=${w}`);
+      const program = parseProgram(`defaultFlags [ ${spec.name} = ${w} ]\nApp [ ]`).flags[spec.name];
+      assert.deepEqual(program, url, `defaultFlags [ ${spec.name} = ${w} ] vs ?${spec.name}=${w}`);
+    }
+  }
 });
 
 // ── the registry's exclusion is not undone by a second door ──────────────────

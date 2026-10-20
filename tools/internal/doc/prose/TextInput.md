@@ -56,7 +56,54 @@ For a `multiline` field: **Return submits** — fires `enter`, and commits a fie
 `false` by default (Return is a line break). A single-line field always submits on Return.
 
 ## spellcheck
-Toggles the native spell-check underline.
+Toggles the native spell-check underline. A field whose `purpose` is not prose (an
+email, a code, a card number) is never spell-checked, whatever this says.
+
+## purpose
+**What the field holds**, said once, so the platform can help with it: the browser's
+autofill and a password manager recognise the field and offer to fill it, a phone brings
+up the keyboard that suits it, and capitalization and autocorrection are left alone where
+they would get in the way. The tokens:
+
+| purpose | for | a phone's keyboard |
+|---|---|---|
+| `text` | anything else (the default) | text |
+| `name` | a person's full name | text, capitalized words |
+| `email` | an email address | email |
+| `username` | a sign-in name | text |
+| `password` | a password being entered | text, hidden |
+| `newPassword` | a password being chosen | text, hidden |
+| `oneTimeCode` | a code sent by text or email | digits |
+| `tel`, `url` | a phone number, a web address | phone, URL |
+| `digits`, `decimal` | a whole number, a number with a point | digits, decimal |
+| `cardNumber`, `cardName`, `cardExpiry`, `cardCode` | a payment card's number, name, expiry and security code | digits (text for the name) |
+| `addressLine1`, `addressLine2`, `city`, `region`, `postalCode`, `country` | a postal address; `region` is a state or province | text |
+
+```declare-fragment
+TextInput [ purpose = email, placeholder = "you@example.com" ],
+TextInput [ purpose = password, accessibilityLabel = "Password" ],
+TextInput [ purpose = cardNumber, accessibilityLabel = "Card number" ]
+```
+
+The purpose says what the field is for, not what may be typed: a `cardNumber` field still
+takes whatever the person types, and checking it is the field's `validate` or your own
+rule. A screen reader is told the field's name by its label as ever.
+
+## concealed
+**What is typed is hidden**, as a password is. It follows `purpose` — `password` and
+`newPassword` are concealed, every other purpose is not — until it is set, which is how a
+"show password" control works: the field keeps its purpose, so a password manager still
+knows it, and only what shows changes.
+
+```declare-fragment
+showing: boolean = false,
+pw: TextInput [ purpose = password, concealed = { !app.showing } ],
+Checkbox [ label = "Show password", checked = { app.showing },
+    input(v: boolean) { app.showing = v } ]
+```
+
+A concealed field's text is never said by a screen reader, nor counted in the name of what
+holds it.
 
 ## wrap
 For a `multiline` field, whether long lines wrap (`true`) or scroll horizontally (`false`) —

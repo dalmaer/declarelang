@@ -72,7 +72,7 @@ async function relaunchNative() {
     env: { ...process.env,
            DECLARE_CONTROL: "1",
            DECLARE_APPEARANCE: APPEARANCE,
-           DECLARE_URL: `${ORIGIN}/apps/desktop/desktop.declare?render=mac` },
+           DECLARE_URL: `${ORIGIN}/apps/desktop/desktop.declare` },
   });
   nativeHost.unref();
   await sleep(6);

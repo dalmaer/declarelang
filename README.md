@@ -103,9 +103,9 @@ you can reach for casually, and trust, because the compiler checks it like every
 The reference app is a calendar whose four views are one surface seen through a moving,
 zooming rectangle — normally a bespoke project on its own:
 
-| <!--stat:calendar.code-->524<!--/stat--> | lines of Declare — four views, continuous zoom, drag, and edit |
+| <!--stat:calendar.code-->529<!--/stat--> | lines of Declare — four views, continuous zoom, drag, and edit |
 |----:|:---|
-| **<!--stat:calendar.wireKB-->131<!--/stat--> KB** | over the wire, gzipped — the whole app and its runtime |
+| **<!--stat:calendar.wireKB-->136<!--/stat--> KB** | over the wire, gzipped — the whole app and its runtime |
 | **0** | lines written by hand — an LLM wrote it; the compiler kept it honest |
 
 → How to think in it: [the guide](docs/guide/01-what-declare-is.md). The language in
@@ -195,7 +195,7 @@ they serve exactly one navigation per visitor: the cold one.
 
 **Conventions** (for contributors):
 - **Format** every `.declare` to the house style — `npx declare-format --write`. The style
-  is [docs/guide/28-formatting.md](docs/guide/28-formatting.md); the tool is
+  is [docs/guide/29-formatting.md](docs/guide/29-formatting.md); the tool is
   [docs/operational/format.md](docs/operational/format.md).
 - **Never rebuild the platform bundles by hand**: `npm run derive` rebuilds a stale
   one before stamping the build id, and the dev server rebuilds on demand

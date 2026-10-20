@@ -1,0 +1,85 @@
+/*
+# Text-size icons — the letter A, small, default and large
+
+The marks of a text-size control: one letter at three sizes, standing on one
+baseline, so the set reads as "smaller, as it is, larger" at a glance — the
+convention readers know from every reading app. Drawn rather than typed, so the
+three are one stroke and one shape at any size, in any font.
+*/
+
+include [ "icon.declare" ]
+
+/*
+# TextSizeIcon
+
+The letter A, drawn: two legs and a crossbar, standing on the box's baseline. Its three
+named sizes are `TextSmallIcon`, `TextMediumIcon` and `TextLargeIcon`; a control names
+them in data.
+
+## glyph
+The letter's height in the 16-unit box. The three named sizes set it; the letter keeps
+its proportions and its baseline at every height.
+
+## draw()
+Renders the letter.
+*/
+
+class TextSizeIcon extends Icon [
+    glyph: number = 10.5,
+    draw(d: Draw) {
+        d.scale(unit, unit)
+        d.strokeStyle = ink
+        d.lineWidth = weight / unit
+        d.lineCap = "round"
+        d.lineJoin = "round"
+        const base = 14.5, h = classroot.glyph, half = h * 0.42
+        const bar = base - h * 0.36, inset = half * 0.36
+        d.beginPath()
+        d.moveTo(8 - half, base); d.lineTo(8, base - h); d.lineTo(8 + half, base)
+        d.moveTo(8 - half + inset, bar); d.lineTo(8 + half - inset, bar)
+        d.stroke()
+        }
+    ]
+
+
+/*
+# TextSmallIcon
+
+The small A of a text-size control.
+
+## glyph
+Seven and a half units: the smallest of the three.
+
+## accessibilityLabel
+"Smaller text", for a control that shows only this mark.
+*/
+
+class TextSmallIcon extends TextSizeIcon [ glyph = 7.5, accessibilityLabel = "Smaller text" ]
+
+/*
+# TextMediumIcon
+
+The default A of a text-size control.
+
+## glyph
+Ten and a half units: between the other two.
+
+## accessibilityLabel
+"Default text size", for a control that shows only this mark.
+*/
+
+class TextMediumIcon extends TextSizeIcon [ glyph = 10.5, accessibilityLabel = "Default text size" ]
+
+/*
+# TextLargeIcon
+
+The large A of a text-size control.
+
+## glyph
+Thirteen and a half units: the largest of the three, nearly the whole box.
+
+## accessibilityLabel
+"Larger text", for a control that shows only this mark.
+*/
+
+class TextLargeIcon extends TextSizeIcon [ glyph = 13.5, accessibilityLabel = "Larger text" ]

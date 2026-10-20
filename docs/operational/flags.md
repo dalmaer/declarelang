@@ -1,25 +1,27 @@
 # Modifiers (flags)
 
-There are exactly **three** compile-time modifiers, defined once in the registry
-(`compiler/src/flags.ts` — `FLAG_SPECS`) and read the same way by every surface: a CLI switch,
-a server URL query, and a browser URL query all mean the same thing and cannot drift. They
-compose onto a run or a build; `kernel` matters only to a build.
+There are exactly **four** compile-time modifiers, defined once in the registry
+(`runtime/src/flags.ts` — `FLAG_SPECS`) and read the same way by every surface: a program's
+`defaultFlags`, a URL query and a `declarec` switch all mean the same thing and cannot drift.
+They compose onto a run or a build; `kernel` matters only to a build.
 
 <!-- generated:flags-table -->
-| modifier | what it does | CLI (`declarec`) | URL | default |
-|---|---|---|---|---|
-| **render** | render through managed DOM, a single <canvas>, or the native Mac host; unset, the program's flags decide | `--render dom` / `--canvas` | `?render=dom` | `dom` |
-| **crawler** | embed the crawled document in the host page, for crawlers; unset, the program's flags decide | `--crawler` | `?crawler` | `false` |
-| **kernel** | the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download); unset, the program's flags decide | `--kernel wasm` | `?kernel=wasm` | `wasm` |
+| modifier | what it does | values | default |
+|---|---|---|---|
+| **render** | render through managed DOM or a single <canvas>; unset, the program's flags decide | `dom`, `canvas` | `dom` |
+| **crawler** | embed the crawled document in the host page, for crawlers; unset, the program's flags decide | `true`, `false` | `false` |
+| **kernel** | the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download); unset, the program's flags decide | `wasm`, `js` | `wasm` |
+| **accessibility** | carry the accessibility layer: what screen readers and the platform's accessibility API are given, the accessibility warnings, and the accessibility settings an app can read; unset, the program's flags decide | `true`, `false` | `true` |
 <!-- /generated:flags-table -->
 
-Every name is lowercase, and the same name works everywhere: `?render=canvas` on the server,
-`--canvas` on the CLI, and `?render=canvas` in the browser are one modifier. Booleans accept
-`?crawler`, `?crawler=1`, `?crawler=true` (on) and `?crawler=0`/`false` (off).
+Every modifier is written `name=value`, with the same names and the same values everywhere:
+`render = canvas` in a program's `defaultFlags`, `?render=canvas` on a URL (the dev server's or
+the browser's), and `--render=canvas` to `declarec`. A boolean's values are the words `true`
+and `false`. There is no other spelling.
 
 ## A program's own flags
 
-A program can set its own defaults for the three, in a top-level
+A program can set its own defaults for them, in a top-level
 [`defaultFlags [ … ]`](declare-docs:language:defaultFlags) block:
 
 ```
@@ -28,9 +30,9 @@ defaultFlags [ render = canvas ]
 
 A flag the request or the command names wins; one it leaves out, the program's block
 decides; one neither names takes the default in the table. So the games, which declare
-`render = canvas`, open on the canvas, and `?render=dom` or `declarec --render dom` still runs
-them on the DOM. The block takes `render = dom | canvas` (not `mac`, which is a host asking
-for the compiled program), `kernel = wasm | js` and `crawler = true | false`.
+`render = canvas`, open on the canvas, and `?render=dom` or `declarec --render=dom` still runs
+them on the DOM. The block takes the values in the table, as every surface does: `render = dom | canvas`,
+`kernel = wasm | js`, `crawler = true | false` and `accessibility = true | false`.
 
 Where each is read:
 
@@ -39,6 +41,9 @@ Where each is read:
 - `kernel`: production builds (`declarec`, `/build`).
 - `crawler`: production builds, and the dev server's run page. The static site's pages never
   embed a crawl.
+- `accessibility`: every compile (off, the accessibility warnings are skipped and every
+  `accessibility…` member is compiled away) and production builds (off, the layer's runtime
+  is left out of the bundle). See [accessibility](../system-design/accessibility.md) §4.1.
 
 ## Not flags (though they once looked like it)
 

@@ -1,0 +1,13 @@
+// TextSizeIcon, the three sizes side by side
+// One drawing at three letter heights — small, default, large — on one baseline, the way a
+// text-size control shows them; `glyph` is the letter's height in the 16-box.
+
+App [ textColor = 0x172530,
+    row: View [ x = 20, y = 20, height = 40, width = { this.contentWidth },
+        layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
+        TextSmallIcon [ iconSize = 32 ],
+        TextMediumIcon [ iconSize = 32 ],
+        TextLargeIcon [ iconSize = 32 ],
+        TextSizeIcon [ iconSize = 32, glyph = 15, ink = 0x2E6FE0 ]
+        ]
+    ]

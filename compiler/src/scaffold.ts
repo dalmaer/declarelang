@@ -399,7 +399,8 @@ interface PointerUpEvent extends PointerEvent { canceled: boolean }
  *  moved (\`changed\`). Declaring a touch handler claims every finger, so the app then
  *  owes its own zoom. */
 interface TouchEvent extends PointerEvent { touches: readonly Touch[]; changed: readonly Touch[] }
-/** A wheel or trackpad scroll, by axis. A trackpad PINCH arrives here too, with
+/** A wheel or trackpad scroll, by axis: how far is \`deltaX\` and \`deltaY\` (from
+ *  PointerEvent), in pixels. A trackpad PINCH arrives here too, with
  *  \`pinch\` true — the browser reports it as a wheel event with a modifier, and
  *  hiding that would make a zoom impossible to write. */
 interface WheelEvent extends PointerEvent { pinch: boolean }
@@ -439,6 +440,14 @@ interface PickOptions { accept?: string[]; multiple?: boolean; folder?: boolean 
 /** The person's files: \`pick\` opens the file dialog — from a press, as a browser allows
  *  one only then — and resolves to the files chosen, none if it was dismissed. */
 declare const Files: { pick(options?: PickOptions): Promise<File[]> };
+/** What a program says to assistive technology with no view to say it from —
+ *  "Message sent", "3 results": \`announce\` speaks it without moving the focus,
+ *  \`polite\` (the default) at the next pause, \`assertive\` at once. A view whose
+ *  own changes should be heard sets \`accessibilityLive\` instead. */
+declare const Accessibility: {
+  announce(text: string, politeness?: "polite" | "assertive"): void;
+  announced(): readonly { text: string; politeness: "polite" | "assertive" }[];
+};
 /** An easing curve, built by \`cubicBezier\`, \`back\`, \`steps\` or \`laszlo\` — what an
  *  \`Animator\`'s \`motion\` takes, alongside the named tokens. Opaque by design: a curve
  *  is a value you pass, not a shape you inspect. */
@@ -587,7 +596,7 @@ export function tsType(t: AttrType): string {
     case "boolean": return t.nullable === true ? "boolean | null" : "boolean";
     case "string": return "string";
     case "color": return "Color";
-    case "shape": return "Shape";
+    case "shape": return "Shape | boolean | null";   // `clip`: a shape, or true for the view's own box
     case "dataschema": return "any"; // the parsed shape declarations — data, not a body-facing type
     // An AUTHORED literal union (`"idle" | "loading"`) carries the union TEXT
     // as its name and is already TypeScript, so it emits inline and needs no

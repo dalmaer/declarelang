@@ -1144,8 +1144,13 @@ final class EditableOverlay: NSObject, NSTextFieldDelegate, NSTextViewDelegate {
             if textView?.string != value { textView?.string = value }
             docDirty = true            // new text (or a new style) ⇒ new height
         } else {
+            // a concealed field is the platform's secure field; a reveal swaps it for a plain one
+            let concealed = (spec["concealed"] as? NSNumber)?.boolValue ?? false
+            if let f = field, (f is NSSecureTextField) != concealed {
+                f.removeFromSuperview(); field = nil
+            }
             if field == nil {
-                let f = NSTextField()
+                let f = concealed ? NSSecureTextField() : NSTextField()
                 f.isBordered = false
                 f.drawsBackground = false
                 f.focusRingType = .none
@@ -1155,6 +1160,13 @@ final class EditableOverlay: NSObject, NSTextFieldDelegate, NSTextViewDelegate {
                 if clipBox.superview == nil { view.addSubview(clipBox) }
                 clipBox.addSubview(f)
                 field = f
+            }
+            // what it holds, for the system's password and code autofill
+            switch spec["purpose"] as? String {
+            case "username", "email": field?.contentType = .username
+            case "password", "newPassword": field?.contentType = .password
+            case "oneTimeCode": field?.contentType = .oneTimeCode
+            default: field?.contentType = nil
             }
             field?.font = font
             field?.textColor = style.color ?? .labelColor

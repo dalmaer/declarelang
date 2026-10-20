@@ -7,6 +7,7 @@ export declare class DeferredSurface implements Surface {
     setVirtualExtent(...a: unknown[]): void;
     scrollToY(...a: unknown[]): void;
     scrollToX(...a: unknown[]): void;
+    setSemantics?: (...a: unknown[]) => void;
     /** Hand what was kept to the surface that replaces this one. */
     replayInto(s: Surface): void;
     setX(): void;

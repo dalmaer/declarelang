@@ -56,3 +56,10 @@ declare const __DECLARE_KERNEL__: "wasm" | "js" | "native";
 //     Safari). Absent everywhere else — the dev server, the platform tree, the
 //     tests — where those checks run and report.
 declare const __DECLARE_PRODUCTION__: boolean;
+//   __DECLARE_ACCESSIBILITY__  whether the build carries the accessibility layer
+//     (docs/system-design/accessibility.md §4.1): the `accessibility…` attributes
+//     on View, their schema, and the role contracts createView checks. A program
+//     built with `accessibility = false` defines it false, and the compiler has
+//     already removed every use, so the build is what it was before the layer.
+//     Absent (a `tsc` build, the dev server, the tests) means present.
+declare const __DECLARE_ACCESSIBILITY__: boolean;

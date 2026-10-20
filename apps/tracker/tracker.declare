@@ -215,7 +215,7 @@ theme Tracker [
     prioHigh = #B88024, prioMedium = #7C8698, prioLow = #AAB4BE,
     danger = #E5484D, brandTeal = #37B6A9, onFill = #FFFFFF,
     bulkLine = #666B72, bulkHover = #3A4048, bulkDanger = #FF9D9D,
-    hues = [#6C7BD9, #4FA3A5, #C97B63, #8E6BC1, #5B9E5E, #C06A8C, #557FB8, #B08A4F]
+    hues = [#5C6CD5, #3E7F81, #B65B3F, #8762BD, #4A814D, #B6537B, #4A76B2, #8F7040]
     ]
 
 
@@ -263,7 +263,7 @@ class Avatar [ width = 22, height = 22, cornerRadius = 11,
         width = 100%,
         fontSize = { classroot.capSize },
         letterSpacing = 0.3,
-        textColor = { classroot.name == "" ? provided("theme").textFaint : provided("theme").onFill },
+        textColor = { classroot.name == "" ? provided("theme").textMuted : provided("theme").onFill },
         text = { classroot.name == "" ? "—" : trkInitials(classroot.name) } ]
     ]
 
@@ -287,6 +287,8 @@ class Chip extends Control [ height = 28, cornerRadius = 8, padding = [6, 12, 0,
     value: string = "",
     count: number = -1,         // -1 hides the count
     on: boolean = false,
+    accessibilityRole = toggle,         // a filter that stays on, read by its name and count
+    accessibilityPressed = { on },
     fill = { on ? provided("theme").controlSelected : hovered ? provided("theme").control : null },
 
     // the tally is a sprung number — `Spring [ attribute = … ]` animates any
@@ -307,7 +309,7 @@ class Chip extends Control [ height = 28, cornerRadius = 8, padding = [6, 12, 0,
         textColor = { classroot.on ? provided("theme").text : provided("theme").textMuted },
         text = { app.issues.statusLabel(classroot.value) } ],
     n: Text [ fontSize = 11, wrap = false, visible = { classroot.count >= 0 && !app.compact },
-        textColor = { provided("theme").textFaint }, text = { "" + Math.round(classroot.anim) } ],
+        textColor = { provided("theme").textMuted }, text = { "" + Math.round(classroot.anim) } ],
     press() { app.toggleFilter("status", value) }
     ]
 
@@ -353,9 +355,9 @@ class GroupRow extends ListRow [
         layout: SimpleLayout [ axis = x, spacing = 8 ],
 
         // collapsed points right, open points down: the same chevron the rest
-        // of the chrome discloses with (it centres itself)
+        // of the chrome discloses with
 
-        chev: ChevronIcon [ iconSize = 11, ink = { provided("theme").textFaint },
+        chev: ChevronIcon [ y = center, iconSize = 11, ink = { provided("theme").textFaint },
             dir = { app.isCollapsed(:status) ? "right" : "down" } ],
         d: StatusIcon [ y = 5, s = :status ],
 
@@ -365,7 +367,7 @@ class GroupRow extends ListRow [
             layout: SimpleLayout [ axis = x, spacing = 8, align = baseline ],
             cap: Text [ fontSize = 13, fontWeight = semibold, wrap = false,
                 text = { app.issues.statusLabel(:status) } ],
-            n: Roll [ fontSize = 11.5, textColor = { provided("theme").textFaint }, n = { :count ?? 0 } ]
+            n: Roll [ fontSize = 11.5, textColor = { provided("theme").textMuted }, n = { :count ?? 0 } ]
             ]
         ],
 
@@ -411,12 +413,12 @@ class IssueRow extends ListRow [
                 layout: SimpleLayout [ axis = x, spacing = 6, align = center ],
                 Tag [ datapath = :labels[0:2][], t = :@ ],
                 more: Text [ fontSize = 10.5, wrap = false, visible = { (:labels ?? []).length > 2 },
-                    textColor = { provided("theme").textFaint },
+                    textColor = { provided("theme").textMuted },
                     text = { "+" + ((:labels ?? []).length - 2) } ]
                 ],
             avatar: Avatar [ name = { :assignee ?? "" } ],
             when: Text [ fontSize = 11.5, wrap = false, textAlign = right, width = 40,
-                textColor = { provided("theme").textFaint },
+                textColor = { provided("theme").textMuted },
                 text = { trkDate(:updated ?? 0) } ]
             ]
         ],
@@ -486,6 +488,8 @@ class RailStat extends Control [ width = 100%, height = 30, cornerRadius = 7, pa
     facet: "status" | "assignee" = "status",
     value: string = "",
     cap: string = "",
+    accessibilityRole = toggle,
+    accessibilityPressed = { on },
     n: number = 0,
     peak: number = 1,
     tint: number = 0,
@@ -519,7 +523,7 @@ class RailStat extends Control [ width = 100%, height = 30, cornerRadius = 7, pa
 // a rail section's caption
 
 class RailCaption extends Text [ fontSize = 11, fontWeight = semibold, letterSpacing = 0.6, wrap = false,
-    textColor = { provided("theme").textFaint }
+    textColor = { provided("theme").textMuted }
     ]
 
 
@@ -543,13 +547,13 @@ class DropButton extends Control [ height = 28, cornerRadius = 8, padding = [0, 
     muted: boolean = true,              // the label recedes unless the filter is on
     tint: number = 0,                   // 0 = no dot
     fill = { on ? provided("theme").controlSelected : hovered || pressed ? provided("theme").control : null },
-    layout: SimpleLayout [ axis = x, spacing = 8 ],     // the chevron centres itself
+    layout: SimpleLayout [ axis = x, spacing = 8 ],
     dot: View [ visible = { classroot.tint != 0 }, y = 10, width = 8, height = 8, cornerRadius = 4, fill = { classroot.tint } ],
     t: Text [ y = center, fontSize = 12.5, wrap = false,
         fontWeight = { classroot.on ? "semibold" : "normal" },
         textColor = { classroot.on || !classroot.muted ? provided("theme").text : provided("theme").textMuted },
         text = { classroot.label } ],
-    c: ChevronIcon [ iconSize = 11, ink = { provided("theme").textMuted } ]
+    c: ChevronIcon [ y = center, iconSize = 11, ink = { provided("theme").textMuted } ]
     ]
 
 
@@ -560,7 +564,7 @@ class KeyHint [ width = 100%, height = 18, padding = [1, 0, 0, 0],
     what: string = "",
     layout: SimpleLayout [ axis = x, align = baseline ],
     k: Text [ width = 44, fontSize = 10.5, textColor = { provided("theme").textMuted }, text = { classroot.shortcut } ],
-    v: Text [ fontSize = 11.5, wrap = false, textColor = { provided("theme").textFaint }, text = { classroot.what } ]
+    v: Text [ fontSize = 11.5, wrap = false, textColor = { provided("theme").textMuted }, text = { classroot.what } ]
     ]
 
 
@@ -572,7 +576,8 @@ class EditTag [ height = 22, cornerRadius = 7, padding = [4, 10, 0, 8],
     layout: SimpleLayout [ axis = x, spacing = 4 ],
     cap: Text [ fontSize = 11.5, textColor = { provided("theme").textMuted }, text = { t } ],
     x2: Control [ fill = null,
-        g: Text [ fontSize = 11, textColor = { provided("theme").textFaint }, text = "×" ],
+        accessibilityLabel = { "Remove " + classroot.t },
+        g: Text [ fontSize = 11, textColor = { provided("theme").textMuted }, text = "×" ],
         press() { app.setDraftField("labels", (app.draft.value.it?.labels ?? []).filter((l) => l != classroot.t)) }
         ]
     ]
@@ -613,6 +618,7 @@ class EditorCard [
             layout: WrappingLayout [ spacing = 6 ],
             EditTag [ datapath = :it.labels[], t = :@ ],
             add: Control [ height = 22, cornerRadius = 7, width = 26,
+                accessibilityLabel = "Add label",
                 fill = { hovered ? provided("theme").control : null },
                 stroke = { stroke(1, provided("theme").line) },
                 t: Text [ x = 8, y = 3, fontSize = 12, textColor = { provided("theme").textMuted }, text = "+" ],
@@ -638,7 +644,7 @@ class EditorCard [
             cancel: Button [ width = 84, height = { app.footRowH }, label = "Cancel",
                 onClick() { app.closeDetail() }
                 ],
-            meta: Text [ fontSize = 11, wrap = false, textColor = { provided("theme").textFaint }, visible = { !app.creating },
+            meta: Text [ fontSize = 11, wrap = false, textColor = { provided("theme").textMuted }, visible = { !app.creating },
                 text = { "Created " + trkDate(:it.created ?? 0) + " · Updated " + trkDate(:it.updated ?? 0) + " · " + (:it.comments ?? 0) + " comments" } ],
             sp: Spacer [ ],
 
@@ -1173,7 +1179,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                 ],
             hitCount: Text [ y = center, fontSize = 11, wrap = false, visible = { app.query != "" },
                 x = { parent.omni.width - this.width - 10 },
-                textColor = { provided("theme").textFaint },
+                textColor = { provided("theme").textMuted },
                 text = { app.shownTotal + " match" + (app.shownTotal == 1 ? "" : "es") } ]
             ],
 
@@ -1249,6 +1255,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                 sortBtn: DropButton [ menu = { app.sortMenu },
                     label = { "Sort: " + app.sortOn.charAt(0).toUpperCase() + app.sortOn.slice(1) } ],
                 dirBtn: Control [ height = 28, width = 28, cornerRadius = 8, tooltipLabel = "Toggle sort direction",
+                    accessibilityLabel = { app.sortDir == "desc" ? "Sorted descending" : "Sorted ascending" },
                     fill = { hovered || pressed ? provided("theme").control : null },
                     t: ArrowIcon [ iconSize = 13, ink = { provided("theme").textMuted },
                         x = center, y = center,
@@ -1296,6 +1303,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             // rest, up to a reading width.
 
             list: Table [ width = { Math.min(parent.width, 1460) }, flexes = true,
+                accessibilityLabel = "Issues",
                 datapath = { app.shown.value },
                 selects = "multi",
                 selected = { app.selected },
@@ -1318,7 +1326,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                 layout: SimpleLayout [ axis = y, spacing = 12 ],
                 ring: View [ x = center, width = 36, height = 36, cornerRadius = 18,
                     stroke = { stroke(2, provided("theme").line) },
-                    g: Text [ x = 0, y = center, width = 36, textAlign = center, fontSize = 15, textColor = { provided("theme").textFaint }, text = "?" ]
+                    g: Text [ x = 0, y = center, width = 36, textAlign = center, fontSize = 15, textColor = { provided("theme").textMuted }, text = "?" ]
                     ],
                 cap: Text [ width = 280, textAlign = center, fontSize = 14.5, fontWeight = semibold,
                     text = { app.issues.total == 0 ? "No issues yet" : "No issues match" } ],
@@ -1356,6 +1364,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                         ],
                     div1: View [ width = 1, height = 20, y = 4, fill = { provided("theme").bulkLine } ],
                     act: Control [ height = 28, cornerRadius = 7, padding = [0, 10, 0, 10],
+                        accessibilityLabel = "Set status",
                         fill = { hovered ? provided("theme").bulkHover : null },
                         t: Text [ y = center, fontSize = 12.5, wrap = false,
                             textColor = { provided("theme").tooltipTextColor }, text = "Set status ▾" ],
@@ -1369,6 +1378,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                         ],
                     div2: View [ width = 1, height = 20, y = 4, fill = { provided("theme").bulkLine } ],
                     clr: Control [ height = 28, cornerRadius = 7, width = 28,
+                        accessibilityLabel = "Clear selection",
                         fill = { hovered ? provided("theme").bulkHover : null },
                         t: Text [ x = 0, y = center, width = 28, textAlign = center, fontSize = 13,
                             textColor = { provided("theme").tooltipTextColor }, text = "×" ],
@@ -1391,7 +1401,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                     n: Roll [ x = 0, y = 0, fontSize = 38, fontWeight = bold, letterSpacing = -1,
                         textFill = { gradient("90deg", provided("theme").accent, provided("theme").brandTeal) },
                         n = { app.shownTotal } ],
-                    cap: Text [ x = 2, y = 48, fontSize = 11.5, wrap = false, textColor = { provided("theme").textFaint },
+                    cap: Text [ x = 2, y = 48, fontSize = 11.5, wrap = false, textColor = { provided("theme").textMuted },
                         text = { app.shownTotal == app.issues.total
                             ? "issues · nothing filtered out"
                             : "matching · of " + app.issues.total.toLocaleString() + " issues" } ]
@@ -1475,11 +1485,11 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
 
     foot: View [ width = 100%, height = 32, padding = [0, 16, 0, 24],
         fill = { provided("theme").surface }, stroke = { [stroke(1, provided("theme").line), null, null, null] },
-        stats: Text [ y = center, fontSize = 11.5, wrap = false, textColor = { provided("theme").textFaint },
+        stats: Text [ y = center, fontSize = 11.5, wrap = false, textColor = { provided("theme").textMuted },
             text = { app.issues.total.toLocaleString() + " issues   ·   " + app.shownTotal.toLocaleString() + " shown" } ],
         perf: Text [ y = center, fontSize = 10.5, wrap = false, visible = { app.ready && !app.railOn },
             x = end,
-            textColor = { provided("theme").textFaint },
+            textColor = { provided("theme").textMuted },
             text = { "load " + app.loadMs + " ms · ingest " + app.ingestMs + " ms" } ]
         ],
 

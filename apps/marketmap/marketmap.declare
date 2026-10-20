@@ -1025,7 +1025,7 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
 
         // min = 1: day zero has no prior close, so no day-over-day color
 
-        scrubber: Slider [ width = 100%,
+        scrubber: Slider [ width = 100%, accessibilityLabel = "Day",
             min = 1, max = { app.nDays - 1 },
             value = { app.day },
             input(v: number) { app.scrub(v) }

@@ -36,19 +36,27 @@ actions, run in the order written (each may repeat)
   --type TEXT                  type TEXT into whatever has the focus (--click a field first)
   --key NAME                   press a key: Enter, Escape, Tab, ArrowDown, Backspace, …
   --wait MS                    let MS milliseconds pass
-  --read PATH.ATTR             print PATH's attribute: app.list.scrollY = 240
+  --read PATH.ATTR             print PATH's attribute: app.list.scrollY = 240 (or any
+                               property past it: app.col.childViews.length)
+  --call PATH.METHOD(ARGS)     call a method, its arguments as JSON: --call 'app.preset(14)'
+  --set PATH.ATTR=VALUE        write an attribute, the value as JSON or else a string:
+                               --set app.formOpen=true
+  --semantics                  print what a screen reader is given: the semantic tree
+                               (roles, names, values, states, actions), as it stands then
   --shot FILE.png              save a picture of the window
 
 PATH names a view by where it sits in the program: the App is "app", and each
 named child adds its name — app.sidebar.list, app.toolbar.save. A replicated
-row is its index: app.list.3. (declare-verify's introspection, find() and
+row is its index: app.list.3. A view can also be named by what it says — its label,
+its accessible name or its text: app.tabs.Settings, app.menu."Save As…". (declare-verify's introspection, find() and
 inspect(), takes the same paths.)
 
 examples
   declare-look app.declare --size 390x844 --shot phone.png
   declare-look app.declare --click app.toolbar.new --type "Buy milk" --key Enter --read app.items.count
   declare-look app.declare --drag app.board.card1 120,0 --shot moved.png
-  declare-look app.declare --wheel app.list 2000 --read app.list.scrollY --shot scrolled.png`;
+  declare-look app.declare --wheel app.list 2000 --read app.list.scrollY --shot scrolled.png
+  declare-look app.declare --click app.toolbar.new --semantics`;
 
 const argv = process.argv.slice(2);
 if (argv.includes("--help") || argv.includes("-h")) { console.log(HELP); process.exit(0); }
@@ -86,7 +94,20 @@ for (let i = 0; i < argv.length; i++) {
     const pa = arg(), k = pa.lastIndexOf(".");
     if (k <= 0) fail(`--read ${pa}: write PATH.ATTR, e.g. app.list.scrollY`);
     actions.push({ kind: "read", label: pa, path: pa.slice(0, k), attr: pa.slice(k + 1) });
+  } else if (a === "--call") {
+    const c = arg(), m = /^(.*)\.([A-Za-z_$][\w$]*)\((.*)\)$/s.exec(c);
+    if (m === null) fail(`--call ${c}: write PATH.METHOD(ARGS), e.g. 'app.preset(14)'`);
+    let args;
+    try { args = JSON.parse(`[${m[3]}]`); } catch { fail(`--call ${c}: the arguments are JSON — strings in double quotes`); }
+    actions.push({ kind: "call", label: c, path: m[1], method: m[2], args });
+  } else if (a === "--set") {
+    const c = arg(), k = c.indexOf("="), dot = c.lastIndexOf(".", k);
+    if (k <= 0 || dot <= 0) fail(`--set ${c}: write PATH.ATTR=VALUE, e.g. app.formOpen=true`);
+    let v = c.slice(k + 1);
+    try { v = JSON.parse(v); } catch { /* a bare word is a string */ }
+    actions.push({ kind: "set", label: c, path: c.slice(0, dot), attr: c.slice(dot + 1, k), value: v });
   } else if (a === "--shot") actions.push({ kind: "shot", file: resolve(arg()) });
+  else if (a === "--semantics") actions.push({ kind: "semantics" });
   else fail(`${a} is not an option — see --help`);
 }
 const [w, h] = size !== undefined ? size.split("x").map(Number) : [null, null];
@@ -102,7 +123,20 @@ const step = (x) => {
     case "type": return `await drive.type(${JSON.stringify(x.text)});${rest}`;
     case "key": return `await drive.key(${JSON.stringify(x.name)});${rest}`;
     case "wait": return `await drive.wait(${x.ms});`;
-    case "read": return `console.log(${JSON.stringify(x.label + " = ")} + JSON.stringify(await page.evaluate((p, a) => { const n = window.__declare.find(p); if (n == null) return "(no view at " + p + ")"; const v = n[a]; return v === undefined ? null : v; }, ${p}, ${JSON.stringify(x.attr)})));`;
+    // the longest leading part that names a view, then any properties past it
+    case "read": return `console.log(${JSON.stringify(x.label + " = ")} + JSON.stringify(await page.evaluate((full) => {
+      const d = window.__declare, segs = full.match(/"[^"]*"|[^.]+/g) ?? [];
+      for (let k = segs.length - 1; k > 0; k--) {
+        let v = d.find(segs.slice(0, k).join("."));
+        if (v == null) continue;
+        for (const s of segs.slice(k)) { if (v == null) break; v = v[s.replace(/^"|"$/g, "")]; }
+        return v === undefined ? null : typeof v === "object" && v !== null && v.constructor?.name && "children" in v ? "(a " + v.constructor.name + ")" : v;
+      }
+      return "(no view at " + full + ")";
+    }, ${JSON.stringify(x.label)})));`;
+    case "call": return `{ const r = await page.evaluate((p, m, a) => { const n = window.__declare.find(p); if (n == null) return "(no view at " + p + ")"; if (typeof n[m] !== "function") return "(" + p + " has no method " + m + ")"; const v = n[m](...a); return v === undefined ? null : v; }, ${p}, ${JSON.stringify(x.method)}, ${JSON.stringify(x.args)}); if (typeof r === "string" && r.startsWith("(")) throw new Error(r); }${rest}`;
+    case "set": return `{ const r = await page.evaluate((p, a, v) => { const n = window.__declare.find(p); if (n == null) return "(no view at " + p + ")"; n[a] = v; return null; }, ${p}, ${JSON.stringify(x.attr)}, ${JSON.stringify(x.value)}); if (r !== null) throw new Error(r); }${rest}`;
+    case "semantics": return `console.log(await page.evaluate(() => window.__declare.semantics()));`;
     case "shot": return `await page.screenshot({ path: ${JSON.stringify(x.file)} }); console.log(${JSON.stringify("shot: " + x.file)});`;
   }
 };
@@ -122,6 +156,14 @@ const dir = mkdtempSync(join(tmpdir(), "declare-look-"));
 const assert = join(dir, "look.mjs");
 writeFileSync(assert, script);
 const verify = join(dirname(fileURLToPath(import.meta.url)), "verify.mjs");
-const r = spawnSync(process.execPath, [verify, file, "--assert", assert, "--rung=5"], { stdio: "inherit" });
+// what was asked for, and only that when it went well: the checking ladder the run
+// climbs on the way (R1–R5, its notes) is said only when something failed
+const r = spawnSync(process.execPath, [verify, file, "--assert", assert, "--rung=5"], { encoding: "utf8" });
 rmSync(dir, { recursive: true, force: true });
+const said = (r.stdout ?? "") + (r.stderr ?? "");
+if (r.status === 0) {
+  const ladder = /^\s+(R\d [✓·]|note |verify: |[a-z].*(synthetic backend|browser's own module|--assert <script))/;
+  const lines = said.split("\n").filter((l) => l.trim() !== "" && !ladder.test(l) && !/^\s{5,}\S/.test(l));
+  if (lines.length > 0) process.stdout.write(lines.join("\n") + "\n");
+} else process.stdout.write(said);
 process.exit(r.status ?? 1);

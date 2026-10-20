@@ -86,6 +86,7 @@ export function createToolchain(platformDir) {
     extract: (source, originDir, opts = {}) => call("extract", { source, originDir, ...opts }),
     flags: (source, originDir) => call("flags", { source, originDir }),
     production: (args) => call("production", { args }),
+    sizes: (args) => call("sizes", { args }),
     fresh: (closure, props) => call("fresh", { closure, props }),
     highlight: (src) => call("highlight", { src }),
     index: (src, file, libraryDir) => call("index", { src, file, libraryDir }),

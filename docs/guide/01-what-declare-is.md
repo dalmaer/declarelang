@@ -92,8 +92,8 @@ schema Task [ id: number, title: string, done: boolean ]
 
 class TaskRow [ width = 100%, height = 32,
     layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
-    Checkbox [ checked = :done, input(v: boolean) { :done = v } ],
-    Text [ text = :title, textColor = { :done ? 0x8A96A0 : 0x172530 } ]
+    Checkbox [ checked = :done, accessibilityLabel = :title, input(v: boolean) { :done = v } ],
+    Text [ text = :title, textColor = { :done ? 0x66727D : 0x172530 } ]
     ]
 
 App [ width = 360, height = 260, fill = #F4F6FA, textColor = #172530,
@@ -261,10 +261,8 @@ from first. [Writing with an LLM](declare-docs:guide:with-an-llm) is that workfl
 
 Declare is young, and this guide will not pretend otherwise. The first visit to a
 live-editing page downloads the compiler, so it is slower than a framework site's
-first load; production builds are precompiled and do not pay that cost. Accessibility
-has a strong baseline on the default renderer — real text, native input fields,
-keyboard focus — but deeper support such as ARIA roles and announcements is still
-growing. The
+first load; production builds are precompiled and do not pay that cost. The canvas renderer
+does not yet carry what a screen reader reads; the default DOM renderer does. The
 library is small and growing, and there is no decade of answers online. What
 compensates is that the whole surface is small enough to know, and the compiler
 answers most of the questions a corpus would.
@@ -286,8 +284,8 @@ where that is taught.
 - **Continuity** is motion, time, and arrangements that move as one.
 - **Where it runs** covers renderers, hosts, and embedding.
 - **Shipping and working** covers packaging, working with an LLM, and a full reading
-  of the calendar app — <!--stat:calendar.code-->524<!--/stat--> lines of code, about
-  <!--stat:calendar.total-->930<!--/stat--> with its comments — which you will be able to read end to end.
+  of the calendar app — <!--stat:calendar.code-->529<!--/stat--> lines of code, about
+  <!--stat:calendar.total-->935<!--/stat--> with its comments — which you will be able to read end to end.
 - **The appendix** holds the formatting rules, a glossary, and
   [a phrasebook for readers coming from React, CSS, SwiftUI and others](declare-docs:guide:coming-from).
 

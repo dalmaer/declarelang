@@ -76,8 +76,8 @@ One program renders through managed DOM elements, directly to a single canvas, o
 
 Concretely, measured from the deployed production artifacts:
 
-- **Wire size**: the entire Declare calendar — application *and* runtime — ships at about <!--stat:calendar.wireKB-->131<!--/stat--> KB gzipped (the homepage reports the live figure, measured from the deployed production artifacts on every commit, which is why it can vary by a kilobyte).
-- **Source size**: the tracker — a million issues, search as you type, editing in place with undo — is <!--stat:tracker.total-->1,504<!--/stat--> lines: <!--stat:tracker.code-->971<!--/stat--> of code and <!--stat:tracker.comment-->258<!--/stat--> of comments, and no dependencies. It ships at <!--stat:tracker.wireKB-->147<!--/stat--> KB gzipped before its data, which a `DataSource` fetches at run time.
+- **Wire size**: the entire Declare calendar — application *and* runtime — ships at about <!--stat:calendar.wireKB-->136<!--/stat--> KB gzipped (the homepage reports the live figure, measured from the deployed production artifacts on every commit, which is why it can vary by a kilobyte).
+- **Source size**: the tracker — a million issues, search as you type, editing in place with undo — is <!--stat:tracker.total-->1,514<!--/stat--> lines: <!--stat:tracker.code-->981<!--/stat--> of code and <!--stat:tracker.comment-->258<!--/stat--> of comments, and no dependencies. It ships at <!--stat:tracker.wireKB-->154<!--/stat--> KB gzipped before its data, which a `DataSource` fetches at run time.
 - **Responsiveness**: when you drag an event, the constraint graph updates exactly what changed and paints — there is no virtual-DOM pass between your gesture and the pixels. Animations ride compositor-native paths (CSS transforms and painted properties on the DOM renderer; direct paint on canvas), so they run at the display's full rate — 120 fps on a ProMotion screen.
 - **Startup**: precompiled production builds start immediately. The live-compile pages (the editable samples) pay a one-time compiler download on a cold visit; warm visits start in around a tenth of a second. The one honest trade: a framework with no in-browser compiler wins the very first cold load — Declare's production path closes that gap by precompiling.
 
@@ -154,7 +154,7 @@ Three layers. The `verify` command is the cheapest and catches the most: it comp
 
 ### Is Declare accessible?
 
-On the DOM renderer — the default — an app is real elements: real text (selectable, findable), native form fields with native caret, selection and IME behavior, and a built-in keyboard focus system with tab navigation. That's a substantially better baseline than a typical canvas-drawn or div-soup UI. The canvas renderer draws pixels and does not currently expose text to assistive technology — choose the DOM renderer where accessibility matters, which costs nothing since the same program runs on both. Static extraction is for crawlers, not a screen-reader substitute, and it's fair to say accessibility depth — ARIA roles, announcements — is an area where the platform is still young.
+Yes. The library's controls tell a screen reader what they are, what they are called and what state they are in, and keep it current; dialogs, sheets and menus hold and return the focus as their kind should; text fields are native, and say what they hold so autofill works. A control you draw yourself is given a role, and the compiler holds it to that role, as it does the library's. This is on the DOM renderer, the default; the canvas renderer does not yet carry it. The guide's Accessibility chapter has the detail.
 
 ### What do I need to learn in order to use it, with or without an LLM?
 

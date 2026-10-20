@@ -601,9 +601,15 @@ impl Host {
         let st = spec.get("style").cloned().unwrap_or(Value::Null);
         let multiline = spec.get("multiline") == Some(&Value::Bool(true));
         let value = spec.get("value").and_then(Value::as_str).unwrap_or("");
+        // a concealed field shows a dot for each character, as its element does
+        let dots: String;
+        let shown = if spec.get("concealed") == Some(&Value::Bool(true)) {
+            dots = "\u{2022}".repeat(value.chars().count());
+            dots.as_str()
+        } else { value };
         let (text, color) = if value.is_empty() {
             (spec.get("placeholder").and_then(Value::as_str).unwrap_or(""), Value::String("#757575".into()))
-        } else { (value, st.get("color").cloned().unwrap_or(Value::Null)) };
+        } else { (shown, st.get("color").cloned().unwrap_or(Value::Null)) };
         let family = match st.get("family") {
             Some(Value::Array(a)) => a.iter().map(jstr).collect::<Vec<_>>().join(", "),
             Some(Value::String(s)) => s.clone(),

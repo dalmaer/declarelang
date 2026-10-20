@@ -7,10 +7,10 @@ use [ PlusIcon, CheckIcon, CloseIcon ]   // named by string, so kept by name
 App [ textColor = 0x172530, fontSize = 13,
     row: View [ x = 20, y = 20, height = 32, width = { this.contentWidth },
         layout: SimpleLayout [ axis = x, spacing = 16 ],
-        IconHost [ kind = "PlusIcon" ],
-        IconHost [ kind = "CheckIcon", ink = 0x12A594 ],
-        IconHost [ kind = "CloseIcon", ink = 0xC93B47 ],
-        IconHost [ kind = "" ],                              // empty: zero width, nothing reserved
+        IconHost [ y = center, kind = "PlusIcon" ],
+        IconHost [ y = center, kind = "CheckIcon", ink = 0x12A594 ],
+        IconHost [ y = center, kind = "CloseIcon", ink = 0xC93B47 ],
+        IconHost [ y = center, kind = "" ],                              // empty: zero width, nothing reserved
         Text [ textColor = 0x6A7883, text = "← the fourth host is empty and takes no room" ]
         ]
     ]

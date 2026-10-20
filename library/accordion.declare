@@ -119,10 +119,25 @@ A pane is as wide as its accordion; only its height is its own.
 Disabled dims the whole pane, header and content alike, rather than recolouring it — to
 the theme's `disabledOpacity`, or 0.45 when the theme states none. A disabled pane
 neither opens nor closes; whatever it shows stays as it is.
+
+## accessibilityLabel
+The header's text, naming the pane; the header itself is the button a screen reader presses to open it.
 */
 
 class Pane extends Control [ width = 100%, clip = true,
     label: string = "",
+
+    // what the pane holds goes in its body, which is present only while the pane
+    // is open or still sliding — closed, the content is absent, to a screen
+    // reader as to Tab, not merely clipped out of sight
+
+    defaultplacement = body,
+
+    // a pane is its header and its content in one view: to a screen reader, a
+    // group named by its header, the header a button that opens and closes it
+
+    accessibilityRole = group,
+    accessibilityLabel = { label },
     name:  string = { label },
     initial: boolean = false,                     // seed the open pane: first Pane sets initial = true
 
@@ -166,11 +181,22 @@ class Pane extends Control [ width = 100%, clip = true,
         stiffness = 220, damping = 26, epsilon = 0.004 ],
 
     header: View [ width = 100%, height = { provided("theme").accordionHeaderHeight },
+        accessibilityRole = button,
+        accessibilityExpanded = { classroot.open },
+        press() { classroot.press() },
         cornerRadius = { provided("theme").controlCornerRadius },
         fill = { classroot.open || classroot.hovered || classroot.pressed ? provided("theme").controlSelected : ((provided("theme").accordionHeaderFill ?? provided("theme").control)) },
         chev: ChevronIcon [ x = 11, y = center, iconSize = 14,
             angle = { classroot.twist }, ink = { provided("theme").textMuted } ],
         t: TextLabel [ x = 32, fontSize = { provided("theme").accordionFontSize }, fontWeight = { classroot.open ? "semibold" : "medium" },
             textColor = { provided("theme").text }, text = { classroot.label } ]
+        ],
+
+    // `open` here too, so content reads its pane's state as `parent.open`
+
+    body: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 0 ],
+        open: boolean = { classroot.open },
+        visible = { classroot.open || classroot.height > classroot.header.height + 0.5 }
         ]
     ]

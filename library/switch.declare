@@ -36,11 +36,24 @@ The track's ladder for a toggle: checked takes the accent; unchecked shows the s
 
 ## stroke
 A hairline in the accent when checked, in the theme's line colour otherwise, so the track keeps an edge on light and dark surfaces alike.
+
+## accessibilityChecked
+Follows `checked`. A switch shows no label of its own, so **its use site names it** with `accessibilityLabel` — unnamed, the compiler warns.
+
+## accessibilityLabel
+The caption of a `Field` around it, unless the use site names the switch: its name to a screen
+reader.
 */
 
 include [ "control.declare" ]
 
 class Switch extends Control [
+    // a switch shows no label of its own, so its use site names it
+    // (accessibilityLabel = "Wi-Fi"); it tells a screen reader whether it is on
+
+    accessibilityRole = switch,
+    accessibilityChecked = { checked },
+    accessibilityLabel = { provided("fieldLabel", "") },
     width  = { provided("theme").switchWidth },
     height = { provided("theme").switchHeight },
     cornerRadius = { height / 2 },

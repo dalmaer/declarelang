@@ -399,6 +399,10 @@ await test("typed data: one namespace of type names — collisions and unknown r
     class Card extends View [ ]
     App [ width=1, height=1 ]`);
   assert.deepEqual(library.errors.map((e) => /is a library class/.test(e.message)), [true, true]);
+  // …and offered the program's name in front: mechanical, and always free
+  const named = await compile(`class Sheet [ ]
+    App [ width=1, height=1 ]`, { mainId: "/x/apps/cadence/cadence.declare" });
+  assert.match(named.errors[0].message, /rename yours, as 'CadenceSheet'/);
   const builtin = await compile(`
     class FontFace extends View [ ]
     App [ width=1, height=1, f: FontFace [ ] ]`);

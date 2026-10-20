@@ -14,6 +14,11 @@ Segmented [ width = 300, value = { app.page },
     ]
 ```
 
+### Tabs
+
+A segmented control that switches what is shown below it — pages, panes — is a row of
+tabs: use a `TabBar`, which is a `Segmented` in every other way and is heard as tabs.
+
 ### Why data, and not `Segment` children
 
 Because the sliding highlight cannot be built any other way. The pill has to know
@@ -112,8 +117,8 @@ aggregate the view tree.
 `stop`: the control is one Tab stop — Tab lands on the selected segment and the next
 Tab leaves; the arrows move among the segments, wrapping, as in any stop. Space or Enter
 picks where they land, so **an inactive choice is reachable and selectable entirely from
-the keyboard**. A segmented control whose choices are places (each carries a `location`)
-switches on the arrow itself, as a tab bar does.
+the keyboard**, and nothing changes until it is asked to — a choice that is a place is
+followed on Enter, as a link is, not on the arrow.
 
 ## focusEntry()
 The segment Tab lands on: the selected one, else the first.
@@ -182,8 +187,7 @@ Delivers this segment's id to the group.
 Presses. A segment whose choice carries a `location` also follows its `link`.
 
 ## onKeyDown
-Space and Enter pick; the arrows move among the segments (the stop's), and a segment that
-is a place is followed when an arrow lands on it.
+Space and Enter pick; the arrows move among the segments (the stop's).
 
 ## focusShape()
 Rings the segment's pill inset, not its whole box.
@@ -202,11 +206,22 @@ Placed by index: the control's inset plus `i` segment widths.
 
 ## disabled
 Disabled with the control; an item never disables alone.
+
+## accessibilityChecked
+Follows `on`: a segment is one radio of its group.
+
+## accessibilityLabel
+Empty for a segment that shows text (the text names it); a segment showing an icon is named by its record's `label`.
 */
 
 include [ "control.declare", "icons/icon.declare" ]
 
 class Segmented [
+    // one choice among a few: a group of radios to a screen reader, whatever it
+    // looks like (a page switcher, an appearance switch)
+
+    accessibilityRole = radioGroup,
+
     // the marker a SegmentedItem reads to recognize its parent
 
     isSegmented: boolean = true,
@@ -321,6 +336,12 @@ class SegmentedItem extends Control [
     x      = { 2 + :i * (parent as Segmented).segW },
 
     on: boolean = { (parent as Segmented).value === :id },
+    accessibilityRole = radio,
+    accessibilityChecked = { on },
+
+    // a segment showing text is named by it; one showing an icon, by its record's label
+
+    accessibilityLabel = { :icon != null ? "" + (:label ?? "") : "" },
 
     // Rest, hover and press only — the chosen state is the sliding pill behind
     // these, not a fill of their own. That is what lets it travel between them.
@@ -368,9 +389,6 @@ class SegmentedItem extends Control [
     onKeyDown(e: KeyEvent) {
         if (e.key == "Enter" || e.key == " ") { press(); return }
         super.onKeyDown(e)
-        // choices that are places switch on the arrow, as a tab bar does
-        const to = Focus.getFocus() as any
-        if (to != null && to != this && to.parent == this.parent && to.link != "") (app as any).follow(to.link, to.replace)
         },
 
     // the ring hugs the segment's pill, not its whole box

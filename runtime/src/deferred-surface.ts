@@ -20,7 +20,7 @@
 
 import type { Surface } from "./backend.js";
 
-type Kept = "setRowIndex" | "setRowCount" | "setVirtualExtent" | "scrollToY" | "scrollToX";
+type Kept = "setRowIndex" | "setRowCount" | "setVirtualExtent" | "scrollToY" | "scrollToX" | "setSemantics";
 
 export class DeferredSurface implements Surface {
   private kept: Map<Kept, unknown[]> | null = null;
@@ -34,6 +34,7 @@ export class DeferredSurface implements Surface {
   setVirtualExtent(...a: unknown[]): void { this.keep("setVirtualExtent", a); }
   scrollToY(...a: unknown[]): void { this.keep("scrollToY", a); }
   scrollToX(...a: unknown[]): void { this.keep("scrollToX", a); }
+  declare setSemantics?: (...a: unknown[]) => void;
   /** Hand what was kept to the surface that replaces this one. */
   replayInto(s: Surface): void {
     if (this.kept === null) return;
@@ -74,3 +75,6 @@ export class DeferredSurface implements Surface {
 
 /** Is this surface a stand-in for a view not yet shown? */
 export const isDeferred = (s: Surface | null): s is DeferredSurface => s instanceof DeferredSurface;
+
+// kept for the real surface, in a build with the accessibility layer
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) DeferredSurface.prototype.setSemantics = function (this: DeferredSurface, ...a: unknown[]): void { (this as unknown as { keep(n: string, a: unknown[]): void }).keep("setSemantics", a); };

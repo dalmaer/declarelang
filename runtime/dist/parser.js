@@ -51,6 +51,7 @@
 // write such regexes as new RegExp("…"). Recorded in HANDOFF §R4.
 import { DeclareError, DeclareErrors } from "./errors.js";
 import { Diag } from "./diagnostics.js";
+import { FLAG_SPECS, flagWords, flagValue } from "./flags.js";
 /** The hosts a script can be marked for (`script [ host = browser ] { … }`):
  *  code that reaches past what every host provides names the hosts it runs
  *  on. A new host is a new name here. */
@@ -83,13 +84,8 @@ export function mergeShip(a, b) {
     };
 }
 const SHIP_MEMBERS = new Set(["islands", "files", "compiler", "inspector"]);
-/** Each member's words — the registry's values a program may choose (`mac`
- *  is a host asking for the compiled program, never a program's default). */
-export const FLAG_WORDS = {
-    render: ["dom", "canvas"],
-    kernel: ["wasm", "js"],
-    crawler: ["true", "false"],
-};
+/** Each member's words — the registry's, as on every surface. */
+export const FLAG_WORDS = Object.fromEntries(FLAG_SPECS.map((s) => [s.name, flagWords(s)]));
 const isDigit = (c) => c >= "0" && c <= "9";
 const isIdentStart = (c) => (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_";
 const isIdentPart = (c) => isIdentStart(c) || isDigit(c);
@@ -1458,7 +1454,7 @@ class Parser {
         while (this.peek().kind !== "rbracket" && this.peek().kind !== "eof") {
             const t = this.peek();
             if (t.kind !== "ident" || !names.includes(t.text)) {
-                throw new DeclareError(`defaultFlags has no member '${t.text}' — render, kernel, or crawler`, t.pos);
+                throw new DeclareError(`defaultFlags has no member '${t.text}' — ${names.join(", ")}`, t.pos);
             }
             this.next();
             const name = t.text;
@@ -1470,12 +1466,7 @@ class Parser {
             if (v.kind !== "ident" || !words.includes(v.name)) {
                 throw new DeclareError(`defaultFlags' ${name} is ${words.join(" or ")}`, v.pos);
             }
-            if (name === "crawler")
-                flags.crawler = v.name === "true";
-            else if (name === "render")
-                flags.render = v.name;
-            else
-                flags.kernel = v.name;
+            flags[name] = flagValue(FLAG_SPECS.find((s) => s.name === name), v.name);
             if (this.peek().kind === "comma")
                 this.next();
             else

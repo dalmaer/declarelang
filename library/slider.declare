@@ -81,15 +81,49 @@ that has left the control.
 Ends the drag.
 
 ## onKeyDown
-Left and Right nudge by one `step`, delivered through `input` like any other change.
+Home and End go to `min` and `max`; Page Up and Page Down move a tenth of the range, never
+less than a `step`. The arrows step, as `Control` gives every slider.
+
+## accessibilityIncrement()
+One `step` up, through `quant` and `input` like any other change — what the Right and Up
+arrows run (Control's keys), and what a screen reader's increment calls.
+
+## accessibilityDecrement()
+One `step` down — what Left and Down run.
 
 ## opacity
 Disabled dims the whole control — every part alike, never a recolour — to the theme's `disabledOpacity`, or 0.45 when the theme states none: the one place the number lives.
+
+## accessibilityValue
+Follows `value`, in the slider's own units.
+
+## accessibilityMin
+Follows `min`.
+
+## accessibilityMax
+Follows `max`.
+
+## accessibilityStep
+Follows `step` — what one increment moves. A slider shows no name, so its use site sets `accessibilityLabel`.
+
+## accessibilityLabel
+The caption of a `Field` around it, unless the use site names the slider: its name to a screen
+reader.
 */
 
 include [ "control.declare" ]
 
 class Slider extends Control [
+
+    // what a screen reader is told: a slider, its value and range in the
+    // slider's own units, named by whatever the use site names it
+
+    accessibilityRole = slider,
+    accessibilityLabel = { provided("fieldLabel", "") },
+    accessibilityValue = { value },
+    accessibilityMin = { min },
+    accessibilityMax = { max },
+    accessibilityStep = { step },
 
     // keyboard focus rings the circular grabber — the part the keys move
 
@@ -130,10 +164,16 @@ class Slider extends Control [
         },
     onPointerUp()   { dragging = false },
     onPointerMove() { if (dragging) input(quant(v0 + (app.pointerX - x0) / (width - 18) * (max - min))) },
+    accessibilityIncrement() { if (!disabled) input(quant(value + step)) },
+    accessibilityDecrement() { if (!disabled) input(quant(value - step)) },
+
+    // Home and End go to the ends; Page Up and Page Down move a tenth of the range
+    // (never less than a step): the slider's keys on every platform
+
     onKeyDown(e: KeyEvent) {
-        if (disabled) return
-        if (e.key == "ArrowLeft") input(quant(value - step))
-        else if (e.key == "ArrowRight") input(quant(value + step))
+        const page = Math.max(step, (max - min) / 10)
+        if (disabled || (e.key != "Home" && e.key != "End" && e.key != "PageUp" && e.key != "PageDown")) { super.onKeyDown(e); return }
+        input(quant(e.key == "Home" ? min : e.key == "End" ? max : value + (e.key == "PageUp" ? page : -page)))
         },
 
     opacity = { disabled ? (provided("theme").disabledOpacity) : 1 },

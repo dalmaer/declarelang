@@ -19,6 +19,10 @@ export declare const REQ: {
      *  compile errors between. The same app as READER/SOURCE (the Viewer owns the tabs);
      *  this is the deep link to the workbench. */
     readonly EDIT: "edit";
+    /** The Viewer's SIZES tab, `?viewer=sizes`: what the program's production build is
+     *  made of and what each part weighs, presented — the SIZES request's JSON, read by
+     *  the Viewer. Its own value because `sizes` is the data request's. */
+    readonly SIZES_TAB: "sizes-tab";
     /** The raw source FILE — the bytes, `text/plain`. What an `include`, the compiler, or
      *  `curl` reads; the explicit spelling of a plain fetch. Was the old `?view=source`. */
     readonly FILE: "file";
@@ -32,18 +36,19 @@ export declare const REQ: {
      *  `?view=seo`. Distinct from the `crawler` FLAG (flags.ts), which EMBEDS this document in
      *  a run/build page rather than returning it alone. */
     readonly EXTRACT: "extract";
-    /** The COMPILED PROGRAM as JSON (`{ source, deps, etag }`) — what a client
-     *  that owns its own renderer asks for. The native host (`?render=mac`) boots
-     *  from this: the server compiles in its toolchain realm, the client caches
-     *  the answer and revalidates it with `If-None-Match`, so the ladder's
-     *  server tier is one conditional request. Renderer-agnostic by
-     *  construction — a compiled program names no backend. */
-    readonly PROGRAM: "program";
+    /** What the program's production build is made of and what each part weighs,
+     *  as JSON (the `declarec --sizes --json` report): the program, runtime,
+     *  kernel and page; every file the program was made from and how it came in;
+     *  every runtime module and what brought it aboard. Needs the Node compiler,
+     *  so the dev server answers it and a static host does not, as with BUILD. */
+    readonly SIZES: "sizes";
 };
 export type ReqType = (typeof REQ)[keyof typeof REQ];
-/** The request type a URL asks for. `?viewer=reader|source|edit` opens Declare Viewer
+/** The Viewer location a tab request opens on: the tab's own name. */
+export declare function viewerTab(rt: ReqType): string;
+/** The request type a URL asks for. `?viewer=reader|source|edit|sizes` opens Declare Viewer
  *  on that tab, and a bare (or unrecognized-value) `?viewer` opens its default tab,
- *  the Reader; a bare `?build` / `?file` / `?segments` / `?extract` asks for that
+ *  the Reader; a bare `?build` / `?file` / `?segments` / `?extract` / `?sizes` asks for that
  *  artifact; anything else (including an absent request) is RUN — the safe default,
  *  so an ordinary app URL is unaffected. */
 export declare function requestType(params: FlagParams): ReqType;

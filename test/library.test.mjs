@@ -107,7 +107,11 @@ await test("ContextMenu: open(v, e) anchors at the pointer; pick delivers and cl
   assert.equal(app.m.x + 0, 130, "anchored at the pointer (root space)");
   assert.equal(app.m.y + 0, 140);
   app.m.pick("copy");
-  await new Promise((r) => setTimeout(r, 5));   // delivery is DEFERRED past the takedown (the native contract)
+  // delivery is DEFERRED past the takedown (the native contract): afterDelay(0)
+  // off the browser is two zero timers, so wait two of our own, queued behind
+  // each — a fixed 5 ms lost the race when a loaded run stretched the gap
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
   settle();
   assert.equal(app.last, "copy", "delivery through the ordinary path");
   assert.equal(app.m.shown, false, "…and closed");
@@ -482,11 +486,13 @@ await test("DataGrid: a column added at runtime joins the column model — nothi
 });
 
 // A warning is about the author's code. The library's own code must raise none
-// in a program that merely uses it — the author cannot act on it.
+// in a program that merely uses it — the author cannot act on it. (A switch, a
+// slider and a progress bar show no name of their own, so the program names them,
+// as an author's must: unnamed, each earns its use site a warning, which is the point.)
 await test("the library raises no warnings in a program that uses it", async () => {
   const r = await (await import("../compiler/dist/compile-node.js")).compile(`App [ width = 600, height = 600,
     col: View [ layout: SimpleLayout [ axis = y ],
-    Button [ label = "b" ], Checkbox [ label = "c" ], Switch [ ], Slider [ ], ProgressBar [ ], Gauge [ ],
+    Button [ label = "b" ], Checkbox [ label = "c" ], Switch [ accessibilityLabel = "s" ], Slider [ accessibilityLabel = "v" ], ProgressBar [ accessibilityLabel = "p" ], Gauge [ ],
     Segmented [ choices = { [ ({ id: "a", label: "A", location: "a" }) ] } ], Combobox [ ], TextInput [ ], AppearanceSwitch [ ],
     RadioGroup [ Radio [ choice = "a", label = "A" ] ], Field [ ], Card [ ], Divider [ ],
     Accordion [ Pane [ ] ], Menu [ ], MenuBar [ ], ContextMenu [ ], Dialog [ ], Tooltip [ ], Icon [ ] ] ]`);
@@ -584,6 +590,20 @@ await test("y = center centers the BOX; TextLabel cap-centers; a Button's label 
   const bl = find(app.b);
   assert.ok(bl, "the Button's label is a TextLabel");
   assert.ok(Math.abs(bl.y - (bl.parent.height / 2 - bl.baseline + bl.capHeight / 2)) < 0.01, "and it cap-centers (pixel-identical to the old y = center)");
+});
+
+// An icon is placed like any view: it declares no y of its own, so a row that
+// centers its children centers it too (it used to refuse it, the icon's own
+// `y = center` against the layout's), and a use site still places one by hand.
+await test("an icon sits in a row that centers its children, and a use site places one by hand", async () => {
+  const b = await compileProgram(`App [ width = 300, height = 100,
+    row: View [ height = 40, layout: SimpleLayout [ axis = x, spacing = 8, align = center ],
+        Text [ text = "Send" ], arrow: ArrowIcon [ iconSize = 16 ] ],
+    alone: CloseIcon [ x = 10, y = center, iconSize = 16 ] ]`, { originDir: process.cwd() + "/library" });
+  assert.equal(b.errors.length, 0, b.errors.map((e) => e.message).join("; "));
+  const app = instantiate(b.program); settle();
+  assert.equal(app.row.arrow.y, 12, "centered in the 40-high row");
+  assert.equal(app.alone.y, 42, "centered in the App by its own use");
 });
 
 summarize("library");

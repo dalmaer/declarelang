@@ -5,7 +5,7 @@
 and a place in the keyboard order.
 
 ```declare
-class Stepper extends Control [ width = 96, height = 28, cornerRadius = 7,
+class Counter extends Control [ width = 96, height = 28, cornerRadius = 7,
     value: number = 0,
     step:  number = 1,
 
@@ -21,7 +21,7 @@ App [ width = 320, height = 130, theme = { SanFrancisco },
     n: number = 0,
     col: View [ x = 20, y = 20,
         layout: SimpleLayout [ axis = y, spacing = 12 ],
-        Stepper [ value = { app.n }, input(v: number) { app.n = v } ],
+        Counter [ value = { app.n }, input(v: number) { app.n = v } ],
         Text [ textColor = { provided("theme").text }, text = { "count: " + app.n } ]
         ]
     ]

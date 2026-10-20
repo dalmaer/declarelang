@@ -41,8 +41,8 @@ import { isDeferred } from "./deferred-surface.js";
 import type { Element } from "./parser.js";
 import { diag } from "./errors.js";
 import { Node } from "./node.js";
-import { View, inheritedCursor, onDiscard, setRowIndex, fireRetireTree, nodeLabel } from "./view.js";
-import { Constraint } from "./reactive.js";
+import { View, inheritedCursor, onDiscard, setRowIndex, fireRetireTree, nodeLabel, provideVisibleRows } from "./view.js";
+import { Constraint, Cell } from "./reactive.js";
 import { setBound, armDivergence, nodeDiverged } from "./attributes.js";
 import { splitPath, isSelective, type PathSeg } from "./path-plan.js";
 import { Focus } from "./focus.js";
@@ -101,6 +101,34 @@ const BLOCKS = new WeakMap<View, Replicator[]>();
 
 /** The replication blocks under `view` — the kernel door for layout
  *  strategies, AT traversal, the inspector, and navigate-to-record. */
+// A view's in-view rows (View.firstVisibleRow / lastVisibleRow): ONE cell per
+// view, made at the first read — before its rows exist, if that is when it is
+// read — so a formula is wired to the same cell however the range comes to be
+// found. Behind it, a rule follows the view's structure to its replication and
+// keeps the range (pay-per-use: a list nobody asks costs nothing).
+const IN_VIEW = new WeakMap<View, { range: { first: number; last: number }; cell: Cell }>();
+provideVisibleRows((v) => {
+  let r = IN_VIEW.get(v);
+  if (r === undefined) {
+    const rec = (r = { range: { first: -1, last: -1 }, cell: new Cell() });
+    IN_VIEW.set(v, rec);
+    const k = new Constraint(`${nodeLabel(v)} (rows in view)`, () => {
+      void v.childViews;   // the replication arriving, its rows coming and going
+      const b = blocksOf(v);
+      return b.length > 0 ? b[0].measureInView() : { first: -1, last: -1 };
+    }, (x) => {
+      const n = x as { first: number; last: number };
+      if (n.first === rec.range.first && n.last === rec.range.last) return;
+      rec.range = n;
+      rec.cell.changed();
+    });
+    k.run();
+    onDiscard(v, () => k.dispose());
+  }
+  r.cell.track();
+  return r.range;
+});
+
 export function blocksOf(view: View): readonly Replicator[] {
   return BLOCKS.get(view) ?? [];
 }
@@ -252,6 +280,29 @@ export class Replicator {
   realized(): readonly { view: View; index: number }[] {
     if (this.win?.active === true) return this.win.realized();
     return this.views.map((view, index) => ({ view, index }));
+  }
+
+  /** The records any part of which is in view in the nearest scroller (or the
+   *  window, at the top), as logical indices — {-1, -1} when none is: the
+   *  window's own range, windowed, else read off the rows' places. Tracked. */
+  measureInView(): { first: number; last: number } {
+    if (this.win?.active === true) return this.win.inView();
+    if (this.views.length === 0) return { first: -1, last: -1 };
+    // the scroller, and this block's offset inside its content
+    let off = 0, sc: View | null = null;
+    for (let p: unknown = this.parent; p instanceof View; p = p.parent) {
+      if (p.scrolls !== "none") { sc = p; break; }
+      off += p.y;
+    }
+    const top = sc !== null ? sc.scrollY : 0;
+    const h = sc !== null ? sc.height : Infinity;
+    let first = -1, last = -1;
+    this.views.forEach((v, i) => {
+      if (!v.visible) return;
+      const y = off + v.y;
+      if (y + v.height > top && y < top + h) { if (first < 0) first = i; last = i; }
+    });
+    return { first, last };
   }
 
   /** Navigate-to-logical-record (materialization.md §3.5 — required by the

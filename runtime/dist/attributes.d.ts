@@ -172,6 +172,7 @@ export declare function faceSlots(): Record<string, {
     def: unknown;
     defBinding: (this: unknown) => unknown;
 }>;
+export declare function computingProvision<T>(node: object, name: string, fn: () => T): T;
 export declare function providedRead(self: object, name: string, hasDefault: boolean, dflt: unknown): unknown;
 /** A runtime-side write: a constraint's apply, auto-size, a load result.
  *  Same store/push/wake as the setter, but it neither marks the slot as

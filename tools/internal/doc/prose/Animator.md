@@ -28,7 +28,10 @@ an animation begins wherever the view already is (the usual case).
 The run time, in ms.
 
 ## repeat
-How many times to repeat; `0`/absent runs once.
+How many times to repeat; `0`/absent runs once. `repeat = { Infinity }` loops for good:
+a spinner, a typing indicator. A loop like that is never "about to finish", so a check's
+`settleMotion` runs every other motion to rest without waiting for it (a large finite count
+is a motion that ends, and holds it).
 
 ## motion
 The easing curve — a motion token (`quad`, `back`, …) naming the shape of the interpolation

@@ -448,7 +448,7 @@ async function crawlAll(program, opts = {}) {
         throw new Error(`crawl failed — data this app fetches is not part of its build-time material:\n${lines}\n` +
             `Indexable content must be baked at build time (docs/system-design/location.md §9): inline the data ` +
             `(Dataset contents), ship it as a file beside the app (a relative url), or accept that ` +
-            `this content is not indexed (drop ?crawler/?extract for this program).`);
+            `this content is not indexed (build it with crawler=false, and drop ?extract).`);
     }
     // De-alias: distinct keys that resolved to one doc share its object; return the
     // unique documents (the owners), in first-seen order.
@@ -476,7 +476,7 @@ const escId = (s) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
  *  reachable location's content as a `<section id="<location>">` — so the emitted
  *  `href="#<location>"` links resolve intra-document, and a fragment that survives
  *  into a click-through addresses the live app identically. This is what `?extract`
- *  returns and `?crawler` bakes when the caller asks for the crawl. */
+ *  returns and `crawler=true` bakes when the caller asks for the crawl. */
 export async function crawlDocument(program, opts = {}) {
     return (await crawlExtract(program, opts)).html;
 }

@@ -47,7 +47,7 @@ script {
 
 include [ "game.declare", "screen.declare", "panel.declare", "page-views.declare" ]
 
-defaultFlags [ render = canvas ]
+defaultFlags [ render = canvas, accessibility = false ]
 
 App [ appName = "Stargate", fill = black,
 

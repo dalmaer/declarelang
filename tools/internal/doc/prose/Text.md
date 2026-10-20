@@ -46,6 +46,13 @@ Whether a width-bounded run wraps to multiple lines (default `true`). Set `wrap 
 to force a single line that overflows instead. Wrapping is reactive: narrow the
 bounding width and the run re-flows in the same frame. Pairs with `textAlign`.
 
+## wrapWidth
+Where a run with no width of its own wraps (default `0`: it stays one line). The run
+wraps at this width and is then as wide as its widest line, so a chat bubble is as wide
+as a short message and, for a long one, as wide as its longest line up to this width:
+`Text [ wrapWidth = 280, text = :body ]`. A width given the run wins; this is the line
+length for the run that sizes itself.
+
 ## maxLines
 A line limit (default `0`, no limit). The run keeps at most this many lines — wrapped
 lines and hard newlines alike — and the last line kept ends in an ellipsis that fits

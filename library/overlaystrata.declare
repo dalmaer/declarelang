@@ -7,6 +7,15 @@ dialogs and sheets share the first, in the order they open (a menu opened from a
 paints above the dialog); toasts paint in the second, above them all. It keeps the open
 overlays in the order they opened, so Esc knows which is on top. Not written in a program.
 
+## width
+The window's width when the layers are the App's (or the App's, where it is narrower);
+a window's own, inside one.
+
+## height
+The window's height when the layers are the App's (or the App's, where it is shorter), so
+an App that is a whole scrolling page still opens its sheets and dialogs on screen; a
+window's own, inside one; the App's, where there is no window (headless).
+
 ## isOverlayStrata
 **Internal.** The marker a `Floating` finds the layers by.
 
@@ -28,11 +37,18 @@ took the keys and still holds them (`Keys.claimant()`). A toast, which takes not
 never it; nor is a dialog open in one window while focus is in another.
 */
 
-class OverlayStrata [ width = 100%, height = 100%, ignoreLayout = true,
+class OverlayStrata [ ignoreLayout = true,
     // fixed to the App's viewport, not its content: a dialog opened with the
     // page scrolled down is on screen, and focus inside it scrolls nothing
 
     ignoreScroll = true,
+
+    // the App's layers are the window's size, not the App's: an App that is the
+    // page, as tall as what it holds, opens a sheet at the window's foot, not the
+    // page's. A window's layers are the window's.
+
+    width = { this.parent == app && app.hostWidth > 0 ? Math.min(app.width, app.hostWidth) : (this.parent as View).width },
+    height = { this.parent == app && app.hostHeight > 0 ? Math.min(app.height, app.hostHeight) : (this.parent as View).height },
 
     // the layers are transparent to the pointer: what paints in them decides
 

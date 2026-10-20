@@ -241,6 +241,9 @@ function sayEntry(e) {
   if (e.readOnly) bits.push("read-only");
   if (e.inheritedFrom) bits.push(`inherited from ${e.inheritedFrom}`);
   say(`${e.id} — ${bits.join(" · ")}`);
+  // a method's whole signature, as the runtime declares it: the argument order
+  // and types prose cannot be trusted to carry
+  if (e.kind === "method" && e.signature) say(`  ${e.signature}`);
   for (const line of (e.doc ?? "").split("\n")) say(`  ${line}`);
   if (e.source?.file) say(`  source: ${e.source.file}${e.source.line ? ":" + e.source.line : ""}`);
   if (Array.isArray(e.seeAlso) && e.seeAlso.length > 0) say(`  see also: ${e.seeAlso.join(", ")}`);
@@ -508,6 +511,14 @@ function answer() {
       const cap = ALL ? Infinity : BUDGET_LINES - 4;
       for (const mline of i.members.slice(0, cap)) say(`  ${mline}`);
       if (i.members.length > cap) say(`  …and ${i.members.length - cap} more — declare-help ${i.name} --all`);
+      // …and what it carries from what it extends: a wheel event's deltaX is a
+      // pointer event's, and an interface that listed only its own looked bare
+      const all = SPINE.types.shared.interfaces ?? [];
+      for (let b = all.find((x) => x.name === i.extends), seen = new Set(); b && !seen.has(b.name); seen.add(b.name), b = all.find((x) => x.name === b.extends)) {
+        say(`  from ${b.name}:`);
+        for (const mline of b.members.slice(0, cap)) say(`    ${mline}`);
+        if (b.members.length > cap) say(`    …and ${b.members.length - cap} more — declare-help ${b.name} --all`);
+      }
     }) ||
     sharedHit("shared-alias", "aliases", (a) => say(`${a.name} — a shared type alias: ${a.type}`)) ||
     sharedHit("shared-function", "functions", (f) => say(`${f.name} — a shared function, callable in ${HANDLER_ONLY.has(f.name) ? "a handler or a method (a { } value never waits)" : "any { } body"}: ${f.signature}`)) ||

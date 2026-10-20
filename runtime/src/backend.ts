@@ -210,6 +210,11 @@ export interface EditableSpec {
   multiline: boolean;
   /** Native spellcheck/red-squiggle underlines — off for a code field. */
   spellcheck: boolean;
+  /** What the field holds (TextInput.purpose, purpose.ts): the autofill name,
+   *  keyboard and capitalization the platform is told. */
+  purpose: string;
+  /** What is typed is hidden, as a password is. */
+  concealed: boolean;
   /** Soft-wrap long lines (true) vs. keep them on one line and scroll
    *  horizontally (false) — a code field wants no-wrap + h-scroll. */
   wrap: boolean;
@@ -412,6 +417,14 @@ export interface Surface {
    *  backends without an AT story may omit them. */
   setRowCount?(n: number | null): void;
   setRowIndex?(i: number | null): void;
+  /** What the view is to assistive technology, as the web spells it — a role and
+   *  its aria-* states (semantics-dom.ts), or null for none. The DOM writes them
+   *  on the view's own element; a host with an accessibility API of its own
+   *  builds from the semantic tree instead and may omit this. */
+  setSemantics?(attrs: Readonly<Record<string, string>> | null): void;
+  /** The language an app's text is in (BCP 47), on its root surface: a page's
+   *  own when the app is the page, its root element's when it is embedded. */
+  setLanguage?(lang: string): void;
   /** Make this surface a HORIZONTAL scroll container (`on`): it clips its box and
    *  scrolls overflowing width, keeping over-wide content (a code block, a wide
    *  table) inside its box instead of spilling. Vertical overflow stays clipped.

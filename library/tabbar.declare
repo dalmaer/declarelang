@@ -1,0 +1,62 @@
+/*
+# TabBar
+
+A `Segmented` that is a row of tabs, switching what is shown below it — see `Segmented`
+§ Tabs. It looks and moves like a `Segmented` and takes the same `choices`, `value` and
+`input`; to a screen reader it is a tab list, each segment a tab. The keys are a `Segmented`'s: the
+arrows move among the tabs and Space or Enter picks one, so a pane changes only when asked.
+
+```declare
+App [ width = 360, height = 150, page: string = "general",
+    TabBar [ x = 20, y = 20, width = 240, value = { app.page },
+        choices = { [ ({ id: "general", label: "General" }),
+                     ({ id: "privacy", label: "Privacy" }) ] },
+        input(v: string) { app.page = v }
+        ],
+    View [ x = 20, y = 70, visible = { app.page == "general" },
+        accessibilityRole = tabPanel, accessibilityLabel = "General",
+        Checkbox [ label = "Open at login" ] ],
+    View [ x = 20, y = 70, visible = { app.page == "privacy" },
+        accessibilityRole = tabPanel, accessibilityLabel = "Privacy",
+        Text [ text = "Nothing is shared." ] ]
+    ]
+```
+
+## datapath
+Roots the control on its own rows of tabs, built from `choices`, so the tabs replicate in
+place of a `Segmented`'s radios.
+*/
+
+include [ "segmented.declare" ]
+
+class TabBar extends Segmented [
+    accessibilityRole = tabList,
+    tabRows: Dataset [ contents = { { tabs: ((classroot.choices ?? []) as any).map((c, i) => ({ ...c, i: i })) } } ],
+    datapath = { this.tabRows.value },
+    SegmentedTab [ datapath = :tabs[] ]
+    ]
+
+
+/*
+# SegmentedTab
+
+One tab of a `TabBar`: a `SegmentedItem` that is a tab to a screen reader. Built by a `TabBar` from its
+`choices` — never authored directly:
+
+```declare
+App [ width = 300, height = 80, view: string = "day",
+    TabBar [ x = 20, y = 20, width = 240, value = { app.view },
+        choices = { [ ({ id: "day", label: "Day" }), ({ id: "week", label: "Week" }) ] },
+        input(v: string) { app.view = v } ]
+    ]
+```
+
+## accessibilitySelected
+Follows `on`.
+*/
+
+class SegmentedTab extends SegmentedItem [
+    accessibilityRole = tab,
+    accessibilityChecked = null,
+    accessibilitySelected = { on }
+    ]

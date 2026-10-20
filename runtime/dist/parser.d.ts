@@ -1,6 +1,7 @@
 import { type Pos } from "./errors.js";
 import type { PathSeg } from "./path-plan.js";
 import type { AttrType } from "./value.js";
+import { type CompileFlags } from "./flags.js";
 /** A literal value as written — the parser classifies syntax, not type.
  *  `hex` preserves whether a number was written `0x…`: the Color type only
  *  admits the hex-written numeric form (language §6), so the written form is
@@ -360,19 +361,14 @@ export interface Ship {
  *  bring its own. */
 export declare function mergeShip(a: Ship | undefined, b: Ship | undefined): Ship | undefined;
 /** `defaultFlags [ … ]` — the program's defaults for the platform's flags (the
- *  registry in compiler/src/flags.ts): each is what the program gets when the
+ *  registry in flags.ts): each is what the program gets when the
  *  request, the `declarec` command or the outer program names no value of its
  *  own. `render` is the renderer a web host mounts it on, `kernel` the
  *  reactive kernel a build carries, `crawler` whether a build or a run page
  *  embeds the crawled document. A program running as an island takes the
  *  outer program's; the Mac host runs its own renderer and kernel. */
-export interface Flags {
-    render?: "dom" | "canvas";
-    kernel?: "wasm" | "js";
-    crawler?: boolean;
-}
-/** Each member's words — the registry's values a program may choose (`mac`
- *  is a host asking for the compiled program, never a program's default). */
+export type Flags = Partial<CompileFlags>;
+/** Each member's words — the registry's, as on every surface. */
 export declare const FLAG_WORDS: {
     readonly [K in keyof Flags]-?: readonly string[];
 };

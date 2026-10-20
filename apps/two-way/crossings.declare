@@ -64,7 +64,7 @@ App [ width = 960, height = 600, fill = #101820,
     swatch: View [ x = 24, y = 38, width = 26, height = 26, cornerRadius = 13,
         fill = { app.hueColor(app.masterHue, 0.62, 0.55) } ],
 
-    master: Slider [ x = 62, y = 38, width = 300, min = 0, max = 360, step = 1,
+    master: Slider [ x = 62, y = 38, width = 300, min = 0, max = 360, step = 1, accessibilityLabel = "Hue",
         value = { app.masterHue },
         input(v: number) { app.masterHue = v }
         ],

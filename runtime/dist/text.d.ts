@@ -18,6 +18,8 @@ export declare class Text extends View {
     textShadow: Shadow | null;
     /** A bounded-width run wraps (default) or stays a single line. */
     wrap: boolean;
+    /** Where a run with no width of its own wraps; it then takes its widest line. 0 = one line. */
+    wrapWidth: number;
     /** Line clamp (schema.ts): the height derive and every renderer honour it. */
     maxLines: number;
     /** True when the clamp actually dropped something (schema.ts). Read-only. */
@@ -55,6 +57,14 @@ export declare class Text extends View {
      *  difference from that box above each line and half below, as the DOM's
      *  line-height does, and every renderer places glyphs by the same rule. */
     get baseline(): number;
+    /** The run's widest line: a hard line, or — with a `wrapWidth` and wrapping on —
+     *  a line as wrapped at that width. */
+    $widestLine(): number;
+    /** Whether the run wraps at its box: a width given it, or one taken from a `wrapWidth`. */
+    $bounded(): boolean;
+    /** True when the run sizes its own width: nothing set it, and what owns it, if
+     *  anything, is the run's own auto-size (a yielding rule, which a write replaces). */
+    get $ownWidth(): boolean;
     $attach(backend: RenderBackend, parentSurface: Surface | null): void;
     /** A Text's own content folds into `contentWidth`/`contentHeight` as its
      *  MEASURED glyph extent — the way an Image folds in its bitmap (view.ts

@@ -3,6 +3,7 @@ import { type FontWeight } from "./measure.js";
 import { type FamilyValue } from "./font-value.js";
 import { Editor } from "./editor.js";
 import { type Color, type Inset } from "./value.js";
+import { type Purpose } from "./purpose.js";
 export declare class TextInput extends Editor {
     textColor: Color;
     fontSize: number;
@@ -21,6 +22,10 @@ export declare class TextInput extends Editor {
     selectionStart: number;
     selectionEnd: number;
     spellcheck: boolean;
+    /** What the field holds — an email, a password, a card number (purpose.ts). */
+    purpose: Purpose;
+    /** What is typed is hidden; a password's purpose sets it. */
+    concealed: boolean;
     wrap: boolean;
     padding: Inset;
     initial: string;

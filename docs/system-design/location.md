@@ -452,7 +452,7 @@ orthogonal layer that was previously missing or hand-hacked:
 | layer | question it answers | owner |
 |---|---|---|
 | path — `apps/docs/docs.declare` | which program | the file system |
-| query — `?viewer=edit`, `?build`, `?render`, `?crawler` | what the host does with it | the host (requests × modifiers, requests.md) |
+| query — `?viewer=edit`, `?build`, `?render=canvas`, `?crawler=true` | what the host does with it | the host (requests × modifiers, requests.md) |
 | fragment — `#guide/04-tree` | where inside the running app | the app (`location`) |
 
 - Fragment, not path or query, for the live form: works identically under the

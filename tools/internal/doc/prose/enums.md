@@ -69,6 +69,22 @@ read only by `contain` (which letterboxes on one axis) and `cover` (which crops 
 one) — under a distorting stretch there is nothing left over to align, and the
 value is ignored.
 
+## AccessibilityLive
+
+How a change to a live view is announced. `off`: it is not. `polite`: at the next pause, without
+interrupting. `assertive`: at once, interrupting what is being read — for what cannot wait.
+
+
+## AccessibilitySort
+Which way the column a `columnHeader` heads is sorted, as a screen reader says it with the
+header's name: `none` (not the sorted column), `ascending` or `descending`.
+## AccessibilityRole
+
+What a view is to assistive technology — the closed vocabulary every platform's accessibility
+API shares, so a program is written for none of them in particular. Each word is a contract: it
+names the facts the role reads and the methods its actions call, and the compiler holds a class
+that declares it to them. `none` is transparent — the view is read as part of its parent.
+
 ## FocusScope
 
 What Tab does at a view's edge. `none`: its stops are its parent's. `stop`: it is one Tab stop
@@ -128,6 +144,13 @@ The **advance** of the digits, which is a different question from their shape.
 counter does not jitter as it counts; `proportional` lets each digit take its
 natural width and reads better in prose. `normal` defers to the face, and faces
 disagree about which of the two that is.
+
+## Purpose
+
+What a text field holds — an email address, a password, a card number, a line of an
+address — said once on `TextInput.purpose`, so the platform can help: autofill and
+password managers recognise the field, a phone brings up the keyboard that suits it,
+and a password is hidden. `text`, the default, says nothing.
 
 ## Process
 

@@ -602,6 +602,10 @@ surface.**
 
 ## 8. Accessibility — projection from the model
 
+> **Superseded in part, 2026-10-18:** the full design is now [accessibility.md](accessibility.md).
+> It keeps the projection idea below but replaces the "registry over the component schemas" with
+> compiler-checked role contracts that any class, library or author, declares the same way.
+
 > **Status 2026-08-05: entirely unbuilt.** There is no `NSAccessibility` anywhere in
 > `mac-host/Sources`. Everything below is still design. It is the largest gap between
 > the host as built and the host as argued, and it is the one that decides whether the

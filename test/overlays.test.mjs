@@ -101,13 +101,13 @@ await test("one Esc closes the top overlay and reaches no Keys member of the pro
 
 const WINDOWS = `App [ width = 800, height = 500,
     note: Toast [ ],
-    a: Window [ x = 20, y = 20, width = 300, height = 240,
+    a: Window [ frame = false, x = 20, y = 20, width = 300, height = 240,
         dlg: Dialog [ title = "In A" ],
         menu: Menu [ items = { [ ({ id: "x", label: "Something" }) ] } ],
         local: Toast [ ],
         fa: View [ x = 10, y = 10, width = 120, height = 24, focusable = true ]
         ],
-    b: Window [ x = 400, y = 20, width = 300, height = 240,
+    b: Window [ frame = false, x = 400, y = 20, width = 300, height = 240,
         fb: View [ x = 10, y = 10, width = 120, height = 24, focusable = true ]
         ]
     ]`;
@@ -147,7 +147,7 @@ await test("an overlay's keyboard claim holds while focus is in its window, and 
 
 await test("a menu in a turned window opens at its anchor in the window's frame and stays on the App", async () => {
   const app = await boot(`App [ width = 600, height = 400,
-    w: Window [ x = 380, y = 40, width = 300, height = 200, rotation = 20,
+    w: Window [ frame = false, x = 380, y = 40, width = 300, height = 200, rotation = 20,
         menu: Menu [ items = { [ ({ id: "a", label: "A long first command" }), ({ id: "b", label: "B" }) ] } ],
         btn: Button [ x = 20, y = 20, label = "Open" ],
         far: Button [ x = 240, y = 150, label = "Edge" ]
@@ -184,9 +184,9 @@ App [ width = 200, height = 200, m: Moving [ ] ]`);
 // that window, and go when the program does.
 async function hosted() {
   const host = await boot(`App [ width = 800, height = 500,
-    w: Window [ x = 100, y = 50, width = 300, height = 200,
+    w: Window [ frame = false, x = 100, y = 50, width = 300, height = 200,
         isl: AppIsland [ width = 100%, height = 100% ] ],
-    other: Window [ x = 450, y = 50, width = 300, height = 200,
+    other: Window [ frame = false, x = 450, y = 50, width = 300, height = 200,
         f: View [ x = 10, y = 10, width = 50, height = 20, focusable = true ] ]
     ]`);
   const b = await compileProgram(`App [ width = 300, height = 200,
@@ -237,7 +237,7 @@ await test("a hosted program's open menu leaves the host's layer when the progra
 
 async function hostedIn(islandSrc) {
   const host = await boot(`App [ width = 800, height = 500,
-    w: Window [ x = 100, y = 50, width = 300, height = 200, ${islandSrc} ] ]`);
+    w: Window [ frame = false, x = 100, y = 50, width = 300, height = 200, ${islandSrc} ] ]`);
   const b = await compileProgram(`App [ width = 300, height = 200,
     btn: Button [ x = 20, y = 20, label = "Sort" ],
     menu: Menu [ items = { [ ({ id: "a", label: "A" }) ] } ]
@@ -276,7 +276,7 @@ await test("containOverlays keeps a hosted program's menu inside its own program
 
 await test("a hosted program's dialog in its window keeps Tab inside it; Esc gives focus back in the program", async () => {
   const host = await boot(`App [ width = 800, height = 500,
-    w: Window [ x = 100, y = 50, width = 400, height = 300,
+    w: Window [ frame = false, x = 100, y = 50, width = 400, height = 300,
         isl: AppIsland [ width = 100%, height = 100% ] ],
     after: View [ x = 600, y = 400, width = 40, height = 20, focusable = true ] ]`);
   const b = await compileProgram(`App [ width = 400, height = 300,
@@ -368,15 +368,16 @@ await test("an open menu keeps the arrows from the control it was opened from", 
   Focus.focus(s0); settle();
   app.m.openFor(s0); settle(); await turns();
   press("ArrowRight");
-  same(Focus.getFocus(), s0, "the segment under the open menu did not rove");
+  same(Focus.getFocus(), app.m, "the open menu holds the focus, naming its rows");
+  assert.equal(app.sel, "a", "the segment under the open menu did not rove");
   app.m.close(); settle();
 });
 
 await test("a sheet modal to one window stays open, and lets by, a press in another window", async () => {
   const app = await boot(`App [ width = 800, height = 500,
-    a: Window [ x = 20, y = 20, width = 300, height = 240,
+    a: Window [ frame = false, x = 20, y = 20, width = 300, height = 240,
         sh: Sheet [ Text [ text = "in A" ] ] ],
-    b: Window [ x = 400, y = 20, width = 300, height = 240,
+    b: Window [ frame = false, x = 400, y = 20, width = 300, height = 240,
         fb: View [ x = 10, y = 10, width = 120, height = 24, focusable = true ] ] ]`);
   app.a.sh.show(); settle(); await turns();
   assert.equal(pressOutside(app, 420, 230), false, "a press in window B goes on");
@@ -446,7 +447,7 @@ await test("typing letters in an open menu moves its highlight: a prefix, then t
   app.m.typedAt = 0;
   press("p"); press("r");
   assert.equal(at(), "Print", "a typed prefix");
-  same(Focus.getFocus(), app.b, "focus stayed on the opener; only the highlight moved");
+  same(Focus.getFocus(), app.m, "the menu holds the focus; its highlight moved");
   assert.equal(app.m.shown, true, "nothing was picked");
   app.m.close(); settle();
 });

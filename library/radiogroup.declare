@@ -48,6 +48,7 @@ The group's radios, for the Tab entry. A handler-only walk.
 include [ "control.declare" ]
 
 class RadioGroup [
+    accessibilityRole = radioGroup,
     value: string = "",
 
     input(v: string) { value = v },
@@ -124,6 +125,9 @@ or 0.45 when the theme states none.
 
 ## height
 Tall enough for the dot and a 2px margin either side: the theme's `radioSize` (18 by default) plus 4.
+
+## accessibilityChecked
+Follows `on`: whether this choice is the group's `value`.
 */
 
 class Radio extends Control [ height = { this.dot.width + 4 },
@@ -134,6 +138,8 @@ class Radio extends Control [ height = { this.dot.width + 4 },
     focusShape() { return ({ x: this.dot.x, y: this.dot.y, w: this.dot.width, h: this.dot.height, rad: this.dot.width / 2 }) },
     choice: string = "",
     label:  string = "",
+    accessibilityRole = radio,
+    accessibilityChecked = { on },
 
     // a radio's parent is its group (the direct-child discipline above); the
     // cast informs the typecheck and is stripped for the runtime

@@ -1,0 +1,16 @@
+App [ width = 360, height = 150,
+    page: string = "general",
+    TabBar [ x = 20, y = 20, width = 240, value = { app.page },
+        choices = { [ ({ id: "general", label: "General" }),
+                     ({ id: "privacy", label: "Privacy" }) ] },
+        input(v: string) { app.page = v }
+        ],
+    View [ x = 20, y = 70, visible = { app.page == "general" },
+        accessibilityRole = tabPanel, accessibilityLabel = "General",
+        Checkbox [ label = "Open at login" ]
+        ],
+    View [ x = 20, y = 70, visible = { app.page == "privacy" },
+        accessibilityRole = tabPanel, accessibilityLabel = "Privacy",
+        Text [ text = "Nothing is shared." ]
+        ]
+    ]

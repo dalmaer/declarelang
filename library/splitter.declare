@@ -1,0 +1,253 @@
+/*
+# Splitter
+
+The divider between two panes — a mail list and the message beside it, a sidebar and the
+page — that a person drags to give one pane more room. **It is only the divider**: you
+arrange the panes yourself, and the pane before it reads `value` for its size. Drag it,
+or Tab to it and use the arrow keys; it keeps `value` inside `min`…`max` either way.
+
+```declare
+App [ width = 600, height = 300, fill = { provided("theme").surface },
+    row: View [ width = 100%, height = 100%,
+        layout: SimpleLayout [ axis = x ],
+        side: View [ width = { app.row.split.value }, height = 100%, fill = { provided("theme").background },
+            Text [ x = 16, y = 16, text = "Mailboxes" ] ],
+        split: Splitter [ value = 200, min = 120, max = 400, accessibilityLabel = "Sidebar width" ],
+        main: View [ width = { app.row.width - app.row.side.width - app.row.split.width }, height = 100%,
+            Text [ x = 16, y = 16, text = "Message" ] ]
+        ]
+    ]
+```
+
+At rest it is a hairline in the theme's `line`; under the pointer, while dragged and while
+focused from the keyboard it becomes a 2 px line in `accent`. Its own footprint along the
+axis is the slim strip a pointer can catch (`thickness`), with the line centred in it.
+
+The same value pattern as every control: standalone it owns `value`, as above; constrained
+to your own state it needs `input` with it —
+`Splitter [ value = { app.sideW }, input(v: number) { app.sideW = v } ]`.
+
+## value
+The size of the pane before the divider, in pixels. Standalone the splitter owns it;
+constrained (`value = { app.sideW }`) it needs an `input` override with it, or the drag's
+own delivery is refused against the constraint.
+
+## min
+The smallest `value` a drag or a key can deliver.
+
+## max
+The largest `value` a drag or a key can deliver.
+
+## step
+How far one arrow key moves the divider, in pixels. 10 by default.
+
+## axis
+Which way the divider moves: `x` (the default) is an upright divider between panes side by
+side, moved left and right; `y` lies across between panes one above the other, moved up and
+down. A bare token, as on `Divider`.
+
+## thickness
+The strip along `axis` that catches the pointer — 8 px by default. The line drawn inside
+it is 1 px at rest and 2 px when active, so a wider strip makes it easier to catch without
+making it heavier.
+
+## input()
+**Where the value goes**, continuously through a drag and once per key. Override it to
+redirect the value (`input(v: number) { app.sideW = v }`); the default writes `value`.
+
+## setTo()
+Clamps a value into `min`…`max`, rounds it to a whole pixel, and delivers it through `input`
+when it differs from `value`. Every change the splitter makes routes through it.
+
+## toggle()
+Collapses the pane before the divider to `min`, remembering where it stood; called again
+from there, it restores that size. What Enter runs.
+
+## home
+The value the splitter had when it was built — what a double-click puts back.
+
+## saved
+Where `toggle()` restores to: the value the pane had when it was collapsed.
+
+## active
+Hovered, dragged, or focused from the keyboard — the state the accent line shows.
+
+## dragging
+True from pointer-down until the captured release. `pressed` will not do here: it goes
+false when the pointer leaves the strip, and a drag must survive exactly that.
+
+## p0
+**Internal.** The root-space pointer position along `axis` at the start of a drag.
+
+## v0
+**Internal.** The value at the start of a drag, which the pointer's movement is added to.
+
+## onInit
+Records `home`. An override must call `super.onInit()`, or a double-click has nothing to
+restore.
+
+## onPointerDown
+Claims focus, as every control does, and starts the drag.
+
+## onPointerMove
+Moves the divider by the pointer's **root-space** movement since the press, so it keeps up
+with a pointer that has left the strip.
+
+## onPointerUp
+Ends the drag. A drag the browser takes back (`e.canceled`, a touch that became a scroll)
+puts the value back where it started.
+
+## onClick
+Does nothing: a press on the divider that does not move is not a command.
+
+## onDblClick
+Restores `home`, the size the pane was built with.
+
+## onKeyDown
+The window-splitter keys: Left and Right (Up and Down on `axis = y`) move by `step` through
+`accessibilityDecrement()` and `accessibilityIncrement()`; Home and End go to `min` and
+`max`; Enter runs `toggle()`.
+
+## accessibilityIncrement()
+One `step` larger for the pane before the divider — what Right (or Down) runs, and what a
+screen reader's increment calls.
+
+## accessibilityDecrement()
+One `step` smaller — what Left (or Up) runs.
+
+## focusShape()
+Hugs the 2 px line itself, stopping short of the ends so the ring stays inside the panes'
+edges: on a focused divider the ring reads as a halo around the accent line.
+
+## accessibilityRole
+`separator`: a focusable one, with a value and a range.
+
+## accessibilityLabel
+Empty: a divider shows no words, so **the use site names it** for what it sizes — "Sidebar
+width".
+
+## accessibilityValue
+Follows `value`, in pixels.
+
+## accessibilityMin
+Follows `min`.
+
+## accessibilityMax
+Follows `max`.
+
+## width
+`thickness` on an upright divider; the parent's width when it lies across.
+
+## height
+The parent's height on an upright divider; `thickness` when it lies across.
+
+## span()
+The length the divider runs across its axis: the parent's content height on an upright
+divider, its content width on one that lies across.
+
+## cursor
+`col-resize` on an upright divider, `row-resize` on one that lies across.
+
+## opacity
+Disabled dims the divider to the theme's `disabledOpacity`.
+*/
+
+include [ "control.declare" ]
+
+class Splitter extends Control [
+    accessibilityRole = separator,
+    accessibilityLabel = "",
+    accessibilityValue = { value },
+    accessibilityMin = { min },
+    accessibilityMax = { max },
+
+    value: number = 0,
+    min: number = 0,
+    max: number = 10000,
+    step: number = 10,
+    axis: Axis = x,
+    thickness: number = 8,
+
+    input(v: number) { value = v },
+    setTo(v: number) {
+        const n = Math.round(Math.max(min, Math.min(max, v)))
+        if (n != value) input(n)
+        },
+
+    // where a double-click returns to, and where Enter restores a collapsed pane to
+
+    home: number = 0,
+    saved: number = 0,
+    onInit() { home = value },
+
+    toggle() {
+        if (value > min) { saved = value; setTo(min) }
+        else setTo(saved > min ? saved : home)
+        },
+
+    accessibilityIncrement() { if (!disabled) setTo(value + step) },
+    accessibilityDecrement() { if (!disabled) setTo(value - step) },
+
+    // the drag, by root-space movement along the axis
+
+    dragging: boolean = false,
+    p0: number = 0,
+    v0: number = 0,
+
+    onPointerDown(e: PointerEvent) {
+        if (disabled) return
+        focusVisible = false
+        Focus.focus(this)
+        dragging = true
+        v0 = value
+        p0 = axis == "x" ? e.rootX : e.rootY
+        },
+    onPointerMove(e: PointerEvent) { if (dragging) setTo(v0 + (axis == "x" ? e.rootX : e.rootY) - p0) },
+    onPointerUp(e: PointerUpEvent) {
+        dragging = false
+        if (e.canceled) setTo(v0)
+        },
+    onClick() { },
+    onDblClick() { if (!disabled) setTo(home) },
+
+    onKeyDown(e: KeyEvent) {
+        if (disabled) return
+        const less = axis == "x" ? "ArrowLeft" : "ArrowUp"
+        const more = axis == "x" ? "ArrowRight" : "ArrowDown"
+        if (e.key == less) accessibilityDecrement()
+        else if (e.key == more) accessibilityIncrement()
+        else if (e.key == "Home") setTo(min)
+        else if (e.key == "End") setTo(max)
+        else if (e.key == "Enter" && !e.repeat) toggle()
+        else if (e.key != " ") super.onKeyDown(e)
+        },
+
+    span() {
+        const p = this.parent as any
+        if (p == null) return 0
+        return p.contentBox(this.axis == "x" ? "height" : "width")
+        },
+    width = { axis == "x" ? thickness : span() },
+    height = { axis == "x" ? span() : thickness },
+    cursor = { disabled ? "" : axis == "x" ? "col-resize" : "row-resize" },
+    opacity = { disabled ? provided("theme").disabledOpacity : 1 },
+
+    active: boolean = { !disabled && (hovered || dragging || focusVisible) },
+
+    // the ring hugs the strip the line sits in
+
+    focusShape() {
+        const across = this.axis == "x" ? this.width : this.height
+        const along = this.axis == "x" ? this.height : this.width
+        const a = (across - 2) / 2
+        const b = Math.min(6, along / 4)
+        return this.axis == "x" ? ({ x: a, y: b, w: 2, h: along - 2 * b, rad: 1 })
+                                : ({ x: b, y: a, w: along - 2 * b, h: 2, rad: 1 })
+        },
+
+    line: View [ x = center, y = center, pointerEvents = "none",
+        width = { classroot.axis == "x" ? (classroot.active ? 2 : 1) : parent.width },
+        height = { classroot.axis == "x" ? parent.height : (classroot.active ? 2 : 1) },
+        cornerRadius = { classroot.active ? 1 : 0 },
+        fill = { classroot.active ? provided("theme").accent : provided("theme").line } ]
+    ]

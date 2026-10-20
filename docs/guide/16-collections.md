@@ -74,6 +74,24 @@ Reach for `key` only when the convention does not fit:
 View [ datapath = :people[], key = :email ]
 ```
 
+Or when a record's `id` changes while it is on screen: a message sent before the server
+has named it. Key it on what does not change: the record gets a `ref` of the client's own
+when it is made, the list says `key = :ref`, and the server's `id` can arrive later without
+the row being rebuilt.
+
+**A small fixed set is replicated too.** Four filters across a row, five stars, a handful of
+sizes: a literal `Dataset` holds them, and one class shows each, which is shorter than writing
+the same control out with a different constant each time, and stays one change to edit. A set
+where one is chosen is also a one-stop group (`focusScope = stop`, [Controls](declare-docs:guide:controls)):
+one Tab stop, the arrows moving within it.
+
+```declare-fragment
+sizes: Dataset { { "rows": [ { "id": "s", "label": "S" }, { "id": "m", "label": "M" }, { "id": "l", "label": "L" } ] } },
+row: View [ datapath = { app.sizes.value }, focusScope = stop,
+    layout: SimpleLayout [ axis = x, spacing = 8 ],
+    SizeChip [ datapath = :rows[], label = :label ] ]
+```
+
 ## Row position: rowIndex
 
 An instance reads its record's index in the array through **`rowIndex`**: 0 for the
@@ -237,6 +255,13 @@ scroll box, live scroll position, every instance's geometry, layout itself, focu
 the reactive graph. A React virtualizer must ask the developer for all of that, which
 is why its ergonomics are what they are. The burden is structural to the ownership
 boundary, not to the problem.
+
+**Which records are in view is a fact of the list.** [`firstVisibleRow`](declare-docs:View.firstVisibleRow) and
+[`lastVisibleRow`](declare-docs:View.lastVisibleRow) on the view that holds the rows are the logical indices of the first
+and last records any part of which is on screen, kept as the list scrolls — a chat's date chip
+is `{ app.d.value.rows[app.list.firstVisibleRow]?.day }`. Ask the list, never the rows: a
+virtualized list reuses a row for another record as you scroll, and the row, which stays where
+it was, has nothing of its own that changed to tell you.
 
 **The window is legible, not hidden.** [`childViews`](declare-docs:View.childViews) on a virtualized block answers with
 the instances that exist — a subset, changing as you scroll — and [`virtualized`](declare-docs:View.virtualized) tells you

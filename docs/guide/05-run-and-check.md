@@ -39,6 +39,7 @@ The same address answers a few requests, each a query on the URL:
 |---|---|
 | `?viewer=edit` | a live editor beside the running program |
 | `?viewer=reader` | the source as a highlighted, readable document |
+| `?viewer=sizes` | what the program's production build weighs: every file and runtime module, and what brought each aboard |
 | `?render=canvas` | the program drawn to a single canvas instead of DOM elements ([Renderers and hosts](declare-docs:guide:renderers)) |
 | `?inspector` | the Inspector, open over the running program (also **⌥⌘D**) |
 | `?extract` | the HTML a crawler reads ([Packaging for production](declare-docs:guide:packaging)) |

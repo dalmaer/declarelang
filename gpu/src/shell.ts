@@ -1,4 +1,5 @@
 import { shellMedia } from "./shell-media.js";
+import { applyPurpose } from "../../runtime/dist/purpose.js";
 // shell — the page's side of render=gpu.
 //
 // The ordinary boot resolves the program (an artifact, a cached compile, or the dev
@@ -20,6 +21,7 @@ type Msg = Record<string, unknown> & { t: string };
 
 interface EditSpec {
   multiline: boolean; spellcheck: boolean; wrap: boolean; padding: number[]; value: string; placeholder: string;
+  purpose: string; concealed: boolean;
   style: { family: unknown; size: number; weight: string | number; italic: boolean; color: string | null; align: string; letterSpacing: number };
   families?: string;
 }
@@ -301,7 +303,7 @@ export async function bootGpu(cfg: { program: unknown; main: string; host?: HTML
       color: st.color ?? "inherit", textAlign: st.align, letterSpacing: `${st.letterSpacing}px`,
       whiteSpace: s.multiline && s.wrap ? "pre-wrap" : "pre", overflow: "hidden",
     });
-    el.spellcheck = s.spellcheck;
+    applyPurpose(el, s.purpose, s.concealed, s.spellcheck);
     el.placeholder = s.placeholder;
     if (el.value !== s.value) el.value = s.value;
   };

@@ -74,6 +74,14 @@ device is this?" read `touchDevice`, which is a standing answer.
 a custom cursor to the native I-beam by gating on `!app.pointerOverText`, so text stays
 comfortably selectable.
 
+## accessibilitySettings
+**Read-only.** The person's accessibility preferences, kept live: `reduceMotion`
+(`prefers-reduced-motion`), `increaseContrast` (`prefers-contrast: more`),
+`reduceTransparency` (`prefers-reduced-transparency`), and `textScale` (1 until a host
+supplies one). Read it anywhere as `provided("accessibilitySettings")`: a program whose
+motion should stand still for someone who asks reads `.reduceMotion` where it moves things.
+The motion system does not act on it by itself.
+
 ## dark
 **Read-only.** The OS color-scheme flag — `true` under `prefers-color-scheme: dark`, kept
 live as the system theme flips. Theme off it: `theme = { app.dark ? darkTokens() : lightTokens() }`.
@@ -329,6 +337,13 @@ name the `exposes` list does not carry.
 ## watchExposed()
 A standing watch over an exposed value, for page script: `app.watchExposed(name, cb)` calls
 `cb(value)` now, then at the close of each settle that changed it; returns the unwatch.
+
+## language
+The language the program's text is in, as a BCP 47 tag — `"en"` (the default), `"fr"`,
+`"pt-BR"`. A screen reader picks its voice by it; a browser's translator and a crawler read it.
+A program that is its page puts it on the page; an embedded program, on its own box, so a
+French program inside an English page is read in French. Bind it when the program switches
+language.
 
 ## appName
 What this app calls itself — the host reflects it into the window or document title. An

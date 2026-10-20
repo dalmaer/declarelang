@@ -1,0 +1,13 @@
+// TextSmallIcon, at chrome sizes
+// The letter A at one of a text-size control's three sizes, at 16, 24 and 32, then tinted: `iconSize`
+// scales the 16-box, `ink` colors it, and the letter stands on the same baseline at every size.
+
+App [ textColor = 0x172530,
+    row: View [ x = 20, y = 20, height = 40, width = { this.contentWidth },
+        layout: SimpleLayout [ axis = x, spacing = 24, align = center ],
+        TextSmallIcon [ iconSize = 16 ],
+        TextSmallIcon [ iconSize = 24 ],
+        TextSmallIcon [ iconSize = 32 ],
+        TextSmallIcon [ iconSize = 32, ink = 0x2E6FE0 ]
+        ]
+    ]

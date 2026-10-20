@@ -79,6 +79,10 @@ schema Stop [ at: string, place: string ]
 
 
 class DeskWindow extends Window [ width = 560, height = 400,
+
+    // the Desktop's own frame: its traffic lights, title bar, halo and dock
+
+    frame = false,
     fill = { provided("theme").surface },
     stroke = { stroke(1, provided("theme").line) },
 
@@ -90,7 +94,7 @@ class DeskWindow extends Window [ width = 560, height = 400,
 
     shadow = { app.wm.frontWin == this ? shadow(0, 12, 26, this.inkHi) : shadow(0, 5, 14, this.inkLo) },
 
-    title: string = "",
+    title = "",
     active: boolean = { app.wm.frontWin == this },
 
     // named geometry — every derived position below reads these, so the
@@ -722,6 +726,7 @@ bar, and a pair of triangles split along the diagonal for zoom.
 
 class BarArrow extends Control [ width = 26, height = 23, cornerRadius = 6,
     glyph: string = "",
+    accessibilityLabel = { glyph == "‹" ? "Back" : "Forward" },
     fill = { hovered ? provided("theme").controlHovered : null },
     t: Text [ x = center, y = -3, fontSize = 22, wrap = false, text = { classroot.glyph },
         textColor = { classroot.disabled ? provided("theme").textMuted : provided("theme").text },
@@ -966,13 +971,13 @@ class ShortcutRow [ width = 100% ]
 class ShortcutLine extends ShortcutRow [ height = 24,
     Text [ y = center, fontSize = 13, text = { "" + :label },
         textColor = { :enabled == false ? provided("theme").textFaint : provided("theme").text } ],
-    Text [ x = end, y = center, fontSize = 13, text = { "" + :key }, textColor = { provided("theme").textFaint } ]
+    Text [ x = end, y = center, fontSize = 13, text = { "" + :key }, textColor = { provided("theme").textMuted } ]
     ]
 
 
 class ShortcutHead extends ShortcutRow [ height = 28,
     Text [ y = { parent.height - this.height - 3 }, fontSize = 11, fontWeight = semibold,
-        text = { "" + :text }, textColor = { provided("theme").textFaint } ]
+        text = { "" + :text }, textColor = { provided("theme").textMuted } ]
     ]
 
 
@@ -1009,7 +1014,7 @@ class AboutWindow extends DeskWindow [ width = 280, height = 380, plain = true,
             bl: Text [ fontSize = 11, wrap = true, width = 100%, textAlign = center,
                 textColor = { provided("theme").textMuted }, text = { classroot.forApp != null ? classroot.forApp.blurb : "" } ],
             gap2: View [ width = 4, height = 8 ],
-            cp: Text [ x = center, fontSize = 10, textColor = { provided("theme").textFaint },
+            cp: Text [ x = center, fontSize = 10, textColor = { provided("theme").textMuted },
                 text = "Built in Declare · MIT · © 2026 David Temkin" ]
             ]
         ]
@@ -1200,7 +1205,7 @@ class LeafColumn extends FilesColumn [
         layout: SimpleLayout [ axis = y, spacing = 11 ],
         dn: Text [ fontSize = 14, fontWeight = semibold, wrap = true, width = 100%,
             textColor = { provided("theme").text }, text = { "" + :leaf.name } ],
-        dk: Text [ fontSize = 11, wrap = false, textColor = { provided("theme").textFaint },
+        dk: Text [ fontSize = 11, wrap = false, textColor = { provided("theme").textMuted },
             text = { "" + :leaf.label } ],
         dp: Text [ fontSize = 12, wrap = true, width = 100%,
             textColor = { provided("theme").text }, text = { "" + :leaf.preview } ],
@@ -1548,9 +1553,9 @@ class ViewerWindow extends DeskWindow [ width = 640, height = 460,
 
         padding = [40, 48, 40, 48],
 
-        loading: Text [ fontSize = 13, textColor = { provided("theme").textFaint },
+        loading: Text [ fontSize = 13, textColor = { provided("theme").textMuted },
             visible = { classroot.inlineDoc == "" && classroot.src.loading }, text = "Loading…" ],
-        failed: Text [ fontSize = 13, textColor = { provided("theme").textFaint }, wrap = true, width = 100%,
+        failed: Text [ fontSize = 13, textColor = { provided("theme").textMuted }, wrap = true, width = 100%,
             visible = { classroot.inlineDoc == "" && classroot.src.failed },
             text = { "Could not load — " + (classroot.src.error || "") } ],
         doc: Markdown [ width = 100%,

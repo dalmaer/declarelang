@@ -139,9 +139,14 @@ The dismiss mark: a window close box, a chip's remove affordance, a dialog's cor
 
 ## draw()
 Renders the cross.
+
+## accessibilityLabel
+"Close": a control that shows only this mark is the Close button to a screen reader. A
+control with words of its own is named by them.
 */
 
 class CloseIcon extends Icon [
+    accessibilityLabel = "Close",
     draw(d: Draw) {
         d.scale(unit, unit)
         d.strokeStyle = ink
@@ -162,9 +167,14 @@ Add. Pairs with `MinusIcon` at the same stroke and cap, so a stepper's two ends 
 
 ## draw()
 Renders the plus.
+
+## accessibilityLabel
+"Add": a control that shows only this mark is named Add. A control with words of its own is
+named by them.
 */
 
 class PlusIcon extends Icon [
+    accessibilityLabel = "Add",
     draw(d: Draw) {
         d.scale(unit, unit)
         d.strokeStyle = ink

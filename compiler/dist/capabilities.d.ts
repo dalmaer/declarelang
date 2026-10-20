@@ -80,10 +80,11 @@ export interface Capability {
      *  whole, its module ships as itself with this export's object literal cut to
      *  the entries the program names (subsetModule), instead of a stand-in — and
      *  whatever only the cut entries referenced is left for the bundler to drop.
-     *  `keys` says which names: `classes`, what it constructs, closed over bases. */
+     *  `keys` says which names: `classes`, what it constructs, closed over bases;
+     *  `mentions`, the names its bodies say. */
     subset?: {
         export: string;
-        keys: "classes";
+        keys: "classes" | "mentions";
     };
 }
 export declare const CAPABILITIES: readonly Capability[];

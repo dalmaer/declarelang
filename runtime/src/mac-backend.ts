@@ -32,6 +32,7 @@ import { colorToCss, insetSides, isGradient, radiusFit, strokeUniform, type BoxS
 import { routeInput, type HitTarget } from "./input.js";
 import { hitWalk, wheelWalk, traceWalk, contentExtentOf, insideRoundedBox, cursorAt, type SceneSurface } from "./scene-walk.js";
 import { strokeSides } from "./stroke-sides.js";
+import { hintsOf } from "./purpose.js";
 
 
 /** The root-space point of the wheel being walked (set at the wheel entry,
@@ -1106,7 +1107,8 @@ class MacSurface implements Surface, SceneSurface {
     if (spec === null) { editCallbacks.delete(this.id); emit(OP.EDIT, this.id, null); return; }
     editCallbacks.set(this.id, spec);
     emit(OP.EDIT, this.id, {
-      multiline: spec.multiline === true, spellcheck: spec.spellcheck !== false,
+      multiline: spec.multiline === true, spellcheck: spec.spellcheck !== false && hintsOf(spec.purpose).prose,
+      purpose: spec.purpose ?? "text", concealed: spec.concealed === true,
       enterSubmits: spec.enterSubmits === true,
       wrap: spec.wrap !== false, padding: insetSides(spec.padding ?? 0),
       value: spec.value ?? "", placeholder: spec.placeholder ?? "",

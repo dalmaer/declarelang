@@ -1,4 +1,5 @@
 import { View } from "./view.js";
+import { Cell } from "./reactive.js";
 import type { Dataset } from "./data.js";
 import { type Match, type Materialize, type MaterializationDiag } from "./replicate.js";
 /** What a windowed block needs from its Replicator. */
@@ -66,6 +67,16 @@ export declare class Windowing {
     /** The rows in view at the last match. */
     private inViewFrom;
     private inViewTo;
+    /** Wakes the readers of the in-view range (View.firstVisibleRow / lastVisibleRow)
+     *  when a pass moves it. */
+    readonly inViewCell: Cell;
+    /** The records any part of which is in the viewport, as logical indices — the
+     *  range each pass computes to decide what to build. Tracked. */
+    inView(): {
+        first: number;
+        last: number;
+    };
+    private inViewEdge;
     /** Rows from this index on lie past a held thumb's frozen range, which
      *  ends at `reach` in ledger coordinates (Infinity when no thumb is held). */
     private limit;

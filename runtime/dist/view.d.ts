@@ -1,4 +1,7 @@
 import { Node } from "./node.js";
+export declare function provideBuiltProbe(p: (v: View) => boolean): void;
+export declare function provideAnnotator(a: (v: View) => void): void;
+export declare const ROLE_LOCK: (v: View) => void;
 import { type Backdrop, type BoxStroke, type Fill, type FilterValue, type Inset, type Mask, type Radius, type Shadow } from "./value.js";
 import { type RenderBackend, type Surface } from "./backend.js";
 type ViewCreator = (root: View, tag: string, parent: View, props?: Record<string, unknown>) => View;
@@ -65,6 +68,10 @@ export declare function isWindowedBlock(v: View): boolean;
 /** The tracked read behind `View.virtualized`. */
 export declare function readVirtualized(v: View): boolean;
 export declare function markWindowedBlock(v: View, on: boolean): void;
+export declare function provideVisibleRows(fn: (v: View) => {
+    first: number;
+    last: number;
+}): void;
 /** The tracked read behind `View.rowIndex`. */
 export declare function readRowIndex(v: View): number;
 export declare function setRowIndex(v: View, index: number): void;
@@ -304,6 +311,32 @@ export declare class View extends Node {
      *  Traversal order is the tree, overridable per view by a `tabOrder()` method. */
     focusable: boolean;
     focusScope: string;
+    /** Accessibility (accessibility.md §3): the role, a contract checked by name
+     *  and type (a11y-roles.ts), and the facts roles read — every one unset (null,
+     *  or "") until a class binds it, and stored nowhere until then. */
+    accessibilityRole: string;
+    accessibilityLabel: string;
+    accessibilityHint: string;
+    accessibilityLive: string;
+    accessibilityValue: number | null;
+    accessibilityMin: number | null;
+    accessibilityMax: number | null;
+    accessibilityStep: number | null;
+    accessibilityValueText: string;
+    accessibilityChecked: boolean | null;
+    accessibilityPressed: boolean | null;
+    accessibilitySelected: boolean | null;
+    /** The item inside this composite the keyboard is on, while focus stays on the
+     *  composite (a menu's highlighted row, a list's active row, a field's suggestion). */
+    accessibilityActiveItem: View | null;
+    /** Which way the column this header heads is sorted: "none", "ascending" or "descending". */
+    accessibilitySort: "none" | "ascending" | "descending";
+    /** Whether more than one of this list's, grid's or tree's items can be selected at once. */
+    accessibilityMultiselectable: boolean;
+    accessibilityLevel: number | null;
+    accessibilityExpanded: boolean | null;
+    accessibilityPosInSet: number | null;
+    accessibilitySetSize: number | null;
     anchor: string;
     /** The linking triple (location.md §0): `link` — this view IS a link to the
      *  reference ("" = not a link); `replace` — following it overwrites the
@@ -541,6 +574,11 @@ export declare class View extends Node {
      *  view no replication made. A fact: read-only, and a constraint reading it
      *  re-runs when the row's place changes. */
     get rowIndex(): number;
+    /** The first and last records of this view's replication any part of which is
+     *  in view — the date chip over a chat, "rows 40–58 of 30,500" — as logical
+     *  indices, -1 when none is; windowed or not, recycled rows or not. */
+    get firstVisibleRow(): number;
+    get lastVisibleRow(): number;
     /** Pointer-interaction intrinsics (interaction.ts): `hovered` is true while
      *  this view is on the live hit chain — the topmost visible view under the
      *  pointer and its ancestors, occlusion-correct, false on touch; `pressed`
@@ -619,6 +657,13 @@ export declare class View extends Node {
      *  its native element without occupying the author's event slot. No-op on a
      *  plain view. */
     $focusChanged(_focused: boolean): void;
+    /** What this view is to assistive technology when it declares no role: a
+     *  runtime leaf says (a run of text, a field, a picture, a document) — the
+     *  semantic tree asks rather than importing the classes, so a build that
+     *  leaves one out never carries it for the tree's sake. Absent on other
+     *  views, and everywhere in a build without the layer (each leaf installs
+     *  its own under the build flag). */
+    $leafRole?: () => "text" | "textField" | "image" | "document";
     /** The OPTICAL band the `center` position literal centers — { lead, size }
      *  along the given axis, in this view's own coordinates. The base answer is
      *  the whole box (lead 0); Text overrides the y axis with its ink band (cap
@@ -879,14 +924,23 @@ export declare function withCursorDefining<T>(view: Node, fn: () => T): T;
 export declare function inheritedCursor(node: Node | null): Cursor | null;
 export declare function setFocusDiscardHook(fn: (view: View) => void): void;
 export declare function setKeyDefaultHook(fn: (view: View, e: unknown) => void): void;
-export declare function noteFocused(now: View | null): void;
+export declare function noteFocused(now: View | null, byKeyboard?: boolean): void;
 /** A node's address for an error message: its authored-name path up the tree
  *  (`app.pulse.card`), or its class when anonymous. Cheap, and built only once
  *  a handler has already thrown. */
 export declare function nodeLabel(n: Node): string;
 export declare function fireEvent(view: Node, event: string, ...args: unknown[]): void;
 export declare function viewLayoutReady(): boolean;
+/** The person's accessibility preferences, as the host reports them. */
+export interface AccessibilitySettings {
+    readonly reduceMotion: boolean;
+    readonly increaseContrast: boolean;
+    readonly reduceTransparency: boolean;
+    readonly textScale: number;
+}
 export declare class App extends View {
+    /** The app's language travels with its root surface from the start. */
+    protected $flush(s: Surface): void;
     /** onReady — the boot transaction's close, DELIVERED (schema.ts App
      *  events): boot is the one settle with no app handler anywhere in it, so
      *  its close cannot be asked for inline (afterSettle) and must arrive as an
@@ -926,6 +980,10 @@ export declare class App extends View {
      *  the runtime. Theme an app off it: `fill = { app.dark ? 0x0B141B : 0xFFFFFF }`
      *  or drive a `theme` record from it. Read-only to user code. */
     dark: boolean;
+    /** The person's accessibility preferences, fed live by the host: `reduceMotion`,
+     *  `increaseContrast`, `reduceTransparency`, and `textScale` (1 until a host
+     *  supplies it). Read anywhere as `provided("accessibilitySettings")`. */
+    accessibilitySettings: AccessibilitySettings;
     /** Is the page this app lives on visible? The browser's Page Visibility fact
      *  (boot.ts wireVisibility feeds it; the native host feeds the same slot from
      *  its occlusion signal). Ambient motion gates itself on it —
@@ -1211,6 +1269,7 @@ export declare class App extends View {
      *  <title> (the extractor reads the settled value). Author-settable, literal
      *  or constraint; "" (the default) leaves the host's served title alone. */
     appName: string;
+    language: string;
     /** The App's auto-extent is the HOST, not its content: an unset width/height
      *  follows hostWidth/hostHeight (reactive on resize), so the root app fills its
      *  enclosing area with no declaration — the near-universal case. An explicit

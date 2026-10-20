@@ -1,0 +1,195 @@
+/*
+# Toolbar
+
+A row of commands that is one Tab stop — a text editor's Bold, Italic and Underline, a
+drawing app's tools. Tab lands on its first command (or the one last used), the arrows move
+along the row, Home and End go to its ends, and the next Tab leaves it, so a long row of
+commands costs one stop. It sits on the same rounded track a `Segmented` does, its
+`ToolButton`s quiet until hovered:
+
+```declare
+use [ PlusIcon, MinusIcon ]
+
+App [ width = 360, height = 100, bold: boolean = false, italic: boolean = false,
+    Toolbar [ x = 20, y = 20, accessibilityLabel = "Formatting",
+        ToolButton [ label = "B", toggle = true, on = { app.bold }, input(v: boolean) { app.bold = v },
+            accessibilityLabel = "Bold" ],
+        ToolButton [ label = "I", toggle = true, on = { app.italic }, input(v: boolean) { app.italic = v },
+            accessibilityLabel = "Italic" ],
+        ToolbarDivider [ ],
+        ToolButton [ icon = "PlusIcon", label = "Add" ],
+        ToolButton [ icon = "MinusIcon", label = "Remove" ]
+        ]
+    ]
+```
+
+Its children are yours: `ToolButton`s, a `ToolbarDivider` between groups, or any control —
+a `Segmented`, a `Stepper` — which the arrows reach like the rest. To a screen reader it is a
+toolbar, named at its use site.
+
+## accessibilityLabel
+The toolbar's name — what its commands are for ("Formatting"). Set it at the use site.
+
+## focusScope
+`stop`: the toolbar is one entry in the Tab order; the arrows move among its commands.
+
+## height
+The theme's `segmentedHeight`, as a `Segmented` is.
+
+## cornerRadius
+The theme's `segmentedCornerRadius`.
+
+## fill
+The track: the theme's `trackFill`, else `control`.
+
+## padding
+2 all round, so a command's hover sits inside the track as a segment's does.
+*/
+
+include [ "control.declare", "icons/icon.declare", "icons/core.declare" ]
+
+class Toolbar [
+    accessibilityRole = toolbar,
+    accessibilityLabel = "",
+    focusScope = stop,
+    height = { provided("theme").segmentedHeight },
+    cornerRadius = { provided("theme").segmentedCornerRadius },
+    fill = { provided("theme").trackFill ?? provided("theme").control },
+    padding = 2,
+    layout: SimpleLayout [ axis = x, spacing = 2, align = center ]
+    ]
+
+
+/*
+# ToolButton
+
+One command in a `Toolbar`: a label or an icon, quiet until hovered. A `toggle` holds a
+state — Bold on or off — and shows it with the raised pill a `Segmented` shows its choice
+with.
+
+```declare
+App [ width = 300, height = 80, wrap: boolean = true,
+    Toolbar [ x = 20, y = 20, accessibilityLabel = "View",
+        ToolButton [ label = "Wrap", toggle = true, on = { app.wrap }, input(v: boolean) { app.wrap = v } ],
+        ToolButton [ label = "Zoom in" ]
+        ]
+    ]
+```
+
+## label
+The command's text. With an `icon`, it is the button's name and tooltip instead of its text.
+
+## icon
+An icon's class name (`"PlusIcon"`), shown in place of the label. An icon named by a string
+is built by name, so the program keeps it with `use [ PlusIcon ]`.
+
+## toggle
+Whether the button holds a state, on or off. A toggle is a pressed or unpressed button to a
+screen reader.
+
+## on
+A toggle's state. Constrain it to your own state and override `input` to own the
+destination, or leave it alone and read it back.
+
+## input()
+**Where a toggle's change goes**, receiving the new `on`. The default writes `on`.
+
+## onClick
+What the command does — the handler you give it. A toggle's own flips `on`; a toggle's
+change is had through `input`, so give a toggle no `onClick`.
+
+## press()
+Runs `onClick`, so Space and Enter do what a click does.
+
+## accessibilityPressed
+A toggle's `on` — a toggle is a button that is pressed or not; a plain command reports none.
+
+## accessibilityLabel
+The `label`, when the button shows an icon.
+
+## tooltipLabel
+The `label`, when the button shows an icon.
+
+## width
+The label or icon and 10 either side, and never narrower than it is tall.
+
+## height
+As tall as the toolbar's inside.
+
+## cornerRadius
+2 inside the toolbar's.
+
+## fill
+The pill when a toggle is on (the theme's `segmentedSelectedFill`, else `surface`); the
+control states when hovered or pressed; else none.
+
+## stroke
+A hairline in the theme's `line` around a toggle that is on, as around a segment's pill.
+
+## opacity
+Disabled dims the button, to the theme's `disabledOpacity`.
+*/
+
+class ToolButton extends Control [
+    label: string = "",
+    icon: string = "",
+    toggle: boolean = false,
+    on: boolean = false,
+    input(v: boolean) { on = v },
+    onClick() { if (toggle) input(!on) },
+    press() { onClick() },
+
+    accessibilityRole = button,
+    accessibilityPressed = { toggle ? on : null },
+    accessibilityLabel = { icon != "" ? label : "" },
+    tooltipLabel = { icon != "" ? label : "" },
+
+    height = { (parent as View).height - 4 },
+    width = { Math.max(this.height, (icon != "" ? this.ico.width : this.t.width) + 20) },
+    cornerRadius = { Math.max(0, provided("theme").segmentedCornerRadius - 2) },
+    fill = { toggle && on ? (provided("theme").segmentedSelectedFill ?? provided("theme").surface)
+           : pressed ? provided("theme").controlPressed
+           : hovered ? provided("theme").controlHovered
+           : null },
+    stroke = { toggle && on ? stroke(1, provided("theme").line) : null },
+    opacity = { disabled ? provided("theme").disabledOpacity : 1 },
+
+    t: TextLabel [ x = center, wrap = false, visible = { classroot.icon == "" },
+        fontSize = { provided("theme").segmentedFontSize }, fontWeight = medium,
+        textColor = { classroot.on || classroot.hovered || !classroot.toggle ? provided("theme").text : provided("theme").textMuted },
+        text = { classroot.label } ],
+    ico: IconHost [ x = center, y = center, kind = { classroot.icon }, ink = { provided("theme").text } ]
+    ]
+
+
+/*
+# ToolbarDivider
+
+A hairline between groups of commands in a `Toolbar`. To a screen reader, a separator.
+
+```declare
+App [ width = 300, height = 80,
+    Toolbar [ x = 20, y = 20, accessibilityLabel = "Edit",
+        ToolButton [ label = "Cut" ], ToolButton [ label = "Copy" ],
+        ToolbarDivider [ ],
+        ToolButton [ label = "Undo" ]
+        ]
+    ]
+```
+
+## width
+1, with the toolbar's spacing either side.
+
+## height
+Half the toolbar's height.
+
+## fill
+The theme's `line`.
+*/
+
+class ToolbarDivider [
+    accessibilityRole = separator,
+    width = 1,
+    height = { (parent as View).height / 2 },
+    fill = { provided("theme").line }
+    ]

@@ -1,0 +1,103 @@
+/*
+# Disclosure
+
+A section that opens and closes under a line that names it — "Advanced options", "Show
+details". Press the line and the section slides open below it, its chevron turning as it
+goes; press again and it slides shut. `Accordion` is a stack of these that keeps one open;
+a `Disclosure` stands alone, and any number may be open.
+
+The content is the disclosure's ordinary children, present through the whole slide and
+carried by the disclosure's clip, exactly as an `Accordion`'s `Pane` carries its own:
+
+```declare
+App [ width = 320, height = 200,
+    Disclosure [ x = 20, y = 20, width = 280, label = "Advanced options",
+        Checkbox [ label = "Keep a log" ],
+        Checkbox [ label = "Check for updates" ]
+        ]
+    ]
+```
+
+To a screen reader the line is a button that says whether it is expanded; Tab reaches the
+content only while it is open.
+
+## label
+The line's text, and the section's name.
+
+## detail
+A summary of what the section holds, set at the line's right end — "3 set", "12 files" —
+so it reads whether the section is open or shut. Empty, the default, shows nothing.
+
+## open
+Whether the section is open. Constrain it to your own state and override `input` to own
+the destination, or leave it alone and read it back.
+
+## input()
+**Where a toggle goes**, receiving the new `open`. The default writes `open`; override it to
+own the destination.
+
+## toggle()
+Opens a closed section and closes an open one, routing through `input`. What the line's
+press calls.
+
+## twist
+The chevron's angle, in radians, sprung between −π/2 (closed) and 0 (open), so it turns in
+step with the slide.
+
+## clip
+The section is carried by this clip while it slides: present the whole way, revealed and
+concealed by the disclosure's own height.
+
+## accessibilityRole
+A group, named by its `label`; the line inside it is the button.
+
+## accessibilityLabel
+The `label`.
+
+*/
+
+include [ "control.declare", "icons/core.declare" ]
+
+class Disclosure [ clip = true,
+    label: string = "",
+    detail: string = "",
+    open: boolean = false,
+    input(v: boolean) { open = v },
+    toggle() { input(!open) },
+
+    // where the content goes: the body, present only while open or sliding,
+    // so Tab and a screen reader reach it only when it can be seen
+
+    defaultplacement = body,
+
+    accessibilityRole = group,
+    accessibilityLabel = { label },
+
+    layout: SimpleLayout [ axis = y, spacing = 0 ],
+
+    // the slide: height springs between the bare line and the whole content,
+    // and the clip carries the content the whole way
+
+    slide: Spring [ attribute = height, to = { classroot.open ? classroot.contentHeight : classroot.line.height },
+        stiffness = 220, damping = 26, epsilon = 0.4 ],
+    twist: number = { -Math.PI / 2 },
+    Spring [ attribute = twist, to = { classroot.open ? 0 : -Math.PI / 2 }, stiffness = 220, damping = 26, epsilon = 0.004 ],
+
+    line: Control [ width = 100%, height = { provided("theme").accordionHeaderHeight },
+        accessibilityRole = button,
+        accessibilityExpanded = { classroot.open },
+        press() { classroot.toggle() },
+        cornerRadius = { provided("theme").controlCornerRadius },
+        fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : null },
+        chev: ChevronIcon [ x = 8, y = center, iconSize = 14, angle = { classroot.twist }, ink = { provided("theme").textMuted } ],
+        t: TextLabel [ x = 30, wrap = false, fontSize = { provided("theme").accordionFontSize }, fontWeight = medium,
+            textColor = { provided("theme").text }, text = { classroot.label } ],
+        more: TextLabel [ visible = { classroot.detail != "" }, x = { parent.width - this.width - 10 }, wrap = false,
+            fontSize = { provided("theme").accordionFontSize }, textColor = { provided("theme").textMuted }, text = { classroot.detail } ]
+        ],
+
+    body: View [ width = 100%, padding = [6, 0, 8, 30],
+        layout: SimpleLayout [ axis = y, spacing = 8 ],
+        visible = { classroot.open || classroot.height > classroot.line.height + 0.5 }
+        ]
+    ]

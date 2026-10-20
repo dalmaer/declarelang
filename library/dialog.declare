@@ -151,10 +151,11 @@ On opening, focus goes to your content's first control when it has one, else to 
 default button.
 
 ## hostW
-The width of the layer it paints in.
+The width of the layer it paints in: its window's, or the browser window's — not the
+App's, which on a page that scrolls is as tall as the page.
 
 ## hostH
-The height of the layer it paints in.
+The height of the layer it paints in: its window's, or the browser window's.
 
 ## full
 Whether it presents full-screen.
@@ -183,6 +184,13 @@ It settles about its middle.
 
 ## pivotY
 It settles about its middle.
+
+## accessibilityLabel
+The `title`, so a screen reader names the dialog as it opens.
+
+## accessibilityHint
+The `message`: a screen reader reads it after the title as the dialog opens, so "Delete
+this file?" is followed by "This cannot be undone."
 */
 
 include [ "control.declare" ]
@@ -206,12 +214,15 @@ class Dialog extends Floating [
     presentation: "center" | "full" = "center",
     title: string = "",
     message: string = "",
+    accessibilityRole = dialog,
+    accessibilityLabel = { title },
+    accessibilityHint = { message },
     tone: string = "",
     buttons: DialogButton[]? = null,
     cb: (id: string) -> void? = null,
 
-    hostW: number = { this.host != null ? this.host.width : app.width },
-    hostH: number = { this.host != null ? this.host.height : app.height },
+    hostW: number = { this.host != null ? this.host.width : app.hostWidth > 0 ? app.hostWidth : app.width },     // a window's, else the browser window's
+    hostH: number = { this.host != null ? this.host.height : app.hostHeight > 0 ? app.hostHeight : app.height },
     full: boolean = { this.presentation == "full" },
 
     width = { this.full ? this.hostW : Math.min(this.hostW - 32, provided("theme").dialogWidth) },

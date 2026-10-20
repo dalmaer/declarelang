@@ -168,7 +168,7 @@ await test("scaffold: View declares its attrs (AttrType→TS map) + the §11 nou
   assert.ok(view.includes("cornerRadius: Radius;"), "radius → Radius (a number, or four corners)");
   assert.ok(view.includes("opacity: number;"), "number → number");
   assert.ok(view.includes("visible: boolean;"), "boolean → boolean");
-  assert.ok(view.includes("clip: Shape;"), "shape → Shape");
+  assert.ok(view.includes("clip: Shape | boolean | null;"), "shape → Shape, or true for the own box (a { } may compute either)");
   assert.ok(view.includes("fill: Fill;"), "fill → Fill");
   // The THIRD one-or-four slot, beside cornerRadius and padding: one Stroke on
   // all four sides, four of them, or null. Symmetric — the slot reads back what

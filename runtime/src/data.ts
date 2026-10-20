@@ -1068,7 +1068,7 @@ export function toCursor(v: unknown, context: string): Cursor | null {
   const tag = TAGS.get(v);
   if (tag === undefined) {
     throw new DeclareError(
-      `${context}: this value belongs to no Dataset/DataSource — a cursor can only point into declared data`
+      `${context}: this value belongs to no Dataset/DataSource — a cursor can only point into declared data. For records you compute, derive a Dataset beside the view — 'items: Dataset [ contents = { … } ]' — and point at it: 'datapath = { this.items.value }'`
     );
   }
   let path = pathOf(tag);

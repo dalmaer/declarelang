@@ -230,7 +230,7 @@ function compileSource(url, src, dir, distro) {
 // ProgramRequest — Source mode, the Inspector); none is the program's to read,
 // and none may reach the read of its source (a dev server would answer
 // `?viewer` with a page, not the program).
-const REQUEST_KEYS = new Set(["viewer", "inspector", "build", "extract", "program", "file", "segments", "render", "crawler", "kernel"]);
+const REQUEST_KEYS = new Set(["viewer", "inspector", "build", "extract", "sizes", "file", "segments", "render", "crawler", "kernel"]);
 function withoutRequests(url) {
   const q = url.indexOf("?");
   if (q < 0) return url;

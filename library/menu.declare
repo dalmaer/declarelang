@@ -52,7 +52,8 @@ App [ width = 320, height = 130,
 ## items
 The rows, as **records — never children**. A menu arranges its own rows, so handing it
 views is not merely discouraged, there is nowhere to put them. The record is
-`{ id, label, key?, icon?, enabled?, checked?, divider?, submenu?, kind?, props?, minWidth? }`;
+`{ id, label, key?, icon?, enabled?, checked?, selected?, divider?, submenu?, kind?, props?, minWidth? }`
+(`selected` is read only in a list of choices: see `asList`);
 a plain array is fine (no `Dataset` required). Because it is an ordinary attribute it
 can be a constraint — **derive it from `opener` and one menu serves every row of a
 table**, live while it is open.
@@ -90,6 +91,31 @@ on screen. A submenu routes to the root so the whole chain closes as one.
 ## activeRow
 The row the keyboard rover currently highlights, or null when the pointer is driving.
 Read-only in practice.
+
+## takesFocus
+True: an open menu holds the focus, so a screen reader follows it, and hands it back to
+what had it when the menu closes. A `Combobox` turns it off for its list, whose field keeps
+the focus.
+
+## onKeyDown
+Takes nothing itself: a menu's keys are its rover's, which hears them however the focus
+lies. Declared so that a menu holding the focus inside a group (a menu bar's) is not
+walked by the group's arrows.
+
+## focusFirst()
+Holds the focus on the menu itself, never on a view inside it: the menu names the row
+the keys are on.
+
+## accessibilityActiveItem
+The highlighted row's item: a screen reader hears each row as the arrows reach it.
+
+## asList
+A list of choices rather than commands: each row is an `option`, not a `menuItem`, selected
+when its record says `selected: true`. A `Combobox` makes its list this way, with the `listbox`
+role given at creation (`createView("Menu", { accessibilityRole: "listbox", asList: true })`).
+
+## accessibilityLabel
+The opener's name, so a menu opened from "Styling" is the "Styling" menu.
 
 ## hasIcons
 Whether any row carries an `icon` — which is what decides the icon gutter exists at
@@ -193,6 +219,11 @@ letter again goes on to the next row that starts with it.
 Picks the roved row — Enter's action. On a row with a `submenu` it enters the cascade
 instead.
 
+## sideways()
+**Where Right and Left go past the menu's own levels**: Right on a row with no submenu, Left
+in the top menu. Nothing by default; a `MenuBar` answers it by opening the menu beside
+this one, as every desktop menu bar does.
+
 ## enterSub()
 Enters the roved row's submenu and puts the rover on its first row — ArrowRight's action.
 
@@ -243,10 +274,30 @@ include [ "floating.declare" ]
 // misspelled field is a compile error, not a row that silently lacks it
 
 schema MenuItem [ id?: string, label?: string, key?: string, icon?: string, enabled?: boolean,
-    checked?: boolean, divider?: boolean, submenu?: any, kind?: string, props?: any,
+    checked?: boolean, selected?: boolean, divider?: boolean, submenu?: any, kind?: string, props?: any,
     minWidth?: number ]
 
 class Menu extends Floating [
+    accessibilityRole = menu,
+
+    // the menu holds the focus while it is open, and names the row the keys are
+    // on, so a screen reader follows the highlight; it hands the focus back on close
+
+    takesFocus = true,
+    accessibilityActiveItem = { this.activeRow == null ? null : this.asList ? (this.activeRow as any).opt : (this.activeRow as any).item },
+
+    // a list of choices rather than commands — a combobox's list, made with the
+    // listbox role: its rows are options
+
+    asList: boolean = false,
+    focusFirst() { this.holdFocusItself() },        // the menu itself, never a view inside it
+
+    // its keys are its rover's (the keys member below): a menu holding the focus
+    // inside a group, as a menu bar's does, is not walked as one of its members
+
+    onKeyDown(e: KeyEvent) { },
+    accessibilityLabel = { this.opener == null ? "" : "" + ((this.opener as any).accessibilityLabel || (this.opener as any).label || "") },   // named for what opened it
+
     // a Floating in the floating layer (floating.declare): it paints above
     // everything in its context and places itself where it opens. A menu
     // appears and goes at once — no motion. An outside press closes the chain
@@ -500,6 +551,11 @@ class Menu extends Floating [
 
     stepIn(c: Menu?) { if (c != null) c.step(1) },
 
+    // Right past the last level, or Left at the top: the menu beside this one, in
+    // a menu bar; nothing for a menu that stands alone
+
+    sideways(d: number) { },
+
     keys: Keys [
         onKeyDown(e: KeyEvent) {
             if (!classroot.shown) return
@@ -507,8 +563,12 @@ class Menu extends Floating [
             if (e.key == "ArrowDown") classroot.step(1)
             else if (e.key == "ArrowUp") classroot.step(-1)
             else if (e.key == "Enter") classroot.pickActive()
-            else if (e.key == "ArrowRight") classroot.enterSub()
-            else if (e.key == "ArrowLeft") { if (!classroot.isRoot) classroot.close() }
+            else if (e.key == "ArrowRight") {
+                if (classroot.activeRow != null && (classroot.activeRow as any).sub == true) classroot.enterSub()
+                else if (classroot.isRoot || classroot.rootMenu == null) classroot.sideways(1)
+                else classroot.rootMenu.sideways(1)
+                }
+            else if (e.key == "ArrowLeft") { if (!classroot.isRoot) classroot.close(); else classroot.sideways(-1) }
             // a printable letter moves the rover (not while a text field is
             // typing into the menu's opener — a combobox's own entry)
             else if (classroot.typeahead && e.key.length == 1 && e.key != " " && !e.meta && !e.ctrl && !e.alt
@@ -588,12 +648,39 @@ class Menu extends Floating [
 
                 // the hover highlight — inset, rounded, accent (the Mac read)
 
+                // What a screen reader reads of the row: an item, named by its label,
+                // checked when its record says so, pressed to pick it or open its
+                // submenu. A divider row is not an item, so this is shown only on
+                // the rows that are — one template serves both.
+
+                item: View [ width = 100%, height = 100%, visible = { !parent.divider && !classroot.asList },
+                    accessibilityRole = menuItem,
+                    accessibilityLabel = { parent.label },
+                    accessibilityChecked = { :checked == null ? null : !!:checked },
+                    press() {
+                        if (!parent.enabled) return
+                        if (parent.sub) parent.openSelf()
+                        else if (parent.custom == "") parent.pickSelf()
+                        }
+                    ],
+
+                // the same row, in a list of choices (a combobox's): an option,
+                // selected when its record says so
+
+                opt: View [ width = 100%, height = 100%, visible = { !parent.divider && classroot.asList },
+                    accessibilityRole = option,
+                    accessibilityLabel = { parent.label },
+                    accessibilitySelected = { :selected == true },
+                    press() { if (parent.enabled) parent.pickSelf() }
+                    ],
+
                 hl: View [ x = 5, y = 1, width = { parent.width - 10 }, height = { parent.height - 2 },
                     cornerRadius = { provided("theme").menuHighlightCornerRadius }, visible = { (parent.hot || classroot.activeRow == parent) && parent.custom == "" },
                     fill = { provided("theme").menuHighlightFill ?? provided("theme").accent } ],
 
                 rule: View [ x = 10, y = 5, width = { parent.width - 20 }, height = 1,
-                    visible = { parent.divider }, fill = { provided("theme").line } ],
+                    visible = { parent.divider }, fill = { provided("theme").line },
+                    accessibilityRole = separator ],
 
                 // The check, from the shared set — the same tick `Checkbox`
                 // draws. The ink stays local: a checked row inverts on the hot

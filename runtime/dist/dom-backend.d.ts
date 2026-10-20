@@ -20,6 +20,7 @@ export declare class DomBackend implements RenderBackend {
      *  fragment; routing still follows in-app). A URL = an embedder that knows
      *  the child's true program address, restoring the native affordances. */
     linkBase: string | null;
+    constructor();
     createSurface(): Surface;
     attachRoot(host: HTMLElement, root: Surface): void;
 }
@@ -86,6 +87,12 @@ export declare class DomSurface implements Surface {
      *  host page — its gesture default is `manipulation`, never the geometry
      *  read (refreshTouchAction). */
     embeddedRoot: boolean;
+    /** The app's language (App.language), kept until the root knows whether it
+     *  is the page or embedded in one (attachRoot). */
+    private language;
+    setLanguage(lang: string): void;
+    /** A page's language is the <html> element's; an embedded app's, its own root's. */
+    applyLanguage(): void;
     /** This surface is an app's root (attachRoot stamps it, with the
      *  `data-declare-app` mark other code reads off the DOM). */
     isRoot: boolean;
@@ -188,6 +195,9 @@ export declare class DomSurface implements Surface {
      *  Local coords unwind a uniform scale (rect vs layout box ratio), then the
      *  Path2D answers with the canvas walk's default nonzero rule. */
     carvedHit(cx: number, cy: number): boolean;
+    /** Whether a point in the view's own frame is inside its Shape clip, for the
+     *  hit walk (interaction.ts): the same path the browser clips hits by. */
+    insideClip(lx: number, ly: number): boolean;
     /** True when this surface opts out of its parent's box-clip (ignoreClip). */
     ignoresClip: boolean;
     /** The lazy inner clip container (see setBoxClip), discovered BY SELECTOR so
@@ -319,6 +329,9 @@ export declare class DomSurface implements Surface {
     private scrollListener;
     private scrollReport;
     private scrollXReport;
+    /** The view's annotations — installed below, in a build with the layer. */
+    setSemantics?: (attrs: Readonly<Record<string, string>> | null) => void;
+    setFaded?: (faded: boolean) => void;
     setRowCount(n: number | null): void;
     setRowIndex(i: number | null): void;
     setScroll(on: boolean, onScroll: (y: number) => void, onScrolling?: (active: boolean) => void): void;

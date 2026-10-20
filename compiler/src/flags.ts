@@ -1,20 +1,16 @@
-// flags — the compile-time MODIFIERS, as ONE canonical model shared by all three
-// entry points: the `declarec` CLI, the dev server's URL query, and the in-browser
-// compile URL. A single REGISTRY (`FLAG_SPECS`) defines each modifier once — its
-// canonical name, kind, and default — and all three parsers DERIVE from it, so the
-// surfaces name every one the SAME way and cannot drift. `?render=canvas` on the
-// server, `--render canvas` (or `--canvas`) on the CLI, and `{ render: "canvas" }` in
-// a JS `compile()` call all mean the same thing; adding a modifier is a single entry
-// below, picked up by every surface.
+// flags — the two compiler-side readers of the platform's modifiers: a URL's
+// query (the dev server, the in-browser compile URL) and `declarec`'s argv.
+// The modifiers themselves — names, values, defaults — are the ONE registry in
+// runtime/src/flags.ts, which the program's `defaultFlags [ … ]` parser reads
+// too, so the three surfaces cannot drift: `name=value` everywhere,
+// `?render=canvas`, `--render=canvas`, `render = canvas`.
 //
-// There are exactly THREE modifiers — `render`, `crawler` and `kernel` — and they compose onto the
-// app-producing REQUESTS (`run`, `build`; see reqtypes.ts and docs/system-design/requests.md).
-// The request TYPE (what artifact a URL returns) is orthogonal and lives in
-// reqtypes.ts. Everything is lowercase — no camelCase in the URL/CLI surface.
+// They compose onto the app-producing REQUESTS (`run`, `build`; see reqtypes.ts
+// and docs/system-design/requests.md). The request TYPE (what artifact a URL
+// returns) is orthogonal and lives in reqtypes.ts. Everything is lowercase.
 //
-// A program states its own defaults for them in `defaultFlags [ … ]` (runtime/src/parser.ts
-// Flags, FLAG_WORDS — the same names, a program's choice of values): a flag a request
-// or the CLI does not name, the program's decides, and only then the default below.
+// A flag a request or the CLI does not name, the program's `defaultFlags`
+// decides, and only then the registry's default.
 //
 // Deliberately NOT flags (see docs/system-design/requests.md §"Removed knobs"):
 //   • `prod` is a REQUEST (`?build`, reqtypes.ts REQ.BUILD), not a modifier.
@@ -23,66 +19,12 @@
 //     `declarec --debug`, not a public flag.
 //   • `typecheck` is a mandatory phase of the one compile — always on, no opt-out.
 // The compiler's INTERNAL options still carry stripPos/typecheck (the build act sets
-// them); only this externally-named FLAG surface is the three modifiers.
+// them); only this externally-named FLAG surface is the modifiers.
 
-/** The compile-time modifier set. Both entry points honour both; the canonical name
- *  is the field (also the URL/CLI name):
- *    • JS   `{ render: "canvas" }`
- *    • URL  `?render=canvas`, `?crawler`
- *    • CLI  `--render canvas` / `--canvas`, `--crawler` */
-export interface CompileFlags {
-  /** Which RENDERER to bundle / mount (`?render=canvas` / `--render canvas`):
-   *  managed DOM, one `<canvas>`, or the NATIVE host's CALayer tree
-   *  (`?render=mac` — the native client asks for the compiled program and
-   *  renders it itself; docs/system-design/native-host.md). */
-  render: "dom" | "canvas" | "mac";
-  /** Static extraction (docs/system-design/capabilities.md §5): embed the program's content as
-   *  semantic HTML in the run/build wrapper's host element (`#declare-static`), for
-   *  crawlers and AI readers that don't run the app. Removed before first paint, never
-   *  CSS-hidden (browser/serve-core.js). `--crawler` on declarec bakes it into the built
-   *  index.html; `?crawler` on a dev-server run URL embeds it server-side. Distinct from
-   *  the `extract` REQUEST (reqtypes.ts REQ.EXTRACT / `?extract`), which returns that
-   *  document ALONE. */
-  crawler: boolean;
-  /** Which reactive KERNEL a build carries (`?kernel=js` / `--kernel js`): the C
-   *  kernel compiled to WebAssembly (the default, the fastest), or the JavaScript
-   *  kernel — the same results from a smaller download, with no WebAssembly bytes
-   *  or loader in the bundle (docs/system-design/kernel.md). The Mac host always
-   *  runs its native kernel. */
-  kernel: "wasm" | "js";
-}
+import { FLAG_SPECS, DEFAULT_FLAGS, flagValue, flagWords, type CompileFlags } from "../../runtime/dist/flags.js";
 
-/** One spec per modifier — the SINGLE source of truth every surface derives from.
- *  `name` is the canonical `CompileFlags` field (also the URL/CLI name). Add a
- *  modifier by adding a spec; no parser edits needed. */
-export type FlagSpec =
-  | { readonly name: keyof CompileFlags; readonly kind: "bool"; readonly default: boolean; readonly description: string }
-  | { readonly name: keyof CompileFlags; readonly kind: "enum"; readonly values: readonly string[]; readonly default: string; readonly description: string };
-
-export const FLAG_SPECS: readonly FlagSpec[] = [
-  { name: "render", kind: "enum", values: ["dom", "canvas", "mac"], default: "dom",
-    description: "render through managed DOM, a single <canvas>, or the native Mac host; unset, the program's flags decide" },
-  { name: "crawler", kind: "bool", default: false,
-    description: "embed the crawled document in the host page, for crawlers; unset, the program's flags decide" },
-  { name: "kernel", kind: "enum", values: ["wasm", "js"], default: "wasm",
-    description: "the reactive kernel a build carries: the C kernel as WebAssembly, or the JavaScript one (a smaller download); unset, the program's flags decide" },
-];
-
-/** Defaults, derived from the registry — never hand-maintained. */
-export const DEFAULT_FLAGS: CompileFlags = Object.fromEntries(
-  FLAG_SPECS.map((s) => [s.name, s.default])
-) as unknown as CompileFlags;
-
-/** The canonical modifier names (docs / help text / validation), from the registry. */
-export const FLAG_NAMES: readonly (keyof CompileFlags)[] = FLAG_SPECS.map((s) => s.name);
-
-const ON = new Set(["", "1", "true", "yes", "on"]);
-const OFF = new Set(["0", "false", "no", "off"]);
-
-const coerceBool = (value: string | null, def: boolean): boolean => {
-  const v = (value ?? "").toLowerCase();
-  return OFF.has(v) ? false : ON.has(v) ? true : def;
-};
+export { FLAG_SPECS, DEFAULT_FLAGS, FLAG_NAMES, flagWords, flagValue } from "../../runtime/dist/flags.js";
+export type { CompileFlags, FlagSpec } from "../../runtime/dist/flags.js";
 
 /** The read surface both a Node `URL`'s searchParams and the browser's
  *  `location.search` params satisfy. */
@@ -91,51 +33,39 @@ export interface FlagParams {
   get(name: string): string | null;
 }
 
-/** Normalize URL/query modifiers into the option set, over a base (defaults, or an
- *  entry point's own baseline). Unknown query keys are ignored; a malformed value
- *  falls back to the base. Derived entirely from `FLAG_SPECS`, so a new modifier needs
- *  no edit here. Names are lowercase, so a single lookup suffices. */
+/** A URL query's modifiers (`?render=canvas&crawler=true`), over a base
+ *  (defaults, or an entry point's own baseline). Unknown keys are ignored, and
+ *  so is a value that is not one of the modifier's words: the base stands. */
 export function parseFlags(params: FlagParams, base: CompileFlags = DEFAULT_FLAGS): CompileFlags {
   const out: Record<string, unknown> = { ...base };
   for (const spec of FLAG_SPECS) {
-    if (!params.has(spec.name)) continue;
-    const value = params.get(spec.name);
-    if (spec.kind === "bool") out[spec.name] = coerceBool(value, base[spec.name] as boolean);
-    else out[spec.name] = value !== null && spec.values.includes(value) ? value : base[spec.name];
+    const word = params.get(spec.name);
+    if (word === null) continue;
+    const v = flagValue(spec, word);
+    if (v !== undefined) out[spec.name] = v;
   }
   return out as unknown as CompileFlags;
 }
 
-/** Parse the same modifiers from CLI argv tokens (`--render canvas` / `--canvas`,
- *  `--crawler`). Returns the modifiers plus the leftover positional args (the input path,
- *  etc.). Long flags only; `--no-<name>` negates a boolean. Enum VALUES are accepted
- *  as shorthand switches (`--canvas` ≡ `--render canvas`). Non-modifier switches the
- *  CLI owns (`--out`, `--debug`, `--extract`, `--highlight`, `--quiet`) pass through in
- *  `rest` for the CLI to handle. */
+/** `declarec`'s modifiers from argv (`--render=canvas --crawler=true`), plus
+ *  the leftover args (the input path, and the switches the CLI owns: `--out`,
+ *  `--debug`, `--extract`, `--highlight`, `--quiet`). A modifier is
+ *  `--name=value` with one of its words; any other spelling of a modifier's
+ *  name is an error naming that form. */
 export function parseArgvFlags(
   argv: readonly string[],
   base: CompileFlags = DEFAULT_FLAGS
 ): { flags: CompileFlags; rest: string[] } {
   const flags: Record<string, unknown> = { ...base };
   const rest: string[] = [];
-  const bySwitch = new Map<string, FlagSpec>();
-  const enumValueAlias = new Map<string, keyof CompileFlags>();
-  for (const spec of FLAG_SPECS) {
-    bySwitch.set(spec.name, spec);
-    if (spec.kind === "enum") for (const v of spec.values) enumValueAlias.set(v, spec.name);
-  }
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (!a.startsWith("--")) { rest.push(a); continue; }
-    let tok = a.slice(2);
-    let negate = false;
-    if (tok.startsWith("no-")) { negate = true; tok = tok.slice(3); }
-    if (!negate && enumValueAlias.has(tok)) { flags[enumValueAlias.get(tok)!] = tok; continue; }
-    const spec = bySwitch.get(tok);
+  for (const a of argv) {
+    const eq = a.indexOf("=");
+    const name = a.startsWith("--") ? a.slice(2, eq < 0 ? undefined : eq) : null;
+    const spec = FLAG_SPECS.find((s) => s.name === name);
     if (spec === undefined) { rest.push(a); continue; }
-    if (spec.kind === "bool") { flags[spec.name] = !negate; continue; }
-    const val = argv[i + 1]; // enum needs a value: `--render canvas`
-    if (val !== undefined && spec.values.includes(val)) { flags[spec.name] = val; i++; }
+    const v = eq < 0 ? undefined : flagValue(spec, a.slice(eq + 1));
+    if (v === undefined) throw new Error(`${a}: write --${spec.name}=${flagWords(spec).join("|")}`);
+    flags[spec.name] = v;
   }
   return { flags: flags as unknown as CompileFlags, rest };
 }

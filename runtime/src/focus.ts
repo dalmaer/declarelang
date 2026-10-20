@@ -23,6 +23,7 @@ import type { KeysService } from "./keys.js";
 import { Cell, Constraint, afterSettle } from "./reactive.js";
 import { rootFrameBox, rootTransform, type InteractionView } from "./interaction.js";
 import { apply as applyAffine } from "./affine.js";
+import { provideKeyContextTarget } from "./input.js";
 
 /** The focused control's live silhouette, root-space — what the follower
  *  (below) computes and onGeometry subscribers receive. `root` lets a ring
@@ -153,7 +154,14 @@ export class FocusService {
     // the web's :focus-visible rule for focus moved by code: it shows when the
     // person's last input was the keyboard — a key's handler roving a group,
     // or an overlay giving focus back a turn after Esc — and not after a press
+    const was = this.keyboard;
     this.setKeyboard(this.keys?.inKeyDispatch() === true || this.lastInputKeyboard);
+    // a press on what already has focus changes no focus, but may change how it
+    // was reached: those watching (the ring) hear it, as a change to the same view
+    if (view !== null && view === this.current && was !== this.keyboard) {
+      for (const h of [...this.changeHandlers]) h(this.current);
+      return;
+    }
     this.apply(view);
   }
 
@@ -183,7 +191,7 @@ export class FocusService {
     const old = this.current;
     this.current = view;
     if (view !== null) this.startPoint = null;
-    noteFocused(view);
+    noteFocused(view, this.keyboard);
     this.currentCell.changed();
     if (old !== null) {
       old.$focusChanged(false); // internal (native element) before the user event
@@ -611,7 +619,7 @@ function precedes(a: View, b: View): boolean {
 }
 
 function canFocus(v: View): boolean {
-  return (v.focusable || v.link !== "" || scopeOf(v) === "region") && v.visible;
+  return ((v.focusable || v.link !== "" || scopeOf(v) === "region") && v.visible) || bareScroller(v);
 }
 
 /** What last had focus inside each scope (§13.2: a scope remembers). */
@@ -695,7 +703,23 @@ function visit(m: View, out: Entry[]): void {
     return;
   }
   if (m.focusable || m.link !== "") out.push({ view: m, scope: null });   // links are stops (§0.4)
+  const at = out.length;
   for (const c of tabOrderOf(m)) visit(c, out);
+  // a scroller nothing inside it takes focus is a stop of its own, so the keyboard
+  // can scroll what it holds (bareScroller)
+  if (out.length === at && !m.focusable && m.link === "" && m.scrolls !== "none") out.push({ view: m, scope: null });
+}
+
+/** A scroller with nothing inside it that takes focus — a pane of text, a strip
+ *  of pictures — is a Tab stop of its own, as Firefox and Chrome make it, so a
+ *  keyboard can scroll it (WCAG 2.1.1): focused, the arrows, Page Up/Down, Space,
+ *  Home and End scroll it. A scroller that holds anything focusable is not: Tab
+ *  reaches into it, and what it focuses is revealed. */
+export function bareScroller(v: View): boolean {
+  if (v.scrolls === "none" || v.focusable || v.link !== "" || !v.visible) return false;
+  const inner: Entry[] = [];
+  for (const c of tabOrderOf(v)) visit(c, inner);
+  return inner.length === 0;
 }
 
 /** The entry `f` is at: the entry itself, or the scope entry it is inside. */
@@ -724,6 +748,7 @@ function memberStop(f: View): View | null {
  *  caret). */
 function arrowDefault(f: View, ev: unknown): void {
   const e = ev as KeyEvent;
+  if (Focus.getFocus() === f && !e.ctrl && !e.alt && !e.meta && scrollKeys(f, e)) return;
   if (e.ctrl || e.alt || e.meta || e.shift || Focus.getFocus() !== f) return;
   const d = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
   if (d === 0 && e.key !== "Home" && e.key !== "End") return;
@@ -736,6 +761,35 @@ function arrowDefault(f: View, ev: unknown): void {
   if (i < 0 || seq.length < 2 && d !== 0) return;
   const n = e.key === "Home" ? 0 : e.key === "End" ? seq.length - 1 : (i + d + seq.length) % seq.length;
   if (n !== i) Focus.land(seq[n].view);   // as Tab lands: keyboard focus, revealed
+}
+
+/** The keys a focused bare scroller (bareScroller) takes: a line with the arrows,
+ *  a page with Page Up/Down and Space (Shift-Space back), the ends with Home and
+ *  End — along the axis it scrolls. True when the key scrolled it. */
+const LINE = 40;
+function scrollKeys(f: View, e: KeyEvent): boolean {
+  if (f.scrolls === "none" || !bareScroller(f)) return false;
+  const v = f.scrolls !== "x", h = f.scrolls !== "y";
+  const page = (v ? f.height : f.width) * 0.9;
+  const by = (d: number): void => { if (v) f.scrollTo(f.scrollY + d); else f.scrollToX(f.scrollX + d); };
+  switch (e.key) {
+    case "ArrowDown": if (!v) return false; f.scrollTo(f.scrollY + LINE); return true;
+    case "ArrowUp": if (!v) return false; f.scrollTo(f.scrollY - LINE); return true;
+    case "ArrowRight": if (!h) return false; f.scrollToX(f.scrollX + LINE); return true;
+    case "ArrowLeft": if (!h) return false; f.scrollToX(f.scrollX - LINE); return true;
+    case "PageDown": by(page); return true;
+    case "PageUp": by(-page); return true;
+    case " ": by(e.shift ? -page : page); return true;
+    case "Home": if (v) f.scrollTo(0); else f.scrollToX(0); return true;
+    case "End": {
+      // the far edge of what it holds
+      let far = 0;
+      for (const c of f.children) if (c instanceof View && c.visible) far = Math.max(far, v ? c.y + c.height : c.x + c.width);
+      if (v) f.scrollTo(Math.max(0, far - f.height)); else f.scrollToX(Math.max(0, far - f.width));
+      return true;
+    }
+    default: return false;
+  }
 }
 
 /** The `stop` whose member scope focus has entered — focus inside a stop on a
@@ -843,13 +897,18 @@ export function deliverKeys(keys: KeysService, focus: FocusService): () => void 
     }
     if (e.code === "Escape" && !e.repeat && !keys.navClaimed()) escArmed = true;
     if (e.code === "Tab") {
-      // an open overlay that holds the keys while focus is outside it (a menu
-      // roving for its opener): Tab closes it as Esc would, then moves on —
-      // the web's menu-button rule; focus never goes behind a menu left open
+      // an open overlay that holds the keys while focus is outside it, or that
+      // holds the focus itself rather than anything inside it (a menu, naming
+      // the row its keys are on): Tab closes it as Esc would, then moves on from
+      // its opener — the web's menu-button rule; focus never goes behind a menu
+      // left open
       const c = keys.claimant();
-      if (c instanceof View && !focus.holds(c)) {
-        const esc = (c as unknown as { escape?: () => void }).escape;
-        if (typeof esc === "function") esc.call(c);
+      if (c instanceof View && (!focus.holds(c) || (focus.getFocus() === c && c.focusScope !== "modal"))) {
+        const held = c as unknown as { escape?: () => void; savedFocus?: View | null };
+        const back = focus.getFocus() === c ? held.savedFocus ?? null : null;
+        if (back !== null) held.savedFocus = null;   // it goes back now, not after the close
+        if (typeof held.escape === "function") held.escape.call(c);
+        if (back !== null) focus.focus(back);
       }
       if (e.shift) focus.prev();
       else focus.next();
@@ -901,6 +960,10 @@ export function deliverKeys(keys: KeysService, focus: FocusService): () => void 
 
 /** The runtime's focus service (LZX's lz.Focus). */
 export const Focus = new FocusService();
+
+// A context menu asked for from the keyboard is for the focused view, or for the
+// item it names as the one the keys are on (a list's active row).
+provideKeyContextTarget(() => { const f = Focus.getFocus(); return f === null ? null : f.accessibilityActiveItem ?? f; });
 
 // Register the discard hook (input.md §mutation): keeps focus off a subtree
 // that is being torn down. One-directional — focus.ts imports view.ts, not the

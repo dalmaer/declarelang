@@ -22,7 +22,7 @@ write, then check the program and look at it running.
    the user's place, the views and any script each belong; and
    `docs/guide/05-run-and-check.md`, the working loop (run, read an error, check, debug).
 3. **The calendar, whole** — `apps/calendar/calendar.declare`, with
-   `docs/guide/27-calendar.md` beside it as its commentary. It is <!--stat:calendar.code-->524<!--/stat--> lines of code,
+   `docs/guide/28-calendar.md` beside it as its commentary. It is <!--stat:calendar.code-->529<!--/stat--> lines of code,
    and it shows a whole program in the grain Declare is designed for: a change of view is
    one assignment, and the screen follows it continuously and interruptibly, with no
    transition code. Read it for how the work divides — the events as a dataset class with
@@ -68,13 +68,13 @@ Then check every need in the plan against
 ## What's where
 
 - **The language** — `docs/declare.md`.
-- **The guide** — `docs/guide/`, thirty chapters in numbered files. Below, a guide
+- **The guide** — `docs/guide/`, thirty-one chapters in numbered files. Below, a guide
   reference is the file and a section heading inside it: `16-collections.md` §
   Virtualization.
 - **Links inside the docs** are written as symbolic `declare-docs:` addresses, not file
   paths; the docs site resolves them to its pages. Reading the files directly, take them
   this way: `declare-docs:guide:urls` is the guide chapter whose file ends in `-urls.md`
-  (`docs/guide/19-urls.md`), and `@slug` after it names a section heading in it;
+  (`docs/guide/20-urls.md`), and `@slug` after it names a section heading in it;
   `operational:<name>` is `docs/operational/<name>.md`; `spec:core` is
   `docs/declare.md`; anything else is a name to ask `npx declare-help` about, with its
   prefix dropped (`View.width` as it stands, `type:Motion` as `Motion`).
@@ -92,7 +92,7 @@ Then check every need in the plan against
     thousand records and a million on demand: one dataset class holds them and makes every
     write; the list is a dataset derived from it, virtualized, with headings as a second
     row class; editing through a draft; menus, shortcuts, undo. It is
-    <!--stat:tracker.code-->971<!--/stat--> lines of code, and worth reading whole.
+    <!--stat:tracker.code-->981<!--/stat--> lines of code, and worth reading whole.
   - **A surface over time, or things dragged between places** — a schedule, a timeline, a
     board, a grid you zoom from years to a day. → `apps/calendar/calendar.declare`, read
     first (above).
@@ -166,11 +166,12 @@ build it: the guide section that teaches it, a program that does it, and names t
 | Drawing what attributes can't express: a gauge, a chart, an icon | `17-your-own-views.md` § Custom drawing, § Icons | weather (`weather-art.declare`): `WindDial`, `PressureGauge`; marketmap: `StageTile`'s sparkline | `draw`, `Draw`, `Icon` |
 | A layout of your own | `17-your-own-views.md` § Writing a layout | weather (`weather-art.declare`): `MasonryLayout`; marketmap: `MarketLayout` | `Layout`, `place` |
 | Anything that opens over the interface — a menu, a context menu, a popover, a dialog, a sheet, a toast — closing when it should, holding focus and keys while open, staying with its window | `18-overlays.md` | tracker: the App's `sortMenu`, `facetMenu`, `ctx: ContextMenu` and its undo `Toast`; sampler: the Overlays page, every kind opened from a card; desktop: a Files window's row menu, which opens in the window's layer | `Menu`, `ContextMenu`, `Popover`, `Dialog`, `Sheet`, `Toast`, `Window` |
-| Addresses, back and forward, deep links | `19-urls.md` | birds: the App's `location` and `waypoint` and what derives from them | `location`, `waypoint` |
-| Motion that can be interrupted and redirected; a view's states | `20-motion.md` | tracker: `ListRow`'s height spring; calendar: `DetailSection`'s spring; desktop: `DockIcon`'s `magSpring` | `Spring`, `State` |
-| Clocks, a later call, one action when something changes | `21-time.md` | calendar: the App's `clock: Time [ tick = day ]`; tracker: `Toast` (`afterDelay`), the App's `trackChanges` and `onChange` | `Time`, `afterDelay`, `onChange` |
-| A whole arrangement moving from one view to another; one view becoming the next | `22-animated-arrangements.md` | calendar: the App's four springs (`c0`, `r0`, `nc`, `nr`) that every cell reads; weather: `CityView`, carried by one spring (`openT`); marketmap: the App's `flight` and `zoomer` | `Spring`, `TweenLayout` |
-| Another program inside yours; yours inside a page | `24-embedding.md` | desktop: `AppWindow`'s `island: AppIsland`; two-way: `crossings` — values go down with `provides`, come back up with the method `exposed(…)` (what the tenant `exposes`), and commands cross with `post` | `AppIsland`, `DOMIsland`, `provides`, `exposes`, `DOMIsland.exposed` |
+| A screen reader and the keyboard alone: names for what shows none, your own drawn control's role, announcements; what a field holds, for autofill and a phone's keyboard | `19-accessibility.md`; `08-controls.md` § Text fields | tracker: its icon buttons' `accessibilityLabel`; library: `Toast` (`Accessibility.announce`), `Slider`'s role contract | `accessibilityLabel`, `accessibilityRole`, `Accessibility`, `TextInput.purpose` |
+| Addresses, back and forward, deep links | `20-urls.md` | birds: the App's `location` and `waypoint` and what derives from them | `location`, `waypoint` |
+| Motion that can be interrupted and redirected; a view's states | `21-motion.md` | tracker: `ListRow`'s height spring; calendar: `DetailSection`'s spring; desktop: `DockIcon`'s `magSpring` | `Spring`, `State` |
+| Clocks, a later call, one action when something changes | `22-time.md` | calendar: the App's `clock: Time [ tick = day ]`; tracker: `Toast` (`afterDelay`), the App's `trackChanges` and `onChange` | `Time`, `afterDelay`, `onChange` |
+| A whole arrangement moving from one view to another; one view becoming the next | `23-animated-arrangements.md` | calendar: the App's four springs (`c0`, `r0`, `nc`, `nr`) that every cell reads; weather: `CityView`, carried by one spring (`openT`); marketmap: the App's `flight` and `zoomer` | `Spring`, `TweenLayout` |
+| Another program inside yours; yours inside a page | `25-embedding.md` | desktop: `AppWindow`'s `island: AppIsland`; two-way: `crossings` — values go down with `provides`, come back up with the method `exposed(…)` (what the tenant `exposes`), and commands cross with `post` | `AppIsland`, `DOMIsland`, `provides`, `exposes`, `DOMIsland.exposed` |
 
 The rows follow the guide's order. For anything else, each chapter opens with a `# ` title
 that says what it covers.
@@ -187,7 +188,7 @@ shows the Declare form.
   datasets, attributes, constraints and methods — on the App, or in a `Dataset` or `Node`
   subclass (`declare.md` §4). Two tells: color or font constants (a theme's job), and script
   that places views or times motion (constraints and springs). (`04-structure.md` § What
-  script is for; `11-paint-and-themes.md` § Themes; `20-motion.md`)
+  script is for; `11-paint-and-themes.md` § Themes; `21-motion.md`)
 - **Rebuilding what Declare does** — row heights measured by hand, a scroll position
   saved and restored, a window of rows computed from the scroll offset, a list's records
   copied into a second list to interleave headings. Each is already done for you.
@@ -199,7 +200,7 @@ shows the Declare form.
 - **Polling** — a `Time` firing every second to act every five, or a value recomputed on a
   timer that a constraint would recompute when its inputs change. Give the `Time` its
   period (`tick = 5000`) and let a constraint read what it depends on; per-frame work is for
-  animation and physics. (`21-time.md`; `03-constraints.md`)
+  animation and physics. (`22-time.md`; `03-constraints.md`)
 - **A list built by a loop** where a `datapath` ending in `[]` would replicate it. (One view
   created when the user asks for it, with `createView`, is fine.) (`14-data.md` § Datasets,
   cursors and paths)
@@ -222,9 +223,14 @@ shows the Declare form.
   it gets a label a panel can list, stays out of a text field's typing, and stands down
   while a menu is open. (`09-pointer-and-keyboard.md` § Keyboard shortcuts)
 - **Placing everything by hand.** A page's cards, rows and insets are a layout's job; `x` and
-  `y` are for a diagram's scene or an overlay. Two tells: a container whose height is
-  arithmetic over its children (it sizes from its content), and
-  `x = { (parent.width - this.width) / 2 }`, which is `x = center`. (`06-layout.md`)
+  `y` are for a diagram's scene or an overlay. Three tells: a container whose height is
+  arithmetic over its children (it sizes from its content);
+  `x = { (parent.width - this.width) / 2 }`, which is `x = center`; and equal widths by
+  arithmetic, `width = { (parent.width - 24) / 4 }`, which is `flexes = true` on each.
+  (`06-layout.md`)
+- **A method per control that only passes the press on** — `picked() { }` declared on the
+  class, `press() { this.picked() }`, the use site overriding `picked`. The use site overrides
+  `press()` itself. (`04-structure.md` § Reaching other parts of the tree)
 
 ## Checking and looking
 

@@ -21,8 +21,8 @@ class BoltIcon extends Icon [
 App [ width = 320, height = 120, fill = white, textColor = black,
     row: View [ x = 20, y = 24,
         layout: SimpleLayout [ axis = x, spacing = 18 ],
-        BoltIcon [ iconSize = 16 ],
-        BoltIcon [ iconSize = 24 ],
-        BoltIcon [ iconSize = 44 ]
+        BoltIcon [ y = center, iconSize = 16 ],
+        BoltIcon [ y = center, iconSize = 24 ],
+        BoltIcon [ y = center, iconSize = 44 ]
         ]
     ]

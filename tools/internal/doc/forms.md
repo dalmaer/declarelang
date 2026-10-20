@@ -1025,7 +1025,7 @@ block is the union.
 
 forms: use, include
 classes: AppIsland, DataSource
-guide: 24-embedding · Embedding, 25-packaging · Packaging for production
+guide: 25-embedding · Embedding, 26-packaging · Packaging for production
 
 ## defaultFlags
 
@@ -1039,8 +1039,8 @@ syntax:
     defaultFlags [ kernel = js, crawler = true ]
 usage: none
 
-The program's own defaults for the platform's flags, the same three a request names in its
-URL (`?render=canvas`) and `declarec` takes as switches (`--render canvas`). A flag the request
+The program's own defaults for the platform's flags, the same ones a request names in its
+URL (`?render=canvas`) and `declarec` takes (`--render=canvas`), with the same values. A flag the request
 or the command names wins; one it leaves out, the program's block decides; one neither names
 takes the platform's default.
 
@@ -1049,6 +1049,9 @@ takes the platform's default.
 - `kernel` — `wasm` or `js`: the reactive kernel a production build carries.
 - `crawler` — `true` or `false`: whether a production build, or a run page on the dev server,
   embeds the program's crawled content for readers that don't run it.
+- `accessibility` — `true` or `false`: whether the program carries its accessibility layer —
+  what screen readers are given, the accessibility warnings, reduced motion. A game drawn
+  every frame, with nothing a screen reader could use, sets it false and pays nothing for it.
 
 The block is read before the program runs, so it says nothing about how the program behaves,
 and the program runs the same whichever values a host uses. A program running as another's
@@ -1060,7 +1063,7 @@ the root.
 ### rules
 
 - A member is one of the three.
-  > says: defaultFlags has no member 'density' — render, kernel, or crawler
+  > says: defaultFlags has no member 'density' — render, crawler, kernel
   > probe: defaultFlags [ density = 1 ]\nApp [ ]
 - A value is one of its member's words.
   > says: defaultFlags' render is dom or canvas
@@ -1076,7 +1079,7 @@ the root.
 
 forms: ship
 classes: AppIsland
-guide: 23-renderers · Renderers and hosts, 25-packaging · Packaging for production
+guide: 24-renderers · Renderers and hosts, 26-packaging · Packaging for production
 
 ## script
 

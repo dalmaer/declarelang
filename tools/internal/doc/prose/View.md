@@ -397,6 +397,18 @@ is *in* — selected or not, saved or draft — keeps one class and a
 [`State`](declare-docs:State) for each variation; a state's children exist only while it
 applies. The two nest: a class per kind, with states inside.
 
+## firstVisibleRow
+**Read-only** fact, on a view whose children are replicated: the logical index of the first
+record any part of which is in view in the nearest scroller — the message a chat's date chip
+names, the start of "rows 40–58". `-1` when none is. It is the list's, not a row's: a virtualized
+list hands a recycled row another record without the row changing anything of its own, so a
+row cannot tell you it moved; this can. Read it as `:rows[list.firstVisibleRow]`, never by
+having rows report themselves.
+
+## lastVisibleRow
+**Read-only** fact: the logical index of the last record any part of which is in view — a row cut
+by the bottom edge counts, one that only touches it does not. `-1` when none is.
+
 ## rowIndex
 **Read-only** fact: this instance's index in the array its replication presents. It is 0
 for the first record and follows the record as others arrive, leave or reorder, so a
@@ -588,6 +600,97 @@ and through its stops (an entry form). `region`: one stop from outside, entered 
 and inside it Tab wraps and never leaves — a window, a pane; F6 and Shift-F6 move between
 regions. `modal`: Tab wraps inside and never leaves; a dialog is one. Every scope remembers
 what last had focus inside it.
+
+## accessibilityRole
+What this view **is** to a screen reader and to every platform's accessibility API — a word,
+written once, fixed for the view's life (a `{ }` role is a compile error). It is also a
+**contract the compiler checks**: a role reads certain facts and calls certain methods, and a
+class that declares it must set them — `slider` needs `accessibilityValue`, `accessibilityMin`,
+`accessibilityMax` and the two step methods, and the error names whichever is missing. Any
+class meets a role the same way the library's do; there is no list of special classes. `none`
+is transparent: the view contributes nothing, and its children are read as its parent's. The
+library's controls already declare theirs, so a `Button` or a `Slider` needs nothing more.
+
+## accessibilityLabel
+The **accessible name** — what a screen reader calls the view. Not the visible `label` a
+control shows: an icon button shows nothing and is still named "Close". A button, link, tab,
+checkbox or menu item with no accessible name takes one from the text inside it, so
+`Button [ label = "Send" ]` needs nothing; set this where nothing visible says what the view
+is — a switch, a slider, a drawn control, an icon.
+
+## accessibilityHint
+A longer description, read after the name and value — what pressing it does, when the name
+alone does not say. Leave it empty rather than repeating the name.
+
+## accessibilityLive
+Whether changes to what this view shows are announced as they happen, without the focus
+moving: `polite` waits for a pause, `assertive` interrupts. A status line, a count of results.
+A `status` role is polite without saying so.
+
+## accessibilityValue
+The value a `slider` or `progress` role reports, in the view's own units — usually bound to
+the class's own fact (`accessibilityValue = { position }`). `null` on a progress bar is
+indeterminate: busy, with no amount.
+
+## accessibilityMin
+The low end of the range `accessibilityValue` moves in.
+
+## accessibilityMax
+The high end of the range `accessibilityValue` moves in.
+
+## accessibilityStep
+How far one increment moves the value; `Control`'s default step methods use it (a tenth of
+the range when unset).
+
+## accessibilityValueText
+The value as it should be **spoken**, when the number alone would mislead — "0:12 of 1:05",
+"Medium", "3 stars". Read instead of the number.
+
+## accessibilityChecked
+Whether a `checkbox`, `switch`, `radio` or checkable `menuItem` is checked — bound to the
+control's own `checked` (or what plays that part), never written by hand. `null` is a
+checkbox's mixed state.
+
+## accessibilityPressed
+Whether a `toggle` — a button that stays down — is pressed.
+
+## accessibilitySelected
+Whether this `tab`, `row`, `cell`, `listItem`, `option` or `treeItem` is the selected one.
+
+## accessibilitySort
+Which way the column a `columnHeader` heads is sorted: `"none"` (the default),
+`"ascending"` or `"descending"`. A screen reader says it with the header's name.
+
+## accessibilityMultiselectable
+Whether more than one item of this `listbox`, `grid` or `tree` can be selected at once.
+`false` by default; a `Table` or `DataGrid` that `selects = "multi"` sets it.
+
+## accessibilityActiveItem
+The item inside this composite the keyboard is on, while the focus stays on the
+composite itself: a menu's highlighted row, a list's active row, the suggestion a
+combobox's field has arrowed to. A screen reader announces it as the keys move, as if it
+had the focus (on the web, `aria-activedescendant`). `null`, the default, names none. The
+library's `Menu`, `Table`, `DataGrid` and `Combobox` set it; a composite of your own that
+keeps the focus while arrows move a highlight sets it the same way:
+`accessibilityActiveItem = { activeRow }`.
+
+## accessibilityExpanded
+Whether what this view opens is open — an accordion pane, a menu, a list it drops — so a
+screen reader says expanded or collapsed. Unset (null) on a view that opens nothing; the
+library's controls set it where they drop a menu.
+
+## accessibilityLevel
+A `heading`'s level, 1 to 6 — the outline a screen reader's heading navigation walks. A
+`treeItem`'s depth, 1 at the top.
+
+## accessibilityPosInSet
+This item's place among its siblings, from 1 — "2 of 3". Null takes the place its
+replication gives it, which is right for a flat list; a tree's rows, replicated flat, say
+where they stand among their own siblings.
+
+## accessibilitySetSize
+How many siblings this item is among — the "of 3". Null takes the count its replication
+gives.
 
 ## onPointerDown
 The pointer pressed on the view — the raw press phase. Prefer `click` (press **and**

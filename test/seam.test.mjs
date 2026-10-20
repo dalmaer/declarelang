@@ -197,6 +197,22 @@ const TABLE = {
     mac: "GAP (not yet built) — AppKit has the row semantics (NSAccessibility rowCount / rowIndexRange), so the native host CAN say it; nothing is wired yet. Until it is, a windowed list there announces the size of its WINDOW rather than of the collection",
     headless: NOT_APPLICABLE,
   },
+  // What a view is to assistive technology, as the web spells it
+  // (accessibility.md §5.2): the DOM annotates its own elements. The other
+  // hosts build from the semantic tree instead (the canvas a DOM mirror, the
+  // Mac NSAccessibility elements), so for them this call is not the seam.
+  setSemantics: {
+    dom: true,
+    canvas: "GAP (phase 6, not yet built) — the canvas has no element per view to annotate; it will realize the semantic tree as a hidden DOM mirror built from the tree's diff, not through this call",
+    mac: "GAP (phase 5, not yet built) — the native host builds NSAccessibility elements from the semantic tree's diff over the op buffer; it never takes ARIA attributes",
+    headless: NOT_APPLICABLE,
+  },
+  setLanguage: {
+    dom: true,
+    canvas: "GAP (phase 6, with its accessibility mirror) — nothing on a canvas page reads a language until the mirror exists; the mirror will carry it",
+    mac: "GAP (phase 5) — NSAccessibility takes the language per element (accessibilityLanguage); it lands with the AX elements",
+    headless: NOT_APPLICABLE,
+  },
   setRowIndex: {
     dom: true,
     canvas: "GAP — same absence as setRowCount: no accessibility tree, so a row cannot report its logical position within the collection",
@@ -427,7 +443,7 @@ for (const member of members) {
 // interaction.ts's, shared, so input honesty never depends on this row.
 await test("the size of the silent-failure surface is stated, not drifting", () => {
   const total = [...src("backend.ts").matchAll(/^ {2}[a-zA-Z][a-zA-Z0-9]*\??\(/gm)].length;
-  assert.equal(members.length, 36,   // +setContentExtent (2026-10-04): a padded scroller's extent, for the DOM's strut — canvas/mac compute it in the shared scene walk
+  assert.equal(members.length, 38,   // +setSemantics, +setLanguage (2026-10-18): a view's ARIA on its own element; an app's language (accessibility.md)
                                 // +setScaling (2026-10-11): a subtree's resampling, `scaling = pixelated`
                                      // +scrollbarHeld (2026-10-02): a held thumb maps the pointer onto the range, so a windowed list holds its range still   // +userScrollByTouch (2026-09-30): a browser-driven scroll says a finger holds it, so anchoring waits   // +richMetrics (2026-09-26, the document flow): baseline + widest off the renderer's layout — DOM reports, canvas/mac use the manual flow's arithmetic
                                      // +setPadding (2026-09-19, padding moves to the view): the TRAILING inset a padded scroller must still show — the origin shift rides the children's own setX/setY and needs no row

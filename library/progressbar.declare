@@ -24,6 +24,15 @@ The bar's thickness, from the theme's `progressBarHeight` (8 by default).
 
 ## cornerRadius
 Fully rounded: half the height, at any thickness.
+
+## accessibilityValue
+Follows `value`.
+
+## accessibilityMin
+Follows `min`.
+
+## accessibilityMax
+Follows `max`.
 */
 
 class ProgressBar [
@@ -31,6 +40,10 @@ class ProgressBar [
     value: number = 0,
     min:   number = 0,
     max:   number = 100,
+    accessibilityRole = progress,
+    accessibilityValue = { value },
+    accessibilityMin = { min },
+    accessibilityMax = { max },
 
     fill = { provided("theme").trackFill ?? provided("theme").control },
 

@@ -33,6 +33,7 @@ import { pressOutside, scrollOutside, contextOf, inside as insideAcross, leafAcr
 import type { InteractionView } from "./interaction.js";
 import { Files } from "./files.js";
 import { Inspect } from "./inspect-service.js";
+import { Accessibility } from "./accessibility-service.js";
 import { afterSettle } from "./reactive.js";
 import { measureText } from "./text-measure.js";
 
@@ -68,7 +69,7 @@ setOutsidePressHook(
     return false;
   },
   (x, y) => { const root = Focus.getRoot(); return root !== null && scrollOutside(root, x, y); });
-setBodyServices({ Focus, Keys, Files, Inspect, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
+setBodyServices({ Focus, Keys, Files, Inspect, Accessibility, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
 // A focused island is not a control: what its program claims, it claims itself.
 setKeysFocusProbe(() => { const f = Focus.getFocus(); return f !== null && !("$tenant" in f); });
 

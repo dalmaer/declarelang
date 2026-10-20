@@ -16,6 +16,7 @@
 //   { type:"extract",    id, source, originDir, document } → { ok, html, title, doc?, report? }
 //   { type:"flags",      id, source, originDir } → the program's own flags, or undefined
 //   { type:"production", id, args }           → writeProduction's result, errors projected
+//   { type:"sizes",      id, args }           → the build's sizes report, nothing written
 //   { type:"fresh",      id, closure, props } → boolean (isUpToDate over diskProbe)
 //   { type:"highlight",  id, src }            → segments
 //   { type:"index",      id, src, file, libraryDir } → { metrics, defs } (highlight.ts programIndex)
@@ -29,7 +30,7 @@ import { compileProgram } from "../compiler/dist/declarec.js";
 import { readFileSync } from "node:fs";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { highlight, programIndex } from "../compiler/dist/highlight.js";
-import { writeProduction } from "../tools/declarec.mjs";
+import { writeProduction, buildProduction } from "../tools/declarec.mjs";
 
 async function handle(m) {
   switch (m.type) {
@@ -60,6 +61,11 @@ async function handle(m) {
         closure: built.closure, moduleName: built.moduleName, sizes: built.sizes,
         assets: built.assets, usedClasses: built.usedClasses,
       };
+    }
+    case "sizes": {
+      const { source, ...opts } = m.args;
+      const built = await buildProduction(source, { ...opts, sizes: true });
+      return { ok: built.ok, report: built.report ?? null, closure: built.closure, sizes: built.ok ? built.sizesReport : null };
     }
     case "fresh":
       return isUpToDate(m.closure, m.props, diskProbe);

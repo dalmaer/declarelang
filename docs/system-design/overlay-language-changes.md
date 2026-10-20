@@ -276,6 +276,47 @@ with them (the prefix grows while typing continues, the same letter again cycles
 picks); `typeahead = false` turns it off, as `Combobox` does for its list, whose letters are its
 field's. Only menus: a group control's few members gain little from it.
 
+## Accessibility (accessibility.md, ruled 2026-10-18)
+
+| Change | Where |
+|---|---|
+| On View: `accessibilityRole` (a closed vocabulary, fixed for the view's life), `accessibilityLabel`, `accessibilityHint`, `accessibilityLive`, and the contract members `accessibilityValue`, `…Min`, `…Max`, `…Step`, `…ValueText`, `…Checked`, `…Pressed`, `…Selected`, `…Level` — every default null or a string, off the kernel block | schema.ts, view.ts, a11y-vocab.ts |
+| A role is a contract the compiler checks (DECLARE2006); a `{ }` role is refused (DECLARE2007); a role written after the view is built throws; a role `createView` passes is checked as the view is created | a11y-roles.ts, compiler/a11y-check.ts, view.ts, instantiate.ts |
+| Warnings: a Control with no role (DECLARE4016), a role that needs a name with none (DECLARE4017), a drawn focusable view with no role (DECLARE4018) — not in merged library source, not under `accessibility = false` | compiler/a11y-check.ts, diagnostics.ts |
+| The semantic tree (`semanticTree`, `formatSemantics`), `__declare.semantics()`, `declare-look --semantics` | semantics.ts, inspect.ts, tools/look.mjs |
+| A class body's `accessibility…` facts are the class's defaults (a literal) or live defaults (a `{ }`), not per-instance constraints | instantiate.ts (`synthesize`) |
+| The `accessibility` flag (default true): off, the compiler removes every `accessibility…` member after checking, the warnings are skipped, and `__DECLARE_ACCESSIBILITY__` drops the layer from the build | flags.ts, compile.ts, declarec.mjs, server/create.mjs, build-flags.d.ts |
+| `methods` the roles call: `accessibilityIncrement()` / `accessibilityDecrement()` (a `slider` must define them; Control's arrow keys call them), `accessibilityShowMenu()` | library/control.declare, a11y-roles.ts |
+| Contrast (WCAG AA) in San Francisco: light `textMuted` `#6C7A88` → `#596570`; dark `accent` `#4C8DFF` → `#2F6FE0`, with hover and pressed now stepping darker (`#2B68D8`, `#2762D0`) so white labels keep 4.5:1; both menu highlights `gradient(#306FE6, #2563D6)` | library/themes/sanfrancisco.declare, themes-data.ts (generated) |
+| A theme token `linkColor` (optional, no default: a reader falls back to `accent`): the blue of links on the page, which in a dark theme must be lighter than the accent behind white labels. Rich text's links read it. San Francisco sets `#2062D6` light, `#4C8DFF` dark | rich-text.ts, prose/RichText.md |
+| Programs: readable text moved off `textFaint` (left for decoration and disabled) onto `textMuted` in sampler, tracker, calendar, desktop; slight darkenings of their own muted tones in docs and birds, the tracker's tag hues, and the guide's done-task grey. The homepage and Market Map palettes are unchanged (DT) | apps/…, docs/guide/01, docs/briefs |
+| `TabBar` (library/tabbar.declare): a `Segmented` that is heard as tabs (role `tabList`, each segment a `SegmentedTab` with `tab` and `accessibilitySelected`), with a `Segmented`'s keys: the arrows move among the tabs and Space or Enter picks, so a pane changes only when asked. `Segmented` itself no longer follows a linked choice on the arrow; Enter follows it, as a link. No panel class: a pane is the program's own view, `accessibilityRole = tabPanel` with its tab's label. Its own file and its own rows, so a program with a `Segmented` and no tabs carries none of it. The sampler's page switch and the docs' Guide/Reference switch are `TabBar`s | library/tabbar.declare, segmented.declare, apps/sampler, apps/docs, guide 08 |
+| New library controls, each in its own file (a program pays only for those it names): `Disclosure`; `Stepper` (role `spinButton`); `Toolbar`, `ToolButton`, `ToolbarDivider`; `Breadcrumb`, `Crumb`, `CrumbLink`, `CrumbHere`; `Tree`, `TreeRow`; `Splitter` (a focusable `separator` with a value); `DatePicker`, `MonthCalendar`, `CalendarDay`, `CalendarArrow`. `Window` now has a frame by default — surface, title bar, close button (`WindowClose`), dragging, `resizable`, Esc, `open`/`input`, brought forward when pressed — and `frame = false` is the bare window it was (Desktop's `DeskWindow` sets it; its `title` is now Window's). Its role is `dialog` named by `title`, where it was `group`. Shown on the sampler's More page | library/*.declare, autoincludes.json, apps/sampler, guide 08 |
+| Role `spinButton` (ARIA `spinbutton`): value, min, max, increment/decrement; Control's Up and Down step it. A `separator` may carry a value and range, and takes increment/decrement as actions where it has them (`mayMethods` in a contract: actions that are not required) | a11y-vocab.ts, a11y-roles.ts, semantics(-dom).ts, control.declare |
+| `accessibilityPosInSet`, `accessibilitySetSize` on View: an item's place among its siblings, over the one its replication gives — a tree's rows, replicated flat | schema.ts, view.ts, semantics(-dom).ts, prose/View.md |
+| The semantic tree reads as the browser does: no text inside a role whose content is presentation (button, checkbox, tab, slider, …); no text that only repeats a node's value; a place ("2 of 4") only on the roles that have one. A heading with no level says level 2 on the DOM | semantics.ts, semantics-dom.ts |
+| Library names now taken by the new controls: a program's own class may not reuse one. Two in this tree did and were renamed: lzx-calendar's `Stepper` → `Nudger`; the guide's and brief's custom-control example `Stepper` → `Counter` | apps/lzx-calendar, docs/guide/17, docs/briefs/your-own-control.md, library/control.declare |
+| `Control` is a `button` by default: a control is something pressed, and says so with no word from the program. A control that is something else names its own role. The compile warning for a Control with no role (DECLARE4016) is gone with it | library/control.declare, compiler/src/a11y-check.ts, runtime/src/diagnostics.ts |
+| A wordless control takes its name from its `tooltipLabel`, else from a named mark it shows: `CloseIcon` is "Close", `PlusIcon` is "Add". Words always win, so "Add" beside a plus is "Add". The no-name warning (DECLARE4017) accepts a tip or a named mark | semantics.ts (`contentOf`, `nameOfContent`), semantics-dom.ts, library/icons/core.declare, a11y-check.ts |
+| A view faded to opacity 0 is not read: pruned from the semantic tree, and `aria-hidden` on its element while it is at 0 (written at the crossing only). Opacity stays paint for input, as ruled | semantics.ts, dom-backend.ts (`setFaded`) |
+| The role contracts no longer ship: the semantic tree keeps three small role sets (named by content, pressed, stepped), a test holds them to the contracts, and `createView`'s contract check is a development check. **Size** | semantics.ts, instantiate.ts, test/accessibility.test.mjs |
+| **In main too.** The Themes preset table ships only the presets a program names (a subset capability, like the schema table); the cutter reads a table wrapped in `Object.freeze`. Calendar: −2.1 KB gzip | compiler/src/capabilities.ts |
+| Apps: no `accessibilityRole = button` remains in any app; the weather and marketmap labels that repeated a tooltip are gone; the calendar's `Ev` is a `Control` with its action in `press()` (it was a view with pointer handlers and its own Enter key) | apps/* |
+
+Also built: `Accessibility.announce`, `accessibilityExpanded` (ruled), `App.language`,
+`firstVisibleRow` / `lastVisibleRow`, `SearchField`. Not yet built: `accessibilitySettings`,
+`ignoreReduceMotion` (phase 4).
+
+## Flags (2026-10-18)
+
+| Change | Where |
+|---|---|
+| One registry for all three surfaces: `name=value` in a program's `defaultFlags`, a URL and `declarec`, with the same names and values; booleans are `true`/`false`. Removed: `--canvas`, bare `--crawler`, `--no-<name>`, `--render canvas`, bare `?crawler`, `=1`/`=0` | runtime/src/flags.ts, compiler/src/flags.ts, parser.ts, declarec.mjs |
+| `declarec` refuses a switch it does not know | tools/declarec.mjs |
+| `render=mac` and the `?program` request removed (the Mac host compiles on device; nothing asked for either) | flags.ts, reqtypes.ts, server/create.mjs, mac-host |
+| A production program no longer carries its `defaultFlags` (spent at build) | tools/declarec.mjs |
+| **Not accessibility; merge with the rest.** The sizes report: `declarec --sizes` (text; `--json` for the report alone) and the dev server's `?sizes` request (JSON, cached while the program's files are unchanged). The parts are measured (program, runtime, kernel, page); every file says how it came in (`include`, auto-included for a tag and named where, provided); declarations are weighed by what removing each would save; modules carry their capability and reason. A compile now records how each file came in (`Compiled.sources`). The Viewer presents it in a Sizes tab, `?viewer=sizes` (request `sizes-tab`): the total and its parts as one bar, every file with how it came in and a link to the reader, every runtime module with its reason, the stand-ins, what is left out and what is fetched beside. The tab switch now fits between the brand and the right-hand controls, and the type-size stepper steps aside below 520px. Below 520px the tabs are a menu opened from a button naming the tab; the header's line counts wrap beneath the filename, phrase by phrase; the include page's "Edit …" line is a link (built from its location, as a segment's is) rather than an `onClick` writing `app.location`. The Sizes tab's files are two folds, Program (the program's own files) and Library, and the runtime a third, shut by default, each line summing its fold (`Disclosure.detail`, new: a summary at the line's right end) on a band of its own. New library control `TextSizeSwitch` (a `Segmented` of three reading sizes, its A's drawn by `TextSizeIcon` and `TextSmall/Medium/LargeIcon`) replaces the hand-made A buttons in the Viewer and docs; three presets in place of the old 0.1 steps; a sampler specimen, a guide row, demos | tools/declarec.mjs, compiler/src/compile.ts, runtime/src/include.ts, compiler/src/reqtypes.ts, server/create.mjs, server/toolchain*.mjs, browser/mac-boot.js, service-worker.js, library/platform-apps/viewer/viewer.declare (and its baselines), test/reader-flow.test.mjs, docs/operational/building.md, dev-server.md, requests.md, assemble.mjs |
+
 ## Programs changed (for review with the merge)
 
 - **`apps/desktop`**: `DeskWindow extends Window` (step 4); the dock is one Tab stop; a Files
@@ -293,7 +334,77 @@ field's. Only menus: a group control's few members gain little from it.
   shortcuts as key-test chains. Guide 09 § Keyboard shortcuts, 18 § Overlays that belong to a
   window, 24 (the boundary is transparent) — neutral examples, nothing shaped like an eval.
 
+## From the outside evaluation (2026-10-19)
+
+| Change | Where |
+|---|---|
+| **Browser focus follows the runtime's through overlays.** The browser refuses focus to an element that is inert or not yet built, silently: an opener behind a closing modal, a dialog's button in the settle that opens it. Focus is applied again when a modal releases `inert`, and retried after the settle and for a few frames while the runtime's focus is still there. Dialog, Sheet and Popover hand focus back on Esc, by key or pointer; an alert opened from either has the browser's focus | runtime/src/semantics-dom.ts |
+| **`accessibilityActiveItem`** (new, View): the item a composite's keys are on while the focus stays on the composite, written as `aria-activedescendant` and marked `active` in the semantic tree. A `Menu` now holds the focus while open (`takesFocus`, holding it itself, named by its opener, its own `onKeyDown` so a menu bar's group does not walk it) and names its highlighted row; a `Combobox`'s field names the suggestion; `Table` names its active row and `DataGrid` its active cell, each reported by the row or cell itself (`trackChanges`), so a recycled row takes itself back | runtime/src/view.ts, schema.ts, semantics.ts, semantics-dom.ts; library/menu.declare, combobox.declare, table.declare, datagrid.declare |
+| `aria-selected` for `option` and `treeItem` | semantics-dom.ts |
+| Tab in a menu holding the focus closes it and moves on from its opener (not for a modal that holds the focus itself, which keeps Tab); an overlay hands the focus back on close only if it has not gone somewhere since | runtime/src/focus.ts, library/floating.declare |
+| **The keyboard's context menu**: Shift+F10 and the Menu key open the context menu of the focused view, or of the item it names, by a press at that point (the right-click's route); the browser's own menu for the key is not delivered twice | runtime/src/input.ts, focus.ts |
+| A tip shows for keyboard focus as for hover; a tip that is not the name describes (`aria-description`, a `hint` in the tree) | runtime/src/view.ts, focus.ts, semantics.ts, semantics-dom.ts |
+| Toast: its action is a Tab stop; held open while hovered or its action is focused, going 1.5 s after it is let go; announced once (`say`), no longer also a `status` region | library/toast.declare |
+| Slider: Home, End, Page Up, Page Down | library/slider.declare |
+| Popover is a `dialog` named by its opener (was a `group` with `aria-modal`); a Dialog is described by its `message` (`accessibilityHint`). `alertdialog` for `ask()`/`error()` is not done: a role is fixed for a view's lifetime, and both reuse one Dialog | library/popover.declare, dialog.declare |
+| MenuBar: Right past a menu's own levels and Left at its top open the menu beside it (`Menu.sideways`, nothing by default) | library/menu.declare, menubar.declare |
+| A separator taller than wide is `aria-orientation="vertical"`; a drawing's `<canvas>` is `aria-hidden` (its view says what it is) | semantics-dom.ts, dom-backend.ts |
+| **`columnHeader`** (new role, named by content) and **`accessibilitySort`** (new: none, ascending, descending). A DataGrid's header row is a row of column headers stating their sort; Up from the first row goes into it, Left/Right move along it, Enter or Space sorts, Down returns (`inHeader`); the header the keys are on is outlined as the active cell is. Its edit and check cells' controls are named by their column; a field inside a container contributes its value to the container's name, not its label | a11y-vocab.ts, a11y-roles.ts, semantics*.ts, view.ts, schema.ts; library/datagrid.declare |
+| The App's overlay layers are the window's size, not the App's, so an App that is a scrolling page opens its sheets and dialogs on screen (Cadence 14); an overlay's fallback frame is the window's, the App's headless | library/overlaystrata.declare, dialog/sheet/popover/toast.declare |
+| DECLARE4017 counts a `label = ""` as no words | compiler/src/a11y-check.ts |
+| **An icon is placed like any view**: `Icon` and `IconHost` no longer declare `y = center`, so one sits in a row whose layout centers its children (Murmur 9: a library icon in `SimpleLayout [ align = center ]` was refused). Every use that relied on it says `y = center` itself (81 uses; the icon reference demos use a centering row instead); nothing moved (the visual baselines hold) | library/icons/icon.declare; library/tree, button, viewer; apps/calendar, tracker, docs demos, games; docs/guide/17-your-own-views.md |
+| `ask()` and `error()` stay `dialog`s: named by the title and described by the message, a listener hears both as one opens; `alertdialog` would need a role per open, against §12.3 | |
+| **`App.accessibilitySettings`** (new): the person's preferences, fed live from the browser (`reduceMotion`, `increaseContrast`, `reduceTransparency`; `textScale` 1), read as `provided("accessibilitySettings")`. The motion system's automatic reduced motion (springs and TweenLayout landing at once) was built, measured with it forced on, and parked: see accessibility.md §8 | runtime/src/view.ts, schema.ts, boot.ts |
+| **`accessibilityMultiselectable`** (new; listbox, grid, tree): `aria-multiselectable`; `Table`/`DataGrid` set it from `selects == "multi"` | view.ts, schema.ts, a11y-roles.ts, semantics*.ts; library/table.declare |
+| A `Combobox`'s list is a `listbox` of `option`s: the Menu is made with the role at creation and `asList` (new, Menu), its rows showing an option view (selected by its record's new `selected`) in place of the menu item | library/menu.declare, combobox.declare |
+| DECLARE5000 offers `<Program><Class>` (`CadenceSheet`) | runtime/src/include.ts, compiler/src/compile.ts |
+| Apps: the sampler's grid is named "Tasks"; the two-way dial's slider "Hue" | apps/sampler, apps/two-way/dial.declare |
+| Gzip, accessibility on: calendar 137,257 → 138,278 (+1,021; text `wrapWidth` included), tracker 154,766 → 156,321, weather 141,574 → 142,721. Raw runtime: semantics-dom +1,137, input +656, attributes +327 (the theme fix), focus +239, text +174 | |
+
+## Teaching, from the evals (2026-10-19)
+
+| Change | Where |
+|---|---|
+| `declare-help` prints a method's whole signature on its entry (`insert(path, index: number, v: unknown): void`), and an interface's inherited members (`WheelEvent` shows `deltaX`/`deltaY` from `PointerEvent`); `WheelEvent`'s description says the amount is `deltaX`/`deltaY` | tools/declare-help.mjs, compiler/src/scaffold.ts |
+| `declare.md` §5: only a change notifies (an equal value wakes nothing; a new array or record is a change); a constraint or computed default is worked out once and kept, and re-derived only when what it reads changes | docs/declare.md |
+| Spring: a spring built later (a row made when its data arrives) starts at its first target too | doc prose Spring.md |
+| `flexes`: flexing children share the room equally; equal widths by arithmetic is a drift-check tell | guide 06-layout.md, skill/SKILL.md |
+| The guide's `Swatch` example overrides `press()` at the use site instead of declaring an empty `picked()`; the empty pass-on method is a drift-check tell | guide 04-structure.md, skill/SKILL.md |
+| A form in a sheet: a generic example (a new page, its address suggested by its title until edited, a taken address refused): the form is a class that `exists` while the sheet is open, so each opening starts fresh; a suggestion is a computed default, shown with `initial` | guide 14-data.md |
+
+## Checking tools, from the evals (2026-10-19)
+
+| Change | Where |
+|---|---|
+| A press in a check is a person's: a view below the fold is scrolled into sight first, and a press on a view something else covers fails, naming what it would reach (it used to land elsewhere in silence) — `drive.click`/`drag`/`wheel`, so `declare-look` too | tools/internal/verify-behave.mjs |
+| A path step may name a view by what it says — its label, accessible name or text (`app.seg.Two`, quoted with a dot or a space: `app.menu."Save As…"`); a member's name and an index still come first | runtime/src/inspect.ts `find` |
+| `declare-look`: `--call 'PATH.METHOD(ARGS)'`, `--set PATH.ATTR=VALUE`, `--read` past the view (`app.col.childViews.length`), and a run that goes well prints only what was asked for (the R1–R5 ladder only on failure) | tools/look.mjs |
+| verify.md: the checks' virtual clock (a hold fires on `drive.wait`, not on real time), the whole `drive`/`expect` vocabulary in one table, and what the "statically wired" count means (information, not a task) | docs/operational/verify.md |
+| `clip = { … }` checks: the slot's type in a body is `Shape \| boolean \| null`, as its bare literal always was (Murmur 9) | compiler/src/scaffold.ts, test/scaffold.test.mjs |
+| Collections guide: a record whose `id` changes on screen is keyed on a `ref` of the client's own (`key = :ref`); a small fixed set is replicated from a literal `Dataset`, and a set where one is chosen is a one-stop group | guide 16-collections.md |
+| A `datapath` to a fresh value stays refused (a cursor points into declared data, and rows' writes would land nowhere); DECLARE3006 and the runtime's refusal now both offer the derived form, `items: Dataset [ contents = { … } ]`, for records computed per view (Murmur 9 built one per row without being told) | runtime/src/diagnostics.ts, data.ts |
+| `repeat = { Infinity }` documented as the way to loop for good, which `settleMotion` does not wait for (Murmur used a large finite count, which it does) | doc prose Animator.md |
+
+## Text (2026-10-19)
+
+| Change | Where |
+|---|---|
+| **`wrapWidth`** on `Text` and rich text: where a run with no width of its own wraps, and it then takes the width of its widest line (a chat bubble as wide as "ok", or as its longest line up to the limit). `Text`'s default is 0 (one line, as before); rich text's is 640, the reading measure it always had, now settable. A width given wins. Greedy wrapping at the widest line breaks where wrapping at `wrapWidth` did, so every renderer, wrapping at the box, draws the same lines. Murmur's bubbles needed `measureText` for this | runtime/src/text.ts, rich-text.ts, schema.ts, doc prose Text.md and RichText.md, guide 12-text.md, test/unit.test.mjs |
+| Words that must not part ("3h 40m") use a no-break space: a sentence in 12-text.md. Cadence's shrink-the-figure workaround needed nothing more; no construct added | docs/guide/12-text.md |
+
+## Text fields: what they hold (2026-10-19)
+
+| Change | Where |
+|---|---|
+| **`purpose`** on `TextInput` (`text`, `name`, `email`, `username`, `password`, `newPassword`, `oneTimeCode`, `tel`, `url`, `digits`, `decimal`, `cardNumber`, `cardName`, `cardExpiry`, `cardCode`, `addressLine1`, `addressLine2`, `city`, `region`, `postalCode`, `country`): what the field holds, told to the platform as its `autocomplete` name (autofill, password managers), its `inputmode` (a phone's keyboard), capitalization, and no spell-check or autocorrection where they get in the way. WCAG's "identify input purpose". A commerce form had no way to say any of it | runtime/src/purpose.ts (the one table), text-input.ts, backend.ts, dom-backend.ts, canvas-backend.ts, mac-backend.ts, schema.ts; doc prose TextInput.md; guide 08-controls.md |
+| **`concealed`** on `TextInput`: what is typed is hidden (`type = password`; the Mac host's `NSSecureTextField`). Follows `purpose` (`password`, `newPassword`) until set, so a "show password" control changes what shows and the field stays a password to a password manager. A concealed field's text is never in the semantic tree, nor in the name of what holds it | text-input.ts, semantics.ts, mac-host Overlays.swift; test/unit.test.mjs, accessibility-browser.test.mjs |
+| Guide chapter **19, Accessibility** (the later chapters renumbered); the FAQ, guide 01 and 24, and SATOR-7 updated to match | docs/guide/19-accessibility.md, apps/homepage/declare-faq.md, docs/tenets/1 SATOR.md, skill/SKILL.md |
+
 ## Runtime bug fixes found on the way (no semantic change intended)
+
+- **The focus ring stayed after a press on the control that had keyboard focus** (focus.ts): the press changed how focus was had, not where, so nothing told the ring. The focus service now tells its listeners when a press flips the keyboard modality on the same view. Test: accessibility-browser.
+
+- **A spring whose target is no number ticked forever** (spring.ts): `Infinity − Infinity` never lands, so a NaN target — a size nothing has measured — kept the frame loop running and the focus ring chasing ±∞. It now sleeps where it is until a real target wakes it. Test: inspect.test.
 
 - `input.ts`: a press with a mouse's secondary button (a right-click) fired `onClick` on the
   view under it as well as the context gesture. It fires no click now, as on the web; the
@@ -332,6 +443,20 @@ field's. Only menus: a group control's few members gain little from it.
 - `canvas-backend.ts`: the native field of a focused `TextInput` scrolled under a pinned bar
   painted over the bar (its overlay clip knew the scroller's box, not its frame chrome); it
   is now cut where the scroller's pinned chrome covers it, as paint is. **In main too.**
+- `attributes.ts` / `bind.ts`: a view whose `theme = { { ...provided("theme"), … } }` extends the
+  theme above it kept its first answer: once its provision existed, its own re-run read it
+  ("its own provision is checked first") instead of the value above, so it never followed a
+  light→dark change (declare.md §9 promises `provided(…)` walks up, never to itself). While a
+  provision derives, a read of that name on that node now starts at the parent. Calendar
+  +45 B gzip. **In main too.**
+- `compile.ts`: the link registry's warnings were moved onto the author's files twice, so a
+  line of the program was read as a line of the merged text and the warning named a library
+  file (the Viewer's showed `library/control.declare:254`). Moved once now. **In main too.**
+- `tools/declarec.mjs` `minifyBodies`: a method's parameters are `{ name, type }` now, and the
+  wrapper joined them as strings (`function __d([object Object])`), which esbuild refused, so
+  every method that takes a parameter kept its comments and indentation. The precompiled
+  bundle minified them again, so a page's total was unaffected; island programs and the
+  Inspector's program, which ship bodies as text, carried them. **In main too.**
 - `dom-backend.ts`: moving an element blurs a focused field inside it, and the blur cleared
   Declare's focus — Tab in a dialog jumped to the page once a sibling re-ordered (the ring
   re-hosting). Moves now keep focus (`keepingFocus`), and a blur a move causes is not

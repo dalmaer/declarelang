@@ -267,7 +267,7 @@ literal names or that live outside its folder; `compiler = true`, it compiles so
 true`, it answers questions about itself in production ([Packaging](declare-docs:guide:packaging)). A
 literal `program = "name"` or `url = "path"` needs no entry, and hosts that carry sources and a compiler read none of it.
 **`defaultFlags [ … ]`** gives the program's own defaults for the platform's flags — `render = canvas`,
-`kernel = js`, `crawler = true` — which a request's `?render=` or `declarec --render` overrides; a
+`kernel = js`, `crawler = true`, `accessibility = false` — which a request's `?render=` or `declarec --render=` overrides; a
 program has at most one, in any of its files ([Renderers](declare-docs:guide:renderers), [defaultFlags](declare-docs:language:defaultFlags)). **`theme Name [ … ]`** and **`style Name [ … ]`** are named records of
 literal values — a token record, and the style of a run of text with no view (§9).
 
@@ -351,6 +351,9 @@ changes, so a node-typed argument is refused); a helper that should be *analyzed
 
 **Assignment is the setter.** `count = count + 1` updates the value and notifies everything
 that reads it; there is no bypass. Reads are symmetric — a bare read **is** the tracked read.
+**Only a change notifies:** a write, or a constraint re-deriving, that lands on the value already
+there (the same number, string or boolean, the same object) wakes nothing. A new array or
+record is a change, even with the same contents.
 
 ### The settle
 
@@ -407,6 +410,9 @@ is the same idea).
 |---|---|---|---|---|
 | `width = { … }` — **set** an existing attribute | yes | subscribes to it | **refused** at runtime | the value is simply derived and should stay that way |
 | `segIndex: number = { … }` — **declare** with a default | no | inlines the expression, so its deps become yours | lands, and the formula is gone | you may want to take the value over later |
+
+Either kind is worked out once and kept, and worked out again only when what it reads
+changes: reading one, however often, costs nothing.
 
 Use both; know which you wrote. One rule covers every case: **derived state is never assigned —
 change its inputs instead.**

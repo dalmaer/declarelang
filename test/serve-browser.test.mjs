@@ -70,8 +70,11 @@ try {
   });
 
   await test("a live demo preview is running (an embedded compiled child app)", async () => {
-    assert.ok(await page.evaluate(() => document.body.innerText.includes("click anywhere to change v")),
-      "the reactivity demo's text should be on screen");
+    // the demo compiles in the page, which a loaded run makes slower than the
+    // fixed wait above: wait for its text rather than for a time
+    const shown = await page.waitForFunction(() => document.body.innerText.includes("click anywhere to change v"), { timeout: 30000 })
+      .then(() => true, () => false);
+    assert.ok(shown, "the reactivity demo's text should be on screen");
   });
 
   await test("the in-browser compiler compiles an edit (the demo onInput path)", async () => {

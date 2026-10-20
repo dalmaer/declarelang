@@ -11,7 +11,7 @@
 import { deferral } from "./boot-deferrals.js";
 import { DeclareError } from "./errors.js";
 import { Constraint, kernel, touchCell } from "./reactive.js";
-import { defaultOf, markPercent, own, release, setBound, provideWrite, slotCellOf, writeOwned, isSetOrOwned, ownerOf, kernelLanding } from "./attributes.js";
+import { defaultOf, markPercent, own, release, setBound, provideWrite, computingProvision, slotCellOf, writeOwned, isSetOrOwned, ownerOf, kernelLanding } from "./attributes.js";
 import { KERNEL_FLAG } from "./kernel-loader.js";
 import { compileExpr } from "./expr.js";
 import { View, inheritedCursor, withCursorDefining } from "./view.js";
@@ -37,21 +37,23 @@ export function provideBind(view, name, src, pos, classroot, deps) {
     if ("error" in c)
         throw new DeclareError(`${view.constructor.name} provides ${name} = { … } ${c.error}`, pos);
     const fn = c.fn;
-    const k = new Constraint(`${view.constructor.name} provides ${name}`, () => fn.call(view, view.parent, classroot), (v) => provideWrite(view, name, v));
+    const k = new Constraint(`${view.constructor.name} provides ${name}`, 
+    // a read of `name` inside it is the value above this node, which it extends
+    () => computingProvision(view, name, () => fn.call(view, view.parent, classroot)), (v) => provideWrite(view, name, v));
     k.source = src;
     k.sourcePos = sourceAt(pos);
     onDiscard(view, () => k.dispose());
     const regionReactive = deps !== undefined && deps.some((rp) => rp.startsWith(":") || rp.includes(".read(") || rp.includes(".value."));
     if (deps !== undefined && deps.length > 0 && !regionReactive) {
         const probes = probeFns(deps);
-        k.wire(() => {
+        k.wire(() => computingProvision(view, name, () => {
             for (const p of probes) {
                 try {
                     p.call(view, view.parent, classroot);
                 }
                 catch { /* a null-value projection — its tracked prefix is already wired */ }
             }
-        }, deps);
+        }), deps);
     }
     else {
         k.run();

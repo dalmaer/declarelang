@@ -217,6 +217,21 @@ export class Windowing {
     /** The rows in view at the last match. */
     inViewFrom = 0;
     inViewTo = -1;
+    /** Wakes the readers of the in-view range (View.firstVisibleRow / lastVisibleRow)
+     *  when a pass moves it. */
+    inViewCell = new Cell();
+    /** The records any part of which is in the viewport, as logical indices — the
+     *  range each pass computes to decide what to build. Tracked. */
+    inView() {
+        this.inViewCell.track();
+        if (this.inViewTo < this.inViewFrom)
+            return { first: -1, last: -1 };
+        // a row that only touches the bottom edge is built (it is about to show) but
+        // not in view: none of it is visible yet
+        const last = this.inViewTo > this.inViewFrom && this.ledger.offset(this.inViewTo) >= this.inViewEdge - 0.5 ? this.inViewTo - 1 : this.inViewTo;
+        return { first: this.inViewFrom, last };
+    }
+    inViewEdge = 0;
     /** Rows from this index on lie past a held thumb's frozen range, which
      *  ends at `reach` in ledger coordinates (Infinity when no thumb is held). */
     limit = 0;
@@ -448,6 +463,8 @@ export class Windowing {
         this.hidden = !this.shownChain();
         if (this.hidden) {
             this.from = this.to = 0;
+            if (this.inViewTo !== -1)
+                this.inViewCell.changed();
             this.inViewFrom = 0;
             this.inViewTo = -1;
             return { data, nodes: [], items: arr, arrayPath, logical: n, start: 0, unit: this.unit, windowed: true, dataChanged, leading: this.leading };
@@ -559,8 +576,13 @@ export class Windowing {
         from = Math.min(from, to);
         this.from = from;
         this.to = to;
+        const wasFrom = this.inViewFrom, wasTo = this.inViewTo;
         this.inViewFrom = Math.min(first, Math.max(0, n - 1));
         this.inViewTo = Math.min(this.ledger.indexAt(Math.max(0, l + viewH)), Math.max(0, n - 1));
+        const edgeMoved = this.inViewEdge !== l + viewH;
+        this.inViewEdge = l + viewH;
+        if (this.inViewFrom !== wasFrom || this.inViewTo !== wasTo || edgeMoved)
+            this.inViewCell.changed();
         this.keepRows = Math.ceil(viewH / Math.max(1, this.ledger.est));
         this.poolCap = Math.max(8, Math.ceil((POOL_SCREENS * viewH) / Math.max(1, this.ledger.est)));
         if (l !== this.movedL) {

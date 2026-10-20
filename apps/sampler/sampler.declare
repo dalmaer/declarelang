@@ -66,7 +66,7 @@ class Specimen extends Card [ width = 100%,
     padding = [14, 16, 16, 16],                      // the eyebrow sits a little higher than it is deep
     layout: SimpleLayout [ axis = y, spacing = 17 ],   // eyebrow, then the specimen
     hd: Text [ fontSize = 11.5, fontWeight = semibold, letterSpacing = 1.1,
-        textColor = { provided("theme").textFaint }, text = { label.toUpperCase() } ]
+        textColor = { provided("theme").textMuted }, text = { label.toUpperCase() } ]
     ]
 
 
@@ -84,11 +84,15 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
 
     barH: number = { app.compact ? 92 : 52 },    // fixed for a width — on a narrow one the page switch takes a second row
 
-    page: "controls" | "table" | "grid" | "overlays" = "controls",      // the center switch
+    page: "controls" | "table" | "grid" | "overlays" | "more" = "controls",      // the center switch
     style: "sanFrancisco" | "mountainView" | "cupertino" | "redmond" = "sanFrancisco",
     menuLocked: boolean = true,
     lastPick: string = "(none yet)",
     lastCtx: string = "(none yet)",
+    span: string = "week",
+    readScale: number = 1,
+    pane: string = "general",
+    lastBar: string = "(none yet)",
     themeMode: "auto" | "light" | "dark" = "auto",          // orthogonal to the styling
     darkUI: boolean = { themeMode == "dark" || (themeMode == "auto" && app.dark) },
     animateFocus: boolean = true,
@@ -242,7 +246,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
 
     sizer: Popover [
         Text [ fontWeight = semibold, textColor = { provided("theme").text }, text = { "Text size · " + app.textSize } ],
-        Slider [ width = 200, min = 10, max = 32, value = { app.textSize },
+        Slider [ width = 200, min = 10, max = 32, value = { app.textSize }, accessibilityLabel = "Text size",
             input(v: number) { app.textSize = Math.round(v) }
             ]
         ],
@@ -250,7 +254,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     rename: Dialog [ title = "Rename document",
         buttons = { [ ({ id: "cancel", label: "Cancel", cancel: true }), ({ id: "ok", label: "Rename", default: true }) ] },
         picked(id: string) { if (id == "ok" && this.nameField.text != "") app.docName = this.nameField.text; app.lastOverlay = "rename: " + id },
-        nameField: TextInput [ width = 100%, initial = { app.docName } ]
+        nameField: TextInput [ width = 100%, initial = { app.docName }, accessibilityLabel = "Document name" ]
         ],
 
     viewer: Dialog [ presentation = "full",
@@ -260,7 +264,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             ]
         ],
 
-    prefs: Sheet [ edge = "end",
+    prefs: Sheet [ edge = "end", accessibilityLabel = "Preferences",
         Text [ fontSize = 17, fontWeight = bold, textColor = { provided("theme").text }, text = "Preferences" ],
         Checkbox [ label = "Show line numbers", checked = true ],
         Checkbox [ label = "Wrap long lines" ],
@@ -270,7 +274,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             ]
         ],
 
-    share: Sheet [
+    share: Sheet [ accessibilityLabel = "Share",
         Text [ fontSize = 17, fontWeight = bold, textColor = { provided("theme").text }, text = "Share" ],
         Text [ width = 100%, wrap = true, textColor = { provided("theme").textMuted },
             text = "A sheet whose edge is the bottom floats as a card on a wide screen and rises from the bottom on a phone." ],
@@ -320,18 +324,19 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                 visible = { !app.compact }, text = "Sampler" ]
             ],
 
-        // the page switch is the library Segmented — one tab stop, arrows
-        // move, the ring hugs the active segment
+        // the page switch is the library's TabBar, a Segmented as tabs — one tab
+        // stop, the arrows move and show each page, the ring hugs the tab
 
-        pageSwitch: Segmented [ y = { app.compact ? 52 : 11 },
+        pageSwitch: TabBar [ y = { app.compact ? 52 : 11 },
             x = { app.compact ? (app.width - this.width) / 2 : Math.max(200, (app.width - this.width) / 2) },
-            segMin = { app.compact ? Math.min(92, (app.width - 32) / 4) : 92 },
+            segMin = { app.compact ? Math.min(92, (app.width - 32) / 5) : 92 },
             value = { app.page },
-            input(v: object) { app.page = v as "controls" | "table" | "grid" | "overlays" },
+            input(v: object) { app.page = v as "controls" | "table" | "grid" | "overlays" | "more" },
             choices = { [ ({ id: "controls", label: "Controls" }),
                           ({ id: "table",    label: "Table" }),
                           ({ id: "grid",     label: "DataGrid" }),
-                          ({ id: "overlays", label: "Overlays" }) ] }
+                          ({ id: "overlays", label: "Overlays" }),
+                          ({ id: "more",     label: "More" }) ] }
             ],
 
         // at the right end: the STYLING door — a button with a menu (the
@@ -364,6 +369,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             // ── Controls page: specimen cards, two balanced columns ────────
 
             grid: View [ visible = { app.page == "controls" }, width = 100%,
+                accessibilityRole = tabPanel, accessibilityLabel = "Controls",
                 layout: ResponsiveLayout [ plan = { [
                     ({ from: 876, flow: "row",   gap: 32, share: ({ left: 50, right: 50 }) }),
                     ({ from: 0, flow: "stack", gap: 20, share: ({ left: 100, right: 100 }) })] } ],
@@ -384,8 +390,8 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                         row: View [
                             layout: SimpleLayout [ axis = x, spacing = 24 ],
                             Checkbox [ label = "Notifications", checked = true ],
-                            Switch [ checked = true ],
-                            Switch [ ],
+                            Switch [ checked = true, accessibilityLabel = "Wi-Fi" ],
+                            Switch [ accessibilityLabel = "Bluetooth" ],
                             RadioGroup [ value = "m",
                                 Radio [ choice = "s", label = "S" ],
                                 Radio [ choice = "m", label = "M" ],
@@ -394,11 +400,34 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                             ]
                         ],
 
-                    Specimen [ label = "Slider · Progress",
+                    Specimen [ label = "Segmented",
+                        demo: View [ width = 100%,
+                            layout: SimpleLayout [ axis = y, spacing = 10 ],
+                            Segmented [ width = { Math.min(260, parent.width) }, value = { app.span },
+                                accessibilityLabel = "Span",
+                                choices = { [ ({ id: "day", label: "Day" }),
+                                              ({ id: "week", label: "Week" }),
+                                              ({ id: "month", label: "Month" }) ] },
+                                input(v: string) { app.span = v }
+                                ],
+                            Text [ fontSize = 12, textColor = { provided("theme").textMuted },
+                                text = { "showing a " + app.span } ]
+                            ],
+                        size: View [ width = 100%,
+                            layout: SimpleLayout [ axis = x, spacing = 12, align = center ],
+                            TextSizeSwitch [ value = { app.readScale },
+                                input(v: object) { app.readScale = v as number }
+                                ],
+                            Text [ fontSize = { 13 * app.readScale }, textColor = { provided("theme").textMuted }, text = "Text at this size" ]
+                            ]
+                        ],
+
+                    Specimen [ label = "Slider · Progress · Gauge",
                         demo: View [ width = 100%,
                             layout: SimpleLayout [ axis = y, spacing = 14 ],
-                            vol: Slider [ width = { Math.min(280, parent.width) }, value = 40, tooltipLabel = "Volume — arrows nudge" ],
-                            ProgressBar [ width = { Math.min(280, parent.width) }, value = { parent.vol.value } ]
+                            vol: Slider [ width = { Math.min(280, parent.width) }, value = 40, tooltipLabel = "Volume — arrows nudge", accessibilityLabel = "Volume" ],
+                            ProgressBar [ width = { Math.min(280, parent.width) }, value = { parent.vol.value }, accessibilityLabel = "Volume level" ],
+                            Gauge [ width = { Math.min(280, parent.width) }, label = "Storage", value = 72 ]
                             ]
                         ],
 
@@ -413,7 +442,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                                     ({ id: "edsger", label: "Edsger Dijkstra" }),
                                     ({ id: "barbara", label: "Barbara Liskov" }),
                                 ] } ],
-                            cap: Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                            cap: Text [ fontSize = 12, textColor = { provided("theme").textMuted },
                                 text = { "chosen: " + (parent.cb.value != null ? (parent.cb.value as any).label : "none") } ]
                             ]
                         ],
@@ -425,7 +454,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                             onHold(e: PointerEvent) { app.ctxMenu.open(this, e) },
                             Text [ x = 14, y = 14, fontSize = 13, textColor = { provided("theme").textMuted },
                                 text = "Right-click (or long-press) in this box." ],
-                            got: Text [ x = 14, y = 40, fontSize = 12, textColor = { provided("theme").textFaint },
+                            got: Text [ x = 14, y = 40, fontSize = 12, textColor = { provided("theme").textMuted },
                                 text = { "picked: " + app.lastCtx } ]
                             ]
                         ]
@@ -434,12 +463,20 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                 right: View [
                     layout: SimpleLayout [ axis = y, spacing = 20 ],
 
-                    Specimen [ label = "Text input · Field",
+                    Specimen [ label = "Text input · Search field · Field",
                         demo: View [ width = 100%,
                             layout: SimpleLayout [ axis = y, spacing = 12 ],
-                            TextInput [ width = { Math.min(280, parent.width) }, height = 30, placeholder = "Your name" ],
-                            Field [ label = "Email", labelWidth = 56,
-                                TextInput [ width = 220, height = 30, text = "d@t.com" ]
+                            TextInput [ width = { Math.min(280, parent.width) }, height = 30, placeholder = "Your name",
+                                purpose = name ],
+                            SearchField [ width = { Math.min(280, parent.width) }, placeholder = "Search documents" ],
+                            Field [ label = "Email", labelWidth = 72,
+                                TextInput [ width = 200, height = 30, text = "d@t.com", purpose = email, accessibilityLabel = "Email" ]
+                                ],
+
+                            // `purpose = password` hides what is typed and lets a password manager fill it
+
+                            Field [ label = "Password", labelWidth = 72,
+                                TextInput [ width = 200, height = 30, text = "hunter2", purpose = password, accessibilityLabel = "Password" ]
                                 ]
                             ]
                         ],
@@ -453,8 +490,32 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
 
                             Button [ width = 130, label = "Options",
                                 menu = { app.optionsMenu } ],
-                            last: Text [ y = center, fontSize = 12, textColor = { provided("theme").textFaint },
+                            last: Text [ y = center, fontSize = 12, textColor = { provided("theme").textMuted },
                                 text = { "picked: " + app.lastPick } ]
+                            ]
+                        ],
+
+                    Specimen [ label = "Menu bar",
+                        demo: View [ width = 100%,
+                            layout: SimpleLayout [ axis = y, spacing = 10 ],
+                            bar: MenuBar [
+                                menus = { [ ({ id: "file", label: "File", items: [
+                                                ({ id: "new", label: "New" }),
+                                                ({ id: "open", label: "Open…" }),
+                                                ({ divider: true }),
+                                                ({ id: "close", label: "Close" }) ] }),
+                                            ({ id: "edit", label: "Edit", items: [
+                                                ({ id: "undo", label: "Undo" }),
+                                                ({ divider: true }),
+                                                ({ id: "cut", label: "Cut" }),
+                                                ({ id: "copy", label: "Copy" }) ] }),
+                                            ({ id: "view", label: "View", items: [
+                                                ({ id: "zoom-in", label: "Zoom In" }),
+                                                ({ id: "zoom-out", label: "Zoom Out" }) ] }) ] },
+                                picked(id: string) { app.lastBar = id }
+                                ],
+                            Text [ fontSize = 12, textColor = { provided("theme").textMuted },
+                                text = { "picked: " + app.lastBar } ]
                             ]
                         ],
 
@@ -472,7 +533,31 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                                     onClick() { app.dlg.error("Could not connect", "The server refused the connection.", (id) => app.lastDialog = id) }
                                     ]
                                 ],
-                            ans: Text [ fontSize = 12, textColor = { provided("theme").textFaint }, text = { "answered: " + app.lastDialog } ]
+                            ans: Text [ fontSize = 12, textColor = { provided("theme").textMuted }, text = { "answered: " + app.lastDialog } ]
+                            ]
+                        ],
+
+                    Specimen [ label = "TabBar",
+                        demo: View [ width = 100%,
+                            layout: SimpleLayout [ axis = y, spacing = 12 ],
+                            TabBar [ width = { Math.min(260, parent.width) }, value = { app.pane },
+                                choices = { [ ({ id: "general", label: "General" }),
+                                              ({ id: "privacy", label: "Privacy" }),
+                                              ({ id: "sync", label: "Sync" }) ] },
+                                input(v: string) { app.pane = v }
+                                ],
+                            View [ visible = { app.pane == "general" },
+                                accessibilityRole = tabPanel, accessibilityLabel = "General",
+                                Checkbox [ label = "Open at login", checked = true ]
+                                ],
+                            View [ visible = { app.pane == "privacy" },
+                                accessibilityRole = tabPanel, accessibilityLabel = "Privacy",
+                                Checkbox [ label = "Share usage data" ]
+                                ],
+                            View [ visible = { app.pane == "sync" },
+                                accessibilityRole = tabPanel, accessibilityLabel = "Sync",
+                                Checkbox [ label = "Sync over cellular" ]
+                                ]
                             ]
                         ],
 
@@ -501,10 +586,11 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             // ── Table page: the ruled selection model, at real height ──────
 
             tablePage: View [ visible = { app.page == "table" }, width = 100%,
+                accessibilityRole = tabPanel, accessibilityLabel = "Table",
                 layout: SimpleLayout [ axis = y, spacing = 10 ],
                 Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.2,
-                    textColor = { provided("theme").textFaint }, text = "TABLE — THE RULED SELECTION MODEL" ],
-                tbl: Table [ width = 100%,
+                    textColor = { provided("theme").textMuted }, text = "TABLE — THE RULED SELECTION MODEL" ],
+                tbl: Table [ width = 100%, accessibilityLabel = "Cities",
                     height = { Math.max(240, app.height - app.barH - 190) },
                     datapath = { app.cities.value }, selects = "multi",
                     fill = { provided("theme").surface }, stroke = { stroke(1, provided("theme").line) }, cornerRadius = 8,
@@ -513,7 +599,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                         p: Text [ x = 260, y = center, fontSize = 13, textColor = { provided("theme").textMuted }, text = :pop ]
                         ]
                     ],
-                cap: Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                cap: Text [ width = 100%, wrap = true, fontSize = 12, textColor = { provided("theme").textMuted },
                     text = { "Click, ⇧-range, ⌘-toggle; arrows + Space from the keyboard.  Selected: "
                            + (((parent.tbl.selection ?? []).map((r) => r.name).join(", ")) || "none") } ]
                 ],
@@ -521,11 +607,12 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             // ── DataGrid page: 500 windowed rows, live cells ───────────────
 
             gridPage: View [ visible = { app.page == "grid" }, width = 100%,
+                accessibilityRole = tabPanel, accessibilityLabel = "DataGrid",
                 layout: SimpleLayout [ axis = y, spacing = 10 ],
                 Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.2, padding = [0, 0, 32, 0],
-                    textColor = { provided("theme").textFaint },
+                    textColor = { provided("theme").textMuted },
                     text = "DATAGRID — 500 ROWS, WINDOWED; EVERY CELL WRITES THE RECORD" ],
-                grid: DataGrid [ width = 100%,
+                grid: DataGrid [ width = 100%, accessibilityLabel = "Tasks",
                     height = { Math.max(280, app.height - app.barH - 220) },
                     datapath = { app.gd.value }, selects = "multi",
                     fill = { provided("theme").surface }, stroke = { stroke(1, provided("theme").line) }, cornerRadius = 8,
@@ -549,16 +636,165 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                     Column [ title = "Done", field = "done", width = 64, kind = "check" ],
                     GridRow [ datapath = :rows[], virtualize = true ]
                     ],
-                cap: Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                cap: Text [ width = 100%, wrap = true, fontSize = 12, textColor = { provided("theme").textMuted },
                     text = "Title edits live; State and Owner pick from a menu; Done is a checkbox — every edit writes the RECORD (windowing keeps it). Drag headers to reorder, edges to resize, click to sort. From the keyboard: arrows move the active cell, Enter or typing edits, Esc puts it back." ]
+                ],
+
+            // ── More page: the newer controls, two balanced columns ─────────
+
+            morePage: View [ visible = { app.page == "more" }, width = 100%,
+                accessibilityRole = tabPanel, accessibilityLabel = "More",
+                layout: ResponsiveLayout [ plan = { [
+                    ({ from: 876, flow: "row",   gap: 32, share: ({ left: 50, right: 50 }) }),
+                    ({ from: 0, flow: "stack", gap: 20, share: ({ left: 100, right: 100 }) })] } ],
+
+                left: View [
+                    layout: SimpleLayout [ axis = y, spacing = 20 ],
+
+                    Specimen [ label = "Disclosure",
+                        stack: View [ width = 100%,
+                            layout: SimpleLayout [ axis = y, spacing = 2 ],
+                            Disclosure [ width = 100%, label = "Advanced options",
+                                Checkbox [ label = "Keep a log" ],
+                                Checkbox [ label = "Check for updates" ]
+                                ],
+                            Disclosure [ width = 100%, label = "Details",
+                                Text [ width = 100%, wrap = true, fontSize = 13, textColor = { provided("theme").textMuted },
+                                    text = "Any number may be open at once; an Accordion keeps one." ]
+                                ]
+                            ]
+                        ],
+
+                    Specimen [ label = "Stepper",
+                        copies: number = 2,
+                        row: View [
+                            layout: SimpleLayout [ axis = x, spacing = 12, align = center ],
+                            Stepper [ value = { parent.parent.copies }, min = 1, max = 99, accessibilityLabel = "Copies",
+                                input(v: number) { (parent.parent as any).copies = v }
+                                ],
+                            Text [ fontSize = 13, textColor = { provided("theme").textMuted }, text = { parent.parent.copies + " copies" } ],
+                            Stepper [ value = 12, min = 6, max = 72, accessibilityLabel = "Text size",
+                                format(v: number) -> string { return v + " pt" }
+                                ]
+                            ]
+                        ],
+
+                    Specimen [ label = "Toolbar",
+                        bold: boolean = true,
+                        italic: boolean = false,
+                        Toolbar [ accessibilityLabel = "Formatting",
+                            ToolButton [ label = "B", toggle = true, accessibilityLabel = "Bold",
+                                on = { parent.parent.bold },
+                                input(v: boolean) { (parent.parent as any).bold = v }
+                                ],
+                            ToolButton [ label = "I", toggle = true, accessibilityLabel = "Italic",
+                                on = { parent.parent.italic },
+                                input(v: boolean) { (parent.parent as any).italic = v }
+                                ],
+                            ToolbarDivider [ ],
+                            ToolButton [ label = "Cut" ],
+                            ToolButton [ label = "Copy" ],
+                            ToolbarDivider [ ],
+                            ToolButton [ icon = "PlusIcon", label = "Add" ],
+                            ToolButton [ icon = "MinusIcon", label = "Remove" ]
+                            ],
+                        Text [ fontSize = 12, textColor = { provided("theme").textMuted },
+                            text = "One Tab stop: the arrows move along it, Space or Enter presses." ]
+                        ],
+
+                    Specimen [ label = "Tree",
+                        Tree [ width = 100%, accessibilityLabel = "Files", value = "notes",
+                            expanded = ["docs", "pics"],
+                            items = { [
+                                ({ id: "docs", label: "Documents", children: [
+                                    ({ id: "notes", label: "Notes.txt" }),
+                                    ({ id: "plans", label: "Plans", children: [
+                                        ({ id: "q1", label: "Q1.txt" }), ({ id: "q2", label: "Q2.txt" }) ] }) ] }),
+                                ({ id: "pics", label: "Pictures", children: [
+                                    ({ id: "beach", label: "Beach.jpg" }), ({ id: "hills", label: "Hills.jpg" }) ] }),
+                                ({ id: "todo", label: "To do" }) ] } ],
+                        Text [ fontSize = 12, textColor = { provided("theme").textMuted },
+                            text = "Up and Down move, Right opens or steps in, Left closes or steps out." ]
+                        ]
+                    ],
+
+                right: View [
+                    layout: SimpleLayout [ axis = y, spacing = 20 ],
+
+                    Specimen [ label = "Breadcrumb",
+                        at: string = "layout",
+                        Breadcrumb [
+                            items = { [ ({ id: "home", label: "Home" }),
+                                        ({ id: "guide", label: "Guide" }),
+                                        ({ id: "layout", label: "Layout" }) ] },
+                            input(id: string) { (parent as any).at = id }
+                            ],
+                        Text [ fontSize = 12, textColor = { provided("theme").textMuted }, text = { "last pressed: " + parent.at } ]
+                        ],
+
+                    Specimen [ label = "Splitter",
+                        panes: View [ width = 100%, height = 140, clip = true, cornerRadius = 8,
+                            stroke = { stroke(1, provided("theme").line) },
+                            layout: SimpleLayout [ axis = x ],
+                            side: View [ width = { parent.split.value }, height = 100%, fill = { provided("theme").background },
+                                Text [ x = 12, y = 12, fontSize = 13, text = "Mailboxes" ]
+                                ],
+                            split: Splitter [ value = 140, min = 90, max = 260, accessibilityLabel = "Sidebar width" ],
+                            main: View [ width = { parent.width - parent.side.width - parent.split.width }, height = 100%,
+                                Text [ x = 12, y = 12, fontSize = 13, text = { "Message — sidebar " + parent.parent.split.value + " px" } ]
+                                ]
+                            ]
+                        ],
+
+                    Specimen [ label = "Date picker · Month calendar",
+                        day: string = "2026-10-18",
+                        row: View [ width = 100%,
+                            layout: SimpleLayout [ axis = y, spacing = 16 ],
+                            Field [ label = "Due",
+                                DatePicker [ width = 150, value = { parent.parent.parent.day },
+                                    input(v: string) { (parent.parent.parent as any).day = v }
+                                    ]
+                                ],
+                            MonthCalendar [ value = { parent.parent.day },
+                                input(v: string) { (parent.parent as any).day = v }
+                                ]
+                            ]
+                        ],
+
+                    Specimen [ label = "Window",
+                        notesOpen: boolean = true,
+                        stage: View [ width = 100%, height = 280, clip = true, cornerRadius = 8,
+                            fill = { provided("theme").background },
+                            Window [ x = 14, y = 14, width = 210, height = 170, title = "Settings",
+                                View [ width = 100%, padding = 14,
+                                    layout: SimpleLayout [ axis = y, spacing = 10 ],
+                                    Checkbox [ label = "Line numbers" ],
+                                    Checkbox [ label = "Wrap lines" ]
+                                    ]
+                                ],
+                            Window [ x = 150, y = 80, width = 220, height = 180, title = "Notes", resizable = true,
+                                open = { parent.parent.notesOpen },
+                                input(v: boolean) { (parent.parent as any).notesOpen = v },
+                                View [ width = 100%, padding = 14,
+                                    layout: SimpleLayout [ axis = y, spacing = 10 ],
+                                    TextInput [ width = 100%, placeholder = "Title" ]
+                                    ]
+                                ]
+                            ],
+                        Button [ label = "Show notes", disabled = { parent.notesOpen },
+                            onClick() { (parent as any).notesOpen = true }
+                            ]
+                        ]
+                    ]
                 ],
 
             // ── Overlays page: every kind of Floating, opened from a card ──
 
             overlaysPage: View [ visible = { app.page == "overlays" }, width = 100%,
+                accessibilityRole = tabPanel, accessibilityLabel = "Overlays",
                 layout: SimpleLayout [ axis = y, spacing = 16 ],
                 Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.2,
-                    textColor = { provided("theme").textFaint }, text = "OVERLAYS — EACH PAINTS ABOVE ITS CONTEXT, CLOSES AS ITS KIND DOES" ],
+                    textColor = { provided("theme").textMuted }, text = "OVERLAYS — EACH PAINTS ABOVE ITS CONTEXT, CLOSES AS ITS KIND DOES" ],
 
                 Specimen [ label = "Popover",
                     View [ layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
@@ -567,7 +803,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                             ],
                         Text [ fontSize = { app.textSize }, textColor = { provided("theme").text }, text = "The quick brown fox" ]
                         ],
-                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                    Text [ fontSize = 12, textColor = { provided("theme").textMuted },
                         text = "Anchored to its button, follows it as the page scrolls; a press outside closes it and still lands." ]
                     ],
 
@@ -583,7 +819,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                             onClick() { app.viewer.show() }
                             ]
                         ],
-                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                    Text [ fontSize = 12, textColor = { provided("theme").textMuted },
                         text = { "Document: " + app.docName + " · " + app.lastOverlay } ]
                     ],
 
@@ -596,7 +832,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                             onClick() { app.share.show() }
                             ]
                         ],
-                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                    Text [ fontSize = 12, textColor = { provided("theme").textMuted },
                         text = "Preferences slides in from the end edge; Share floats as a card — both rise from the bottom on a phone." ]
                     ],
 
@@ -609,7 +845,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                             onClick() { app.toast.say("Item deleted", ({ id: "undo", label: "Undo" })) }
                             ]
                         ],
-                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                    Text [ fontSize = 12, textColor = { provided("theme").textMuted },
                         text = "Takes no focus, blocks nothing, goes by itself." ]
                     ],
 
@@ -620,7 +856,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                             ],
                         Button [ label = "With a tooltip", tooltipLabel = "Tooltips paint above everything too" ]
                         ],
-                    Text [ fontSize = 12, textColor = { provided("theme").textFaint },
+                    Text [ fontSize = 12, textColor = { provided("theme").textMuted },
                         text = "A menu over a dialog, a toast over both; Esc closes the topmost." ]
                     ]
                 ]

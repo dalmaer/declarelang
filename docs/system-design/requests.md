@@ -31,9 +31,11 @@ URL surface.
 | **build** | `?build` | the standalone, minified, self-contained deployable (the `declarec` artifact). A *directory* of files — see the transport note below. |
 | **reader** | `?viewer=reader` | the **viewer** app, reader tab: highlighted source with `/* */` prose rendered as Markdown. |
 | **source** | `?viewer=source` | the **viewer** app, **Source** tab: the verbatim source shown *in the viewer*. (Distinct from `?file`.) |
+| **sizes-tab** | `?viewer=sizes` | the **viewer** app, **Sizes** tab: the `sizes` report presented — the total and its parts, every file with how it came in, every runtime module with what brought it aboard. Needs the dev server for its data. |
 | **edit** | `?viewer=edit` | the **viewer** app, live-edit tab: source in an editor, the running program below, compile errors between. |
 | **file** | `?file` | the raw source **bytes** (`text/plain`) — what an `include`, the compiler, or `curl` reads. |
 | **segments** | `?segments` | the highlighter's output as **JSON** (`highlight()` segments — the reader's data alone). |
+| **sizes** | `?sizes` | what the **production build** is made of and what each part weighs, as **JSON** (`declarec --sizes --json`). Takes the build's modifiers (`?sizes&render=canvas`). Dev server only, as `?build` is: a static host has no compiler to build with. |
 | **extract** | `?extract` | the **static-extraction** document alone (`text/html`) — the program's content as semantic HTML at its t=0 snapshot, for crawlers and AI readers (capabilities.md §5). |
 
 `source` vs `file` is the split that removes the old collision: `?viewer=source` is the
@@ -66,12 +68,12 @@ not take its directory's name.
 
 ## Modifiers
 
-Three, and they compose onto `run` and `build` (nothing else):
+Three, and they compose onto `run`, `build` and `sizes` (nothing else):
 
 | Modifier | URL | Meaning |
 |---|---|---|
 | **render** | `?render=canvas` | which renderer: managed DOM (default) or one `<canvas>`. |
-| **crawler** | `?crawler` | embed the crawler DOM (`#declare-static`) in the run/build wrapper — "the running app **with** the crawler content." Removed before first paint (never CSS-hidden; see serve-core.js). Distinct from the `extract` *request*, which returns that document alone. |
+| **crawler** | `?crawler=true` | embed the crawler DOM (`#declare-static`) in the run/build wrapper — "the running app **with** the crawler content." Removed before first paint (never CSS-hidden; see serve-core.js). Distinct from the `extract` *request*, which returns that document alone. |
 | **clear** | `?clear` | on an **entry page** only (`/` or any `…/index.html`): drop every compiled-program cache in this browser — and, on the dev server, the server's too — then run. Ignored on a program URL. |
 
 ### Why `clear` exists, and why it is only on an entry page
@@ -171,8 +173,8 @@ not list is not in the package, and the request 404s — by design (app-packagin
   query-uniformity — honest about `build` being a discrete deployable, not a view.
 - **`extract` on `declarec`** emits the extraction document as an *additional* output
   file alongside the build — a build may legitimately produce more than one file.
-- **`?crawler` on a static host** is a *build-time* affair: crawlers don't install service
-  workers, so the block is baked by `declarec --crawler`, the homepage bake
+- **`?crawler=true` on a static host** is a *build-time* affair: crawlers don't install service
+  workers, so the block is baked by `declarec --crawler=true`, the homepage bake
   (`tools/internal/bake-homepage-crawler.mjs`), or the prewarm seo tier — not embedded at request
   time by the SW.
 - **The dev server names itself.** `GET /__identity` answers `{ pid, root, platform,

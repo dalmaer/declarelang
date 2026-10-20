@@ -36,7 +36,7 @@ it.*
 
 include [ "machine.declare", "well.declare", "game.declare", "enemies.declare", "camera.declare", "scene.declare", "figures.declare", "beam.declare", "screen.declare", "sound.declare" ]
 
-defaultFlags [ render = canvas ]
+defaultFlags [ render = canvas, accessibility = false ]
 
 App [ appName = "Tempest", fill = black,
     wavesData: DataSource [ url = "waves.json", auto = true, schema = [ waves[]: Wave ] ],

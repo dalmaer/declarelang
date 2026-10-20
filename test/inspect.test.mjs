@@ -182,6 +182,26 @@ await test("driven clock: step() advances motion deterministically; settleMotion
   clock.auto();
 });
 
+await test("a spring whose target is no number sleeps, rather than ticking forever; a real target wakes it", async () => {
+  clock.manual();
+  const app = await boot(`App [ width = 300, height = 100, w: number = 40,
+    ball: View [ width = 20, height = 20,
+        slide: Spring [ attribute = x, to = { app.w * 2 }, stiffness = 200, damping = 30 ] ] ]`);
+  const ball = find(app, "app.ball");
+  clock.step(16.7);
+  assert.equal(ball.x, 80);
+  app.w = NaN;                         // a size nothing has measured
+  settle();
+  assert.equal(clock.settleMotion(2000), true, "motion comes to rest");
+  assert.equal(ball.x, 80, "left where it was");
+  app.w = 10;
+  settle();
+  assert.equal(clock.settleMotion(10000), true);
+  assert.ok(Math.abs(ball.x - 20) < 1, `woken and landed: ${ball.x}`);
+  app.discard();
+  clock.auto();
+});
+
 await test("stats: node and owned-slot counts", async () => {
   const app = await boot(APP);
   const s = stats(app);
@@ -251,6 +271,21 @@ await test("explain: an unknown slot answers loudly, never with placid nothing",
     assert.match(p.error, /no attribute 'fitZ'/);
     assert.match(p.error, /fitS/, "with the near name suggested");
   } finally { app.discard(); }
+});
+
+// A path can name a view by what it says, so a check need not know a child's
+// position among its siblings (a Segmented's segments sit after its own parts).
+await test("find: a path step names a view by its label, accessible name or text; quoted when it holds a dot", async () => {
+  const app = await boot(`App [ width = 300, height = 200, pick: string = "a",
+    seg: Segmented [ width = 240, value = { app.pick }, input(v: any) { app.pick = v },
+        choices = { [ ({ id: "a", label: "One" }), ({ id: "b", label: "Two" }) ] } ],
+    box: View [ Text [ text = "Save As…" ], v: View [ accessibilityLabel = "Volume", accessibilityRole = group ] ] ]`);
+  const two = find(app, "app.seg.Two");
+  assert.ok(two !== null && (two.label === "Two" || two.text === "Two"), "the view in the segment that says Two (a press on it is the segment's)");
+  assert.equal(find(app, 'app.box."Save As…"')?.text, "Save As…", "a text, quoted");
+  assert.equal(find(app, "app.box.Volume"), find(app, "app.box.v"), "a view by its accessible name");
+  assert.equal(find(app, "app.box.Nothing"), null);
+  assert.equal(find(app, "app.seg"), app.seg, "a member's name still comes first");
 });
 
 summarize("inspect");

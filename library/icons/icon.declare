@@ -8,6 +8,9 @@ text baseline and reads like a square-root sign, not like a checkmark. The
 library's own marks — `Checkbox.mark`, `Menu.check`, the `Combobox` disclosure —
 are all `Icon`s.
 
+An icon is placed like any view. In a row, the row's `align = center` centers it with
+the text beside it; placed by hand, it takes `y = center` as any view does.
+
 ### Writing one
 
 Subclass and override `draw`. Author the shape in a **16×16 box** — `unit`
@@ -176,7 +179,6 @@ class IconHost [
     iconSize: number = { provided("iconSize", 16) },
     width  = { classroot.kind == "" ? 0 : iconSize },
     height = { iconSize },
-    y = center,
     visible = { classroot.kind != "" },
 
     // The ink channel. A value passed to `createView` is set once, and the ink
@@ -213,7 +215,6 @@ class Icon [
 
     width  = { iconSize },
     height = { this.width },
-    y = center,
 
     // Follows the effective text colour, so an icon beside a muted label goes
     // muted on its own. State `ink` directly to override — `IconHost` does it for

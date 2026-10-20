@@ -1,4 +1,4 @@
-class Stepper extends Control [ width = 90, height = 26, cornerRadius = 6,
+class Counter extends Control [ width = 90, height = 26, cornerRadius = 6,
     n: number = 0,
     fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : provided("theme").control },
     press() { n = n + 1 },
@@ -6,5 +6,5 @@ class Stepper extends Control [ width = 90, height = 26, cornerRadius = 6,
     ]
 
 
-App [ Stepper [ x = 20, y = 20 ]
+App [ Counter [ x = 20, y = 20 ]
     ]

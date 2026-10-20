@@ -23,6 +23,7 @@ import { fontMetrics, fontString, wrapEditable, type TextStyle, type FontWeight 
 import { heldFamily, type FamilyValue } from "./font-value.js";
 import { isTwoWay, edited, commitDraft, Editor } from "./editor.js";
 import { insetSides, stroke, type Color, type Inset } from "./value.js";
+import { hintsOf, type Purpose } from "./purpose.js";
 
 export class TextInput extends Editor {
   // The FACE slots (off View — docs/system-design/style.md): each defaults to
@@ -44,6 +45,10 @@ export class TextInput extends Editor {
   declare selectionStart: number;
   declare selectionEnd: number;
   declare spellcheck: boolean;
+  /** What the field holds — an email, a password, a card number (purpose.ts). */
+  declare purpose: Purpose;
+  /** What is typed is hidden; a password's purpose sets it. */
+  declare concealed: boolean;
   declare wrap: boolean;
   declare padding: Inset;
   declare initial: string;
@@ -89,6 +94,9 @@ export class TextInput extends Editor {
       const v = theme?.[name];
       return typeof v === "number" ? v : fallback;
     };
+    // a password is hidden unless the author shows it (a reveal toggle sets `concealed`)
+    if (!isSet(this, "concealed") && ownerOf(this, "concealed") === null)
+      bindDerived(this, "concealed", () => hintsOf(this.purpose).concealed);
     if (!isSet(this, "fill") && ownerOf(this, "fill") === null)
       bindDerived(this, "fill", () => tok("surface", 0xFFFFFF));
     if (!isSet(this, "stroke") && ownerOf(this, "stroke") === null)
@@ -168,6 +176,8 @@ export class TextInput extends Editor {
       value: this.text,
       multiline: this.multiline,
       spellcheck: this.spellcheck,
+      purpose: this.purpose,
+      concealed: this.concealed,
       wrap: this.wrap,
       padding: this.padding,
       placeholder: this.placeholder,
@@ -298,11 +308,15 @@ defineAttributes(TextInput, {
   fontWeight: { def: "normal", defBinding: providedDefault("fontWeight", "normal") },
   letterSpacing: { def: 0, defBinding: providedDefault("letterSpacing", 0) },
   selectable: { def: false, defBinding: providedDefault("selectable", false) },
+  // a field's name, unless it is given one: the caption a Field around it provides
+  ...((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) ? { accessibilityLabel: { def: "", defBinding: providedDefault("fieldLabel", "") } } : {}),
   text: { def: "", push: (t) => t.$syncEditable() },
   placeholder: { def: "", push: (t) => t.$syncEditable() },
   multiline: { def: false, push: (t) => t.$syncEditable() },
   enterSubmits: { def: false, push: (t) => t.$syncEditable() },
   spellcheck: { def: true, push: (t) => t.$syncEditable() },
+  purpose: { def: "text", push: (t) => t.$syncEditable() },
+  concealed: { def: false, push: (t) => t.$syncEditable() },
   wrap: { def: true, push: (t) => t.$syncEditable() },
   // the field's content box, as View's: where the text sits inside it
   padding: { def: 0, push: (t, p) => {
@@ -316,3 +330,6 @@ defineAttributes(TextInput, {
   selectionEnd: { def: 0 },
   // commitOn / error / valid / dirty are declared on the Editor base.
 });
+
+// what a TextInput is to assistive technology (View.$leafRole), in a build with the layer
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) TextInput.prototype.$leafRole = () => "textField";

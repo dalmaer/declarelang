@@ -92,9 +92,9 @@ export const OPS = {
     title: "Building for production",
     steps: [
       { id: "build-app", cmd: "node tools/declarec.mjs <app.declare> -o <outdir>",
-        description: "Precompile to a self-contained production bundle (~45KB gz + your program). --canvas selects the canvas renderer; --debug keeps positions.",
+        description: "Precompile to a self-contained production bundle (~45KB gz + your program). --render=canvas selects the canvas renderer; --debug keeps positions.",
         test: false, docs: "declare-docs:operational:building" },
-      { id: "crawler", cmd: "node tools/declarec.mjs <app.declare> -o <outdir> --crawler",
+      { id: "crawler", cmd: "node tools/declarec.mjs <app.declare> -o <outdir> --crawler=true",
         description: "Also bake the crawled document (every linked location's content) into the built page for crawlers.",
         test: false, docs: "declare-docs:guide:urls" },
       { id: "extract", cmd: null,

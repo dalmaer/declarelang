@@ -1,0 +1,48 @@
+/*
+# TextSizeSwitch
+
+The reading-size control: three sizes — smaller, the default, larger — each shown as
+the letter A at that size, with the size in use marked. It is a `Segmented`, so it
+holds its value the way every segmented control does, Tab reaches it as one stop, and
+the arrows move between the sizes.
+
+The value is a scale, one of `sizes`. An app keeps the scale it reads its text at and
+binds the switch to it:
+
+```declare-fragment
+App [ fontScale: number = 1,
+    TextSizeSwitch [ value = { app.fontScale },
+        input(v: object) { app.fontScale = v as number } ],
+    Text [ fontSize = { 15 * app.fontScale }, text = "Read me" ]
+    ]
+```
+
+## sizes
+The three scales, smallest first, the default in the middle: `[0.9, 1, 1.2]` unless the
+app reads at another default.
+
+## choices
+One segment per size, each showing its A and named for a screen reader by what it does.
+
+## accessibilityLabel
+"Text size": the group's name.
+
+## width
+Three segments of 34 each, so the letters keep their room whatever the theme's
+segment minimum.
+*/
+
+include [ "segmented.declare", "icons/textsize.declare" ]
+
+// the segments name their letters in data, so the build keeps them by name
+
+use [ TextSmallIcon, TextMediumIcon, TextLargeIcon ]
+
+class TextSizeSwitch extends Segmented [
+    sizes: number[] = [0.9, 1, 1.2],
+    choices = { [ ({ id: classroot.sizes[0], icon: "TextSmallIcon", label: "Smaller text" }),
+                  ({ id: classroot.sizes[1], icon: "TextMediumIcon", label: "Default text size" }),
+                  ({ id: classroot.sizes[2], icon: "TextLargeIcon", label: "Larger text" }) ] },
+    accessibilityLabel = "Text size",
+    width = 102
+    ]

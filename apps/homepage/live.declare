@@ -19,6 +19,7 @@ drift from the source.
 */
 
 class CodeField extends TextInput [ multiline = true, spellcheck = false,
+    accessibilityLabel = { "Source of the " + editName + " example" },
     fontFamily = ["ui-monospace", "monospace"], fontSize = 11, textColor = { provided("theme").lead },
     editName: string = "",
     src: string = "",

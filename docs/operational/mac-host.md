@@ -205,7 +205,7 @@ full language and library support, but it is a *runtime environment*, not an app
 story in the Electron sense: there is no way to wrap a program as a standalone, signed,
 distributable `.app` with its own identity, no system integration surface (menus beyond the
 host's own, dock behaviour, notifications, file associations of your own), and no
-per-program installer. `declarec --render mac` refuses for exactly this reason — packaging
+per-program installer, and `declarec` has no Mac target for exactly this reason — packaging
 a program as an application is a separate construct, and it does not exist yet.
 
 What you get is: your program, running natively, at native speed, with real AppKit text and

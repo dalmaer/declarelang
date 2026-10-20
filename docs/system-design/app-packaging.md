@@ -228,7 +228,7 @@ this whole mechanism.
 - **The Mac app packager.** "Make me a Mac app with this program as THE app" pins one
   program and drops the compiler and library. It needs this mechanism, but it is a
   separate construct — see [`operational/mac-host.md`](../operational/mac-host.md) on why
-  `declarec --render mac` currently refuses.
+  `declarec` has no Mac target.
 
 ## 8. As built (2026-09-23)
 

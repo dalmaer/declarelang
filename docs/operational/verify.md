@@ -29,6 +29,11 @@ drive it with real input, and assert through the
 [introspection bridge](declare-docs:operational:introspection) with motion made
 deterministic by the driven clock.
 
+A clean run ends with a count — `clean through R4 (351 of 460 constraints statically
+wired)`. It says how many constraints the compiler wired ahead of time; the rest find their
+reads as they run, which is correct and costs a little at run time. It is information, not
+a task: a program with a lower count is not wrong.
+
 ## Flags
 
 | flag | effect |
@@ -72,8 +77,11 @@ npx declare-look app.declare --size 390x844 --touch --dark \
 ```
 
 The actions — `--click PATH`, `--drag PATH DX,DY`, `--wheel PATH DY`, `--type TEXT`,
-`--key NAME`, `--wait MS`, `--read PATH.ATTR` (printed as `path.attr = value`) and
-`--shot FILE` — run in the order written, and each may repeat; `--console` prints what the
+`--key NAME`, `--wait MS`, `--read PATH.ATTR` (printed as `path.attr = value`; any property
+past the view reads too, `app.col.childViews.length`), `--call 'PATH.METHOD(ARGS)'`
+(arguments as JSON) and `--set PATH.ATTR=VALUE` to set up a state, and `--shot FILE` — run
+in the order written, and each may repeat; a run that goes well prints only what it was asked
+for; `--console` prints what the
 page writes to its console, and `--help` says it all with examples. It runs as rung 5 — the
 same browser and reporting. Motion is run to rest once the page opens and after each action,
 so a read or a picture shows where things land rather than a spring mid-flight;
@@ -86,7 +94,12 @@ to keep) is an assert script, below — and it stays behind as a test.
 you explored with can be the test as it is: `page` is the puppeteer page with the app loaded
 (throw to fail the rung). Its scrollbars are real ones, the classic bar Windows and Linux
 draw, so a script can grab a thumb with `page.mouse` and drag it as a person would.
-`drive` and `expect` drive the app by **view path**, never by DOM selector:
+`drive` and `expect` drive the app by **view path**, never by DOM selector. A path names
+members (`app.toolbar.add`), a replicated row by its index (`app.list.3`), or a view by what
+it says — its label, accessible name or text (`app.tabs.Settings`, quoted when it holds a dot
+or a space: `app.menu."Save As…"`). A press is a person's: a view below the fold is scrolled
+into sight first, and a press on a view something else covers fails, naming what it would
+have reached, rather than landing elsewhere in silence.
 
 ```js
 export default async ({ drive, expect }) => {
@@ -97,8 +110,26 @@ export default async ({ drive, expect }) => {
 };
 ```
 
-The full `drive` / `expect` vocabulary, and the `explain()` call that lets an assertion
-be structural rather than numeric, are in
+**Time in a check is the check's.** The page's timers run on a virtual clock: a delay in
+the program (`afterDelay`, a tooltip's wait, a press-and-hold's half second) passes only when
+the script says time passes — `drive.wait(ms)` advances it by exactly `ms` (real time passes
+too, for the browser's own work), and `drive.settleMotion()` runs motion to rest frame by
+frame, carrying the timers with it. Holding the mouse down for 800 ms of real time fires no
+hold; `page.mouse.down()`, `drive.wait(800)`, `page.mouse.up()` does.
+
+| call | what it does |
+|---|---|
+| `drive.click(path)`, `drive.drag(path, dx, dy)`, `drive.wheel(path, dy, dx?)` | a press, a drag, a wheel turn on the view, as a person makes them |
+| `drive.key(name)`, `drive.type(text)`, `drive.tab(n?)` | keys, to whatever has the focus |
+| `drive.set(path, attr, value)` | an assignment, as a handler's write |
+| `drive.wait(ms)` | `ms` of real time, and exactly `ms` of the program's virtual time |
+| `drive.settleMotion(maxMs?)` | motion run to rest, frame by frame; loops that never end (`repeat = { Infinity }`, a `Time`) do not hold it |
+| `drive.settleData()` | the network gone quiet |
+| `expect.attr(path, attr, expected)`, `expect.approx(path, attr, expected, tol?)`, `expect.text(path, contains)`, `expect.visible(path)`, `expect.hidden(path)`, `expect.exists(path)`, `expect.count(path, kind, n)`, `expect.equal(a, b)` | assertions: each fails the rung with what it found |
+| `expect.explain(path, attr)` | why an attribute holds its value — an assertion about structure, not a number |
+| `expect.traceStart(n?)`, `expect.trace()`, `expect.traceText()` | the runtime's own record of what it did |
+
+`page` is there for anything else. More on `explain()` and the trace is in
 [Introspection](declare-docs:operational:introspection).
 
 ## Writing a states script

@@ -1,34 +1,113 @@
 /*
 # Window
 
-A window inside a program — a pane with its own content, its own overlays and its own Tab
-cycle. A menu, popover, dialog or sheet declared inside it opens over it: above its content
-and past its edges, turning and scaling with it. A toast belongs to the whole program and
-shows at the bottom of the App. Tab stays among the window's controls; F6 moves to the next
-window, Shift-F6 back; a press inside it gives it the keyboard, back on the control that
-last had focus there. A dialog or sheet open in it holds back presses aimed at this window
-only — another window, or what lies behind, still takes them.
+A window inside a program: a raised surface with a title bar you drag it by and a button at
+its end that closes it — and, when `resizable`, edges that resize it. It is the theme's
+surface, hairline, rounding and shadow, as a dialog or a popover is, with the title bar the
+same surface and a hairline under it.
 
-A window draws nothing of its own: its fill, stroke, shadow and rounding are yours. Its
-children go into its `content` pane, which clips to its rounding; its overlays open in its
-`layer`, above the content and unclipped. A title bar, resizing and stacking are the program's —
-`raise()` brings a window to the front.
+It is also a world of its own. A menu, popover, dialog or sheet declared inside it opens
+over it: above its content and past its edges, turning and scaling with it. A toast belongs
+to the whole program and shows at the bottom of the App. Tab stays among the window's
+controls; F6 moves to the next window, Shift-F6 back; a press inside it gives it the
+keyboard, back on the control that last had focus there, and brings it to the front. A
+dialog or sheet open in it holds back presses aimed at this window only — another window,
+or what lies behind, still takes them. Esc closes it when focus is inside it and nothing
+open inside it takes Esc first.
+
+Its children go into its body, the pane below the title bar, and place themselves there as
+in any view — give one a layout or a `padding` of its own. Whether it is open is state, by
+the value pattern: `open` on its own, or `open = { … }` with `input` writing where your
+state lives. Its `x`, `y`, `width` and `height` are its own to move and resize, so set them
+as literals.
 
 ```declare
-App [ width = 560, height = 300, fill = #E6E9EE,
-    Window [ x = 40, y = 40, width = 240, height = 160, rotation = -4, cornerRadius = 10,
-        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
-        more: Menu [ items = { [ ({ id: "rename", label: "Rename" }), ({ id: "copy", label: "Duplicate" }) ] } ],
-        Text [ x = 16, y = 16, text = "A window" ],
-        Button [ x = 16, y = 52, label = "Options", menu = { parent.more } ]
+App [ width = 640, height = 360, fill = { provided("theme").background },
+    notesOpen: boolean = true,
+    Button [ x = 20, y = 316, label = "Show notes", disabled = { app.notesOpen },
+        onClick() { app.notesOpen = true } ],
+    Window [ x = 30, y = 30, width = 280, height = 190, title = "Settings",
+        more: Menu [ items = { [ ({ id: "reset", label: "Reset" }), ({ id: "copy", label: "Copy settings" }) ] } ],
+        View [ width = 100%, padding = 16,
+            layout: SimpleLayout [ axis = y, spacing = 12 ],
+            Checkbox [ label = "Show line numbers" ],
+            Checkbox [ label = "Wrap long lines" ],
+            Button [ label = "More", menu = { parent.parent.more } ]
+            ]
         ],
-    Window [ x = 300, y = 70, width = 220, height = 140, cornerRadius = 10,
-        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
-        TextInput [ x = 16, y = 16, width = 188 ],
-        TextInput [ x = 16, y = 56, width = 188 ]
+    Window [ x = 330, y = 60, width = 280, height = 220, title = "Notes", resizable = true,
+        open = { app.notesOpen }, input(v: boolean) { app.notesOpen = v },
+        View [ width = 100%, padding = 16,
+            layout: SimpleLayout [ axis = y, spacing = 10 ],
+            TextInput [ width = 100%, placeholder = "Title" ]
+            ]
         ]
     ]
 ```
+
+### Without a frame
+
+`frame = false` keeps the world and drops the frame: no surface, title bar, close button or
+resize edges, and no bringing itself forward or closing on Esc — its fill, stroke, shadow
+and rounding are yours, and so are moving, sizing and stacking it (`raise()` brings it to the
+front). What a program with windows of its own design builds on — the Desktop app's are
+these.
+
+```declare
+App [ width = 560, height = 260, fill = #E6E9EE,
+    Window [ x = 40, y = 40, width = 240, height = 160, rotation = -4, frame = false, title = "Tilted",
+        cornerRadius = 10, fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
+        Text [ x = 16, y = 16, text = "A window of its own design" ],
+        TextInput [ x = 16, y = 52, width = 200 ]
+        ]
+    ]
+```
+
+## frame
+Whether the window draws its frame — surface, title bar, close button, resize edges — and
+behaves as a framed window does: brought forward when pressed or reached, closed by Esc.
+`true` by default; `false` leaves the window bare for a frame of your own.
+
+## title
+The name in the title bar, and the window's name to a screen reader — give a frameless
+window one too.
+
+## closable
+Whether it has a close button and closes on Esc.
+
+## resizable
+Whether its bottom and right edges and the corner between them resize it.
+
+## minWidth
+The narrowest a resize makes it.
+
+## minHeight
+The shortest a resize makes it.
+
+## titleBarHeight
+The height of the title bar; the body starts below it. None without a frame.
+
+## open
+Whether it is open. Constrain it to state of your own and override `input`, or leave it and
+read it back.
+
+## input()
+**Where an opening or a closing goes**, receiving the new open state. The default writes
+`open`; override it to own the destination.
+
+## close()
+Closes it, through `input(false)` — what the close button and Esc do.
+
+## show()
+Opens it, through `input(true)`, and brings it to the front.
+
+## visible
+Present while it is open.
+
+## bringForward()
+Brings it in front of the windows beside it — its siblings that are windows — and keeps it
+beneath whatever its parent holds above them. A press in a framed window, focus arriving in
+it and `show()` all call it.
 
 ## overlays
 The layer the overlays declared inside the window open in — its `layer`, read by them as
@@ -46,12 +125,127 @@ Whether focus is inside the window now, in a program it hosts included.
 `region`: Tab stays among the window's controls, and F6 moves between windows.
 
 ## onPointerDown
-A press inside the window, on nothing that takes it, gives the window the keyboard.
+A press inside the window, on nothing that takes it, gives the window the keyboard — and a
+framed one comes to the front.
+
+## defaultplacement
+`body`: its children go into the pane below the title bar (the whole window, without a
+frame).
+
+## width
+360 to begin with; a resize changes it.
+
+## height
+240 to begin with; a resize changes it.
+
+## accessibilityRole
+`dialog`: a window that does not hold back the rest of the program.
+
+## accessibilityLabel
+The `title`, so a screen reader names the window.
+
+## fill
+The theme's `surface`; none without a frame.
+
+## stroke
+A hairline in the theme's `line`; none without a frame.
+
+## cornerRadius
+The theme's dialog rounding; none without a frame.
+
+## shadow
+The theme's dialog shadow; none without a frame.
+
+## dragX
+**Internal.** Its `x` when a move began.
+
+## dragY
+**Internal.** Its `y` when a move began.
+
+## sizeW
+**Internal.** Its `width` when a resize began.
+
+## sizeH
+**Internal.** Its `height` when a resize began.
+
+## moveStart()
+**Internal.** The title bar's press: brings it to the front and notes where it started.
+
+## moveBy()
+**Internal.** Moves it by the pointer's travel since the press, keeping its title bar within
+its parent.
+
+## moveEnd()
+**Internal.** The release: an interrupted move puts it back where it started.
+
+## sizeStart()
+**Internal.** A resize edge's press.
+
+## sizeBy()
+**Internal.** Resizes it by the pointer's travel since the press, along the edges the grabbed
+one moves (`"r"`, `"b"` or `"rb"`), no smaller than the minimum.
+
+## sizeEnd()
+**Internal.** The release: an interrupted resize puts the size back.
 */
 
-class Window [
+/*
+# WindowClose
+
+The close button of a `Window`: a quiet round button with a small cross, filled only while
+hovered or pressed.
+
+```declare
+App [ width = 300, height = 140, fill = { provided("theme").background },
+    Window [ x = 20, y = 20, width = 260, height = 100, title = "Press the cross" ]
+    ]
+```
+
+## width
+A 24-pixel round target.
+
+## height
+A 24-pixel round target.
+
+## cornerRadius
+Round.
+
+## fill
+None at rest; the theme's `controlHovered` while hovered and `controlPressed` while pressed.
+
+## accessibilityRole
+`button`.
+
+## accessibilityLabel
+"Close".
+*/
+
+include [ "control.declare" ]
+
+class Window [ width = 360, height = 240,
+    accessibilityRole = dialog,
+    accessibilityLabel = { title },
     focusScope = region,
-    defaultplacement = content,
+    defaultplacement = body,
+    visible = { open },
+
+    frame: boolean = true,
+    title: string = "",
+    closable: boolean = true,
+    resizable: boolean = false,
+    minWidth: number = 200,
+    minHeight: number = 120,
+    titleBarHeight: number = { frame ? 36 : 0 },
+
+    fill = { frame ? provided("theme").surface : null },
+    stroke = { frame ? stroke(1, provided("theme").line) : null },
+    cornerRadius = { frame ? (provided("theme").dialogCornerRadius ?? provided("theme").menuCornerRadius + 2) : 0 },
+    shadow = { frame ? (provided("theme").dialogShadow ?? provided("theme").menuShadow) : null },
+
+    open: boolean = true,
+    input(v: boolean) { open = v },
+    close() { this.input(false) },
+    show() { this.input(true); this.bringForward() },
 
     overlays: View? = { this.layer },
 
@@ -59,12 +253,146 @@ class Window [
 
     enter() { if (!this.holdsFocus()) Focus.focusIn(this) },
 
-    onPointerDown() { this.enter() },
+    onPointerDown() {
+        if (frame) this.bringForward()
+        this.enter()
+        },
 
-    content: View [ width = 100%, height = 100%, clip = true, cornerRadius = { classroot.cornerRadius } ],
+    // in front of the windows beside it, and still beneath whatever the parent
+    // keeps above its windows (the focus ring, the overlay layers)
+
+    bringForward() {
+        const kids = (this.parent as View).children
+        let last = -1
+        for (let i = 0; i < kids.length; i++) if (typeof (kids[i] as any).holdsFocus == "function") last = i
+        if (last < 0 || kids[last] == this) return
+        if (last + 1 < kids.length) this.raise(kids[last + 1] as View)
+        else this.raise()
+        },
+
+    // moving and resizing: where the gesture began; the pointer's travel since
+    // the press is the event's root-space delta
+
+    dragX: number = 0,
+    dragY: number = 0,
+    sizeW: number = 0,
+    sizeH: number = 0,
+
+    moveStart() {
+        this.bringForward()
+        this.enter()
+        dragX = x
+        dragY = y
+        },
+    moveBy(dx: number, dy: number) {
+        const p = this.parent as View
+        x = Math.max(60 - width, Math.min(p.width - 60, dragX + dx))
+        y = Math.max(0, Math.min(p.height - titleBarHeight, dragY + dy))
+        },
+    moveEnd(canceled: boolean) { if (canceled) { x = dragX; y = dragY } },
+
+    sizeStart() {
+        this.bringForward()
+        this.enter()
+        sizeW = width
+        sizeH = height
+        },
+    sizeBy(edges: string, dx: number, dy: number) {
+        if (edges.indexOf("r") >= 0) width = Math.max(minWidth, sizeW + dx)
+        if (edges.indexOf("b") >= 0) height = Math.max(minHeight, sizeH + dy)
+        },
+    sizeEnd(canceled: boolean) { if (canceled) { width = sizeW; height = sizeH } },
+
+    // the window's own pane: the body, which clips to the window's rounding
+    // (its children's ignoreClip escapes it, as a band past the edge must), then
+    // the title bar (so Tab reaches the content first and the close button
+    // last), then the resize edges
+
+    content: View [ width = 100%, height = 100%,
+
+        body: View [ y = { classroot.titleBarHeight }, width = 100%, height = { parent.height - classroot.titleBarHeight },
+            clip = true,
+            cornerRadius = { classroot.frame ? [0, 0, classroot.cornerRadius as number, classroot.cornerRadius as number] : classroot.cornerRadius } ],
+
+        titleBar: View [ width = 100%, height = { classroot.titleBarHeight }, visible = { classroot.frame },
+            onPointerDown(e: PointerEvent) { classroot.moveStart() },
+            onPointerMove(e: PointerEvent) { classroot.moveBy(e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot.moveEnd(e.canceled) },
+
+            // leading, or centred where the theme centres a dialog's title
+
+            caption: TextLabel [ wrap = false, clip = true, fontSize = 13, fontWeight = semibold,
+                x = { provided("theme").dialogTextAlign == "center" ? 40 : 14 },
+                width = { parent.width - this.x - 40 },
+                textAlign = { provided("theme").dialogTextAlign == "center" ? "center" : "left" },
+                textColor = { provided("theme").text },
+                text = { classroot.title } ],
+
+            closer: WindowClose [ x = { parent.width - this.width - 7 }, y = center,
+                visible = { classroot.closable },
+                press() { classroot.close() }
+                ],
+
+            rule: View [ y = { parent.height - 1 }, width = 100%, height = 1, fill = { provided("theme").line } ]
+            ],
+
+        // the resize edges: a band astride the frame line, and the corner, which
+        // wins over both
+
+        sizeRight: View [ visible = { classroot.frame && classroot.resizable }, ignoreClip = true, cursor = "ew-resize",
+            x = { parent.width - 4 }, y = { classroot.titleBarHeight }, width = 8, height = { parent.height - classroot.titleBarHeight - 12 },
+            onPointerDown(e: PointerEvent) { classroot.sizeStart() },
+            onPointerMove(e: PointerEvent) { classroot.sizeBy("r", e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot.sizeEnd(e.canceled) }
+            ],
+        sizeBottom: View [ visible = { classroot.frame && classroot.resizable }, ignoreClip = true, cursor = "ns-resize",
+            x = 0, y = { parent.height - 4 }, width = { parent.width - 12 }, height = 8,
+            onPointerDown(e: PointerEvent) { classroot.sizeStart() },
+            onPointerMove(e: PointerEvent) { classroot.sizeBy("b", e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot.sizeEnd(e.canceled) }
+            ],
+        sizeGrip: View [ visible = { classroot.frame && classroot.resizable }, ignoreClip = true, cursor = "nwse-resize",
+            x = { parent.width - 16 }, y = { parent.height - 16 }, width = 20, height = 20,
+            onPointerDown(e: PointerEvent) { classroot.sizeStart() },
+            onPointerMove(e: PointerEvent) { classroot.sizeBy("rb", e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot.sizeEnd(e.canceled) },
+            draw(d: Draw) {
+                d.strokeStyle = provided("theme").textFaint
+                d.lineWidth = 1
+                d.lineCap = "round"
+                d.beginPath()
+                d.moveTo(5, 13); d.lineTo(13, 5)
+                d.moveTo(9, 13); d.lineTo(13, 9)
+                d.stroke()
+                }
+            ]
+        ],
 
     // above the content and outside its clip: what opens inside the window
     // paints here, past its edges
 
-    layer: View [ width = 100%, height = 100%, pointerEvents = "none" ]
+    layer: View [ width = 100%, height = 100%, pointerEvents = "none" ],
+
+    // Esc reaches this only when no overlay holds the keyboard: one open
+    // inside the window takes it first
+
+    escKeys: Keys [
+        onKeyDown(e: KeyEvent) {
+            if (e.key == "Escape" && classroot.frame && classroot.closable && classroot.open && classroot.holdsFocus()) classroot.close()
+            }
+        ],
+
+    // focus arriving by F6 or a press on a control brings a framed window forward
+
+    focusWatch: Focus [
+        onFocusChange(v: View) { if (v != null && classroot.frame && classroot.holdsFocus()) classroot.bringForward() }
+        ]
+    ]
+
+
+class WindowClose extends Control [ width = 24, height = 24, cornerRadius = 12,
+    accessibilityRole = button,
+    accessibilityLabel = "Close",
+    fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : null },
+    CloseIcon [ x = center, y = center, iconSize = 14, ink = { provided("theme").textMuted } ]
     ]

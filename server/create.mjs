@@ -23,9 +23,11 @@ import path from "node:path";
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { requestType, REQ, runWrapper, programName, directoryProgram } from "../browser/serve-core.js";
+import { requestType, REQ, viewerTab, runWrapper, programName, directoryProgram } from "../browser/serve-core.js";
 import { createToolchain } from "./toolchain.mjs";
-import { parseFlags, DEFAULT_FLAGS } from "../compiler/dist/flags.js";
+import { parseFlags, DEFAULT_FLAGS, FLAG_NAMES } from "../compiler/dist/flags.js";
+// A base that names no flag: what a request leaves out, the program decides.
+const UNSET = Object.fromEntries(FLAG_NAMES.map((n) => [n, undefined]));
 import { rebuildStale, BUNDLES } from "../tools/internal/bundle-freshness.mjs";
 import { createMounts, describeMounts } from "./mounts.mjs";
 import { createProxy } from "./proxy.mjs";
@@ -273,7 +275,7 @@ self.addEventListener("activate", (event) => event.waitUntil((async () => {
     const { metrics, defs } = await toolchain.index(source, absPath, path.join(PLATFORM_DIR, "library"));
     if (rt === REQ.SEGMENTS)
       return send(res, 200, JSON.stringify({ path: relPath, segments, metrics, defs }), "application/json");
-    const mode = rt === REQ.SOURCE ? "source" : rt === REQ.EDIT ? "edit" : "reader";
+    const mode = viewerTab(rt);
     return send(res, 200, withServerMarker(await sourcePage(relPath, segments, source, metrics, defs, backendClass, mode)));
   }
 
@@ -348,7 +350,7 @@ bootHost(cfg);
   // PARAMETERS serve-parity.test locks down — bootUrl and iconBase — now built
   // from the platform mount's prefix so a workspace app boots the platform from
   // /declare/ while its own resources resolve from /.
-  // `crawler` is the request's ?crawler, or undefined: then the program's own
+  // `crawler` is the request's ?crawler=…, or undefined: then the program's own
   // flags decide.
   async function declareRunPage(urlPath, crawler) {
     let staticBlock = "";
@@ -375,29 +377,6 @@ bootHost(cfg);
     });
   }
 
-  // ── ?program — the COMPILED PROGRAM as JSON ────────────────────────────────
-  // `{ program, etag }`: the program object every host boots from, positions
-  // kept, for a client that owns its renderer. The compile is the server's
-  // ordinary one — same toolchain realm, same freshness — and the strong ETag
-  // lets a client revalidate with one conditional request.
-  async function serveProgram(req, res, absPath, relPath) {
-    let source;
-    try { source = readFileSync(absPath, "utf8"); }
-    catch { return send(res, 404, "not found: " + relPath, "text/plain"); }
-    const out = await toolchain.compileProgram(source, { originDir: path.dirname(absPath), mainId: absPath, stripPos: false });
-    if (out.program === null) {
-      return send(res, 422, JSON.stringify({ report: out.report, diagnostics: out.diagnostics }), "application/json");
-    }
-    const program = JSON.stringify(out.program);
-    const etag = '"' + createHash("sha256").update(program).digest("hex").slice(0, 24) + '"';
-    if ((req.headers["if-none-match"] ?? "") === etag) {
-      res.writeHead(304, { etag });
-      return res.end();
-    }
-    res.writeHead(200, { "content-type": "application/json", etag, "cache-control": "no-cache" });
-    res.end(`{"program":${program},"etag":${JSON.stringify(etag)}}`);
-  }
-
   function serveFrom(req, res, baseDir, rel) {
     const abs = path.join(baseDir, rel.replace(/^\/+/, ""));
     if (!(abs === baseDir || abs.startsWith(baseDir + path.sep))) return send(res, 403, "forbidden", "text/plain");
@@ -414,26 +393,27 @@ bootHost(cfg);
   // the url (so distro mode's two aliases of one file share a single entry).
   // (embeddable-server.md §1, §5)
   const prodMem = new Map();
-  function buildKey(srcPath, backend, kernel, crawler, toolchain) {
+  // `flags` are the flags the request named (the registry's names), each
+  // undefined when it named none: then the program's own flags decide, which the
+  // build resolves (declarec buildProduction) and keys as "program".
+  const asKeyed = (flags) => Object.fromEntries(FLAG_NAMES.map((n) => [n, flags[n] === undefined ? "program" : String(flags[n])]));
+  function buildKey(srcPath, flags, toolchain) {
+    const keyed = asKeyed(flags);
     return createHash("sha256")
-      .update([`main=${srcPath}`, `render=${backend}`, `kernel=${kernel}`, `slim=true`, `stripPos=true`, `typecheck=true`, `crawler=${crawler}`, `tc=${toolchain}`].join("\n"))
+      .update([`main=${srcPath}`, ...FLAG_NAMES.map((n) => `${n}=${keyed[n]}`), `slim=true`, `stripPos=true`, `typecheck=true`, `tc=${toolchain}`].join("\n"))
       .digest("hex").slice(0, 16);
   }
 
-  // `backend`, `kernel` and `crawler` are the flags the request named, each
-  // undefined when it named none: then the program's own flags decide, which the
-  // build resolves (declarec buildProduction) and keys as "program".
-  async function ensureProdBuild(srcPath, backend, kernel, crawler) {
+  async function ensureProdBuild(srcPath, flags) {
     if (!existsSync(srcPath)) return null;
     const source = readFileSync(srcPath, "utf8");
     const name = path.basename(srcPath).replace(/\.declare$/, "");
     const dir = path.dirname(srcPath);
     const tc = toolchain.fingerprint();
-    const crawled = crawler === undefined ? "program" : String(crawler);
-    const key = buildKey(srcPath, backend ?? "program", kernel ?? "program", crawled, tc);
+    const key = buildKey(srcPath, flags, tc);
     const outDir = path.join(buildCache, key);
     const manPath = path.join(outDir, "manifest.json");
-    const propsNow = { render: backend ?? "program", slim: "true", stripPos: "true", typecheck: "true", crawler: crawled, kernel: kernel ?? "program", toolchain: tc };
+    const propsNow = { ...asKeyed(flags), slim: "true", stripPos: "true", typecheck: "true", toolchain: tc };
     const fresh = async (m) => {
       if (!m || !m.closure || !m.moduleName || !existsSync(path.join(outDir, m.moduleName))) return false;
       try { return await toolchain.fresh(m.closure, propsNow); } catch { return false; }
@@ -443,7 +423,7 @@ bootHost(cfg);
     if (existsSync(manPath)) {
       try { const d = JSON.parse(readFileSync(manPath, "utf8")); if (await fresh(d)) { prodMem.set(key, d); return d; } } catch { /* rebuild */ }
     }
-    const built = await toolchain.production({ source, name, srcDir: dir, outDir, render: backend, kernel, crawler, props: { toolchain: tc } });
+    const built = await toolchain.production({ source, name, srcDir: dir, outDir, ...flags, props: { toolchain: tc } });
     if (!built.ok) return { error: built.errors, report: built.report };
     man = { closure: built.closure, dir: outDir, moduleName: built.moduleName, sizes: built.sizes,
       assets: built.assets, used: built.usedClasses, source: srcPath, builtAt: null };
@@ -453,12 +433,31 @@ bootHost(cfg);
     return man;
   }
 
+  // ── the SIZES request: what the production build is made of, as JSON ───────
+  // The same build as ?build, run in memory with its report on and nothing
+  // written; kept while every file it read is unchanged, as a build is.
+  const sizesMem = new Map();
+  async function serveSizes(res, srcPath, flags) {
+    const tc = toolchain.fingerprint();
+    const key = buildKey(srcPath, flags, tc);
+    const propsNow = { ...asKeyed(flags), slim: "true", stripPos: "true", typecheck: "true", toolchain: tc };
+    let hit = sizesMem.get(key);
+    if (hit === undefined || !(await toolchain.fresh(hit.closure, propsNow).catch(() => false))) {
+      const name = path.basename(srcPath).replace(/\.declare$/, "");
+      const built = await toolchain.sizes({ source: readFileSync(srcPath, "utf8"), name, originDir: path.dirname(srcPath), ...flags, props: { toolchain: tc } });
+      if (!built.ok) return send(res, 422, built.report ?? "compile failed", "text/plain");
+      hit = { closure: built.closure, json: JSON.stringify(built.sizes) };
+      sizesMem.set(key, hit);
+    }
+    return send(res, 200, hit.json, "application/json");
+  }
+
   // /build/<program-dir>/ — resolve the program url this mirrors, find its
   // <name>.declare, build and serve. The url after /build is a program-directory
   // url in the mount space, so it composes with every mount identically.
   // `req` rides along because everything static now goes out through sendFile,
   // which answers byte ranges — and a range is a property of the REQUEST.
-  async function serveBuild(req, res, buildPath, urlPath, backend, kernel, crawler) {
+  async function serveBuild(req, res, buildPath, urlPath, flags) {
     // buildPath = "/build/my-apps/lzx-weather/foo.js" → the PROGRAM directory is
     // the longest prefix holding its own <dir>/<dir>.declare (the directory-
     // program rule), and everything after it is the tail — which may be a
@@ -488,7 +487,7 @@ bootHost(cfg);
       }
     }
 
-    const man = await ensureProdBuild(hit.abs, backend, kernel, crawler);
+    const man = await ensureProdBuild(hit.abs, flags);
     if (man === null) return send(res, 404, "no such program", "text/plain");
     if (man.error) return send(res, 500, "declarec build failed:\n" + (man.report ?? man.error.map((e) => e.message).join("\n")), "text/plain");
     const t = tail.replace(/^\/+/, "");
@@ -701,8 +700,8 @@ bootHost(cfg);
       if (p === "/build" || p.startsWith("/build/")) {
         const q = new URL(req.url, "http://x").searchParams;
         // a flag the request does not name, the program's own flags decide
-        const flags = parseFlags(q, { ...DEFAULT_FLAGS, render: undefined, kernel: undefined, crawler: undefined });
-        serveBuild(req, res, p, p, flags.render, flags.kernel, flags.crawler).catch((e) => {
+        const flags = parseFlags(q, UNSET);
+        serveBuild(req, res, p, p, flags).catch((e) => {
           if (!res.headersSent) send(res, 500, String((e && e.stack) || e), "text/plain");
         });
         return;
@@ -729,7 +728,7 @@ bootHost(cfg);
         const hit = mounts.resolve(p);
         const real = hit && existsSync(hit.abs) && statSync(hit.abs).isFile();
         if (real) {
-          if (rt === REQ.READER || rt === REQ.SOURCE || rt === REQ.EDIT || rt === REQ.SEGMENTS) {
+          if (rt === REQ.READER || rt === REQ.SOURCE || rt === REQ.EDIT || rt === REQ.SIZES_TAB || rt === REQ.SEGMENTS) {
             serveSource(res, hit.abs, hit.rel, rt, "DomBackend")
               .catch((e) => { if (!res.headersSent) send(res, 500, String((e && e.stack) || e), "text/plain"); });
             return;
@@ -738,10 +737,9 @@ bootHost(cfg);
             serveExtract(res, hit.abs, hit.rel).catch((e) => { if (!res.headersSent) send(res, 500, String((e && e.stack) || e), "text/plain"); });
             return;
           }
-          if (rt === REQ.PROGRAM) {
-            serveProgram(req, res, hit.abs, hit.rel).catch((e) => {
-              if (!res.headersSent) send(res, 500, String((e && e.stack) || e), "text/plain");
-            });
+          if (rt === REQ.SIZES) {
+            serveSizes(res, hit.abs, parseFlags(params, UNSET))
+              .catch((e) => { if (!res.headersSent) send(res, 500, String((e && e.stack) || e), "text/plain"); });
             return;
           }
           if (rt === REQ.BUILD) {

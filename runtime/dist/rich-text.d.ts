@@ -343,6 +343,8 @@ export declare abstract class RichText extends View {
     maxLines: number;
     /** True when the clamp dropped something — what a "Show more" binds to. */
     truncated: boolean;
+    /** The line length a rich text with no width of its own wraps at (schema.ts). */
+    wrapWidth: number;
     bodyColor: number | null;
     linkUnderline: boolean;
     fontScale: number;
@@ -413,6 +415,8 @@ export declare abstract class RichText extends View {
     /** True when no author and no layout gives this box its width: it is then the
      *  width of the text itself (fitNatural). The auto-extent that reports that
      *  width back is not a giver. */
+    /** Where a rich text with no width wraps: its `wrapWidth`, else the reading measure. */
+    private $wrapAt;
     private $ownWidth;
     /** A rich text with no width of its own is AS WIDE AS ITS TEXT: laid out at
      *  the reading measure, then re-flowed at its widest line (plus a 2px guard,

@@ -133,6 +133,12 @@ content origin and the pill's width is simply what it holds.
 class NavLink extends Control [ height = 33, cornerRadius = 8, padding = [0, 12, 0, 12],
     label:   string = "",
 
+    // a link, named by its label; the one that drops a list of pages says so
+    // (a link has no "expanded" — the hint carries it)
+
+    accessibilityRole = link,
+    accessibilityHint = { this.dropdown ? "opens a menu" : "" },
+
     // a pill WITH children opens the dropdown instead of following a link —
     // the wide rendition of the sheet's group rows. The anchor is snapshotted
     // at the gesture (rootOrigin, converted to viewport space), the sanctioned
@@ -436,7 +442,7 @@ class AppCard [
     head: CardHead [ arrow = true, num = { classroot.num }, title = { classroot.title },
         url = { classroot.url }, hot = { classroot.hot } ],
 
-    frame: Shot [ width = 100%, src = { classroot.shot }, link = { classroot.url },
+    frame: Shot [ width = 100%, src = { classroot.shot }, link = { classroot.url }, accessibilityLabel = { "Open " + classroot.title },
         hot = { classroot.titleHot } ],
 
     copy: View [ width = 100%,
@@ -1097,6 +1103,8 @@ App [ tagline: string = "a UI language for you and your AI",
                     // who never scrolls here never decodes a frame.
 
                     plate: Shot [ src = { app.isDark ? "shots/calendar-dark.webp" : "shots/calendar-light.webp" }, link = "apps/calendar/calendar.declare",
+                        accessibilityLabel = "Open Declare Calendar",
+
                         // Its last frame IS its first, so the loop has no seam to
                         // notice. What it shows is the app being USED — a detail
                         // panel opening on a real record, an event dragged to
@@ -1481,6 +1489,9 @@ App [ tagline: string = "a UI language for you and your AI",
             // you are in, and a press flips to the other
 
             modeBtn: Control [ width = 34, height = 33, cornerRadius = 8,
+                accessibilityRole = switch,
+                accessibilityLabel = "Dark appearance",
+                accessibilityChecked = { app.isDark },
                 fill = { pressed ? provided("theme").pillPress : hovered ? provided("theme").pillHover : null },
                 tooltipLabel = { app.isDark ? "Switch to light" : "Switch to dark" },
                 press() { app.appearance = app.isDark ? "light" : "dark" },
@@ -1494,6 +1505,8 @@ App [ tagline: string = "a UI language for you and your AI",
             // press feedback, toggling the sheet
 
             kebab: Control [ width = 34, height = 33, cornerRadius = 8,
+                accessibilityLabel = "Menu",
+                accessibilityExpanded = { app.menuOpen },
                 fill = { pressed ? provided("theme").pillPress : hovered ? provided("theme").pillHover : null },
                 press() { app.menuOpen = !app.menuOpen },
                 d1: View [ x = center, y = 8,  width = 3, height = 3, cornerRadius = 1.5, fill = { parent.hovered || parent.pressed ? provided("theme").text : provided("theme").muted } ],

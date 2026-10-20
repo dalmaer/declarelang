@@ -100,6 +100,7 @@ include [ "menu.declare", "shortcuts.declare" ]
 schema MenuBarMenu [ id: string, label: string, bold?: boolean, kind?: string, items: MenuItem[] ]
 
 class MenuBar [
+    accessibilityRole = menuBar,
     height = { provided("theme").menuBarHeight },
 
     // chrome, not prose: the titles never select inside a `selectable` region
@@ -185,6 +186,7 @@ class MenuBar [
     // menu (menu tracking by click)
 
     menu: Menu [ pressPolicy = "dismissAndDeliver",
+        sideways(d: number) { classroot.stepMenu(d) },
         items = { ((classroot.menus || []).find((m) => "" + m.id == classroot.openId) || ({ })).items || [] },
         picked(id: string) { classroot.picked(id) }
         ],
@@ -210,6 +212,13 @@ class MenuBar [
 
             fill = { this.open ? ((provided("theme").menuTitleHighlightFill ?? provided("theme").controlSelected)) : null },
             focusable = true,
+
+            // a menu title: named by its label, pressed to open its menu
+
+            accessibilityRole = menuItem,
+            accessibilityExpanded = { this.open },
+            accessibilityLabel = { this.kd != "" ? "" + (:label ?? "") : "" },
+            press() { if (this.open) classroot.menu.close(); else classroot.openMenu(this) },
             onKeyDown(e: KeyEvent) {
                 if (e.key == "Enter" || e.key == " " || e.key == "ArrowDown") classroot.openMenu(this)
                 else if (e.key == "ArrowLeft" || e.key == "ArrowRight") super.onKeyDown(e)

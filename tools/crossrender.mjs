@@ -184,7 +184,7 @@ async function macDump(file) {
     // `waitload` sent straight after it can be answered by the PREVIOUS
     // program's verdict (and the dump read from its tree): wait until another
     // app is mounted first
-    await ctl(`eval globalThis.__crossrenderPrev = globalThis.__app; __declareBoot(${JSON.stringify(withHash(urlOf(file) + "?render=mac"))}); "ok"`);
+    await ctl(`eval globalThis.__crossrenderPrev = globalThis.__app; __declareBoot(${JSON.stringify(withHash(urlOf(file)))}); "ok"`);
     for (let i = 0; i < 300; i++) {
       if ((await ctl("eval String(globalThis.__app != null && globalThis.__app !== globalThis.__crossrenderPrev)", 50)) === "true") break;
       await sleep(0.05);

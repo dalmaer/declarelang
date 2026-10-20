@@ -69,4 +69,7 @@ export class DeferredSurface {
 }
 /** Is this surface a stand-in for a view not yet shown? */
 export const isDeferred = (s) => s instanceof DeferredSurface;
+// kept for the real surface, in a build with the accessibility layer
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__)
+    DeferredSurface.prototype.setSemantics = function (...a) { this.keep("setSemantics", a); };
 //# sourceMappingURL=deferred-surface.js.map

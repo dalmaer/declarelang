@@ -26,8 +26,9 @@ only one row at a time is ever in.
 
 **It starts where it is going.** The first target a spring computes is where its attribute
 begins: a `Switch` declared checked renders checked, a panel whose spring targets "closed"
-starts closed — nothing flies in from 0 as the program opens. Physics governs every change
-after that. To have the opening itself move, start the target somewhere else and change it
+starts closed — nothing flies in from 0 as the program opens. The same holds for a spring
+built later: a row made when its data arrives starts at its first target, not at 0. Physics
+governs every change after that. To have the opening itself move, start the target somewhere else and change it
 once the program is up (from `onReady`, or a `Time`); to have a *later* first value appear
 without travel, use `arrive()`.
 

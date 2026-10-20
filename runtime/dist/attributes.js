@@ -609,7 +609,38 @@ function devProvidedCensus(self, name, hops, provider, kind) {
         m.set(name, provider);
     }
 }
+/** THE PROVISION BEING COMPUTED: while a node's `{ }` provision derives
+ *  (`theme = { { ...provided("theme"), accent: … } }`), a read of that same name
+ *  on that node means the value ABOVE it — the one it extends — never its own
+ *  previous result, which would hold it at its first answer for good. Set by
+ *  the provision's binding (bind.ts provideBind) around each evaluation. */
+let PROVIDING = null;
+export function computingProvision(node, name, fn) {
+    const prev = PROVIDING;
+    PROVIDING = { node, name };
+    try {
+        return fn();
+    }
+    finally {
+        PROVIDING = prev;
+    }
+}
 export function providedRead(self, name, hasDefault, dflt) {
+    // the provision this node is deriving reads the one above it: walk from the
+    // parent, past the memo (whose answer for this node is its own provision)
+    if (PROVIDING !== null && PROVIDING.node === self && PROVIDING.name === name) {
+        const parent = self.parent;
+        if (typeof parent === "object" && parent !== null)
+            return providedRead(parent, name, hasDefault, dflt);
+        // nothing above: as the walk ends when no ancestor provides the name
+        if (hasDefault)
+            return dflt;
+        if (name === "theme")
+            return THEME_PRESETS.SanFrancisco;
+        if (S.collecting !== null)
+            return undefined;
+        throw new DeclareError(`provided("${name}"): no ancestor provides '${name}', and this read declares no default — provide '${name}' on an ancestor, or give the read a default`);
+    }
     // A node that PROVIDES a value can also read it — `App [ theme = { … }, fill =
     // { provided("theme").background } ]`. Its own provision is checked first (a provision
     // is not a declared slot, so this never shadows a face slot's own read, which

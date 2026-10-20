@@ -152,7 +152,7 @@ coerces by the slot of whatever view each use puts it in.
 ## 6. The kernel
 
 The reactive kernel is chosen by the `kernel` build modifier: WebAssembly by
-default, or JavaScript (`--kernel js`). A build carries exactly one of them,
+default, or JavaScript (`--kernel=js`). A build carries exactly one of them,
 inlined. See [kernel.md](kernel.md) §10–11.
 
 ## 7. Checking it: the gate
@@ -177,7 +177,7 @@ differently.
 It takes minutes and a browser, so it is not part of `npm test`. Run it after
 changing the manifest or splitting a module:
 
-    node test/slim-corpus.test.mjs [--only <substring>] [--skip-ladder] [--skip-corpus] [--render canvas]
+    node test/slim-corpus.test.mjs [--only <substring>] [--skip-ladder] [--skip-corpus] [--render=canvas]
 
 `declarec.test` checks the manifest itself: every module exists, every
 stand-in generates, every export is answered, and no inert value names an

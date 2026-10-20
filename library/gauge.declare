@@ -29,12 +29,26 @@ The fill colour: the theme's `accent` unless you give one.
 ## lead
 The caption column's width, derived from whether there is a `label` at all. Set it to
 align several bars whose captions differ in length.
+
+## accessibilityLabel
+The caption, so a screen reader names the reading as the eye does.
+
+## accessibilityValue
+The reading, out of the gauge's fixed 0–100 range.
 */
 
 class Gauge [ height = 28,
     label: string = "",
     value: number = 0,
     tint:  Color  = { provided("theme").accent },
+
+    // a reading out of 100, named by its caption
+
+    accessibilityRole = progress,
+    accessibilityLabel = { label },
+    accessibilityValue = { value },
+    accessibilityMin = 0,
+    accessibilityMax = 100,
     lead:  number = { label == "" ? 0 : 96 },
     cap: Text [ y = center, textColor = { provided("theme").textMuted }, text = { classroot.label } ],
     rail: View [ x = { classroot.lead }, width = { parent.width - classroot.lead },

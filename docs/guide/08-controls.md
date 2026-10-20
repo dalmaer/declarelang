@@ -25,9 +25,20 @@ what the library ships, and what `extends Control` makes yours.
 | [`RadioGroup [ value ]`](declare-docs:RadioGroup) with [`Radio [ choice, label ]`](declare-docs:Radio) children | `value` on the group | one of several |
 | [`Slider [ value, min, max, step ]`](declare-docs:Slider) | `value: number` | drag or arrow keys |
 | [`Segmented [ choices, value ]`](declare-docs:Segmented) | the chosen `id` | one of a few, shown at once; set its `width` — segments divide it evenly |
+| [`TabBar [ choices, value ]`](declare-docs:TabBar) | the chosen `id` | a `Segmented` that switches what is shown below it — pages, panes; a screen reader hears tabs, made of [`SegmentedTab`](declare-docs:SegmentedTab)s |
 | [`Combobox [ items, value ]`](declare-docs:Combobox) | the chosen item | filter as you type |
 | [`TextInput [ text, placeholder ]`](declare-docs:TextInput) | `text: string` | the text field |
+| [`SearchField [ text, placeholder ]`](declare-docs:SearchField) | `text: string` | a text field for searching: round at both ends, and a search field to a screen reader |
 | [`AppearanceSwitch [ dark ]`](declare-docs:AppearanceSwitch) | `dark: boolean` | light or dark, as one icon |
+| [`TextSizeSwitch [ value ]`](declare-docs:TextSizeSwitch) | the scale, one of its `sizes` | the reading size: a small, a default and a large A |
+| [`Stepper [ value, min, max, step ]`](declare-docs:Stepper) | `value: number` | a number a step at a time, between − and +; a spin button to a screen reader |
+| [`DatePicker [ value ]`](declare-docs:DatePicker) | an ISO date string | a field that opens a [`MonthCalendar`](declare-docs:MonthCalendar) (its days are [`CalendarDay`](declare-docs:CalendarDay)s, its arrows [`CalendarArrow`](declare-docs:CalendarArrow)s); the calendar also stands alone |
+| [`Disclosure [ label, open ]`](declare-docs:Disclosure) | `open: boolean` | a section that slides open under the line that names it |
+| [`Tree [ items, value, expanded ]`](declare-docs:Tree) | the selected `id` | an outline whose [`TreeRow`](declare-docs:TreeRow)s open and close |
+| [`Toolbar`](declare-docs:Toolbar) with [`ToolButton [ label, icon, toggle ]`](declare-docs:ToolButton) children | a toggle's `on` | one Tab stop for a row of commands; [`ToolbarDivider`](declare-docs:ToolbarDivider) between groups |
+| [`Breadcrumb [ items ]`](declare-docs:Breadcrumb) | — | the path to where you are; its steps are [`Crumb`](declare-docs:Crumb)s, [`CrumbLink`](declare-docs:CrumbLink)s and the current [`CrumbHere`](declare-docs:CrumbHere) |
+| [`Splitter [ value, min, max ]`](declare-docs:Splitter) | `value: number` | the divider between two panes you arrange, by pointer or keys |
+| [`Window [ title, open ]`](declare-docs:Window) | `open: boolean` | a window with a title bar, dragging and a close button ([`WindowClose`](declare-docs:WindowClose)); `frame = false` for one of your own design |
 
 Every control also takes `disabled`, which makes it inert and removes it from the tab
 order. Constrain it (`disabled = { app.muted }`) rather than assigning it.
@@ -81,7 +92,7 @@ and the runtime refuses it.
 
 **A record owns it.** Inside a list built from data, the value is a field of the row's
 record, and the edit goes straight back to it:
-`Checkbox [ checked = :done, input(v: boolean) { :done = v } ]`.
+`Checkbox [ checked = :done, accessibilityLabel = :title, input(v: boolean) { :done = v } ]`.
 [Data](declare-docs:guide:data@writing-a-record) covers records.
 
 ### Text fields
@@ -113,6 +124,19 @@ Second, a text field editing a record can bind to it both ways with `<->`
 written, and it can wait for Enter or a Save button before it lands.
 [Data](declare-docs:guide:data@editing-text-and-forms) covers drafts and forms. `<->` is for text fields only;
 the compiler refuses it on a checkbox or a slider and names the value pattern instead.
+
+Say what a field holds with [`purpose`](declare-docs:TextInput.purpose) —
+`email`, `password`, `cardNumber`, `postalCode` and the rest — and the platform helps
+with it: the browser's autofill and a password manager recognise the field and offer to
+fill it, a phone brings up the keyboard that suits it, and a password is hidden as it is
+typed. A "show password" control sets [`concealed`](declare-docs:TextInput.concealed);
+the field stays a password to the password manager.
+
+```declare-fragment
+TextInput [ purpose = email, accessibilityLabel = "Email" ],
+TextInput [ purpose = password, accessibilityLabel = "Password",
+    concealed = { !app.showPassword } ]
+```
 
 A multi-line field (`multiline = true`) left unsized is as tall as its text. Cap it as you
 cap any box — `height = { Math.min(contentHeight, 120) }` — and it grows as the user types,
@@ -199,8 +223,8 @@ When you need more:
 
 ## Building a missing control
 
-There is no tab bar or date picker in the library yet — and that is the normal case, not
-a gap. Check the tables first: a modal is `Dialog`, one-open-at-a-time panes are
+The library will not have every control you need, and that is the normal case, not a
+gap. Check the tables first: a modal is `Dialog`, one-open-at-a-time panes are
 `Accordion`, and each already carries the parts that are tedious to rebuild. When
 something is genuinely missing, compose it — and **anything that would be a button —
 anything a keyboard user must be able to reach and press — is a control**, whether or

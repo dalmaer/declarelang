@@ -31,6 +31,7 @@ import { setOutsidePressHook } from "./input.js";
 import { pressOutside, scrollOutside, contextOf, inside as insideAcross, leafAcross } from "./outside.js";
 import { Files } from "./files.js";
 import { Inspect } from "./inspect-service.js";
+import { Accessibility } from "./accessibility-service.js";
 import { afterSettle } from "./reactive.js";
 import { measureText } from "./text-measure.js";
 // escapeHtml — the one string chore rich text needs and no host global covers.
@@ -64,7 +65,7 @@ setOutsidePressHook((x, y) => {
     Focus.pressAt(leafAcross(root, x, y));
     return false;
 }, (x, y) => { const root = Focus.getRoot(); return root !== null && scrollOutside(root, x, y); });
-setBodyServices({ Focus, Keys, Files, Inspect, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
+setBodyServices({ Focus, Keys, Files, Inspect, Accessibility, afterSettle, activeTone, measureText, escapeHtml, ...THEME_PRESETS });
 // A focused island is not a control: what its program claims, it claims itself.
 setKeysFocusProbe(() => { const f = Focus.getFocus(); return f !== null && !("$tenant" in f); });
 // The keyboard's view of the program tree (keys.ts KeysPrograms): which

@@ -284,7 +284,7 @@ the service worker is installed:
 | `?segments` | the reader's highlight data as JSON |
 | `?extract` | the **static extraction** document — content as semantic HTML (`text/html`) |
 | `?file` | the EXACT source file (the bytes, `text/plain`) |
-| `?render=canvas`, `?crawler` | the same orthogonal modifiers as everywhere |
+| `?render=canvas`, `?crawler=true` | the same orthogonal modifiers as everywhere |
 | a **fetch** of the same URL (an include, the viewer, `curl`) | the source bytes (`text/plain`) |
 
 The navigate/fetch discrimination is the service worker's own (a top-level
@@ -321,15 +321,14 @@ is always on.
 
 ## Compile flags
 
-`compiler/src/flags.ts` is the single `CompileFlags` model — exactly **three modifiers**,
-`render` (dom/canvas), `crawler`, and `kernel` (wasm/js, for a build) — with `DEFAULT_FLAGS` and two parsers:
-`parseFlags(URLSearchParams-like)` for the server and browser URL queries, and
-`parseArgvFlags(argv)` for the CLI. So `?render=canvas` on the server, `--render canvas`
-(or `--canvas`) on the CLI, and the browser's `?render=canvas` all resolve through one
-place — no per-entry-point drift. Every modifier is named the same way on all three
-surfaces (the canonical `CompileFlags` field): booleans read `?f`/`?f=1`/`?f=true` (on)
-and `?f=0`/`false` (off) and the CLI spells them `--f`/`--no-f`; `--canvas`/`--dom` are
-kept aliases. A single `FLAG_SPECS` registry is the source both parsers derive from.
+`runtime/src/flags.ts` is the single registry, `FLAG_SPECS` — exactly **four modifiers**,
+`render` (dom/canvas), `crawler`, `kernel` (wasm/js, for a build) and `accessibility` — with `DEFAULT_FLAGS`.
+Three readers derive from it: the program parser's `defaultFlags [ … ]`, and in
+`compiler/src/flags.ts` `parseFlags(URLSearchParams-like)` for the server and browser URL
+queries and `parseArgvFlags(argv)` for the CLI. Every modifier is written `name=value`, with
+the same names and the same values on all three: `render = canvas`, `?render=canvas`,
+`--render=canvas`. A boolean's values are the words `true` and `false`. There are no
+aliases.
 
 The former knobs `slim`, `stripPos`, `prod`, and `typecheck` are **not** modifiers
 (docs/system-design/requests.md §"Removed knobs"): a `build` always slims and strips positions (the
@@ -337,7 +336,7 @@ escape hatch is `declarec --debug`, which keeps the full registry and source pos
 `prod` became the `build` request (§Request types); and typecheck is a mandatory phase
 of every compile — always on, with no flag or option. The compiler's internal options
 still carry `stripPos` (the `build` act sets it); only the externally-named FLAG surface
-is the three modifiers.
+is the four modifiers.
 
 ## Request types
 
@@ -351,7 +350,7 @@ workbench); `file` (`?file` → the exact source bytes, `text/plain`); `segments
 (`?segments` → the reader's highlight JSON on its own); and `extract` (`?extract` → the
 static-extraction document alone, content as semantic HTML). `?viewer=` is the one key
 that takes a value (its three tabs); everything else is a bare presence key, and the
-absence of all is `run`. `?extract` is distinct from the bare `?crawler` *modifier*, which
+absence of all is `run`. `?extract` is distinct from the `?crawler=true` *modifier*, which
 embeds the same document in the run page rather than returning it alone. The server
 (`server/index.mjs`) applies it on both the `apps/<name>/` route and any `.declare`
 file path; the viewer requests boot the code viewer (`library/platform-apps/viewer`) on the named

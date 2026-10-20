@@ -70,6 +70,9 @@ export interface TouchPoint {
     y: number;
 }
 export declare function setOutsidePressHook(fn: ((x: number, y: number) => boolean) | null, scroll?: ((x: number, y: number) => boolean) | null): void;
+export declare function provideKeyContextTarget(fn: () => {
+    $surface?: unknown;
+} | null): void;
 export declare function routeInput(alive: () => boolean, resolve: (e: MouseEvent) => HitTarget | null, rootPoint?: (e: MouseEvent) => {
     x: number;
     y: number;

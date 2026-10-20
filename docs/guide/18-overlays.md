@@ -222,8 +222,7 @@ Nothing at the use site says so; declaring the menu inside the window is the who
 
 ```declare
 App [ width = 520, height = 300, theme = { SanFrancisco }, order: string = "name",
-    w: Window [ x = 60, y = 30, width = 260, height = 130, rotation = 4,
-        fill = { provided("theme").surface }, cornerRadius = 10, stroke = { stroke(1, provided("theme").line) },
+    w: Window [ x = 60, y = 30, width = 260, height = 170, rotation = 4, title = "Files",
         sort: Menu [ items = { [ ({ id: "name", label: "By name" }), ({ id: "date", label: "By date" }),
                                 ({ id: "size", label: "By size" }), ({ id: "kind", label: "By kind" }) ] },
             picked(id: string) { app.order = id } ],

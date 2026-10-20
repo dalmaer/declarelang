@@ -275,7 +275,7 @@ export const Diag = {
   // a literal array or object is a fresh value no Dataset holds — the boot
   // refuses it ("belongs to no Dataset") every time.
   literalDatapath: (pos: Pos): DeclareError =>
-    err(code4(3006), `a datapath is a place in declared data, and a literal is in none — the value is fresh, so no Dataset holds it and the cursor has nowhere to point. Declare the records as data and point there: 'items: Dataset { { "rows": [ … ] } }', then 'datapath = { app.items.value }' and replicate with ':rows[]'`, pos),
+    err(code4(3006), `a datapath is a place in declared data, and a literal is in none — the value is fresh, so no Dataset holds it and the cursor has nowhere to point. Declare the records as data and point there: 'items: Dataset { { "rows": [ … ] } }' for fixed records, or 'items: Dataset [ contents = { … } ]' for records you compute, then 'datapath = { app.items.value }' and replicate with ':rows[]'`, pos),
   // A declared type name that TypeScript's standard library already declares
   // globally (Pick, Map, Record, …): every { } body typechecks against that
   // library, where the name already means the built-in — so a reference in a
@@ -313,6 +313,19 @@ export const Diag = {
   // keyboard's path only and the click lands in the untouched onClick.
   buttonPressOverride: (owner: string, pos: Pos): DeclareError =>
     err(code4(4013), `press() on ${owner} replaces Button's activation path — every other control routes the pointer through press(), and Button inverts that: its own press() delivers to onClick, which is the use site's action slot. An override here answers Space and Enter, and a click still runs the untouched onClick — so the action never fires from the pointer. Put the action in onClick()`, pos),
+  // Accessibility (docs/system-design/accessibility.md §3.7). A role is a
+  // contract: the class that declares it must set what the role reads and have
+  // the methods its actions call — an error, since a slider with no value is a
+  // broken class. A role is a word, fixed for the view's life, never a formula.
+  // The rest are warnings: what a person using a screen reader would miss.
+  accessibilityContract: (message: string, pos: Pos): DeclareError =>
+    err(code4(2006), message, pos),
+  accessibilityRoleComputed: (pos: Pos): DeclareError =>
+    err(code4(2007), `accessibilityRole is a word, fixed for the view's life — write it as one (accessibilityRole = button), not as a { } value. A view whose role would change is two views, or two classes picked by classFor`, pos),
+  accessibilityNoName: (owner: string, role: string, pos: Pos): DeclareError =>
+    err(code4(4017), `${owner} is ${/^[aeiou]/i.test(role) ? "an" : "a"} ${role} with no name: it sets no accessibilityLabel${["slider", "progress", "textField", "dialog", "alertDialog", "region"].includes(role) ? "" : " and holds no text, tip or named mark to take one from"}, so a screen reader announces only "${role}". Set accessibilityLabel to what it is called ("Volume", "Close")`, pos),
+  accessibilityDrawnFocusable: (owner: string, pos: Pos): DeclareError =>
+    err(code4(4018), `${owner} draws itself and takes the focus, but has no accessibilityRole — what it draws is pixels, not anything a screen reader can read. Give it the role it plays and the facts that role reads, or make it a Control`, pos),
   afterInValue: (pos: Pos): DeclareError =>
     err(code4(4014), `afterDelay() waits, and a { } value computes — it runs whenever what it reads changes, so a wait here would be scheduled again on every change. Call afterDelay(ms, fn) from a handler or a method; a value that should change over time derives from a Time's facts or moves with a Spring or an Animator`, pos),
   scriptWrite: (name: string, pos: Pos): DeclareError =>
@@ -410,6 +423,8 @@ export const DIAGNOSTIC_CATALOG: ReadonlyArray<{ code: string; phase: DiagPhase;
   { code: code4(2003), phase: "structure", summary: "a member is placed where its node-kind forbids it" },
   { code: code4(2004), phase: "structure", summary: "a name violates the member namespace" },
   { code: code4(2005), phase: "structure", summary: "a Spring drives an attribute its view also binds — the target belongs in the Spring's to" },
+  { code: code4(2006), phase: "structure", summary: "a class declares an accessibilityRole whose contract it does not meet" },
+  { code: code4(2007), phase: "structure", summary: "accessibilityRole written as a { } value — a role is a word, fixed for the view's life" },
   { code: code4(3000), phase: "type", summary: "type/value error (unclassified)" },
   { code: code4(3001), phase: "type", summary: "a value does not fit its attribute's type" },
   { code: code4(3002), phase: "type", summary: "a percent with no axis to resolve against" },
@@ -430,6 +445,9 @@ export const DIAGNOSTIC_CATALOG: ReadonlyArray<{ code: string; phase: DiagPhase;
   { code: code4(4011), phase: "name", summary: "a constraint centers a box by hand — x = center says it (hint)" },
   { code: code4(4012), phase: "name", summary: "an Animator nothing ever starts — no 'started', no start() call (warning)" },
   { code: code4(4013), phase: "name", summary: "a press() override on a Button — the click runs onClick, not this (warning)" },
+  { code: code4(4016), phase: "name", summary: "a Control with no accessibilityRole (warning)" },
+  { code: code4(4017), phase: "name", summary: "a view whose role needs a name has none (warning)" },
+  { code: code4(4018), phase: "name", summary: "a drawn, focusable view with no accessibilityRole (warning)" },
   { code: code4(4014), phase: "name", summary: "afterDelay() in a { } value — a value computes and never waits" },
   { code: code4(4015), phase: "name", summary: "a class, schema, theme or style takes a name TypeScript's standard library declares" },
   { code: code4(5000), phase: "module", summary: "include/module error (unclassified)" },

@@ -18,6 +18,14 @@ export interface Splice {
         open: number;
     }[];
 }
+/** How a file came into a program: named in an `include` (`by` the file that
+ *  names it, null for the program's own), or pulled for a tag it declares
+ *  (`name`, referenced `by` that file, null for the program's own). */
+export interface SourceFrom {
+    how: "include" | "auto";
+    by: string | null;
+    name?: string;
+}
 export declare function spliceScriptFiles(source: string, refs: readonly IncludeRef[] | undefined, spans: readonly Span[] | undefined, fromDir: string, host: IncludeHost, errors: DeclareError[], excise?: readonly Span[], applied?: Splice[]): Promise<string>;
 export declare function exciseSpans(source: string, spans: readonly Span[]): string;
 /** The file-access abstraction include resolution rides (composition.md §1).
@@ -59,6 +67,7 @@ export declare function resolveIncludes(program: Program, host: IncludeHost, ori
     program: Program;
     sources: string[];
     sourceIds: string[];
+    sourceFrom: SourceFrom[];
     sourceSplices: Splice[][];
     errors: DeclareError[];
     visited: Set<string>;
@@ -97,10 +106,14 @@ export declare function referencedClassNames(program: Program): string[];
 export declare function resolveAutoIncludes(program: Program, root: Element, host: IncludeHost, visited: Set<string>, 
 /** The text being compiled — a library file compiled on its own (or under a
  *  verify probe) declares its own names by right. */
-mainSource?: string): Promise<{
+mainSource?: string, 
+/** The program's name as a class-name prefix (`Cadence`), for the rename a
+ *  refused name is offered. */
+prefix?: string): Promise<{
     program: Program;
     sources: string[];
     sourceIds: string[];
+    sourceFrom: SourceFrom[];
     sourceSplices: Splice[][];
     errors: DeclareError[];
 }>;

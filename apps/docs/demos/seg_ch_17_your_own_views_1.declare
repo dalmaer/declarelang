@@ -1,15 +1,15 @@
-class Stepper extends Control [ width = 96, height = 28,
+class Counter extends Control [ width = 96, height = 28,
     value: number = 0,
     input(v: number) { value = v },
     press() { input(value + 1) }
     ]
 
 
-class BoundedStepper extends Stepper [ max: number = 5,
+class BoundedCounter extends Counter [ max: number = 5,
     press() { if (value < max) super.press() }
     ]
 
 
 App [ width = 320, height = 60, theme = { SanFrancisco },
-    BoundedStepper [ x = 20, y = 16, fill = { provided("theme").control } ]
+    BoundedCounter [ x = 20, y = 16, fill = { provided("theme").control } ]
     ]

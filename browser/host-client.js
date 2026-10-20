@@ -75,7 +75,7 @@ export async function bootHost(cfg) {
     // in `ship [ files = [ … ] ]` from its own folder, whatever the program asked for
     provideTransport((url, init) => fetch(mapUrl(new URL(url, dataBase).href), init));
   }
-  // The `?crawler` flag's embedded static document (docs/system-design/capabilities.md §5): content
+  // The `crawler=true` flag's embedded static document (docs/system-design/capabilities.md §5): content
   // for crawlers that never run any script. The page already removes #declare-static
   // in a SYNCHRONOUS pre-paint script (serve-core.js / index.html / declarec) so a
   // human never flashes the bare text; this second removal is the belt-and-braces for

@@ -54,6 +54,7 @@ import { DeclareError, DeclareErrors, type Pos } from "./errors.js";
 import { Diag } from "./diagnostics.js";
 import type { PathSeg } from "./path-plan.js";
 import type { AttrType } from "./value.js";
+import { FLAG_SPECS, flagWords, flagValue, type CompileFlags } from "./flags.js";
 
 /** A literal value as written — the parser classifies syntax, not type.
  *  `hex` preserves whether a number was written `0x…`: the Color type only
@@ -424,25 +425,18 @@ export function mergeShip(a: Ship | undefined, b: Ship | undefined): Ship | unde
 const SHIP_MEMBERS = new Set(["islands", "files", "compiler", "inspector"]);
 
 /** `defaultFlags [ … ]` — the program's defaults for the platform's flags (the
- *  registry in compiler/src/flags.ts): each is what the program gets when the
+ *  registry in flags.ts): each is what the program gets when the
  *  request, the `declarec` command or the outer program names no value of its
  *  own. `render` is the renderer a web host mounts it on, `kernel` the
  *  reactive kernel a build carries, `crawler` whether a build or a run page
  *  embeds the crawled document. A program running as an island takes the
  *  outer program's; the Mac host runs its own renderer and kernel. */
-export interface Flags {
-  render?: "dom" | "canvas";
-  kernel?: "wasm" | "js";
-  crawler?: boolean;
-}
+export type Flags = Partial<CompileFlags>;
 
-/** Each member's words — the registry's values a program may choose (`mac`
- *  is a host asking for the compiled program, never a program's default). */
-export const FLAG_WORDS: { readonly [K in keyof Flags]-?: readonly string[] } = {
-  render: ["dom", "canvas"],
-  kernel: ["wasm", "js"],
-  crawler: ["true", "false"],
-};
+/** Each member's words — the registry's, as on every surface. */
+export const FLAG_WORDS: { readonly [K in keyof Flags]-?: readonly string[] } = Object.fromEntries(
+  FLAG_SPECS.map((s) => [s.name, flagWords(s)])
+) as unknown as { readonly [K in keyof Flags]-?: readonly string[] };
 
 /** An included file (composition.md §1): a library of top-level declarations
  *  — classes, themes, styles, and its own `include`s — with NO root. It is
@@ -1700,7 +1694,7 @@ class Parser {
     while (this.peek().kind !== "rbracket" && this.peek().kind !== "eof") {
       const t = this.peek();
       if (t.kind !== "ident" || !names.includes(t.text as keyof Flags)) {
-        throw new DeclareError(`defaultFlags has no member '${t.text}' — render, kernel, or crawler`, t.pos);
+        throw new DeclareError(`defaultFlags has no member '${t.text}' — ${names.join(", ")}`, t.pos);
       }
       this.next();
       const name = t.text as keyof Flags;
@@ -1711,9 +1705,7 @@ class Parser {
       if (v.kind !== "ident" || !words.includes(v.name)) {
         throw new DeclareError(`defaultFlags' ${name} is ${words.join(" or ")}`, v.pos);
       }
-      if (name === "crawler") flags.crawler = v.name === "true";
-      else if (name === "render") flags.render = v.name as "dom" | "canvas";
-      else flags.kernel = v.name as "wasm" | "js";
+      (flags as Record<string, unknown>)[name] = flagValue(FLAG_SPECS.find((s) => s.name === name)!, v.name);
       if (this.peek().kind === "comma") this.next();
       else break;
     }

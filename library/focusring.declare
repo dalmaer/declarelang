@@ -317,9 +317,11 @@ class FocusRing [
 
     noteOverlayFocus() {
         const c = Keys.claimant() as View | null
-        let n = Focus.getFocus() as View | null
+        const f = Focus.getFocus() as View | null
+        let n = f
         while (n != null && n != c) n = n.parent as View | null
-        focusInOverlay = c != null && n == c
+        // focus held by the overlay itself (a menu, which marks its own row) is not ringed
+        focusInOverlay = c != null && n == c && f != c
         },
 
     // pure chrome: never a pointer target — and never on the hover chain

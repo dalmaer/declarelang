@@ -1198,6 +1198,8 @@ export abstract class RichText extends View {
   declare maxLines: number;
   /** True when the clamp dropped something — what a "Show more" binds to. */
   declare truncated: boolean;
+  /** The line length a rich text with no width of its own wraps at (schema.ts). */
+  declare wrapWidth: number;
   declare bodyColor: number | null;
   declare linkUnderline: boolean;
   declare fontScale: number;
@@ -1255,7 +1257,7 @@ export abstract class RichText extends View {
     // constraint, and it must run AFTER the first build (c.run() above) so there
     // is something to re-width. A width nobody gives is the text's own (the
     // build fitted it), so there is nothing to re-width to.
-    const cw = new Constraint(`${this.constructor.name}.rewidth`, () => `${this.width}`, () => { if (!this.$ownWidth()) this.$relayout(this.width > 0 ? this.width : READING_MEASURE); }, 0);
+    const cw = new Constraint(`${this.constructor.name}.rewidth`, () => `${this.width}`, () => { if (!this.$ownWidth()) this.$relayout(this.width > 0 ? this.width : this.$wrapAt()); }, 0);
     cw.run();
     onDiscard(this, () => cw.dispose());
   }
@@ -1279,8 +1281,8 @@ export abstract class RichText extends View {
     return {
       headingColor: ink, bodyColor: ink, code, codeFg: code,
       codeBg: tok("codeBg", tok("control", 0xe7ebf1)),
-      rule: tok("line", 0xdbe1e9), link: tok("accent", 0x2e6fe0),
-      quoteRule: tok("line", 0xdbe1e9), quoteColor: tok("textMuted", 0x6c7a88),
+      rule: tok("line", 0xdbe1e9), link: tok("linkColor", tok("accent", 0x2062d6)),
+      quoteRule: tok("line", 0xdbe1e9), quoteColor: tok("textMuted", 0x596570),
     };
   }
   /** The palette's values, for the render key. */
@@ -1330,6 +1332,9 @@ export abstract class RichText extends View {
   /** True when no author and no layout gives this box its width: it is then the
    *  width of the text itself (fitNatural). The auto-extent that reports that
    *  width back is not a giver. */
+  /** Where a rich text with no width wraps: its `wrapWidth`, else the reading measure. */
+  private $wrapAt(): number { return this.wrapWidth > 0 ? this.wrapWidth : READING_MEASURE; }
+
   private $ownWidth(): boolean {
     if (isSet(this, "width")) return false;
     const owner = ownerOf(this, "width");
@@ -1359,7 +1364,7 @@ export abstract class RichText extends View {
       natural = Math.max(natural, widest + 2 + e.geo.ml + e.geo.mr);
     }
     natural = Math.ceil(natural);
-    if (natural < READING_MEASURE) relayoutEntries(this.laid, natural);
+    if (natural < this.$wrapAt()) relayoutEntries(this.laid, natural);
   }
 
   /** True while the width fit waits for a flow's first real layout. */
@@ -1397,7 +1402,7 @@ export abstract class RichText extends View {
     STYLES = this.$stylesOf();                         // named styles for this render
     for (const v of this.built) { this.removeChild(v); v.discard(); }
     this.built = [];
-    const width = this.$ownWidth() || !(this.width > 0) ? READING_MEASURE : this.width;
+    const width = this.$ownWidth() || !(this.width > 0) ? this.$wrapAt() : this.width;
     // The family a flow's value names now — held while a newly chosen font is
     // inside its wait, exactly as the render key above read it (font-value.ts).
     const family = heldFamily(this, "fontFamily", this.fontFamily) || FALLBACK_FAMILY;
@@ -1482,7 +1487,7 @@ export abstract class RichText extends View {
   }
 }
 
-/** Where a rich text with no width of its own wraps. */
+/** Where a rich text with no width of its own wraps, when `wrapWidth` says nothing usable. */
 const READING_MEASURE = 640;
 
 // Shared attributes live on the RichText base; Markdown (markdown.ts) and
@@ -1496,6 +1501,8 @@ defineAttributes(RichText, {
   // is taken (View.styles = the skin class list), so the map the CONTENT
   // references is `textStyles`; the `text` earns its place disambiguating them.
   textStyles: { def: EMPTY_STYLES, defBinding: providedDefault("textStyles", EMPTY_STYLES) },
+  // the line length a rich text with no width wraps at; it then takes its widest line
+  wrapWidth: { def: READING_MEASURE },
   // FACE slots, off View: each defaults to the nearest provided value.
   textColor: { def: 0x000000, defBinding: providedDefault("textColor", 0x000000) },
   fontSize: { def: 16, defBinding: providedDefault("fontSize", 16) },
@@ -1520,3 +1527,6 @@ defineAttributes(RichText, {
   lineHeight: { def: 1 }, bodyColor: { def: null }, fontScale: { def: 1 }, baseline: { def: null },
   maxLines: { def: 0 }, truncated: { def: false },
 });
+
+// what a RichText is to assistive technology (View.$leafRole), in a build with the layer
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) RichText.prototype.$leafRole = () => "document";

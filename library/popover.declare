@@ -43,10 +43,11 @@ The anchor's box in the popover's frame.
 Whether it sits below its anchor now.
 
 ## hostW
-The width of the layer it paints in.
+The width of the layer it paints in: its window's, or the browser window's — not the
+App's, which on a page that scrolls is as tall as the page.
 
 ## hostH
-The height of the layer it paints in.
+The height of the layer it paints in: its window's, or the browser window's.
 
 ## roomBelow
 Whether it fits below its anchor.
@@ -84,11 +85,19 @@ It grows from its middle.
 
 ## pivotY
 It grows from its anchor's side.
+
+## accessibilityRole
+A dialog: it takes the focus and holds it while it is open, as a dialog does.
+
+## accessibilityLabel
+The name of what opened it, so a popover opened from "Text size" is the "Text size" dialog.
 */
 
 include [ "floating.declare" ]
 
 class Popover extends Floating [
+    accessibilityRole = dialog,
+    accessibilityLabel = { this.opener == null ? "" : "" + ((this.opener as any).accessibilityLabel || (this.opener as any).label || "") },
     kind = "floating",
     pressPolicy = { this.asSheet ? "dismiss" : "dismissAndDeliver" },
     scrollPolicy = "allow",
@@ -103,8 +112,8 @@ class Popover extends Floating [
 
     anchorView: View? = { this.opener != null ? this.opener : this.anchorTo },
     ab: object = { this.anchorBox(this.anchorView) },
-    hostW: number = { this.host != null ? this.host.width : app.width },
-    hostH: number = { this.host != null ? this.host.height : app.height },
+    hostW: number = { this.host != null ? this.host.width : app.hostWidth > 0 ? app.hostWidth : app.width },     // a window's, else the browser window's
+    hostH: number = { this.host != null ? this.host.height : app.hostHeight > 0 ? app.hostHeight : app.height },
     roomBelow: boolean = { this.ab.y + this.ab.h + this.gap + this.height <= this.hostH - 8 },
     roomAbove: boolean = { this.ab.y - this.gap - this.height >= 8 },
     below: boolean = { this.placement == "above" ? !this.roomAbove && this.roomBelow : this.roomBelow || !this.roomAbove },

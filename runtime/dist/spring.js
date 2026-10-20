@@ -167,6 +167,15 @@ export class Spring extends Animator {
             return false;
         }
         const to = this.to; // reactive: the live target this frame
+        // A target that is no number (a NaN from a size nothing has measured yet)
+        // can never be reached: sleep where it is, and the next real target wakes
+        // it, instead of ticking every frame forever.
+        if (!Number.isFinite(to)) {
+            this.springRunning = false;
+            sharedClock.remove(this);
+            setBound(this, "running", false);
+            return false;
+        }
         let pos = numOf(target, attr);
         if (!Number.isFinite(pos))
             pos = to; // recover from any poisoned prior state

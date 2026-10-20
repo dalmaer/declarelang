@@ -172,7 +172,7 @@ keep their own breaks, as today.
 The kernel replaces 27 KB gz of JS on the web (reactive core 5.7, layout+springs 5.6,
 instantiate+replicate 12.8, scroll physics 2.8). The C kernel as WebAssembly is about 8.2 KB
 gzipped with its loader beside it; the JavaScript kernel (`runtime/src/kernel-js.ts`) is about
-5.3 KB and needs no loader, which is what `--kernel js` (§10) trades on: a production build on the
+5.3 KB and needs no loader, which is what `--kernel=js` (§10) trades on: a production build on the
 JavaScript kernel is about 9 KB gzipped smaller.
 
 ## 8. Phases, each with its measurement
@@ -228,7 +228,7 @@ through identical scenarios — values, host calls in order, each rule's reads i
 visibility and auto-extent rules over random view trees, growth — and requires them equal.
 
 A production build chooses its kernel with the `kernel` modifier (`compiler/src/flags.ts`):
-`declarec --kernel js`, or `?build&kernel=js` on the dev server. The default is `wasm`. A
+`declarec --kernel=js`, or `?build&kernel=js` on the dev server. The default is `wasm`. A
 `js` build imports the JavaScript kernel with the bundle, and the WebAssembly bytes and loader
 fold out of it (`reactive.ts` `kernelReady`). The trade, measured on the corpus (Chrome, and an
 iPhone 15 Pro in Safari): the JavaScript kernel matches on memory and correctness and is about
@@ -311,6 +311,6 @@ which kernel is faster — the shape of the program's interaction at run time (h
 settle touches, how often) — and program size, views or rules do not predict it. The only
 honest signal would be timing each app's own interactions under both kernels, which is costly
 and noisy, for a prize of about 9 KB gzipped that measures near noise on most interactions.
-`wasm` stays the default; `--kernel js` is chosen by hand, and the one situation that calls for
+`wasm` stays the default; `--kernel=js` is chosen by hand, and the one situation that calls for
 it is an embed in a page whose Content-Security-Policy does not admit WebAssembly
 (guide ch. 24).

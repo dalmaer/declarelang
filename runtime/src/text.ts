@@ -69,6 +69,8 @@ export class Text extends View {
   declare textShadow: Shadow | null;
   /** A bounded-width run wraps (default) or stays a single line. */
   declare wrap: boolean;
+  /** Where a run with no width of its own wraps; it then takes its widest line. 0 = one line. */
+  declare wrapWidth: number;
   /** Line clamp (schema.ts): the height derive and every renderer honour it. */
   declare maxLines: number;
   /** True when the clamp actually dropped something (schema.ts). Read-only. */
@@ -125,6 +127,29 @@ export class Text extends View {
     return insetSides(this.padding)[0] + m.ascent + Math.floor((this.$lineAdvance(m) - (m.ascent + m.descent)) / 2);
   }
 
+  /** The run's widest line: a hard line, or — with a `wrapWidth` and wrapping on —
+   *  a line as wrapped at that width. */
+  $widestLine(): number {
+    const font = fontString(this);
+    const disp = transformText(runOf(this), this.textTransform);
+    const lines = this.wrap && this.wrapWidth > 0 && this.$ownWidth
+      ? wrapLines(disp, font, Math.max(1, this.wrapWidth - insetSides(this.padding)[1] - insetSides(this.padding)[3]), this.letterSpacing)
+      : disp.split("\n");
+    return Math.ceil(lines.reduce((w, line) => Math.max(w, textWidth(line, font, this.letterSpacing)), 0));
+  }
+
+  /** Whether the run wraps at its box: a width given it, or one taken from a `wrapWidth`. */
+  $bounded(): boolean {
+    return (!this.$ownWidth || this.wrapWidth > 0) && this.width > 0;
+  }
+
+  /** True when the run sizes its own width: nothing set it, and what owns it, if
+   *  anything, is the run's own auto-size (a yielding rule, which a write replaces). */
+  get $ownWidth(): boolean {
+    const o = ownerOf(this, "width");
+    return !isSet(this, "width") && (o === null || o.yielding);
+  }
+
   override $attach(backend: RenderBackend, parentSurface: Surface | null): void {
     // A switch to a font still inside its wait keeps this run in the family it
     // had until the font settles (font-value.ts) — measure and paint alike.
@@ -133,13 +158,14 @@ export class Text extends View {
     // model stays Node-importable) and only for unowned, never-set slots: an
     // author literal, constraint, or percent takes precedence untouched.
     if (!isSet(this, "width") && ownerOf(this, "width") === null) {
-      // As wide as the widest HARD line: a newline breaks the line on every renderer
-      // even when soft wrapping is off, so the whole string is not one line's width.
+      // As wide as the widest line: a HARD line, since a newline breaks the line on
+      // every renderer even when soft wrapping is off, or — given a `wrapWidth` —
+      // a line as wrapped there. Wrapping greedily at the widest line breaks where
+      // wrapping at `wrapWidth` did, so every renderer, wrapping at this box,
+      // draws the same lines.
       bindDerived(this, "width", () => {
-        const font = fontString(this);
         const [, right, , left] = insetSides(this.padding);
-        return Math.ceil(transformText(runOf(this), this.textTransform).split("\n")
-          .reduce((w, line) => Math.max(w, textWidth(line, font, this.letterSpacing)), 0)) + left + right;
+        return this.$widestLine() + left + right;
       });
     }
     if (!isSet(this, "height") && ownerOf(this, "height") === null) {
@@ -149,7 +175,7 @@ export class Text extends View {
         // A bounded width wraps (unless wrap=false) → height extends to the
         // wrapped line count. Reading `width` keeps this reactive, so a
         // container/viewport resize re-wraps and re-flows — baseline.
-        const bounded = (isSet(this, "width") || ownerOf(this, "width") !== null) && this.width > 0;
+        const bounded = this.$bounded();
         const all = bounded && this.wrap
           ? wrapLines(transformText(runOf(this), this.textTransform), fontString(this), this.contentBox("width"), this.letterSpacing).length
           // Not wrapping still breaks at a HARD newline — DOM (`pre`), canvas and the
@@ -175,9 +201,9 @@ export class Text extends View {
   protected override $contentExtent(size: "width" | "height"): number {
     const font = fontString(this);
     const disp = transformText(runOf(this), this.textTransform);
-    if (size === "width") return Math.ceil(disp.split("\n").reduce((w, line) => Math.max(w, textWidth(line, font, this.letterSpacing)), 0));
+    if (size === "width") return this.$widestLine();
     const m = fontMetrics(font);
-    const bounded = (isSet(this, "width") || ownerOf(this, "width") !== null) && this.width > 0;
+    const bounded = this.$bounded();
     const all = bounded && this.wrap ? wrapLines(disp, font, this.contentBox("width"), this.letterSpacing).length : disp.split("\n").length;
     setBound(this, "truncated", this.maxLines > 0 && all > this.maxLines);
     const lines = clampN(all, this.maxLines);
@@ -219,7 +245,7 @@ export class Text extends View {
           letterSpacing: this.letterSpacing,
           color: this.textColor,
           shadow: this.textShadow,
-          wrap: this.wrap && (isSet(this, "width") || ownerOf(this, "width") !== null) && this.width > 0,
+          wrap: this.wrap && this.$bounded(),
           maxLines: this.maxLines,
           align: this.textAlign,
           italic: this.italic,
@@ -284,6 +310,7 @@ defineAttributes(Text, {
   text: { def: "", push: (t, v) => t.$surface?.setText(v ?? "") },
   textShadow: { def: null, equal: shadowEqual },
   wrap: { def: true },
+  wrapWidth: { def: 0 },
   maxLines: { def: 0 },
   truncated: { def: false },
   textAlign: { def: "left" },
@@ -303,3 +330,6 @@ defineAttributes(Text, {
   strike: { def: false },
   lineHeight: { def: 0 },
 });
+
+// what a Text is to assistive technology (View.$leafRole), in a build with the layer
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) Text.prototype.$leafRole = () => "text";

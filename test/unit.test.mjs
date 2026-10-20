@@ -4613,6 +4613,49 @@ await test("Text renders through the effective style: the style derive follows a
   assert.equal(log.filter(([m]) => m === "setText").length, 1, "the hot path did not re-send");
 });
 
+// A view that extends the theme above it reads the value above it every time,
+// never its own previous answer (declare.md §9: provided(…) walks up, never to
+// itself) — so it follows the app from light to dark, as a class body's does.
+await test("a theme that extends provided(\"theme\") follows the theme above it when that changes", async () => {
+  const app = buildProgram(await compiled(`
+    class Tinted [ theme = { { ...provided("theme"), accent: 0x123456 } },
+        t: Text [ text = { "" + provided("theme").text } ] ]
+    App [ dk: boolean = false, theme = { app.dk ? SanFranciscoDark : SanFrancisco },
+        inst: View [ theme = { { ...provided("theme"), accent: 0x123456 } },
+            fill = { provided("theme").surface },
+            t: Text [ text = { "" + provided("theme").text } ] ],
+        cls: Tinted [ ] ]`));
+  settle();
+  const read = () => [Number(app.inst.t.text), Number(app.cls.t.text), app.inst.fill];
+  assert.deepEqual(read(), [0x1b2733, 0x1b2733, 0xffffff], "light");
+  app.dk = true; settle();
+  assert.deepEqual(read(), [0xe7eef2, 0xe7eef2, 0x18212c], "dark, below and on the view itself");
+  assert.equal(app.inst.$provides.theme.accent, 0x123456, "the view's own change rides along");
+  app.dk = false; settle();
+  assert.deepEqual(read(), [0x1b2733, 0x1b2733, 0xffffff], "and back");
+});
+
+// A run that sizes itself wraps at its wrapWidth and is as wide as its widest
+// line — the same lines a run given that width draws, in a narrower box.
+await test("Text.wrapWidth: wraps there, then takes its widest line; a given width wins", async () => {
+  const long = "a longer message that will certainly wrap onto more than one line here";
+  const r = await compile(`App [ width = 400, height = 400,
+    short: Text [ wrapWidth = 200, text = "ok" ],
+    long: Text [ wrapWidth = 200, text = "${long}" ],
+    fixed: Text [ width = 200, text = "${long}" ],
+    given: Text [ width = 300, wrapWidth = 200, text = "${long}" ],
+    one: Text [ text = "${long}" ],
+    md: Markdown [ wrapWidth = 200, text = "${long}" ] ]`, {});
+  assert.equal(r.errors.length, 0, r.errors.map((e) => e.message).join("; "));
+  const app = settleHeadless(r.program);
+  assert.ok(app.short.width < 30 && app.short.height === app.one.height, "a short run is its own width, one line");
+  assert.ok(app.long.width <= 200 && app.long.width > 150, `the long run is its widest line (${app.long.width})`);
+  assert.equal(app.long.height, app.fixed.height, "the same lines as a run given that width");
+  assert.equal(app.given.width, 300, "a width given wins");
+  assert.ok(app.one.width > 400 && app.one.height < app.long.height, "no wrapWidth: one line, as before");
+  assert.ok(app.md.width <= 200 && app.md.width > 150, `rich text wraps at its wrapWidth (${app.md.width})`);
+});
+
 // ── Styling rung: decoration values ─────────────────────────────────────────
 
 await test("Color: the #RGBA / #RRGGBBAA and 0xRRGGBBAA alpha forms (one representation)", () => {
@@ -6313,7 +6356,7 @@ await test("defaultFlags [ … ]: the registry's members, each a word, once per 
     assert.ok(err !== null, "should refuse: " + src);
     assert.match(err.errors ? err.errors.map((e) => e.message).join("\n") : err.message, re);
   };
-  bad("defaultFlags [ density = 1 ]\nApp [ ]", /defaultFlags has no member 'density' — render, kernel, or crawler/);
+  bad("defaultFlags [ density = 1 ]\nApp [ ]", /defaultFlags has no member 'density' — render, crawler, kernel/);
   bad("defaultFlags [ render = mac ]\nApp [ ]", /defaultFlags' render is dom or canvas/);
   bad('defaultFlags [ render = { "canvas" } ]\nApp [ ]', /defaultFlags' render is dom or canvas/);
   bad("defaultFlags [ crawler = yes ]\nApp [ ]", /defaultFlags' crawler is true or false/);
@@ -7367,6 +7410,36 @@ await test("textinput: spellcheck = false carries to the editable spec (code fie
   const spec = lastSpec(log);
   assert.equal(spec.multiline, true);
   assert.equal(spec.spellcheck, false, "a code field turns native squiggles off");
+});
+
+await test("textinput: purpose carries to the spec, and a password is concealed until shown", async () => {
+  const log = [];
+  const app = buildProgram(await compiled(`App [ width = 100, height = 100, showing: boolean = false,
+    mail: TextInput [ purpose = email ],
+    pw: TextInput [ purpose = password, text = "secret" ],
+    shown: TextInput [ purpose = password, concealed = { app.showing } ],
+  ]`));
+  const backend = mockBackend(log);
+  app.$attach(backend, null);
+  assert.equal(app.mail.purpose, "email");
+  assert.equal(app.mail.concealed, false, "an email is not hidden");
+  assert.equal(app.pw.concealed, true, "a password is hidden by its purpose");
+  assert.equal(app.shown.concealed, false, "a set concealed wins over the purpose");
+  app.showing = true; settle();
+  assert.equal(app.shown.concealed, true);
+  const specs = log.filter((e) => e[0] === "setEditable").map((e) => e[1]);
+  assert.ok(specs.some((s) => s.purpose === "password" && s.concealed === true), "the spec carries both");
+});
+
+await test("textinput: a concealed field's text is not in the semantic tree", async () => {
+  const { semanticTree } = await import("../runtime/dist/semantics.js");
+  const app = buildProgram(await compiled(`App [ width = 200, height = 100,
+    pw: TextInput [ purpose = password, text = "secret", accessibilityLabel = "Password" ],
+  ]`));
+  app.$attach(mockBackend([]), null);
+  const json = JSON.stringify(semanticTree(app));
+  assert.ok(!json.includes("secret"), "the password is never said");
+  assert.ok(json.includes("concealed"), "the field is marked concealed");
 });
 
 await test("textinput: a native edit updates the model text and fires input", async () => {

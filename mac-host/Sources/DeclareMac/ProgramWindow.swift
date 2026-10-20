@@ -742,7 +742,7 @@ struct ProgramRequest {
     let viewer: String?
     let inspector: Bool
 
-    static let reserved: Set<String> = ["viewer", "inspector", "build", "extract", "program", "file", "segments", "render", "crawler", "kernel"]
+    static let reserved: Set<String> = ["viewer", "inspector", "build", "extract", "file", "segments", "render", "crawler", "kernel"]
 
     init(_ url: String) {
         guard url.contains("?"), var comps = URLComponents(string: url), let items = comps.queryItems,

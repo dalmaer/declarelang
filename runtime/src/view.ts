@@ -11,7 +11,21 @@
 // the full state once — literals cost no reactive machinery at all.
 
 import { Node, onDiscard, runRetire, authoredName, provideCursorRead, provideCursorWrite } from "./node.js";
-import { diag } from "./errors.js";
+import { diag, DeclareError } from "./errors.js";
+
+/** Whether a view has been built (its init fired) — instantiate.ts supplies it,
+ *  for the one attribute that may be written only while a view is built. */
+let builtProbe: (v: View) => boolean = () => false;
+export function provideBuiltProbe(p: (v: View) => boolean): void { builtProbe = p; }
+/** accessibilityRole's push: a role is fixed for the view's life — written while
+ *  it is built (its class's, then its use site's), never after (accessibility.md §3.2). */
+/** The platform's annotator (semantics-dom.ts on the DOM renderer): handed each
+ *  view with a role, or a name, as it attaches. None until a host installs one. */
+let annotator: ((v: View) => void) | null = null;
+export function provideAnnotator(a: (v: View) => void): void { annotator = a; }
+export const ROLE_LOCK = (v: View): void => {
+  if (builtProbe(v)) throw new DeclareError(`${nodeLabel(v)}.accessibilityRole is fixed for the view's life — it is set where the view is declared or created, never written afterwards. A view whose role would change is two views (or two classes, picked by classFor).`);
+};
 import { backdropEqual, fillEqual, filterList, filtersEqual, insetIsZero, insetLead, insetSides, isMaskGradient, shadowEqual, strokeEqual, type Backdrop, type BoxStroke, type Fill, type FilterValue, type Inset, type Mask, type Radius, type Shadow } from "./value.js";
 import { PINCH_TYPES, POINTER_TYPES, TOUCH_TYPES, allowedRef, type InputSink, type InputWants, type RenderBackend, type Surface } from "./backend.js";
 import { Tooltips } from "./tooltips.js";
@@ -154,6 +168,10 @@ export function markWindowedBlock(v: View, on: boolean): void {
 // replication made.
 interface RowPlace { index: number; cell: Cell }
 const ROW_PLACES = new WeakMap<View, RowPlace>();
+/** The in-view range of a view's replication (replicate.ts supplies it). */
+let visibleRows: (v: View) => { first: number; last: number } = () => ({ first: -1, last: -1 });
+export function provideVisibleRows(fn: (v: View) => { first: number; last: number }): void { visibleRows = fn; }
+
 /** The tracked read behind `View.rowIndex`. */
 export function readRowIndex(v: View): number {
   const p = ROW_PLACES.get(v);
@@ -644,6 +662,32 @@ export class View extends Node {
    *  Traversal order is the tree, overridable per view by a `tabOrder()` method. */
   declare focusable: boolean;
   declare focusScope: string;
+  /** Accessibility (accessibility.md §3): the role, a contract checked by name
+   *  and type (a11y-roles.ts), and the facts roles read — every one unset (null,
+   *  or "") until a class binds it, and stored nowhere until then. */
+  declare accessibilityRole: string;
+  declare accessibilityLabel: string;
+  declare accessibilityHint: string;
+  declare accessibilityLive: string;
+  declare accessibilityValue: number | null;
+  declare accessibilityMin: number | null;
+  declare accessibilityMax: number | null;
+  declare accessibilityStep: number | null;
+  declare accessibilityValueText: string;
+  declare accessibilityChecked: boolean | null;
+  declare accessibilityPressed: boolean | null;
+  declare accessibilitySelected: boolean | null;
+  /** The item inside this composite the keyboard is on, while focus stays on the
+   *  composite (a menu's highlighted row, a list's active row, a field's suggestion). */
+  declare accessibilityActiveItem: View | null;
+  /** Which way the column this header heads is sorted: "none", "ascending" or "descending". */
+  declare accessibilitySort: "none" | "ascending" | "descending";
+  /** Whether more than one of this list's, grid's or tree's items can be selected at once. */
+  declare accessibilityMultiselectable: boolean;
+  declare accessibilityLevel: number | null;
+  declare accessibilityExpanded: boolean | null;
+  declare accessibilityPosInSet: number | null;
+  declare accessibilitySetSize: number | null;
   declare anchor: string;
   /** The linking triple (location.md §0): `link` — this view IS a link to the
    *  reference ("" = not a link); `replace` — following it overwrites the
@@ -746,6 +790,8 @@ export class View extends Node {
     const s = (this.$surface = defer ? new DeferredSurface() : backend.createSurface());
     if (detached) { DETACHED.add(this); DETACHED_SURFACES.add(s); STATS.detached++; }
     this.$flush(s);
+    if ((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__)
+      && annotator !== null && (this.accessibilityRole !== "none" || this.accessibilityLabel !== "" || this.link !== "" || this.scrolls !== "none")) annotator(this);
     if (!defer && !detached) parentSurface?.insertChild(s, before !== null && !isPlaced(before) ? realSurfaceAfter(this) : before);
     // Each child joins the surface this view has NOW: the flush, or a child
     // that needs a real surface while hidden, may have brought this view in.
@@ -1156,6 +1202,11 @@ export class View extends Node {
    *  view no replication made. A fact: read-only, and a constraint reading it
    *  re-runs when the row's place changes. */
   get rowIndex(): number { return readRowIndex(this); }
+  /** The first and last records of this view's replication any part of which is
+   *  in view — the date chip over a chat, "rows 40–58 of 30,500" — as logical
+   *  indices, -1 when none is; windowed or not, recycled rows or not. */
+  get firstVisibleRow(): number { return visibleRows(this).first; }
+  get lastVisibleRow(): number { return visibleRows(this).last; }
 
   /** Pointer-interaction intrinsics (interaction.ts): `hovered` is true while
    *  this view is on the live hit chain — the topmost visible view under the
@@ -1243,6 +1294,13 @@ export class View extends Node {
    *  its native element without occupying the author's event slot. No-op on a
    *  plain view. */
   $focusChanged(_focused: boolean): void {}
+  /** What this view is to assistive technology when it declares no role: a
+   *  runtime leaf says (a run of text, a field, a picture, a document) — the
+   *  semantic tree asks rather than importing the classes, so a build that
+   *  leaves one out never carries it for the tree's sake. Absent on other
+   *  views, and everywhere in a build without the layer (each leaf installs
+   *  its own under the build flag). */
+  declare $leafRole?: () => "text" | "textField" | "image" | "document";
 
   /** The OPTICAL band the `center` position literal centers — { lead, size }
    *  along the given axis, in this view's own coordinates. The base answer is
@@ -2042,6 +2100,32 @@ defineAttributes(View, {
   scrollBelow: { def: "none", push: (v) => noteOverlay(v) },
   focusable: { def: false },
   focusScope: { def: "none" },
+  // Accessibility: every default is null or a string, so none of these takes a
+  // slot in the kernel's per-view block (attributes.ts — only number and
+  // boolean defaults do); a view that leaves them unset stores nothing.
+  // A role is fixed for the view's life: written while the view is built (a
+  // class's, then its use site's), never after (accessibility.md §3.2).
+  ...((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) ? {
+    accessibilityRole: { def: "none", push: ROLE_LOCK },
+    accessibilityLabel: { def: "" },
+    accessibilityHint: { def: "" },
+    accessibilityLive: { def: "off" },
+    accessibilityValue: { def: null },
+    accessibilityMin: { def: null },
+    accessibilityMax: { def: null },
+    accessibilityStep: { def: null },
+    accessibilityValueText: { def: "" },
+    accessibilityChecked: { def: null },
+    accessibilityPressed: { def: null },
+    accessibilitySelected: { def: null },
+    accessibilityActiveItem: { def: null },
+    accessibilitySort: { def: "none" },
+    accessibilityMultiselectable: { def: false },
+    accessibilityLevel: { def: null },
+    accessibilityExpanded: { def: null },
+    accessibilityPosInSet: { def: null },
+    accessibilitySetSize: { def: null },
+  } : {}),
   // `anchor` — the view's name in the reveal namespace (location.md §6). A stored
   // slot the reveal walk reads after settle; "" = not an anchor. No push: it has
   // no surface effect. (Materializes §6's "named view"; heading slugs are the rest.)
@@ -2053,7 +2137,11 @@ defineAttributes(View, {
   // input when the value changes (empty↔non-empty flips interest itself).
   link: { def: "", push: (v) => {
     v.$rewireInput();
-    v.$surface?.setLink?.(v.link, (v as unknown as { label?: string }).label ?? "");
+    // a link's name: what it is to a screen reader, else the label it shows
+    const named = (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) ? v.accessibilityLabel : "";
+    v.$surface?.setLink?.(v.link, named || ((v as unknown as { label?: string }).label ?? ""));
+    // a link bound after the view attached is named then (a link's name is its text)
+    if ((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) && annotator !== null && v.link !== "" && v.$surface !== null) annotator(v);
   } },
   // `replace` — this link overwrites the current history entry instead of pushing
   // (location.md §0.5.6): fine-grained movement WITHIN a place (a deck's arrows),
@@ -2165,12 +2253,15 @@ export function setKeyDefaultHook(fn: (view: View, e: unknown) => void): void {
  *  view that has been read, so a program that never reads it pays nothing. */
 let FOCUSED: View | null = null;
 const focusedCells = new WeakMap<View, Cell>();
-export function noteFocused(now: View | null): void {
+export function noteFocused(now: View | null, byKeyboard = false): void {
   const old = FOCUSED;
   if (old === now) return;
   FOCUSED = now;
   if (old !== null) focusedCells.get(old)?.changed();
   if (now !== null) focusedCells.get(now)?.changed();
+  // a tip shows for the keyboard's focus as for the pointer's hover, and goes when it leaves
+  if (old !== null && old.tooltipLabel !== "") Tooltips.out(old);
+  if (now !== null && byKeyboard && now.tooltipLabel !== "") Tooltips.over(now);
 }
 function readFocused(v: View): boolean {
   let c = focusedCells.get(v);
@@ -2329,7 +2420,21 @@ export function viewLayoutReady(): boolean {
   return true;
 }
 
+/** The person's accessibility preferences, as the host reports them. */
+export interface AccessibilitySettings {
+  readonly reduceMotion: boolean;
+  readonly increaseContrast: boolean;
+  readonly reduceTransparency: boolean;
+  readonly textScale: number;
+}
+const NO_SETTINGS: AccessibilitySettings = Object.freeze({ reduceMotion: false, increaseContrast: false, reduceTransparency: false, textScale: 1 });
+
 export class App extends View {
+  /** The app's language travels with its root surface from the start. */
+  protected override $flush(s: Surface): void {
+    super.$flush(s);
+    s.setLanguage?.(this.language);
+  }
   /** onReady — the boot transaction's close, DELIVERED (schema.ts App
    *  events): boot is the one settle with no app handler anywhere in it, so
    *  its close cannot be asked for inline (afterSettle) and must arrive as an
@@ -2378,6 +2483,10 @@ export class App extends View {
    *  the runtime. Theme an app off it: `fill = { app.dark ? 0x0B141B : 0xFFFFFF }`
    *  or drive a `theme` record from it. Read-only to user code. */
   declare dark: boolean;
+  /** The person's accessibility preferences, fed live by the host: `reduceMotion`,
+   *  `increaseContrast`, `reduceTransparency`, and `textScale` (1 until a host
+   *  supplies it). Read anywhere as `provided("accessibilitySettings")`. */
+  declare accessibilitySettings: AccessibilitySettings;
   /** Is the page this app lives on visible? The browser's Page Visibility fact
    *  (boot.ts wireVisibility feeds it; the native host feeds the same slot from
    *  its occlusion signal). Ambient motion gates itself on it —
@@ -2845,6 +2954,7 @@ export class App extends View {
    *  <title> (the extractor reads the settled value). Author-settable, literal
    *  or constraint; "" (the default) leaves the host's served title alone. */
   declare appName: string;
+  declare language: string;
 
   /** The App's auto-extent is the HOST, not its content: an unset width/height
    *  follows hostWidth/hostHeight (reactive on resize), so the root app fills its
@@ -2941,6 +3051,8 @@ defineAttributes(App, {
   hovering: { def: false },
   pointerOverText: { def: false },
   dark: { def: false },
+  // the person's accessibility preferences (schema.ts); none, until a host says
+  accessibilitySettings: { def: NO_SETTINGS },
   // page visibility (schema.ts) — true until a host reports otherwise, so
   // headless and test mounts that never wire it see a visible page
   pageVisible: { def: true },
@@ -3005,6 +3117,8 @@ defineAttributes(App, {
   minHeight: { def: 0 },
   // the app's human name (page title etc.) — author-settable, "" = host default
   appName: { def: "" },
+  // the language its text is in (BCP 47), said to the host's surface
+  language: { def: "en", push: (a: App, l: string) => a.$surface?.setLanguage?.(l) },
 });
 
 

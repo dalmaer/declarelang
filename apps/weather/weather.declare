@@ -824,7 +824,7 @@ class Dot extends Control [ width = 18, height = 44, cursor = "pointer", fill = 
     // a page indicator the pointer can scrub; the keyboard pages with the
     // arrows either side, so twenty-five dots are not twenty-five stops
 
-    focusable = false,
+    focusable = false, accessibilityRole = none,
     mine: string = { :id },
     here: boolean = { app.city != null && app.city.id == this.mine },
 
@@ -849,6 +849,7 @@ class Dot extends Control [ width = 18, height = 44, cursor = "pointer", fill = 
 // which is the smallest thing a finger reliably lands on.
 
 class ClearButton extends Control [ width = 44, height = 44, cursor = "pointer", fill = null, tooltipLabel = "Clear",
+    accessibilityLabel = "Clear search",
     press() { app.query = "" },
     disc: View [ x = center, y = center, width = 20, height = 20, cornerRadius = 10,
         fill = #FFFFFF42 ],

@@ -87,6 +87,11 @@ export function setOutsidePressHook(fn, scroll = null) {
     OUTSIDE_PRESS = fn;
     OUTSIDE_SCROLL = scroll;
 }
+/** What a context menu asked for from the keyboard (Shift+F10, the Menu key) is
+ *  for: the focused view, or the item it names as the one the keys are on. The
+ *  focus service provides it; without one, the keys open nothing of ours. */
+let KEY_CONTEXT = null;
+export function provideKeyContextTarget(fn) { KEY_CONTEXT = fn; }
 export function routeInput(alive, resolve, rootPoint, onHover, 
 // the top-level program's router — the one that answers the open overlays
 // (an embedded program's own router leaves it to the page's)
@@ -229,18 +234,56 @@ topLevel = true) {
     // Touch context rides onHold instead (the hold gate), so nothing here
     // touches the touch stream.
     {
+        const deliverAt = (e, at) => {
+            const t = resolve(at);
+            const owner = t === null ? undefined : t.context ?? (t.wantsContext === true ? t : undefined);
+            if (owner === undefined)
+                return false;
+            e.preventDefault();
+            const cp = rootOf(at);
+            owner.sink("contextMenu", cp.x, cp.y);
+            return true;
+        };
+        // the context menu asked for from the keyboard (Shift+F10, the Menu key) opens
+        // where the keys are — the focused view, or the item it names — as a press
+        // there would: the nearest owner of that point takes it. The browser may send
+        // its own contextmenu for the same key after; that one is not delivered twice.
+        let keyTook = -1;
+        const keyListener = (e) => {
+            if (!alive()) {
+                window.removeEventListener("keydown", keyListener, true);
+                return;
+            }
+            if (e.key !== "ContextMenu" && !(e.key === "F10" && e.shiftKey))
+                return;
+            const el = KEY_CONTEXT?.()?.$surface?.element;
+            if (el === undefined)
+                return;
+            // the point a press would land on: inside the target, near its start — and
+            // the event a press there makes, so it takes the right-click's own route
+            const r = el.getBoundingClientRect();
+            const x = r.left + Math.min(r.width / 2, 24), y = r.top + r.height / 2;
+            const under = el.ownerDocument.elementFromPoint(x, y) ?? el;
+            const ctx = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 });
+            under.dispatchEvent(ctx);
+            if (ctx.defaultPrevented) {
+                e.preventDefault();
+                keyTook = performance.now();
+            }
+        };
+        window.addEventListener("keydown", keyListener, true);
         const ctxListener = (e) => {
             if (!alive()) {
                 window.removeEventListener("contextmenu", ctxListener);
                 return;
             }
-            const t = resolve(e);
-            const owner = t === null ? undefined : t.context ?? (t.wantsContext === true ? t : undefined);
-            if (owner !== undefined) {
+            // the browser's own menu for a key already answered
+            if (e.isTrusted && performance.now() - keyTook < 500) {
+                keyTook = -1;
                 e.preventDefault();
-                const cp = rootOf(e);
-                owner.sink("contextMenu", cp.x, cp.y);
+                return;
             }
+            deliverAt(e, e);
         };
         window.addEventListener("contextmenu", ctxListener);
     }

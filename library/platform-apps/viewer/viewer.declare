@@ -11,11 +11,12 @@
 //
 // Reach it with a request type: a bare `foo.declare?viewer` opens the default
 // Reader tab (the program URL is the address — a directory carries no
-// behavior). The Reader / Source / Edit triple (?viewer=reader | source | edit)
-// switches between the rendered view, the verbatim source, and an editing
+// behavior). The Reader / Source / Edit / Sizes tabs (?viewer=reader | source |
+// edit | sizes) switch between the rendered view, the verbatim source, an editing
 // workbench (the source in an editor, the running program below it, compile
-// errors sandwiched between); the A stepper zooms every text size; the
-// sun / half-disc / moon switch picks Light / System / Dark.
+// errors sandwiched between), and what the program's production build weighs;
+// the text-size switch zooms every text size; the sun / half-disc / moon switch picks
+// Light / System / Dark.
 //
 // The code is linked: an `include [ "…" ]` path opens that file; a class the
 // program declares opens where it is declared, at that line; a platform class
@@ -25,6 +26,26 @@
 // instead.
 
 include [ "reference.declare" ]
+
+// what a production build weighs: the dev server's ?sizes report (declarec
+// --sizes --json), the fields this app reads of it
+
+schema SizePart [ raw: number, gzip: number ]
+schema SizePiece [ kind: string, name: string, gzip: number ]
+schema SizeFile [ file: string, how: string, by?: string, name?: string, gzip: number, pieces[]: SizePiece ]
+schema SizeModule [ module: string, gzip: number, status: string, capability?: string, reason?: string ]
+schema SizeReport [ program: string,
+    settings: [ render: string, kernel: string, accessibility: boolean ],
+    total: SizePart,
+    parts: [ program: SizePart, runtime: SizePart, kernel: SizePart, page: SizePart ],
+    files[]: SizeFile,
+    modules[]: SizeModule,
+    capabilities: [ left[]: [ id: string, describe: string ] ],
+    beside[]: [ file: string, what: string, gzip: number ] ]
+
+// one line of it, as the Sizes tab shows it: `part` names the bar's color
+
+schema SizeLine [ label: string, href: string, note: string, gzip: number, share: number, detail: string, part: string ]
 
 // the appearance switch names its icons in data, so the build keeps the classes
 
@@ -119,18 +140,81 @@ class Block [ kind: string = "",
     ]
 
 
-// small / reset / large "A" — steps the reader font zoom (docs' SizeBtn).
+// one line of the Sizes tab: what it is (a link, when it is a file the reader
+// can open), what brought it aboard, its compressed size, a bar of its share
+// of its list, and what it holds
 
-class SizeBtn extends Control [ width = 34, height = 30, cornerRadius = 6,
+class SizeRow [ width = 100%,
+    label: string = "",
+    href: string = "",
+    note: string = "",
+    gzip: number = 0,
+    share: number = 0,
+    detail: string = "",
+    part: string = "program",
 
-    glyph: number = 14,
-    delta: number = 0,
-    fill = { hovered ? provided("theme").controlHovered : null },
-    press() { app.fontScale = classroot.delta == 0 ? 0.9
-        : Math.max(0.7, Math.min(1.6, Math.round((app.fontScale + classroot.delta) * 100) / 100)) },
+    layout: SimpleLayout [ axis = y, spacing = 4 ],
 
-    lbl: TextLabel [ fontWeight = semibold, fontSize = { classroot.glyph }, textColor = { provided("theme").textMuted },
-        text = "A", wrap = false, x = center ]
+    top: View [ width = 100%, fontSize = { 13 * app.fontScale },
+        name: Text [ wrap = false, fontWeight = medium, text = { classroot.label }, link = { classroot.href },
+            textColor = { classroot.href != "" ? provided("theme").linkColor : provided("theme").text } ],
+        size: Text [ x = end, wrap = false, textColor = { provided("theme").text }, text = { app.kb(classroot.gzip) } ],
+        note: Text [ x = { parent.name.width + 10 }, width = { Math.max(0, parent.width - this.x - parent.size.width - 16) },
+            maxLines = 1, textColor = { provided("theme").textMuted }, text = { classroot.note } ]
+        ],
+    bar: View [ height = 4, cornerRadius = 2, width = { Math.max(2, parent.width * classroot.share) },
+        fill = { app.partTint(classroot.part) } ],
+    more: Text [ visible = { classroot.detail != "" }, width = 100%, wrap = true,
+        fontSize = { 12 * app.fontScale }, textColor = { provided("theme").textMuted }, text = { classroot.detail } ]
+    ]
+
+
+// a fold of the Sizes tab — the program's files, the library's, the runtime —
+// whose line names it and sums it, open or shut: a step above its rows, on a
+// band of its own
+
+class SizeGroup extends Disclosure [ width = 100%,
+    theme = { { ...provided("theme"), accordionFontSize: 15 * app.fontScale, accordionHeaderHeight: 40 * app.fontScale } },
+
+    // the band under the line, drawn beneath it: the page's backdrop, so it
+    // recedes in either appearance as a recess, not a raised card
+
+    draw(d: Draw) {
+        const h = this.line.height, r = 8
+        d.fillStyle = provided("theme").background
+        d.beginPath()
+        d.moveTo(r, 0); d.lineTo(this.width - r, 0); d.arcTo(this.width, 0, this.width, r, r)
+        d.lineTo(this.width, h - r); d.arcTo(this.width, h, this.width - r, h, r)
+        d.lineTo(r, h); d.arcTo(0, h, 0, h - r, r)
+        d.lineTo(0, r); d.arcTo(0, 0, r, 0, r)
+        d.fill()
+        }
+    ]
+
+
+// one part in the key under the total's bar: its swatch, its name, its size
+
+class PartKey [ part: string = "program",
+    gzip: number = 0,
+    layout: SimpleLayout [ axis = x, spacing = 6, align = center ],
+    View [ width = 10, height = 10, cornerRadius = 3, fill = { app.partTint(classroot.part) } ],
+    Text [ wrap = false, fontSize = { 13 * app.fontScale }, textColor = { provided("theme").text }, text = { classroot.part } ],
+    Text [ wrap = false, fontSize = { 13 * app.fontScale }, textColor = { provided("theme").textMuted }, text = { app.kb(classroot.gzip) } ]
+    ]
+
+
+// a section of the Sizes tab: a heading, a line on what its figures mean, its rows
+
+class SizeSection [ width = 100%,
+    title: string = "",
+    blurb: string = "",
+    layout: SimpleLayout [ axis = y, spacing = 10 ],
+    head: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 2 ],
+        Text [ fontSize = { 16 * app.fontScale }, fontWeight = semibold, textColor = { provided("theme").text }, text = { classroot.title } ],
+        Text [ visible = { classroot.blurb != "" }, width = 100%, wrap = true, fontSize = { 12 * app.fontScale },
+            textColor = { provided("theme").textMuted }, text = { classroot.blurb } ]
+        ]
     ]
 
 
@@ -202,10 +286,10 @@ App [ fill = { provided("theme").background },
 
     barH: number = 52,
     topM: number = 40,    // reader top margin (foot matches it at the bottom)
-    headH: number = { 46 * app.fontScale },    // filename title + rule, above the body
+    headH: number = { Math.max(46 * app.fontScale, app.content.head.height + 10 * app.fontScale) },    // filename title + rule, above the body
 
     // "reader" = highlighted + Markdown, "source" = verbatim, "edit" = live
-    // workbench — the viewer's location. The `?viewer=` request seeds the
+    // workbench, "sizes" = what the build weighs — the viewer's location. The `?viewer=` request seeds the
     // opening tab (the host translates the query into the initial location);
     // a tab click writes `app.location` and this derives back from it, so the
     // tab is a single source of truth that back/forward walk for free.
@@ -223,12 +307,25 @@ App [ fill = { provided("theme").background },
     mode: string = { (app.place || "reader").split("/")[0] || "reader" },
     fileRel: string = { app.place.indexOf("/") < 0 ? "" : app.place.slice(app.place.indexOf("/") + 1) },
 
+    // the tabs, each with the location it opens: the viewed file kept across them
+
+    tabs() -> object[] {
+        const at = app.fileRel == "" ? "" : "/" + app.fileRel
+        return [["reader", "Reader"], ["source", "Source"], ["edit", "Edit"], ["sizes", "Sizes"]].map(([id, label]) => ({ id: id, label: label, location: id + at }))
+        },
+
+    // on a phone the tab switch is a menu, opened from a button that names the tab
+
+    tabMenu: Menu [ items = { app.tabs().map((t: any) => ({ id: t.location, label: t.label, checked: t.id == app.mode })) },
+        picked(id: string) { app.follow("#" + id, true) }
+        ],
+
     // The history walk is the host's — the browser's Back/Forward, the mac
     // titlebar's ‹ › — because a followed file is one location entry and a tab
     // switch replaces its entry (the Segmented's `replace`), so Back walks
     // files, never tabs. The viewer draws no chrome of its own for it.
 
-    fontScale: number = 0.9,    // reader font zoom (0.9 = the comfortable default; the A stepper drives it)
+    fontScale: number = 0.9,    // reader font zoom (0.9 = the comfortable default; the text-size switch drives it)
     proseMeasure: number = 560,    // prose reading measure (matches the docs); code runs wider off the same left edge
     proseTopPad: number = 22,    // space above a prose block — reads as the section break
     themeMode: string = "auto",
@@ -255,6 +352,86 @@ App [ fill = { provided("theme").background },
     // host→app channel; parse + normalise so every record has kind/md/html.
 
     doc: Dataset [ contents = { app.parseDoc() } ],
+
+    // THE SIZES TAB — the program's production build, weighed by the dev server
+    // (?sizes). Fetched only while the tab shows, since each is a build; a file
+    // with no App is no program and has no build. The report names its files from
+    // the program's folder, and the library's from the library.
+
+    sizes: DataSource [ auto = true, schema = SizeReport, url = { app.sizesUrl() } ],
+    sizesUrl() -> string {
+        if (app.mode != "sizes" || app.isInclude) return ""
+        if (app.fileRel != "") return app.srcUrl("?sizes")
+        if (app.hostProgram != "") return app.hostProgram + "?sizes"
+        // standalone, the file is named by the seeds, which land after boot
+        return app.demoSources && app.demoSources["__path__"] ? app.baseName() + "?sizes" : ""
+        },
+    sizeView: Dataset [ schema = [ parts[]: SizeLine, program[]: SizeLine, library[]: SizeLine, modules[]: SizeLine, beside[]: SizeLine,
+            heads: [ program: string, library: string, runtime: string ] ],
+        contents = { app.sizeLines() } ],
+
+    kb(n: number) -> string { return (n / 1024).toFixed(1) + " KB" },
+    partTint(part: string) -> Color {
+        const t = provided("theme")
+        return part == "program" ? t.accent : part == "runtime" ? t.accentSecondary : part == "kernel" ? t.textMuted : t.textFaint
+        },
+    sizesSettings: string = { app.sizes.value == null ? "" : app.sizes.value.settings.render + " · " + app.sizes.value.settings.kernel + " kernel · accessibility "
+        + (app.sizes.value.settings.accessibility ? "on" : "off") },
+    sizesLeftOut: string = { app.sizes.value == null ? "" : app.sizes.value.capabilities.left.map((c) => c.id).join(", ") },
+
+    // where the reader opens a file the report names: the program's own files from
+    // the viewed file's folder, the library's from where the library is served
+
+    sizeHref(f: SizeFile) -> string {
+        if (f.how == "program") return "#reader" + (app.fileRel == "" ? "" : "/" + app.fileRel)
+        if (f.file.startsWith("library/")) {
+            const base = app.libraryBase()
+            return base == "" ? "" : "#reader/" + base + f.file.slice("library/".length)
+            }
+        return "#reader/" + app.resolveRel(app.viewedDir(), f.file)
+        },
+    libraryBase() -> string {
+        try { const s = app.demoSources && app.demoSources["__library__"]; if (s) return ("" + JSON.parse(s).base).replace(/^[a-z]+:\/\/[^/]+/i, "").replace(/^\/+/, "") } catch (e) { }
+        return ""
+        },
+    howOf(f: SizeFile) -> string {
+        if (f.how == "program") return "the program"
+        if (f.how == "provided") return "provided by the library"
+        if (f.how == "auto") return "for " + (f.name ?? "") + (f.by != null ? ", named in " + f.by : "")
+        return "included by " + (f.by ?? "the program")
+        },
+    sizeLines() {
+        const r = app.sizes.value
+        if (r == null) return ({ parts: [], program: [], library: [], modules: [], beside: [], heads: ({ program: "", library: "", runtime: "" }) })
+        const line = (label: string, gzip: number, share: number, part: string, note: string, href: string, detail: string) =>
+            ({ label: label, gzip: gzip, share: share, part: part, note: note, href: href, detail: detail })
+        const total = Math.max(1, r.total.gzip)
+        const parts = [["program", "its declarations, its tree and its bodies"], ["runtime", r.modules.length + " modules"], ["kernel", "the reactive kernel"], ["page", "index.html"]]
+            .map(([k, note]) => line(k, r.parts[k].gzip, r.parts[k].gzip / total, k, note, "", ""))
+        const files = [...r.files].sort((a, b) => b.gzip - a.gzip)
+        const fileMax = Math.max(1, ...files.map((f) => f.gzip))
+        const fromLibrary = (f: SizeFile) => f.file.startsWith("library/")
+        const fileLine = (f: SizeFile) => line(f.file, f.gzip, f.gzip / fileMax, "program", app.howOf(f), app.sizeHref(f),
+            f.pieces.filter((q) => q.gzip >= 52).map((q) => q.name + " " + (q.gzip / 1024).toFixed(1)).join(" · "))
+        const head = (n: number, one: string, many: string, bytes: number) => n + " " + (n == 1 ? one : many) + " · " + app.kb(bytes)
+        const sum = (fs: SizeFile[]) => fs.reduce((s, f) => s + f.gzip, 0)
+        const own = files.filter((f) => !fromLibrary(f)), lib = files.filter(fromLibrary)
+        const modules = r.modules.filter((m) => m.status != "stand-in")
+        const standIns = r.modules.filter((m) => m.status == "stand-in")
+        const modMax = Math.max(1, ...modules.map((m) => m.gzip))
+        const why = (m: SizeModule) => m.status == "core" ? "core" : m.status == "cut" ? m.capability + ": cut to what the program names" : m.capability + ": " + (m.reason ?? "")
+        return ({
+            parts: parts,
+            program: own.map(fileLine),
+            library: lib.map(fileLine),
+            heads: ({ program: head(own.length, "file", "files", sum(own)), library: head(lib.length, "file", "files", sum(lib)),
+                runtime: head(r.modules.length - standIns.length, "module", "modules", r.parts.runtime.gzip) }),
+            modules: [...modules.map((m) => line(m.module, m.gzip, m.gzip / modMax, "runtime", why(m), "", "")),
+                ...(standIns.length == 0 ? [] : [line(standIns.length + " stand-ins", standIns.reduce((t, m) => t + m.gzip, 0),
+                    standIns.reduce((t, m) => t + m.gzip, 0) / modMax, "runtime", "in place of what was left out", "", "")])],
+            beside: r.beside.map((b) => line(b.file, b.gzip, 0, "page", b.what, "", ""))
+            })
+        },
     plainMarks: Dataset [ contents = { { marks: app.marksIn(app.plainHtml()) } } ],
 
     parseDoc() {
@@ -432,13 +609,20 @@ App [ fill = { provided("theme").background },
             }
         return m
         },
-    counts(c: { code: number; comment: number }) -> string {
-        return (c.code + c.comment).toLocaleString("en-US") + " lines with comments, " + c.code.toLocaleString("en-US") + " without"
-        },
     hasMetrics: boolean = { app.metrics() != null },
     hasWhole: boolean = { app.hasMetrics && app.metrics().app != null && app.metrics().app.files > 1 },
-    fileCounts: string = { app.hasMetrics ? app.counts(app.metrics()) + (app.hasWhole ? " ·" : "") : "" },
-    appCounts: string = { app.hasWhole ? "(" + app.metrics().app.files + " files): " + app.counts(app.metrics().app) : "" },
+
+    // the counts as phrases, so a narrow window wraps them between phrases
+    // rather than running them off its edge
+
+    counts(c: { code: number; comment: number }, last: string) -> object[] {
+        return [({ text: (c.code + c.comment).toLocaleString("en-US") + " lines with comments,", bold: false }),
+            ({ text: c.code.toLocaleString("en-US") + " without" + last, bold: false })]
+        },
+    countPhrases: Dataset [ schema = [ phrases[]: [ text: string, bold: boolean ] ],
+        contents = { { phrases: !app.hasMetrics ? [] : [({ text: "This file:", bold: true }), ...app.counts(app.metrics(), app.hasWhole ? " ·" : ""),
+            ...(!app.hasWhole ? [] : [({ text: "Whole app", bold: true }), ({ text: "(" + app.metrics().app.files + " files):", bold: false }),
+                ...app.counts(app.metrics().app, "")])] } } ],
     dirName() { const p = app.filePath(); const i = p.lastIndexOf("/"); return i < 0 ? "" : p.slice(0, i + 1) },
     baseName() { const p = app.filePath(); const i = p.lastIndexOf("/"); return i < 0 ? p : p.slice(i + 1) },
 
@@ -483,26 +667,30 @@ App [ fill = { provided("theme").background },
 
         head: View [ y = { app.topM }, width = { app.hostWidth - 96 },
             x = { Math.max(24, (parent.width - this.width) / 2) },
-            title: View [ layout: SimpleLayout [ axis = x, spacing = 0 ],
-                d: Text [ fontSize = { 21 * app.fontScale }, wrap = false, textColor = { provided("theme").textMuted }, text = { app.dirName() } ],
-                n: Text [ fontSize = { 21 * app.fontScale }, fontWeight = bold, wrap = false, textColor = { provided("theme").text }, text = { app.baseName() } ],
+
+            // one flow on one baseline: the path, then the counts, which wrap
+            // beneath it, phrase by phrase, when the window is too narrow
+
+            title: View [ width = 100%, datapath = { app.countPhrases.value },
+                layout: WrappingLayout [ spacing = 4, rowSpacing = 4, align = baseline ],
+                path: View [ baseline: number = { this.n.y + this.n.baseline },
+                    layout: SimpleLayout [ axis = x, spacing = 0 ],
+                    d: Text [ fontSize = { 21 * app.fontScale }, wrap = false, textColor = { provided("theme").textMuted }, text = { app.dirName() } ],
+                    n: Text [ fontSize = { 21 * app.fontScale }, fontWeight = bold, wrap = false, textColor = { provided("theme").text }, text = { app.baseName() } ]
+                    ],
 
                 // the size of the thing, quietly: the compiler's own count
 
-                gapm: View [ width = 14, height = 1 ],
-                m: View [ y = { 8 * app.fontScale }, visible = { app.hasMetrics },
-                    fontSize = { 13 * app.fontScale }, textColor = { provided("theme").textMuted },
-                    layout: SimpleLayout [ axis = x, spacing = 4 ],
-                    Text [ fontWeight = bold, wrap = false, text = "This file:" ],
-                    Text [ wrap = false, text = { app.fileCounts } ],
-                    Text [ fontWeight = bold, wrap = false, visible = { app.hasWhole }, text = "Whole app" ],
-                    Text [ wrap = false, visible = { app.hasWhole }, text = { app.appCounts } ]
-                    ]
+                gapm: View [ width = 6, height = 1,
+                    baseline: number = 0
+                    ],
+                Text [ datapath = :phrases[], wrap = false, fontSize = { 13 * app.fontScale }, textColor = { provided("theme").textMuted },
+                    fontWeight = { :bold ? "bold" : "normal" }, text = :text ]
                 ],
 
             // a blue→teal thread of the brand accent, the origin of the code spine
 
-            rule: View [ y = { 34 * app.fontScale }, width = 100%, height = 2, cornerRadius = 1,
+            rule: View [ y = { Math.max(34 * app.fontScale, parent.title.height + 8 * app.fontScale) }, width = 100%, height = 2, cornerRadius = 1,
                 opacity = { app.isDark ? 0.72 : 1 },
                 fill = { gradient("90deg", provided("theme").accent, provided("theme").accentSecondary) } ]
             ],
@@ -543,10 +731,81 @@ App [ fill = { provided("theme").background },
                 ]
             ],
 
+        // what the build weighs: the total, its four parts as one bar, then the
+        // program's files, the library's and the runtime's modules, each with
+        // what brought it aboard
+
+        weigh: View [ visible = { app.mode == "sizes" }, y = { app.topM + app.headH + 8 }, width = { app.hostWidth - 96 },
+            x = { Math.max(24, (parent.width - this.width) / 2) },
+            layout: SimpleLayout [ axis = y, spacing = 28 ],
+
+            status: Text [ visible = { !app.sizes.loaded || app.isInclude }, width = 100%, wrap = true,
+                fontSize = { 14 * app.fontScale }, textColor = { provided("theme").textMuted },
+                text = { app.isInclude ? "This file declares classes — there is no App, so no build to weigh."
+                    : app.sizes.failed ? "No sizes: they come from the program's production build, which the dev server makes. This host cannot build it, or the program does not compile."
+                    : "Building the program to weigh it …" } ],
+
+            summary: View [ visible = { app.sizes.loaded && !app.isInclude }, width = 100%,
+                layout: SimpleLayout [ axis = y, spacing = 10 ],
+                Text [ fontSize = { 30 * app.fontScale }, fontWeight = semibold, wrap = false, textColor = { provided("theme").text },
+                    text = { app.sizes.value == null ? "" : app.kb(app.sizes.value.total.gzip) } ],
+                Text [ width = 100%, wrap = true, fontSize = { 13 * app.fontScale }, textColor = { provided("theme").textMuted },
+                    text = { "over the wire, compressed · " + app.sizesSettings } ],
+
+                // the four parts, end to end in one bar, and a key to it
+
+                whole: View [ width = 100%, height = 10, cornerRadius = 5, clip = true, datapath = { app.sizeView.value },
+                    layout: SimpleLayout [ axis = x, spacing = 0 ],
+                    View [ datapath = :parts[], height = 100%, width = { parent.width * :share }, fill = { app.partTint(:part) } ]
+                    ],
+                key: View [ width = 100%, datapath = { app.sizeView.value },
+                    layout: WrappingLayout [ spacing = 18, rowSpacing = 6 ],
+                    PartKey [ datapath = :parts[], part = :part, gzip = :gzip ]
+                    ],
+                Text [ width = 100%, wrap = true, fontSize = { 12 * app.fontScale }, textColor = { provided("theme").textMuted },
+                    text = "A file's figure is what removing it would save, and a module's its share of the runtime's bytes: estimates, since gzip compresses each piece against the others." ]
+                ],
+
+            // the program's own files, the library's, and the runtime: each a
+            // section whose line sums it, open or shut
+
+            program: SizeGroup [ visible = { app.sizes.loaded && !app.isInclude }, label = "Program", open = true,
+                detail = { app.sizeView.value.heads.program },
+                View [ width = 100%, datapath = { app.sizeView.value },
+                    layout: SimpleLayout [ axis = y, spacing = 14 ],
+                    SizeRow [ datapath = :program[], label = :label, href = :href, gzip = :gzip, share = :share, part = :part, note = :note, detail = :detail ]
+                    ]
+                ],
+            library: SizeGroup [ visible = { app.sizes.loaded && !app.isInclude }, label = "Library", open = true,
+                detail = { app.sizeView.value.heads.library },
+                View [ width = 100%, datapath = { app.sizeView.value },
+                    layout: SimpleLayout [ axis = y, spacing = 14 ],
+                    SizeRow [ datapath = :library[], label = :label, href = :href, gzip = :gzip, share = :share, part = :part, note = :note, detail = :detail ]
+                    ]
+                ],
+            runtime: SizeGroup [ visible = { app.sizes.loaded && !app.isInclude }, label = "Runtime",
+                detail = { app.sizeView.value.heads.runtime },
+                View [ width = 100%, datapath = { app.sizeView.value },
+                    layout: SimpleLayout [ axis = y, spacing = 10 ],
+                    SizeRow [ datapath = :modules[], label = :label, gzip = :gzip, share = :share, part = :part, note = :note ]
+                    ],
+                Text [ width = 100%, wrap = true, fontSize = { 12 * app.fontScale }, textColor = { provided("theme").textMuted },
+                    text = { "Left out: " + app.sizesLeftOut } ]
+                ],
+
+            beside: SizeSection [ visible = { app.sizes.loaded && !app.isInclude && app.sizes.value != null && app.sizes.value.beside.length > 0 },
+                title = "Beside the bundle", blurb = "Fetched when needed, and not in the total.",
+                View [ width = 100%, datapath = { app.sizeView.value },
+                    layout: SimpleLayout [ axis = y, spacing = 10 ],
+                    SizeRow [ datapath = :beside[], label = :label, gzip = :gzip, share = :share, part = :part, note = :note ]
+                    ]
+                ]
+            ],
+
         // bottom margin: a spacer just past the active view's bottom edge
 
         foot: View [ width = 8, height = 48,
-            y = { app.topM + app.headH + (app.mode == "reader" ? parent.col.height : parent.plain.height) } ]
+            y = { app.topM + app.headH + (app.mode == "reader" ? parent.col.height : app.mode == "sizes" ? parent.weigh.height + 8 : parent.plain.height) } ]
         ],
 
     // Live-edit workbench — a fixed stack filling the window below the bar: the
@@ -580,13 +839,14 @@ App [ fill = { provided("theme").background },
             name: Text [ wrap = false, fontSize = { 15 * app.fontScale }, fontWeight = semibold,
                 textColor = { app.isDark ? 0x58A6FF : 0x0969DA },
 
-                // a location write, not a `link` attr: "edit" is the viewer's own
-                // location grammar, not a `shows` destination — the registry
-                // (rightly) refuses the literal form, and the write is the same
-                // edge the tabs emit
+                // "edit" is the viewer's own location grammar, not a `shows`
+                // destination, so the registry refuses it as a literal: the link
+                // is built from the location it names, as a Segmented's segment's
+                // is, and the crawl checks it
 
-                text = { app.seededPath().split("/").pop() || "" },
-                onClick() { app.location = "edit" }
+                location: string = "edit",
+                link = { "#" + location },
+                text = { app.seededPath().split("/").pop() || "" }
                 ],
             Text [ wrap = false, fontSize = { 15 * app.fontScale }, textColor = { provided("theme").textMuted }, text = ", the program this page opened on." ]
             ],
@@ -609,7 +869,7 @@ App [ fill = { provided("theme").background },
         editor: TextInput [ x = 0, y = 0, width = 100%, height = { parent.editorH },
             multiline = true, spellcheck = false, wrap = false, padding = 14,
 
-            // the A stepper drives every pane, this one included
+            // the text-size switch drives every pane, this one included
 
             fontFamily = ["ui-monospace", "monospace"], fontSize = { 12 * app.fontScale },
             textColor = { app.codeFg() },
@@ -710,13 +970,20 @@ App [ fill = { provided("theme").background },
                 textColor = { provided("theme").text }, text = "Viewer" ]
             ],
 
-        // Reader / Source / Edit. The tab writes `app.location`, and `app.mode`
+        // Reader / Source / Edit / Sizes. The tab writes `app.location`, and `app.mode`
         // derives back from it — so the switch stays a single source of truth
         // that back/forward walk for free. `Segmented` keeps that seam intact:
         // `value` reads the derived mode, `input` writes the location.
 
-        modeSwitch: Segmented [ y = { (app.barH - 30) / 2 }, height = 30, width = 244,
-            x = { Math.max(200, (app.hostWidth - 244) / 2) },
+        // the room between the brand and the controls on the right: the switch is
+        // centered in the window while it fits, and narrows when it does not
+
+        left: number = { this.brand.x + this.brand.width + 16 },
+        right: number = { (this.size.visible ? this.size.x : this.themeSwitch.x) - 12 },
+
+        modeSwitch: Segmented [ visible = { app.hostWidth >= 520 }, y = { (app.barH - 30) / 2 }, height = 30,
+            width = { Math.min(320, parent.right - parent.left) },
+            x = { Math.min(parent.right - this.width, Math.max(parent.left, (app.hostWidth - this.width) / 2)) },
             replace = true,        // a tab switch never buries Back — the walk is between files
             value = { app.mode },
 
@@ -736,20 +1003,27 @@ App [ fill = { provided("theme").background },
             // …and keeps the viewed file: switching tabs on a followed include
             // stays on that include
 
-            choices = { [ ({ id: "reader", label: "Reader", location: "reader" + (app.fileRel == "" ? "" : "/" + app.fileRel) }),
-                          ({ id: "source", label: "Source", location: "source" + (app.fileRel == "" ? "" : "/" + app.fileRel) }),
-                          ({ id: "edit",   label: "Edit",   location: "edit" + (app.fileRel == "" ? "" : "/" + app.fileRel) }) ] }
+            choices = { app.tabs() }
             ],
 
-        size: View [ y = { (app.barH - 30) / 2 }, x = { parent.themeSwitch.x - this.width - 8 }, height = 30,
-            width = { this.contentWidth },
-            cornerRadius = 8, fill = { provided("theme").surface }, stroke = { stroke(1, provided("theme").line) },
-            layout: SimpleLayout [ axis = x, spacing = 0 ],
-            SizeBtn [ glyph = 11, delta = -0.1 ],
-            d1: View [ width = 1, height = 18, y = 6, fill = { provided("theme").line } ],
-            SizeBtn [ glyph = 15, delta = 0 ],
-            d2: View [ width = 1, height = 18, y = 6, fill = { provided("theme").line } ],
-            SizeBtn [ glyph = 19, delta = 0.1 ]
+        // a phone's tabs: the tab it is on, and a chevron that says there are more
+
+        tabBtn: Control [ visible = { app.hostWidth < 520 }, menu = { app.tabMenu },
+            x = { parent.left }, y = { (app.barH - 30) / 2 }, height = 30, cornerRadius = 8, padding = [0, 8, 0, 12],
+            accessibilityLabel = { "View: " + this.t.text },
+            fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : provided("theme").control },
+            layout: SimpleLayout [ axis = x, spacing = 6 ],     // the label and the chevron centre themselves
+            t: TextLabel [ fontSize = 13, fontWeight = medium, wrap = false, textColor = { provided("theme").text },
+                text = { (app.tabs().find((c: any) => c.id == app.mode) as any)?.label ?? "Reader" } ],
+            ChevronIcon [ y = center, iconSize = 11, ink = { provided("theme").textMuted } ]
+            ],
+
+        // the text-size switch steps aside on a phone, where the tabs need the room
+
+        size: TextSizeSwitch [ visible = { app.hostWidth >= 520 }, y = { (app.barH - 30) / 2 }, x = { parent.themeSwitch.x - this.width - 8 }, height = 30,
+            sizes = [0.8, 0.9, 1.1],
+            value = { app.fontScale },
+            input(v: object) { app.fontScale = v as number }
             ],
 
         themeSwitch: AppearanceSwitch [ y = { (app.barH - this.height) / 2 }, x = { app.hostWidth - this.width - 16 },

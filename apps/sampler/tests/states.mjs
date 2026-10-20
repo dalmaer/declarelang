@@ -62,8 +62,9 @@ export default [
   // The combobox disclosure chevron and its popped list.
   {
     name: "combobox-open",
+    viewport: { width: 1024, height: 1100 },
     route: async ({ drive }) => {
-      await drive.click("app.content.col.grid.left.3.demo.cb");
+      await drive.click("app.content.col.grid.left.4.demo.cb");
       await settle(drive, { focused: true });
     },
   },
@@ -72,7 +73,7 @@ export default [
   {
     name: "accordion-open",
     route: async ({ drive }) => {
-      await drive.click("app.content.col.grid.right.3.acc.1");
+      await drive.click("app.content.col.grid.right.5.acc.1");
       await settle(drive, { focused: true });
     },
   },
@@ -139,7 +140,7 @@ export default [
   {
     name: "table",
     route: async ({ drive }) => {
-      await drive.click("app.bar.pageSwitch.5");
+      await drive.click("app.bar.pageSwitch.6");
       await settle(drive, { focused: true });
     },
   },
@@ -148,7 +149,7 @@ export default [
   {
     name: "grid",
     route: async ({ drive }) => {
-      await drive.click("app.bar.pageSwitch.6");
+      await drive.click("app.bar.pageSwitch.7");
       await settle(drive, { focused: true });
     },
   },

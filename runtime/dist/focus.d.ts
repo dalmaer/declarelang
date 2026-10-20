@@ -182,6 +182,12 @@ export declare class FocusService {
      *  controls. Called from View.discard() via the seam in view.ts. */
     noteDiscarded(view: View): void;
 }
+/** A scroller with nothing inside it that takes focus — a pane of text, a strip
+ *  of pictures — is a Tab stop of its own, as Firefox and Chrome make it, so a
+ *  keyboard can scroll it (WCAG 2.1.1): focused, the arrows, Page Up/Down, Space,
+ *  Home and End scroll it. A scroller that holds anything focusable is not: Tab
+ *  reaches into it, and what it focuses is revealed. */
+export declare function bareScroller(v: View): boolean;
 export declare function deliverKeys(keys: KeysService, focus: FocusService): () => void;
 /** The runtime's focus service (LZX's lz.Focus). */
 export declare const Focus: FocusService;

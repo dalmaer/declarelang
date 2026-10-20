@@ -95,6 +95,18 @@ function wireColorScheme(app) {
     mq.addEventListener("change", update);
     return () => mq.removeEventListener("change", update);
 }
+/** Feed `app.accessibilitySettings` from the browser's preference queries, live.
+ *  Returns an unsubscribe, as wireColorScheme does. */
+function wireAccessibilitySettings(app) {
+    const q = (s) => window.matchMedia(s);
+    const motion = q("(prefers-reduced-motion: reduce)"), contrast = q("(prefers-contrast: more)"), clear = q("(prefers-reduced-transparency: reduce)");
+    const update = () => { app.accessibilitySettings = Object.freeze({ reduceMotion: motion.matches, increaseContrast: contrast.matches, reduceTransparency: clear.matches, textScale: 1 }); };
+    update();
+    for (const m of [motion, contrast, clear])
+        m.addEventListener("change", update);
+    return () => { for (const m of [motion, contrast, clear])
+        m.removeEventListener("change", update); };
+}
 /** Feed `app.pageVisible` — the Page Visibility fact (schema.ts has the full
  *  contract and its Safari-occlusion caveat). One listener per app, exactly
  *  wireColorScheme's shape; visibility is per-DOCUMENT, so an embedded app
@@ -231,6 +243,7 @@ function wireEnvironment(app, host, embedded) {
         return wireEnvironmentEmbedded(app, host);
     const w = window;
     wireColorScheme(app); // top-level app lives for the page — no teardown needed
+    wireAccessibilitySettings(app); // the person's preferences — likewise page-lived
     wireVisibility(app); // page visibility fact — likewise page-lived
     wireTouchDevice(app); // device pointer kind — likewise page-lived
     wireSafeArea(app, w); // notch/home-indicator insets — likewise page-lived
@@ -355,6 +368,7 @@ function wireEnvironmentEmbedded(app, host) {
     };
     const leave = () => { app.hovering = false; app.pointerOverText = false; };
     const unTheme = wireColorScheme(app); // re-rendered embedded apps must drop the mq listener
+    const unSettings = wireAccessibilitySettings(app);
     const unVisible = wireVisibility(app); // …and the visibilitychange listener
     const unPointer = wireTouchDevice(app);
     const down = (e) => {
@@ -386,6 +400,7 @@ function wireEnvironmentEmbedded(app, host) {
         host.removeEventListener("pointerleave", leave);
         ro?.disconnect();
         unTheme();
+        unSettings();
         unVisible();
         unPointer();
     });

@@ -135,15 +135,18 @@ await test("a hidden image's natural size reaches the program, and shown it pain
   assert.equal(out.shownImgs, 1, "shown, the image is there");
 });
 
+// (A list's items say their place as ARIA does, aria-posinset: aria-rowindex is a
+// grid row's. The annotations land after the frame — accessibility.md §5.2.)
 await test("a list's rows carry their place once their pane is first shown", async () => {
   const out = await inPage(`App [ width = 300, height = 300,
     d: Dataset { { "rows": [ { "n": 0 }, { "n": 1 }, { "n": 2 } ] } },
     pane: View [ visible = false, width = 300, height = 200, scrolls = y,
-      list: View [ width = 300, datapath = { d.value }, layout: SimpleLayout [ axis = y ],
-        View [ datapath = :rows[], virtualize = true, width = 300, height = 20 ] ] ] ]`, `
+      list: View [ width = 300, datapath = { d.value }, layout: SimpleLayout [ axis = y ], accessibilityRole = list, accessibilityLabel = "Rows",
+        View [ datapath = :rows[], virtualize = true, width = 300, height = 20, accessibilityRole = listItem ] ] ] ]`, `
     app.pane.visible = true; settle(); await frame(); await frame();
-    return [...host.querySelectorAll("[aria-rowindex]")].map((e) => e.getAttribute("aria-rowindex"));`);
-  assert.deepEqual(out, ["1", "2", "3"], "each shown row says its place");
+    await new Promise((r) => setTimeout(r, 400));
+    return [...host.querySelectorAll("[aria-posinset]")].map((e) => e.getAttribute("aria-posinset") + "/" + e.getAttribute("aria-setsize"));`);
+  assert.deepEqual(out, ["1/3", "2/3", "3/3"], "each shown row says its place");
 });
 
 await test("a hidden stencil still masks the view that uses it", async () => {

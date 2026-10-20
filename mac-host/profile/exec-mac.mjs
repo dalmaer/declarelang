@@ -194,7 +194,7 @@ export async function runCaseOnMac(desc, opts = {}) {
   // the same move the fidelity gate makes, for the same reason: one launch
   // covers a whole corpus.
   if (origin) {
-    const url = `${origin}/${desc.app}?render=mac`;
+    const url = `${origin}/${desc.app}`;
     // A FAILURE TO LOAD IS NOT ONLY ON SCREEN. The host records what a person
     // would have been shown and `lasterror` hands it over (Control.swift;
     // ProgramWindow's own comment says a harness should read the state rather

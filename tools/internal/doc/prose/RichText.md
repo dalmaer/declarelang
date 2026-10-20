@@ -114,6 +114,11 @@ like CSS. A fill is simply the `textFill` field, one attribute among many, not a
 Leading multiplier on the natural line height — `1` (the default) is tight, `1.5` airy.
 Tune prose density without touching the font size.
 
+## wrapWidth
+The line length a rich text with no width of its own wraps at: `640` px, a reading
+measure, unless set. It then takes the width of its widest line, so a short note is as
+wide as its words. A width given the rich text wins.
+
 ## maxLines
 A line limit over the **whole document** (default `0`, no limit), counted in order:
 headings, paragraphs, list items, table rows and code lines all spend it, and a list's
@@ -196,8 +201,9 @@ else. Unset, headings take the house weight, which is heavier than the body. Set
 brand face needs a different level of emphasis than the default picks.
 
 ## linkColor
-The colour of links in the prose. `null` is the theme's accent, which is the
-answer you want almost always: a link that follows the theme needs no line here.
+The colour of links in the prose. `null` is the theme's `linkColor` when the theme names one,
+else its `accent` — the answer you want almost always: a link that follows the theme needs no
+line here.
 
 ## linkUnderline
 Whether links are underlined. The house default underlines them, because a

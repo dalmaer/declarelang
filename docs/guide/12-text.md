@@ -15,11 +15,16 @@ on every renderer.
 ## Text
 
 A `Text` with no size is exactly as wide and tall as its glyphs. Give it a width and it
-wraps (`wrap = true` is the default), aligned by [`textAlign`](declare-docs:Text.textAlign). [`maxLines`](declare-docs:Text.maxLines) limits it and
+wraps (`wrap = true` is the default), aligned by [`textAlign`](declare-docs:Text.textAlign). Give it a
+[`wrapWidth`](declare-docs:Text.wrapWidth) instead and it wraps there and is as wide as its widest
+line, which is a chat bubble: as wide as "ok", or as its longest line up to that width. [`maxLines`](declare-docs:Text.maxLines) limits it and
 ends the last line with an ellipsis, and the read-only [`truncated`](declare-docs:Text.truncated) says whether anything
 was cut — what a "Show more" link reads. [`lineHeight`](declare-docs:Text.lineHeight) sets leading as a multiple of the
 font size. `selectable = true` lets the reader select it; set on a container, it applies
 to everything below.
+
+Words that must not part at a line's end, such as "3h 40m", are joined by a no-break
+space (`"3h\u00A040m"` in a `{ }` string): it looks like a space and is never a break.
 
 A `Text` cannot bold one word; that is what rich text is for (below).
 
@@ -151,8 +156,8 @@ App [ width = 380, height = 210, fill = white,
     ]
 ```
 
-**The width you give is the line length.** Give none and the text wraps at a 640 px
-reading measure, then takes the width of its widest line — so a short line of rich text
+**The width you give is the line length.** Give none and the text wraps at its
+[`wrapWidth`](declare-docs:RichText.wrapWidth), a 640 px reading measure unless you set one, then takes the width of its widest line — so a short line of rich text
 is as wide as its words, and centers or sits in a row the way a `Text` does. A document
 holding a list, a table, a quote or code keeps the full measure.
 

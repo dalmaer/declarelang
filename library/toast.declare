@@ -22,6 +22,27 @@ The optional action record, `{ id, label }`, or null.
 ## duration
 How long it stays, in milliseconds.
 
+## accessibilityRole
+A group, named by its `message`: what it says is announced once as it appears (`say`),
+and its action is a control inside it.
+
+## accessibilityLabel
+The `message`.
+
+## held
+Whether the toast is held open: the pointer is over it, or its action has the focus. A
+toast whose time runs out while held stays, and goes a moment after it is let go, so a
+person reaching for "Undo" is never cut off.
+
+## expired
+**Internal.** Its time ran out while it was held.
+
+## trackChanges
+`shown`, as every overlay's, and `held`.
+
+## onChange
+As every overlay's; and a toast let go after its time ran out goes a moment later.
+
 ## say()
 Shows `message`, with an optional action record; a toast already showing takes the new
 message and starts its time again.
@@ -35,10 +56,11 @@ action from the keyboard gives it a shortcut of its own.
 **Internal.** Which showing is current, so an earlier one's timer does not close a later.
 
 ## hostW
-The width of the layer it paints in.
+The width of the layer it paints in: its window's, or the browser window's — not the
+App's, which on a page that scrolls is as tall as the page.
 
 ## hostH
-The height of the layer it paints in.
+The height of the layer it paints in: its window's, or the browser window's.
 
 ## x
 Centered in its layer.
@@ -72,12 +94,18 @@ class Toast extends Floating [
     scrollPolicy = "allow",
 
     message: string = "",
+
+    // a notice: what it says is announced once (say), without taking the focus;
+    // its action is a Tab stop while it shows
+
+    accessibilityRole = group,
+    accessibilityLabel = { message },
     action: object = null,
     duration: number = 4000,
     round: number = 0,
 
-    hostW: number = { this.host != null ? this.host.width : app.width },
-    hostH: number = { this.host != null ? this.host.height : app.height },
+    hostW: number = { this.host != null ? this.host.width : app.hostWidth > 0 ? app.hostWidth : app.width },     // a window's, else the browser window's
+    hostH: number = { this.host != null ? this.host.height : app.hostHeight > 0 ? app.hostHeight : app.height },
 
     x = { (this.hostW - this.width) / 2 },
     y = { this.hostH - this.height - 24 + 16 * (1 - this.openT) },
@@ -93,7 +121,23 @@ class Toast extends Floating [
         round = round + 1
         const mine = round
         this.show()
-        afterDelay(duration, () => { if (this.round == mine) this.close() })
+        // a status line that appears with its words in it is not reliably
+        // heard as it arrives, so the notice is also said, without the focus moving
+        Accessibility.announce(m)
+        expired = false
+        afterDelay(duration, () => { if (this.round == mine) { if (held) expired = true; else this.close() } })
+        },
+
+    // held open while the pointer is over it or its action has the focus
+
+    held: boolean = { hovered || this.row.act.focused },
+    expired: boolean = false,
+    trackChanges = ["shown", "held"],
+    onChange() {
+        super.onChange()
+        if (held || !expired) return
+        const mine = round
+        afterDelay(1500, () => { if (this.round == mine && !held) this.close() })
         },
 
     picked(id: string) { },
@@ -104,10 +148,10 @@ class Toast extends Floating [
             textColor = { provided("theme").tooltipTextColor },
             text = { classroot.message } ],
 
-        // a toast never takes focus — not even from an open dialog, whose
-        // focus a press on the action leaves where it was
+        // a toast never takes the focus on its own; its action is reachable
+        // from the keyboard, as any control is
 
-        Button [ visible = { classroot.action != null }, focusable = false,
+        act: Button [ visible = { classroot.action != null },
             label = { classroot.action != null ? "" + classroot.action.label : "" },
             onClick() { if (classroot.action != null) { const id = "" + classroot.action.id; classroot.close(); classroot.picked(id) } }
             ]

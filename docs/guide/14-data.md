@@ -82,7 +82,7 @@ App [ width = 320, height = 170, fill = white, textColor = #172530,
         Text [ fontWeight = semibold, text = { app.left + " left to do" } ],
         View [ datapath = :items[], width = 100%, height = 30,
             layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
-            Checkbox [ checked = :done, input(v: boolean) { :done = v } ],
+            Checkbox [ checked = :done, accessibilityLabel = :title, input(v: boolean) { :done = v } ],
             Text [ width = 150, text = :title ],
             Button [ label = { "★ " + :stars }, height = 26, onClick() { :stars += 1 } ]
             ]
@@ -530,6 +530,59 @@ freely, and copy it across on Save with `app.record.set([], structuredClone(app.
 The copy is what makes it a draft: a derived dataset would hold the record itself, and
 its writes would land in the record at once. Validate the model, not the widgets: a
 `canSave` computed over the draft covers controls that have no `valid` of their own.
+
+### A form in a sheet
+
+A form that opens for each new thing (a sheet that creates a page, a dialog that adds an
+entry) is its own view class, and it **exists only while it is open**: `exists` builds it
+when the sheet opens and discards it when the sheet closes. Its fields are its own
+attributes, so every opening starts from its defaults, with nothing to reset.
+
+A value the form suggests until the person sets it is a **computed default**: the
+address below follows the title, character by character, until the person writes an
+address of their own; their write replaces the formula, and from then on it is theirs.
+No flag says whether it was edited. The field shows it with `initial`, the editable twin of
+`text`, which follows the suggestion until the person types.
+
+```declare
+// the page being written: built when the sheet opens and gone when it closes,
+// so every opening starts empty, with the address suggested again
+class NewPage [ width = 300,
+    title: string = "",
+    // the address follows the title until the person writes one
+    slug: string = { classroot.title.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") },
+    layout: SimpleLayout [ axis = y, spacing = 10 ],
+    TextInput [ width = 300, placeholder = "Title", onInput(t: string) { classroot.title = t } ],
+    TextInput [ width = 300, placeholder = "Address", initial = { classroot.slug },
+        onInput(t: string) { classroot.slug = t } ],
+    Text [ visible = { app.saveError != "" }, width = 300, wrap = true, textColor = firebrick, text = { app.saveError } ],
+    Button [ label = "Create", primary = true, disabled = { classroot.title == "" },
+        onClick() { app.create(classroot) } ]
+    ]
+
+App [ width = 400, height = 300, fill = white, textColor = black,
+    pages: Dataset { { "rows": [ { "title": "About", "slug": "about" } ] } },
+    adding: boolean = false,
+    saveError: string = "",
+    create(p: NewPage) {
+        if ((app.pages.value?.rows ?? []).some((r) => r.slug == p.slug)) { app.saveError = "A page already has that address."; return }
+        app.pages.set("/rows/-", ({ title: p.title, slug: p.slug }))
+        app.adding = false
+        },
+    col: View [ x = 20, y = 20, layout: SimpleLayout [ axis = y, spacing = 10 ],
+        Button [ label = "New page", onClick() { app.adding = true } ],
+        Text [ text = { (app.pages.value?.rows ?? []).map((r) => "/" + r.slug).join("  ") } ] ],
+    sheet: Sheet [ accessibilityLabel = "New page", shown = { app.adding },
+        input(open: boolean) { app.adding = open; app.saveError = "" },
+        form: NewPage [ exists = { app.adding } ] ]
+    ]
+```
+
+The refusal lands where the person is looking: `create` checks, says why in `saveError`,
+and leaves the sheet open; the sheet's own close clears it. A form that saves to a server
+does the same with a `DataSource`: Save fetches, `onLoad` closes the sheet, and the
+source's `failed` and `error` are the message
+([Talking to a server](declare-docs:guide:data@talking-to-a-server)).
 
 ## Data in a whole app
 

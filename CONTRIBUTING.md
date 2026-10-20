@@ -132,7 +132,7 @@ renames or migrations; no implementation history; no dates or "ruled" notes; no 
 into `docs/system-design/`; no prior-art framing. Mid-sentence ALL-CAPS is not emphasis
 here either — `**bold**` once or twice, or a better sentence. The prose rule, with
 examples, is [`prose/STYLE.md`](tools/internal/doc/prose/STYLE.md#one-version-of-the-truth);
-what a *comment* may say is [the formatting appendix](docs/guide/28-formatting.md#what-a-comment-says).
+what a *comment* may say is [the formatting appendix](docs/guide/29-formatting.md#what-a-comment-says).
 
 The corpus is the reason `apps/` is on that list. Every program under it is read to learn
 the language from, by people and by agents, so an ordinary `// ` comment in an app carries

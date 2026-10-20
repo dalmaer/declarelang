@@ -115,8 +115,9 @@ export interface Capability {
    *  whole, its module ships as itself with this export's object literal cut to
    *  the entries the program names (subsetModule), instead of a stand-in — and
    *  whatever only the cut entries referenced is left for the bundler to drop.
-   *  `keys` says which names: `classes`, what it constructs, closed over bases. */
-  subset?: { export: string; keys: "classes" };
+   *  `keys` says which names: `classes`, what it constructs, closed over bases;
+   *  `mentions`, the names its bodies say. */
+  subset?: { export: string; keys: "classes" | "mentions" };
 }
 
 // ── the manifest ───────────────────────────────────────────────────────────
@@ -166,6 +167,8 @@ export const CAPABILITIES: readonly Capability[] = [
   { id: "themes", describe: "the Themes preset records", modules: ["themes"], hostsKeep: true, refusal: "unused",
     when: [{ mentions: [...THEME_PRESET_NAMES, "activeTone"] }],
     inert: { THEME_PRESETS: "object", THEME_PRESET_NAMES: "array", activeTone: "identity", withThemeDefaults: "identity" } },
+  { id: "theme-table", describe: "the Themes preset records, whole (a build ships the presets its program names)",
+    modules: ["themes-data"], when: [], hostsKeep: true, refusal: "unused", subset: { export: "THEME_RECORDS", keys: "mentions" } },
   { id: "draw", describe: "draw(): the drawing vocabulary and raster cache", modules: ["draw"], requires: ["visibility"], hostsKeep: true, refusal: "unused",
     when: [{ methods: ["draw"] }],
     inert: { record: "null", replay: "noop", Draw: "class", DrawGradient: "class", replayArea: "zero", listIsolated: "false",
@@ -179,7 +182,7 @@ export const CAPABILITIES: readonly Capability[] = [
     when: [{ classes: ["Keys", "Focus", "TextInput"], methods: ["onKeyDown", "onKeyUp", "onFocus", "onBlur"],
       attributes: ["focusable", "focusScope"], attributesUnless: { focusable: "false", focusScope: "none" }, mentions: ["Keys", "Focus"] }],
     inert: { Focus: FOCUS_OBJECT, deliverKeys: "unsubscribe", FocusService: "class",
-      Keys: KEYS_OBJECT, setKeysFocusProbe: "noop", setKeysPrograms: "noop", keysCaller: "null", KeysService: "class", normalize: "null" } },
+      Keys: KEYS_OBJECT, setKeysFocusProbe: "noop", setKeysPrograms: "noop", keysCaller: "null", KeysService: "class", normalize: "null", bareScroller: "false" } },
   { id: "files", describe: "the person's files: the file dialog, drops, uploads", modules: ["files"], hostsKeep: true, refusal: "unused",
     when: [{ mentions: ["Files"], methods: ["onFilesDrop", "onFilesOver", "onFilesOut"] }],
     inert: { Files: { members: { pick: "rejects" } }, provideFilesHost: "noop", wireFiles: "noop", deliverFiles: "false",
@@ -543,7 +546,10 @@ export function subsetModule(cap: Capability, moduleName: string, source: string
   for (const st of file.statements) {
     if (!ts.isVariableStatement(st)) continue;
     for (const d of st.declarationList.declarations) {
-      if (ts.isIdentifier(d.name) && d.name.text === sub.export && d.initializer !== undefined && ts.isObjectLiteralExpression(d.initializer)) table = d.initializer;
+      if (!ts.isIdentifier(d.name) || d.name.text !== sub.export || d.initializer === undefined) continue;
+      // the literal itself, or the one a call wraps (`Object.freeze({ … })`)
+      const init = ts.isCallExpression(d.initializer) && d.initializer.arguments.length === 1 ? d.initializer.arguments[0] : d.initializer;
+      if (ts.isObjectLiteralExpression(init)) table = init;
     }
   }
   if (table === null) throw new Error(`capability "${cap.id}": ${moduleName} has no object literal '${sub.export}' to cut`);

@@ -90,17 +90,15 @@ supplies what the part does. Inside that class's body, `classroot` is the owner:
 ```declare
 class Swatch extends Control [ width = 40, height = 40, cornerRadius = 20,
     tint: Color = gray,
-    fill = { tint },
-    picked() { },
-    press() { this.picked() }
+    fill = { tint }
     ]
 
 class Palette [
     chosen: Color = navy,
     layout: SimpleLayout [ axis = x, spacing = 10 ],
-    Swatch [ tint = navy, picked() { classroot.chosen = this.tint } ],
-    Swatch [ tint = seagreen, picked() { classroot.chosen = this.tint } ],
-    Swatch [ tint = tomato, picked() { classroot.chosen = this.tint } ]
+    Swatch [ tint = navy, press() { classroot.chosen = this.tint } ],
+    Swatch [ tint = seagreen, press() { classroot.chosen = this.tint } ],
+    Swatch [ tint = tomato, press() { classroot.chosen = this.tint } ]
     ]
 
 App [ width = 320, height = 130, fill = white,
@@ -112,8 +110,10 @@ App [ width = 320, height = 130, fill = white,
     ]
 ```
 
-`Swatch` knows nothing about palettes. It declares `picked()` and calls it when pressed;
-each placement inside `Palette` says what picking means, with `classroot` as the palette.
+`Swatch` knows nothing about palettes. It is a control, so a click or a key calls its
+`press()`, and each placement inside `Palette` says what pressing means, with `classroot`
+as the palette. A part needs no method of its own to hand the press on: the use site
+writes `press()` itself.
 A part that climbs to its owner instead — through `parent.parent`, or by searching the
 tree — is tied to one arrangement of the tree, and breaks when that arrangement changes.
 

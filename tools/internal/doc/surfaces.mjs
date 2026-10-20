@@ -193,7 +193,8 @@ export const SURFACES = [
       // icon, it does not enumerate ten marks (the residency rule).
       const FAMILY = {
         Icon: ["ChevronIcon", "ArrowIcon", "CheckIcon", "CloseIcon", "PlusIcon", "MinusIcon",
-               "LightbulbIcon", "SunIcon", "MoonIcon", "AutoIcon", "IconHost"],
+               "LightbulbIcon", "SunIcon", "MoonIcon", "AutoIcon", "TextSizeIcon", "TextSmallIcon",
+               "TextMediumIcon", "TextLargeIcon", "IconHost"],
         Segmented: ["SegmentedItem"], DataGrid: ["GridRow"], Table: ["TableRow"],
         Accordion: ["Pane"], RadioGroup: ["Radio"],
       };

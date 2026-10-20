@@ -38,7 +38,7 @@ registered elsewhere.
 
 ### SATOR-6 — Small, and fast where it counts
 A full application ships small — the flagship calendar, application *and* runtime,
-at roughly <!--stat:calendar.wireKB-->131<!--/stat--> KB gzipped (machine-stamped from
+at roughly <!--stat:calendar.wireKB-->136<!--/stat--> KB gzipped (machine-stamped from
 the measured artifact): a compact runtime, practical on a phone over a slow network.
 Input latency is low — there is no virtual-DOM pass between gesture and pixels — and
 animation runs at the display's full rate. The homepage reports the live size figures,
@@ -49,8 +49,8 @@ measured from the deployed artifacts and regenerated with them on every publicat
 The promises come with their limits stated plainly: a framework with no in-browser
 compiler wins the very first cold load (the production path closes the gap by
 precompiling); Declare is young and the repository *is* the distribution and the
-source of truth; and accessibility depth, an npm package, and a dedicated editor
-extension are named, unhidden gaps.
+source of truth; an npm package and a dedicated editor extension are named, unhidden
+gaps; and the canvas renderer does not yet carry the accessibility the DOM renderer does.
 *Held in:* FAQ ("Startup" trade; "How mature is Declare?"; "Is Declare accessible?"; "Is there editor support?").
 
 ### SATOR-8 — Open, MIT, entirely public

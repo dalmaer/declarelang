@@ -170,6 +170,89 @@ await test("viewer: a page opened DIRECTLY on an include points at no program �
   assert.equal(st.alt, "Open a program that includes it to edit live.");
 });
 
+// THE SIZES TAB — the program's production build, weighed by the dev server
+// (?sizes) and shown file by file: each file says how it came in and links to
+// the reader, and a file with no App says it has no build to weigh.
+await test("viewer: the Sizes tab weighs the program's build, file by file, and links each file to the reader", async () => {
+  await page.goto(`${B}/apps/weather/weather.declare?viewer=sizes`, { waitUntil: "load", timeout: 60000 });
+  await page.waitForFunction(() => window.__declare?.find("app")?.sizes?.loaded === true, { timeout: 90000, polling: 200 });
+  await settled(page);
+  const st = await page.evaluate(() => {
+    const a = window.__declare.find("app");
+    const v = a.sizeView.value;
+    return { mode: a.mode, total: a.sizes.value.total.gzip, parts: v.parts.reduce((t, p) => t + p.gzip, 0),
+      files: [...v.program, ...v.library].map((f) => ({ label: f.label, note: f.note, href: f.href })), modules: v.modules.length,
+      program: v.program.map((f) => f.label), library: v.library.every((f) => f.label.startsWith("library/")), heads: v.heads,
+      open: ["program", "library", "runtime"].map((k) => a.content.weigh[k].open),
+      runtimeLine: a.content.weigh.runtime.line.more.text,
+      hrefs: [...document.querySelectorAll("a")].map((e) => e.getAttribute("href")) };
+  });
+  assert.equal(st.mode, "sizes");
+  assert.ok(Math.abs(st.parts - st.total) <= 4, `the parts sum to the total (${st.parts} vs ${st.total})`);
+  const art = st.files.find((f) => f.label === "weather-art.declare");
+  assert.deepEqual([art.note, art.href], ["included by the program", "#reader/apps/weather/weather-art.declare"]);
+  assert.equal(st.files.find((f) => f.label === "weather.declare").href, "#reader");
+  assert.ok(st.files.some((f) => f.label === "library/focusring.declare" && f.note === "provided by the library"));
+  assert.ok(st.hrefs.some((h) => h?.endsWith("#reader/apps/weather/weather-art.declare")), "a file is a real link");
+  // a library file opens in the reader, from where the library is served
+  const ring = st.files.find((f) => f.label === "library/focusring.declare").href;
+  assert.ok(/^#reader\/(declare\/)?library\/focusring\.declare$/.test(ring), ring);
+  await page.evaluate((h) => window.__declare.find("app").follow(h), ring);
+  await page.waitForFunction(() => window.__declare.find("app").segSrc.loaded === true, { timeout: 30000, polling: 100 });
+  await settled(page);
+  assert.equal(await page.evaluate(() => window.__declare.find("app").baseName()), "focusring.declare");
+  assert.ok(await page.evaluate(() => window.__declare.find("app").doc.value.segments.some((g) => g.kind == "code")), "the library file reads");
+  await page.goBack(); await settled(page);
+  assert.ok(st.modules > 20, "the runtime's modules are listed");
+  // the program's own files, the library's, the runtime: each a fold whose line
+  // sums it; the runtime starts shut
+  assert.deepEqual(st.program, ["weather.declare", "weather-art.declare"]);
+  assert.ok(st.library, "the library's files are the library's");
+  assert.deepEqual(st.open, [true, true, false]);
+  assert.match(st.heads.program, /^2 files · \d+\.\d KB$/);
+  assert.equal(st.runtimeLine, st.heads.runtime, "a shut fold still says what it holds");
+  await page.evaluate(() => window.__declare.find("app").content.weigh.runtime.toggle());
+  await settled(page);
+  assert.equal(await page.evaluate(() => window.__declare.find("app").content.weigh.runtime.open), true, "the runtime opens");
+  // a followed include keeps the tab, and has no App to build
+  await page.evaluate(() => window.__declare.find("app").follow("#sizes/apps/weather/weather-art.declare"));
+  await settled(page);
+  const inc = await page.evaluate(() => { const a = window.__declare.find("app"); return { url: a.sizesUrl(), status: a.content.weigh.status.text }; });
+  assert.equal(inc.url, "", "nothing is built for an include");
+  assert.equal(inc.status, "This file declares classes — there is no App, so no build to weigh.");
+  // and the switch's Sizes tab keeps the viewed file, as the others do
+  await page.evaluate(() => window.__declare.find("app.bar.modeSwitch").input("reader"));
+  await settled(page);
+  assert.equal(await page.evaluate(() => window.__declare.find("app").location), "reader/apps/weather/weather-art.declare");
+});
+
+// ON A PHONE the tab switch is a menu, opened from a button naming the tab; the
+// header's counts wrap beneath the filename instead of running off the edge.
+await test("viewer: on a phone the tabs are a menu, and the header wraps within the window", async () => {
+  await page.setViewport({ width: 390, height: 800 });
+  try {
+    await page.goto(`${B}/apps/tracker/tracker.declare?viewer=reader`, { waitUntil: "networkidle0", timeout: 60000 });
+    await settled(page);
+    const st = await page.evaluate(() => {
+      const a = window.__declare.find("app");
+      const head = a.content.head;
+      return { seg: a.bar.modeSwitch.visible, btn: a.bar.tabBtn.visible, label: a.bar.tabBtn.t.text,
+        rows: head.title.height > head.title.path.height * 1.5,
+        overflow: Math.max(...head.title.children.filter((c) => c.visible).map((c) => c.x + c.width)) - head.title.width };
+    });
+    assert.deepEqual([st.seg, st.btn, st.label], [false, true, "Reader"]);
+    assert.ok(st.rows, "the counts wrapped to rows of their own");
+    assert.ok(st.overflow <= 0.5, `nothing runs past the header's edge (by ${st.overflow}px)`);
+    await page.evaluate(() => window.__declare.find("app.bar.tabBtn").press());
+    await settled(page);
+    const items = await page.evaluate(() => window.__declare.find("app.tabMenu").items.map((i) => [i.label, i.checked]));
+    assert.deepEqual(items, [["Reader", true], ["Source", false], ["Edit", false], ["Sizes", false]]);
+    await page.evaluate(() => window.__declare.find("app.tabMenu").pick("source"));
+    await settled(page);
+    assert.deepEqual(await page.evaluate(() => [window.__declare.find("app").mode, window.__declare.find("app.bar.tabBtn").t.text]), ["source", "Source"]);
+  } finally { await page.setViewport({ width: 1200, height: 900 }); }
+});
+
 await browser.close();
 httpServer.close();
 summarize("reader-flow");

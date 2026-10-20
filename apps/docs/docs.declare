@@ -64,6 +64,7 @@ class ClassTab [ width = 100%, height = 30, cornerRadius = 6,
 
 class FoldHead extends Control [ width = 100%, height = 28, cornerRadius = 6, cursor = "pointer",
     label:    string  = "",
+    accessibilityExpanded = { this.open },
     contains: boolean = false,             // does this group hold the current page?
     opened:   boolean = false,             // it has been open — this does not expire
     shut:     boolean = false,             // the reader shut it, …
@@ -464,6 +465,7 @@ class ReadStrip [ width = 100%, cornerRadius = 10, visible = { :n > 0 },
     fill = { provided("theme").surface }, stroke = { stroke(1, provided("theme").line) },
     layout: SimpleLayout [ axis = y, spacing = 0 ],
     head: Control [ width = 100%, height = 40, cursor = "pointer", cornerRadius = 10,
+        accessibilityExpanded = { classroot.open },
         fill = { hovered ? provided("theme").chipBg : null },
         padding = [10, 16, 10, 16],
         press() { classroot.open = !classroot.open },
@@ -498,6 +500,7 @@ class Strip [ width = 100%, cornerRadius = 10,
     layout: SimpleLayout [ axis = y, spacing = 0 ],
 
     head: Control [ width = 100%, cursor = "pointer",
+        accessibilityExpanded = { classroot.open },
         height = { this.lead.y + this.lead.height + 14 },
         fill = { hovered ? provided("theme").chipBg : null }, cornerRadius = 10,
         press() { classroot.open = !classroot.open },
@@ -544,6 +547,7 @@ the compiled child app into. Both are keyed by the example's program,
 */
 
 class DocField extends TextInput [ multiline = true, spellcheck = false, wrap = false,
+    accessibilityLabel = "Example source",
     fontFamily = { app.mono }, fontSize = { 13 * app.fontScale }, textColor = { provided("theme").code },   // 13 = the house code size (PROSE.codeSize)
     editName: string = "",
     src: string = "",
@@ -1252,7 +1256,7 @@ then the classes). `app.mode` picks which; each keeps its own selection
 (`app.chapter` / `app.selected` / `app.form`) so switching back lands where you
 left. Both rails are folds: a group opens when it holds the current page.
 
-Nav chrome does not ride `app.fontScale`: the A-stepper is a reading-comfort
+Nav chrome does not ride `app.fontScale`: the text-size switch is a reading-comfort
 control for the content pane; the rail keeps its designed sizes.
 */
 
@@ -1330,29 +1334,6 @@ class ChapterDetail [ width = 100%,
             Example [ datapath = :demo[], width = 100%, live = { classroot.pageLive } ]
             ]
         ]
-    ]
-
-
-/*
-## The font-size stepper
-
-Three differently-sized "A"s — small · reset · large. Each cell is a centered
-"A" whose glyph size signals the action: the small A shrinks, the middle A
-resets to the default, the large A grows. The glyphs are fixed (not
-`* app.fontScale`) so the control itself never zooms. Every doc `fontSize`
-reads `{ N * app.fontScale }` (and Markdown takes `scale`), so one attribute
-zooms the whole document.
-*/
-
-class SizeBtn extends Control [ width = 32, height = 30, cornerRadius = 6,
-    glyph: number = 14,
-    delta: number = 0,          // delta 0 = reset to the default
-    fill = { hovered ? provided("theme").control : null },
-    press() { app.fontScale = delta == 0 ? 1.0
-                  : Math.max(0.7, Math.min(1.6, Math.round((app.fontScale + delta) * 100) / 100)) },
-    lbl: Text [ fontWeight = semibold,
-        fontSize = { classroot.glyph }, textColor = { provided("theme").textMuted }, text = "A",
-        x = center, y = center ]
     ]
 
 
@@ -1534,7 +1515,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         return out
         },
 
-    fontScale: number = 1.0,                   // reader font-size zoom for the CONTENT pane (the A stepper drives it; nav is fixed)
+    fontScale: number = 1.0,                   // reader font-size zoom for the CONTENT pane (the text-size switch drives it; nav is fixed)
     themeMode: string = "auto",                // "light" | "auto" | "dark" — the ☀◐☾ switch; auto follows app.dark
     barH: number = 52,                         // the house chrome bar (Viewer/Calendar/Tracker share the height)
     compact: boolean = { app.width < 780 },    // narrow bar: the type-size stepper stands down so the pill keeps its room
@@ -1698,7 +1679,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     docsTokens(dark: boolean) -> object { return dark
         ? ({ bg: 0x0B141B, rail: 0x0D1922, surface: 0x0C1620, chipBg: 0x14232E, control: 0x152633, sel: 0x1C2D39, mchipBg: 0x172436, echipBg: 0x241F12, chipHov: 0x1C3243, line: 0x1E313C, rule: 0x345B84, edge: 0x1B2C39, accent: 0x4C8DFF, accentSecondary: 0x37E0C8, chipTeal: 0x9FD9CE, chipBlue: 0xA9C7FF, chipAmber: 0xE7C98A, text: 0xE7EEF2, body: 0xC4CFD8, code: 0xC7D3DC, strong: 0xB7C6D2, mtail: 0x9FB3C2, tabIdle: 0x9BB0BE, refDim: 0x98A7B1, textMuted: 0x8A9BA6, sigDim: 0x6E8494, eyebrow: 0x55707F, live: 0xE6B450, liveInk: 0x1A1A1A, errBg: 0x2A1518, errBar: 0xE0525E, errText: 0xF2A0A6 })
-        : ({ bg: 0xF6F8FA, rail: 0xECF0F4, surface: 0xFFFFFF, chipBg: 0xE9EFF4, control: 0xE4EBF1, sel: 0xDBE5EE, mchipBg: 0xE7EDF6, echipBg: 0xF5EFE0, chipHov: 0xD9E4ED, line: 0xDCE3E9, rule: 0xB6C8DA, edge: 0xE0E6EC, accent: 0x2E6FE0, accentSecondary: 0x12A594, chipTeal: 0x15806E, chipBlue: 0x3355C2, chipAmber: 0x8F6F28, text: 0x172530, body: 0x2E3B46, code: 0x2B3843, strong: 0x3A4A56, mtail: 0x4F5F6B, tabIdle: 0x55636F, refDim: 0x51606C, textMuted: 0x6A7883, sigDim: 0x84929D, eyebrow: 0x93A0AA, live: 0xE6B450, liveInk: 0x1A1A1A, errBg: 0xFBE9EA, errBar: 0xC93B47, errText: 0x8E2830 }) },
+        : ({ bg: 0xF6F8FA, rail: 0xECF0F4, surface: 0xFFFFFF, chipBg: 0xE9EFF4, control: 0xE4EBF1, sel: 0xDBE5EE, mchipBg: 0xE7EDF6, echipBg: 0xF5EFE0, chipHov: 0xD9E4ED, line: 0xDCE3E9, rule: 0xB6C8DA, edge: 0xE0E6EC, accent: 0x2064DB, accentSecondary: 0x12A594, chipTeal: 0x15806E, chipBlue: 0x3355C2, chipAmber: 0x8F6F28, text: 0x172530, body: 0x2E3B46, code: 0x2B3843, strong: 0x3A4A56, mtail: 0x4F5F6B, tabIdle: 0x55636F, refDim: 0x51606C, textMuted: 0x5A6670, sigDim: 0x84929D, eyebrow: 0x93A0AA, live: 0xE6B450, liveInk: 0x1A1A1A, errBg: 0xFBE9EA, errBar: 0xC93B47, errText: 0x8E2830 }) },
 
     /* Code-vs-prose coherence, matching the source-viewer reader: prose (and
        every non-code block) wraps to a reading measure while code fills the
@@ -1823,16 +1804,12 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
                 }
             ],
 
-        size: View [ y = center, x = { parent.themeSwitch.x - this.width - 20 }, height = 30,
+        // the reading size: the content pane's text zooms, the nav keeps its size
+
+        size: TextSizeSwitch [ y = center, x = { parent.themeSwitch.x - this.width - 20 }, height = 30,
             visible = { !app.compact },
-            width = { this.contentWidth },
-            cornerRadius = 8, fill = { provided("theme").surface }, stroke = { stroke(1, provided("theme").line) },
-            layout: SimpleLayout [ axis = x, spacing = 0 ],
-            SizeBtn [ glyph = 11, delta = -0.1 ],
-            d1: View [ width = 1, height = 18, y = 6, fill = { provided("theme").line } ],
-            SizeBtn [ glyph = 15, delta = 0 ],
-            d2: View [ width = 1, height = 18, y = 6, fill = { provided("theme").line } ],
-            SizeBtn [ glyph = 19, delta = 0.1 ]
+            value = { app.fontScale },
+            input(v: object) { app.fontScale = v as number }
             ],
 
         // the theme switch — light · follow the system · dark. Selection is one
@@ -1868,7 +1845,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
             // `language/<form>`) but not a third tab: they live at the top of the
             // reference rail, so the Reference tab lights for both.
 
-            modes: Segmented [ width = 100%, height = 30,
+            modes: TabBar [ width = 100%, height = 30,
                 value = { app.mode == "guide" ? "guide" : "reference" },
                 input(v: object) { if (("" + v) == "guide") app.goGuide(app.guideAt); else app.goRef(app.refAt) },
 

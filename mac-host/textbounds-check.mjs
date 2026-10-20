@@ -28,7 +28,7 @@ const server = createDeclareServer({
 });
 const httpServer = http.createServer(server.handler).on("upgrade", server.upgrade);
 await new Promise((r) => httpServer.listen(0, "127.0.0.1", r));
-const URL_ = `http://127.0.0.1:${httpServer.address().port}/test/probe/textbounds.declare?render=mac`;
+const URL_ = `http://127.0.0.1:${httpServer.address().port}/test/probe/textbounds.declare`;
 
 const bin = hostBinary();
 if (bin === null) { console.error(NO_HOST); process.exit(1); }

@@ -314,7 +314,11 @@ class Floating [
         Keys.navClaim(this, false)
         const back = savedFocus
         savedFocus = null
-        if (back != null) afterDelay(0, () => { Focus.focus(back) })
+        // back to where it was — unless the focus has gone on somewhere since
+        if (back != null) afterDelay(0, () => {
+            const f = Focus.getFocus() as View | null
+            if (f == null || f == this || Focus.holds(this)) Focus.focus(back)
+            })
         this.closed()
         },
 

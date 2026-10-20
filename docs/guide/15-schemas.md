@@ -47,7 +47,7 @@ App [ width = 360, height = 170, fill = white, textColor = #172530,
         Text [ fontWeight = semibold, text = { app.open + " open" } ],
         View [ datapath = :items[], width = 100%, height = 28,
             layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
-            Checkbox [ checked = :done, input(v: boolean) { :done = v } ],
+            Checkbox [ checked = :done, accessibilityLabel = :title, input(v: boolean) { :done = v } ],
             Text [ text = { :title + " · due in " + :due + " days" } ]
             ]
         ]

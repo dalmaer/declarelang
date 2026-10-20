@@ -220,14 +220,56 @@ bootHost(cfg);
         return { x: n.rootX + n.width / 2, y: n.rootY + n.height / 2 };
       };
 
+      // Where a press on a view lands, as a person's would: a view below the fold
+      // is scrolled into sight first (as a person scrolls to it), and a point some
+      // other view covers is said, not pressed — a press that reaches nothing used
+      // to pass in silence, and the step after it failed for a reason it never named.
+      const reach = async (path) => {
+        let c = await center(path);
+        const vp = page.viewport() ?? { width: 1280, height: 800 };
+        const off = (q) => q.x < 0 || q.y < 0 || q.x >= vp.width || q.y >= vp.height;
+        if (off(c)) {
+          await page.evaluate((p) => { const n = window.__declare.find(p); n?.scrollIntoView?.("nearest"); }, path);
+          await page.evaluate(() => window.__declare.clock?.settleMotion?.());
+          await new Promise((r) => setTimeout(r, 120));   // the platform's scroll lands as an event
+          c = await center(path);
+          if (off(c)) throw new VerifyAssertion(`'${path}' is outside the window at (${Math.round(c.x)}, ${Math.round(c.y)}) and scrolling did not bring it in`);
+        }
+        // the view a press there reaches must be the target, inside it, or what holds it;
+        // one that pinned chrome covers is scrolled clear of it first, as a person would
+        const reaches = () => page.evaluate((p, x, y) => {
+          const d = window.__declare, at = d.at(x, y);
+          if (at === null) return { ok: false, path: null };
+          const t = d.find(p), h = d.find(at.path);
+          const inside = (a, b) => { for (let n = a; n != null; n = n.parent) if (n === b) return true; return false; };
+          return { ok: t !== null && h !== null && (inside(h, t) || inside(t, h)), path: at.path };
+        }, path, c.x, c.y);
+        let hit = await reaches();
+        if (!hit.ok) {
+          // past the covering view: its bottom edge, when it covers from above
+          await page.evaluate((p, cover, y) => {
+            const d = window.__declare, n = d.find(p), k = cover === null ? null : d.inspect(cover);
+            const below = k !== null && k.rootY < y ? k.rootY + k.height + 8 : 0;
+            if (below > 0) n?.scrollIntoView?.("start", false, below); else n?.scrollIntoView?.("nearest");
+          }, path, hit.path, c.y);
+          await page.evaluate(() => window.__declare.clock?.settleMotion?.());
+          await new Promise((r) => setTimeout(r, 120));
+          c = await center(path);
+          hit = await reaches();
+        }
+        if (!hit.ok)
+          throw new VerifyAssertion(`a press on '${path}' at (${Math.round(c.x)}, ${Math.round(c.y)}) would reach ${hit.path === null ? "nothing" : `'${hit.path}'`} — it is covered, or takes no presses`);
+        return c;
+      };
+
       const drive = {
         async click(path) {
-          const c = await center(path);
+          const c = await reach(path);
           step(`click ${path}`);
           await page.mouse.click(c.x, c.y);
         },
         async drag(path, dx, dy = 0, steps = 10) {
-          const c = await center(path);
+          const c = await reach(path);
           step(`drag ${path} by (${dx}, ${dy})`);
           await page.mouse.move(c.x, c.y);
           await page.mouse.down();
@@ -238,7 +280,7 @@ bootHost(cfg);
          *  or wheel would — the view under the pointer, or a scroller above it,
          *  takes it. */
         async wheel(path, dy, dx = 0) {
-          const c = await center(path);
+          const c = await reach(path);
           step(`wheel ${path} by (${dx}, ${dy})`);
           await page.mouse.move(c.x, c.y);
           // A native scroll lands after the wheel event: count the page's scroll

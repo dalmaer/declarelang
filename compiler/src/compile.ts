@@ -203,6 +203,7 @@ import { isAuthoredUnion } from "../../runtime/dist/value.js";
 import { hostGlobalHint } from "../../runtime/dist/teach.js";
 import { PRELUDE_NAMES } from "./scaffold.js";
 import { runtimeMethodsOf } from "../../runtime/dist/runtime-methods.js";
+import { accessibilityDiagnostics } from "./a11y-check.js";
 import { resolveIncludes, resolveAutoIncludes, spliceScriptFiles, NO_INCLUDES, type IncludeHost, type AutoIncludeHost, type Splice } from "../../runtime/dist/include.js";
 import { typecheckBodies, bodyRewrites } from "./typecheck.js";
 import { Diag, toDiagnostic, formatDiagnostic, renderReport, type Diagnostic, type DiagPhase } from "../../runtime/dist/diagnostics.js";
@@ -276,7 +277,16 @@ export interface Compiled {
    *  that crossed a boundary rebuilds from `source` (programFromCompiled).
    *  Copy a result with `carryProgram`, which a spread would lose. */
   readonly program?: Program;
+  /** Every file the program was made from and how each came in: the program's
+   *  own, named in an `include`, pulled for a tag it declares (`auto`), or a
+   *  manifest's provided singleton. `by` is the file that brought it, null for
+   *  the program's own; `name` the tag or class. The program's own file is
+   *  "", as it is in a position (a compile knows no name for it). A build's account of itself
+   *  (declarec --sizes) reads it. Present exactly when `source` is. */
+  sources?: readonly CompiledSource[];
 }
+
+export interface CompiledSource { file: string; how: "program" | "include" | "auto" | "provided"; by: string | null; name?: string }
 
 /** Attach `program` to a compile result, non-enumerable (Compiled.program). */
 function attachProgram<T extends object>(target: T, program: Program | undefined): T {
@@ -632,7 +642,7 @@ const ES_GLOBALS = new Set([
 // in a handler is the service, never a member to resolve. `afterSettle` and
 // `tint` are the function-shaped entries; the built-in theme presets are in
 // scope by name (`SanFrancisco`, `CupertinoDark`, …), so a body names one.
-const RUNTIME_SERVICES = new Set(["Focus", "Keys", "Files", "Inspect", "afterSettle", "activeTone", ...THEME_PRESET_NAMES]);
+const RUNTIME_SERVICES = new Set(["Focus", "Keys", "Files", "Inspect", "Accessibility", "afterSettle", "activeTone", ...THEME_PRESET_NAMES]);
 
 const isKnownGlobal = (name: string): boolean =>
   hostGlobalHint(name) === null && (ES_GLOBALS.has(name) || PRELUDE_NAMES.has(name) || RUNTIME_SERVICES.has(name));
@@ -672,6 +682,23 @@ export interface CompileOptions {
    *  in-browser compiler has none, so a program with script imports is
    *  refused there with the reason. */
   bundleScripts?: (entry: string, resolveDir: string) => Promise<{ code: string } | { error: string }>;
+  /** The `accessibility` flag a request or a command names (`--accessibility=false`):
+   *  it wins over the program's own `defaultFlags`. Off, the accessibility warnings
+   *  are skipped and every `accessibility…` member is compiled away
+   *  (docs/system-design/accessibility.md §4.1). */
+  accessibility?: boolean;
+  /** The main file's path, when there is one: its name names the program in messages
+   *  (a class that takes a library name is offered `<Program><Class>`). */
+  mainId?: string;
+}
+
+/** The program's name as a class-name prefix: `cadence.declare` → `Cadence`,
+ *  `murmur-virt` → `MurmurVirt`; the folder's name when there is no file, else `My`. */
+function programPrefix(opts: CompileOptions): string {
+  const path = opts.mainId ?? opts.originDir ?? "";
+  const base = path.replace(/\/+$/, "").split("/").pop()!.replace(/\.declare$/, "");
+  const words = base.split(/[^A-Za-z0-9]+/).filter((w) => w !== "" && /^[A-Za-z]/.test(w));
+  return words.length === 0 ? "My" : words.map((w) => w[0].toUpperCase() + w.slice(1)).join("");
 }
 
 /** Compile a Declare source: full diagnostics (include resolve + check + scope
@@ -713,7 +740,7 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
   // tags (`Gauge [ … ]` with no `include`, no inline class) — after explicit
   // includes, sharing their visited set so the two dedup. A no-op on a host
   // without the manifest (single-file compiles stay byte-identical).
-  const auto = await resolveAutoIncludes(resolved.program, main.root, host, resolved.visited, source);
+  const auto = await resolveAutoIncludes(resolved.program, main.root, host, resolved.visited, source, programPrefix(opts));
   if (auto.errors.length > 0) {
     return { source: null, errors: auto.errors, warnings: [], ...diagnose(auto.errors, [], "module") };
   }
@@ -736,6 +763,7 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
   // that lands in the prelude is rebased onto that file (makeRebaser).
   const libIds = [...resolved.sourceIds, ...auto.sourceIds];
   const libSplices = [...resolved.sourceSplices, ...auto.sourceSplices];
+  const libFrom: { how: CompiledSource["how"]; by: string | null; name?: string }[] = [...resolved.sourceFrom, ...auto.sourceFrom];
 
   // Library-provided singletons ride in by MANIFEST RULE (`$provide` in
   // autoincludes.json): the FocusRing with any Control descendant (OL's
@@ -807,7 +835,7 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
     // dependency-first and include-once, and its own `include` lines are
     // blanked (same length, so every position stays true). False when the
     // file is missing or already in the program.
-    const spliceProvided = async (path: string): Promise<boolean> => {
+    const spliceProvided = async (path: string, from: (typeof libFrom)[number]): Promise<boolean> => {
       const lib = await autoHost.resolveLibrary!(path);
       if (lib === null || lib === undefined || resolved.visited.has(lib.canonical) || libIds.includes(lib.canonical)) return false;
       const deps: string[] = [];
@@ -815,9 +843,10 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
         for (const q of list.matchAll(/"([^"]+)"/g)) deps.push(q[1]);
         return m.replace(/[^\n]/g, " ");
       });
-      for (const d of deps) await spliceProvided(d);
+      for (const d of deps) await spliceProvided(d, { how: "include", by: lib.canonical });
       libSources.push(src);
       libIds.push(lib.canonical);
+      libFrom.push(from);
       libSplices.push([]);   // a library file has no script splices of its own here
       return true;
     };
@@ -838,7 +867,7 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
           if (!triggered) continue;
           if (byName.has(cls) || treeHas(main.root, cls)) continue; // the program provides its own
           const path = manifest[cls];
-          if (typeof path !== "string" || !(await spliceProvided(path))) continue;
+          if (typeof path !== "string" || !(await spliceProvided(path, { how: "provided", by: null, name: cls }))) continue;
           provided.push({ cls, comment: typeof r.comment === "string" ? r.comment : `${cls} — provided with the class library` });
         }
       }
@@ -1005,6 +1034,10 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
   r.warnings.push(...coldLoadWarnings);
   const idiom = idiomDiagnostics(program, r.schemas);
   r.warnings.push(...idiom.warnings);
+  const accessible = opts.accessibility ?? program.flags?.accessibility ?? true;
+  const a11y = accessibilityDiagnostics(program, r.schemas, { libraryEnd: preludeLen, warnings: accessible });
+  r.errors.push(...a11y.errors);
+  r.warnings.push(...a11y.warnings);
   const byPos = (a: DeclareError, b: DeclareError) => (a.pos?.offset ?? 0) - (b.pos?.offset ?? 0);
   r.errors.sort(byPos);
   r.warnings.sort(byPos);
@@ -1050,6 +1083,20 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
     };
     stripElement(program.root);
     for (const cls of program.classes) stripElement(cls.body);
+  }
+
+  // A program that leaves the accessibility layer out carries none of it: every
+  // `accessibility…` attribute and method goes, the library's included, so a
+  // control costs what it did before the layer existed. Checked first (a broken
+  // contract is a broken class whether or not it ships), removed for emission.
+  if (!accessible) {
+    const leave = (el: Element): void => {
+      el.attrs = el.attrs.filter((a) => !a.name.startsWith("accessibility"));
+      el.methods = el.methods.filter((m) => !m.name.startsWith("accessibility"));
+      for (const c of el.children) leave(c);
+    };
+    leave(program.root);
+    for (const cls of program.classes) leave(cls.body);
   }
 
   // `script { … }` → JavaScript. Unlike a `{ }` body — where a type annotation
@@ -1150,9 +1197,15 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
   // corpus, attaching only where no authored link exists.
   attachAuthoredLinks(depProgram);
   extractLinks(depProgram);
-  const okWarnings = rbAll([...r.warnings, ...regWarnings]);
+  // the registry's warnings are on the author's files already (rebased where made)
+  const okWarnings = [...rbAll(r.warnings), ...regWarnings];
   const okHints = hs();
-  const result: Compiled = { source: emittedSource(merged, spans, provided), deps: serializeDeps(depProgram), links: serializeLinks(depProgram), linkRegistry, errors: [], warnings: okWarnings, hints: okHints, ...diagnose([], okWarnings, "name", "name", okHints) };
+  const shown = (id: string | null): string | null => id === null ? null : displayFile(id, opts.originDir ?? "");
+  const sources: CompiledSource[] = [
+    { file: "", how: "program", by: null },
+    ...libIds.map((id, i) => ({ file: shown(id)!, ...libFrom[i], by: shown(libFrom[i].by) })),
+  ];
+  const result: Compiled = { sources, source: emittedSource(merged, spans, provided), deps: serializeDeps(depProgram), links: serializeLinks(depProgram), linkRegistry, errors: [], warnings: okWarnings, hints: okHints, ...diagnose([], okWarnings, "name", "name", okHints) };
   // The program's own positions, from the merged text onto the author's
   // files — last, once nothing more here reads them as merged coordinates.
   // Every consumer builds from this program (programFromCompiled, the compile

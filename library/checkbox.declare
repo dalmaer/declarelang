@@ -59,6 +59,14 @@ Content-sized: the box, then a gap and the label when there is one. A label-less
 
 ## opacity
 Disabled dims the whole control — every part alike, never a recolour — to the theme's `disabledOpacity`, or 0.45 when the theme states none: the one place the number lives.
+
+## accessibilityChecked
+Follows `checked`; the visible label is the name.
+
+## accessibilityLabel
+The caption of a `Field` around it, unless the use site names the checkbox; with neither, its
+`label` is its name. A checkbox with no `label` — a task's in a list — is named at its use site:
+`accessibilityLabel = :title`.
 */
 
 include [ "control.declare" ]
@@ -72,6 +80,12 @@ class Checkbox extends Control [
     height = 24,
     checked: boolean = false,
     label:   string = "",
+
+    // a checkbox, named by its label, telling a screen reader whether it is checked
+
+    accessibilityRole = checkbox,
+    accessibilityChecked = { checked },
+    accessibilityLabel = { provided("fieldLabel", "") },
 
     // the box's size: the theme fact by default, one attribute to override
     // (a toolbar checkbox can shrink to its neighbors without a subclass)

@@ -83,7 +83,7 @@ only what genuinely depends on the previous frame: the game clock `t`, the held-
 spin and auto-fire, and the collision sweep (which asks the `Playfield` what happened in
 this step). That is the guide's sanctioned use of `onTick` (integration).
 
-Another clock is a **period**, not a frame (guide 21's `tick = <ms>`): the pulsars'
+Another clock is a **period**, not a frame (guide 22's `tick = <ms>`): the pulsars'
 and fuseballs' "brain" (`tick = 250`, a hop or a closing on the claw). A second
 cycles the tube shapes on the attract screen. Flippers move and enemies fire in the
 step of play, on the arcade's own waits and odds, each written to the foe's record

@@ -121,6 +121,17 @@ Whether two items are the same one, by `idOf`.
 ## activeIndex
 **Internal.** The keyboard position as a logical index.
 
+## activeView
+The row view at the keyboard position, reported by the row itself (in a `DataGrid`, the
+cell). Null while no row presents it.
+
+## accessibilityActiveItem
+The `activeView`: a screen reader hears the row the arrows land on while the table keeps
+the focus.
+
+## accessibilityMultiselectable
+True when `selects` is `"multi"`, so a screen reader says more than one row can be chosen.
+
 ## onKeyDown
 Arrows, Home/End, Space (multi), Delete/Backspace and Enter. An override should call
 through or the table loses its keyboard.
@@ -151,6 +162,11 @@ class Table extends Control [
     // ── the value ─────────────────────────────────────────────────────────
 
     selected:  object = null,   // the primary selected item, or null
+
+    // a list whose rows are picked, one or several: to a screen reader a list box
+    // of options (DataGrid, whose rows hold cells, is a grid)
+
+    accessibilityRole = listbox,
     selection: array  = null,   // every selected item, presented order (null = none)
 
     // the keyboard position — the item the keyboard stands on
@@ -165,6 +181,14 @@ class Table extends Control [
 
     anchorIndex: number = -1,
     activeIndex: number = -1,
+
+    // the row (in a grid, the cell) the keyboard is on, as a view: the row
+    // reports it, since only a row knows it is the one shown for that index,
+    // and a screen reader is told of it while the table keeps the focus
+
+    activeView: View? = null,
+    accessibilityActiveItem = { activeView },
+    accessibilityMultiselectable = { selects == "multi" },
 
     // ── identity — the ladder's keyless rungs, shared with the reconciler
     //    by convention: a record's scalar `id` is its identity; anything
@@ -337,6 +361,14 @@ stored.
 ## active
 Whether this row is its table's keyboard position.
 
+## trackChanges
+`active`, so the row can tell its table when it becomes the keyboard position.
+
+## onChange
+The row that becomes its table's keyboard position records itself as the table's
+`activeView`; one that stops being it, a recycled row handed another record, takes itself
+back.
+
 ## item()
 The item this row presents: its **record** when replicated, the row view itself when
 written by hand.
@@ -366,6 +398,9 @@ Selected takes the selected tint, hovered the hover tint, otherwise none — a r
 
 ## stroke
 The active row shows an accent ring only while the table's focus is visible (keyboard, not pointer) — the rule every control's focus ring follows.
+
+## accessibilitySelected
+Follows `selected`.
 */
 
 class TableRow extends Control [
@@ -395,7 +430,20 @@ class TableRow extends Control [
     // membership, it never stores it
 
     selected: boolean = { (parent as Table).isTable === true && (parent as Table).isSelected(this.item()) },
+    accessibilityRole = option,
+    accessibilitySelected = { selected },
     active:   boolean = { (parent as Table).isTable === true && (parent as Table).isActive(this.item()) },
+
+    // a row that becomes the active one says so to its table, and one that stops
+    // being it (a recycled row handed another record) takes itself back
+
+    trackChanges = ["active"],
+    onChange(e: ChangeEvent) {
+        const t = parent as Table
+        if (t.isTable !== true) return
+        if (active) t.activeView = this
+        else if (t.activeView == this) t.activeView = null
+        },
 
     // rows are never tab stops (the one-stop policy): the table is the stop
     // and the keyboard position moves inside it. A pointer press on a row

@@ -57,6 +57,11 @@ function joinPath(dir: string, rel: string): string {
  *  its body `open` characters in (the `script … {` header and its newline). */
 export interface Splice { start: number; end: number; was: string; text: string; files: { at: number; file: string; open: number }[] }
 
+/** How a file came into a program: named in an `include` (`by` the file that
+ *  names it, null for the program's own), or pulled for a tag it declares
+ *  (`name`, referenced `by` that file, null for the program's own). */
+export interface SourceFrom { how: "include" | "auto"; by: string | null; name?: string }
+
 export async function spliceScriptFiles(
   source: string,
   refs: readonly IncludeRef[] | undefined,
@@ -161,7 +166,7 @@ export async function resolveIncludes(
   program: Program,
   host: IncludeHost,
   originDir: string
-): Promise<{ program: Program; sources: string[]; sourceIds: string[]; sourceSplices: Splice[][]; errors: DeclareError[]; visited: Set<string> }> {
+): Promise<{ program: Program; sources: string[]; sourceIds: string[]; sourceFrom: SourceFrom[]; sourceSplices: Splice[][]; errors: DeclareError[]; visited: Set<string> }> {
   const errors: DeclareError[] = [];
   const classes: ClassDecl[] = [...program.classes];
   const shapes = [...(program.shapes ?? [])];
@@ -185,6 +190,8 @@ export async function resolveIncludes(
   // `sourceIds[i]` is the canonical identity of `sources[i]` — what compile()
   // needs to rebase a merged-text position back onto the file it came from.
   const sourceIds: string[] = [];
+  // `sourceFrom[i]` is how `sources[i]` came in, for a build's account of itself.
+  const sourceFrom: SourceFrom[] = [];
   // `sourceSplices[i]` is what splicing did to `sources[i]`, to carry a
   // position back through it.
   const sourceSplices: Splice[][] = [];
@@ -222,7 +229,7 @@ export async function resolveIncludes(
   // the same program, which is what keeps a compile-cache key stable. Awaiting one
   // file at a time costs latency on a fetch host and buys all four properties; any
   // faster shape has to preserve them to be correct.
-  const walk = async (includes: readonly { path: string; pos: DeclareError["pos"] }[], fromDir: string): Promise<void> => {
+  const walk = async (includes: readonly { path: string; pos: DeclareError["pos"] }[], fromDir: string, by: string | null): Promise<void> => {
     for (const inc of includes) {
       const resolved = await host.resolve(fromDir, inc.path);
       if (resolved === null) {
@@ -241,7 +248,7 @@ export async function resolveIncludes(
       // DEPENDENCY-FIRST: resolve the library's OWN includes before folding /
       // emitting the library itself, so an included base is declared above the
       // subclass that extends it (post-order, relative to the library's dir).
-      await walk(lib.includes, resolved.dir);
+      await walk(lib.includes, resolved.dir, resolved.canonical);
       // The file is named by the path it was included as — the spelling the
       // author reads in the `include` directive (composition.md §1's collision
       // message form).
@@ -264,15 +271,17 @@ export async function resolveIncludes(
       const splices: Splice[] = [];
       sources.push(await spliceScriptFiles(resolved.source, lib.scriptFiles, lib.scriptFileSpans, resolved.dir, host, errors, lib.includeSpans, splices));
       sourceIds.push(resolved.canonical);
+      sourceFrom.push({ how: "include", by });
       sourceSplices.push(splices);
     }
   };
-  await walk(program.includes, originDir);
+  await walk(program.includes, originDir, null);
 
   return {
     program: { classes, shapes, themes, styles, fonts, includes: [], includeSpans: [], uses: [...new Set(uses)], ...(ship === undefined ? {} : { ship }), ...(flags === undefined ? {} : { flags }), scripts, root: program.root },
     sources,
     sourceIds,
+    sourceFrom,
     sourceSplices,
     errors,
     visited,
@@ -350,11 +359,14 @@ export async function resolveAutoIncludes(
   visited: Set<string>,
   /** The text being compiled — a library file compiled on its own (or under a
    *  verify probe) declares its own names by right. */
-  mainSource?: string
-): Promise<{ program: Program; sources: string[]; sourceIds: string[]; sourceSplices: Splice[][]; errors: DeclareError[] }> {
+  mainSource?: string,
+  /** The program's name as a class-name prefix (`Cadence`), for the rename a
+   *  refused name is offered. */
+  prefix = "My"
+): Promise<{ program: Program; sources: string[]; sourceIds: string[]; sourceFrom: SourceFrom[]; sourceSplices: Splice[][]; errors: DeclareError[] }> {
   const auto = host as Partial<AutoIncludeHost>;
   if (typeof auto.autoincludes !== "function" || typeof auto.resolveLibrary !== "function") {
-    return { program, sources: [], sourceIds: [], sourceSplices: [], errors: [] };
+    return { program, sources: [], sourceIds: [], sourceFrom: [], sourceSplices: [], errors: [] };
   }
   const manifest = auto.autoincludes();
   // Record what COULD have been auto-included, for the checker's near-miss.
@@ -379,6 +391,7 @@ export async function resolveAutoIncludes(
   let ship: Ship | undefined = program.ship;
   const sources: string[] = [];
   const sourceIds: string[] = [];                         // parallel to `sources`, as in resolveIncludes
+  const sourceFrom: SourceFrom[] = [];
   const sourceSplices: Splice[][] = [];
 
   // name → the file that declared it (main + explicit includes seed it). A
@@ -401,7 +414,7 @@ export async function resolveAutoIncludes(
     const lib = await auto.resolveLibrary(path);
     if (lib !== null && (visited.has(lib.canonical) || (mainSource !== undefined && mainSource.includes(lib.source)))) continue;
     const kind = "base" in d ? "a class" : "a schema";
-    errors.push(new DeclareError(`'${d.name}' is a library class — ${kind} of the program can't take its name; rename yours (the library's is used as '${d.name} [ … ]')`, d.pos));
+    errors.push(new DeclareError(`'${d.name}' is a library class — ${kind} of the program can't take its name; rename yours, as '${prefix}${d.name}' (the library's is used as '${d.name} [ … ]')`, d.pos));
   }
 
   const foldOne = (name: string, pos: Element["pos"], from: string): boolean => {
@@ -420,7 +433,7 @@ export async function resolveAutoIncludes(
   // a self/mutual reference does not re-pull. The ROOT's own tag is pulled too
   // (referencedTags walks children only) — a root-position library tag then
   // reports its precise misplacement, not "unknown class".
-  const pull = async (tag: string, pos: Element["pos"]): Promise<void> => {
+  const pull = async (tag: string, pos: Element["pos"], by: string | null): Promise<void> => {
     if (origin.has(tag)) return;
     const path = manifest[tag];
     if (path === undefined) return; // not a magic tag → unknownClass, post-merge
@@ -438,7 +451,7 @@ export async function resolveAutoIncludes(
     const mine: ClassDecl[] = [];
     for (const c of lib.classes) if (foldOne(c.name, c.pos, path)) mine.push(c);
     // dependency-first: pull what this library references, then emit it
-    for (const r of referencedTags(null, lib.classes)) await pull(r.tag, r.pos);
+    for (const r of referencedTags(null, lib.classes)) await pull(r.tag, r.pos, resolved.canonical);
     for (const c of mine) classes.push(c);
     for (const d of lib.shapes ?? []) if (foldOne(d.name, d.pos, path)) shapes.push(d);
     for (const s of lib.themes) if (foldOne(s.name, s.pos, path)) themes.push(s);
@@ -450,11 +463,12 @@ export async function resolveAutoIncludes(
     const splices: Splice[] = [];
     sources.push(await spliceScriptFiles(resolved.source, lib.scriptFiles, lib.scriptFileSpans, resolved.dir, host, errors, lib.includeSpans, splices));
     sourceIds.push(resolved.canonical);
+    sourceFrom.push({ how: "auto", by, name: tag });
     sourceSplices.push(splices);
   };
 
-  for (const r of referencedTags(root, program.classes)) await pull(r.tag, r.pos);
-  await pull(root.tag, root.pos);
+  for (const r of referencedTags(root, program.classes)) await pull(r.tag, r.pos, null);
+  await pull(root.tag, root.pos, null);
   // The keep-list is a reference too: `use [ Gauge ]` pulls Gauge's library even with
   // no static tag (the escape hatch for by-name construction). A built-in or
   // unknown name isn't in the manifest, so pull() no-ops — the checker validates
@@ -462,7 +476,7 @@ export async function resolveAutoIncludes(
   // a pulled library can CONTRIBUTE uses (line ~139), and those pull too —
   // a class that `use`s what it createView's (Combobox → Menu) keeps its
   // dependency even when no static tag references it.
-  for (let i = 0; i < uses.length; i++) await pull(uses[i], program.root.pos);
+  for (let i = 0; i < uses.length; i++) await pull(uses[i], program.root.pos, null);
 
   return {
     // `uses` is the FOLDED list — the root's plus every included library's
@@ -471,6 +485,7 @@ export async function resolveAutoIncludes(
     program: { classes, shapes, themes, styles, fonts, includes: [], includeSpans: [], uses: [...new Set(uses)], ...(ship === undefined ? {} : { ship }), ...(program.flags === undefined ? {} : { flags: program.flags }), scripts, root: program.root },
     sources,
     sourceIds,
+    sourceFrom,
     sourceSplices,
     errors,
   };

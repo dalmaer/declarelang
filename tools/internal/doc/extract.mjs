@@ -881,12 +881,12 @@ const CLASS_GROUPS = [
   ["Text",          ["Text", "TextLabel", "Font", "FontFace", "RichText", "Markdown", "HTMLText"]],
   ["Media",         ["Image", "Media", "Video", "Audio"]],
   ["Layout",        ["Layout", "SimpleLayout", "WrappingLayout", "ResponsiveLayout", "TweenLayout", "Spacer"]],
-  ["Controls",      ["Control", "Button", "Checkbox", "Switch", "Slider", "RadioGroup", "Radio", "Field", "Editor", "TextInput", "Combobox", "Segmented", "SegmentedItem", "ProgressBar", "FocusRing", "AppearanceSwitch"]],
+  ["Controls",      ["Control", "Button", "Checkbox", "Switch", "Slider", "RadioGroup", "Radio", "Field", "Editor", "TextInput", "SearchField", "Combobox", "Segmented", "SegmentedItem", "TabBar", "SegmentedTab", "Stepper", "DatePicker", "MonthCalendar", "CalendarDay", "CalendarArrow", "Toolbar", "ToolButton", "ToolbarDivider", "Splitter", "ProgressBar", "FocusRing", "AppearanceSwitch", "TextSizeSwitch"]],
   // "Structure", not "Chrome": the word is the browser the gates drive, and the
   // reference is read by agents as often as by people, so the collision was one
   // we would have been adding on purpose. It is also the word the language file's
   // own map already uses for these — "controls, structure, layouts, embedding".
-  ["Structure",     ["Gauge", "Card", "Divider", "MenuBar", "Accordion", "Pane", "Window"]],
+  ["Structure",     ["Gauge", "Card", "Divider", "MenuBar", "Accordion", "Pane", "Disclosure", "Tree", "TreeRow", "Breadcrumb", "Crumb", "CrumbLink", "CrumbHere", "Window", "WindowClose"]],
   // what paints above everything in its context (planes.md §3.3): one base, the
   // objects every platform converges on, and the layers they paint in
   ["Overlays",      ["Floating", "Menu", "ContextMenu", "Popover", "Dialog", "Sheet", "Toast", "Tooltip", "OverlayStrata"]],
@@ -898,7 +898,7 @@ const CLASS_GROUPS = [
   ["Services",      ["Keys", "Shortcuts", "Focus", "Tooltips"]],
   ["Embedding",     ["DOMIsland", "AppIsland"]],
   ["Themes",        ["SanFrancisco", "SanFranciscoDark", "Cupertino", "CupertinoDark", "MountainView", "MountainViewDark", "Redmond", "RedmondDark", "ThemeDefaults"]],
-  ["Icons",         ["Icon", "IconHost", "ArrowIcon", "ChevronIcon", "CheckIcon", "CloseIcon", "PlusIcon", "MinusIcon", "LightbulbIcon", "SunIcon", "MoonIcon", "AutoIcon"]],
+  ["Icons",         ["Icon", "IconHost", "ArrowIcon", "ChevronIcon", "CheckIcon", "CloseIcon", "PlusIcon", "MinusIcon", "LightbulbIcon", "SunIcon", "MoonIcon", "AutoIcon", "TextSizeIcon", "TextSmallIcon", "TextMediumIcon", "TextLargeIcon"]],
 ];
 const groupProblems = [];
 {

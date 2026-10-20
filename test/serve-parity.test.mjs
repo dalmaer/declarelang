@@ -14,7 +14,7 @@ import { join, dirname, basename, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { test, summarize } from "./harness.mjs";
-import { requestType, REQ, runWrapper, programName, directoryProgram, stubPage, launchTarget, isEntryPage } from "../browser/serve-core.js";
+import { requestType, REQ, viewerTab, runWrapper, programName, directoryProgram, stubPage, launchTarget, isEntryPage } from "../browser/serve-core.js";
 import { preloadsFor } from "../tools/internal/bake-app-stubs.mjs";
 import { programDirs } from "../tools/internal/program-dirs.mjs";
 
@@ -35,12 +35,15 @@ await test("requestType maps the query to a request (the classifier both hosts s
   assert.equal(requestType(params("viewer=reader")), REQ.READER);      // ?viewer= = the Viewer’s tabs
   assert.equal(requestType(params("viewer=source")), REQ.SOURCE);      // the viewer's Source tab
   assert.equal(requestType(params("viewer=edit")), REQ.EDIT);
+  assert.equal(requestType(params("viewer=sizes")), REQ.SIZES_TAB);  // the tab, not the JSON
+  assert.equal(viewerTab(REQ.SIZES_TAB), "sizes");
   assert.equal(requestType(params("viewer=bogus")), REQ.READER);  // unknown value → the Viewer default
   assert.equal(requestType(params("viewer")), REQ.READER);       // bare ?viewer → the Reader          // unknown view → safe default
   assert.equal(requestType(params("build")), REQ.BUILD);             // bare presence keys
   assert.equal(requestType(params("file")), REQ.FILE);
   assert.equal(requestType(params("segments")), REQ.SEGMENTS);
   assert.equal(requestType(params("extract")), REQ.EXTRACT);
+  assert.equal(requestType(params("sizes")), REQ.SIZES);
   assert.equal(requestType(params("reader")), REQ.RUN);              // bare ?reader is not a request now
 });
 
@@ -59,7 +62,7 @@ await test("launchTarget reads a bare-path query as the target", () => {
 });
 
 await test("launchTarget ignores ordinary flag queries — a page keeps its own params", () => {
-  for (const q of ["", "?render=canvas", "?crawler", "?viewer=edit", "?clear", "?a=b/c"]) {
+  for (const q of ["", "?render=canvas", "?crawler=true", "?viewer=edit", "?clear", "?a=b/c"]) {
     assert.equal(launchTarget("https://x.dev/index.html" + q), null, `${q || "(no query)"} is not a launch target`);
   }
 });
@@ -101,7 +104,7 @@ await test("runWrapper produces a valid RUN shell that boots the given bundle", 
   assert.match(html, /<title>calendar · Declare<\/title>/);
 });
 
-await test("runWrapper embeds a staticBlock (the server's ?crawler bake) inside the host", () => {
+await test("runWrapper embeds a staticBlock (the server's ?crawler=true bake) inside the host", () => {
   const html = runWrapper({ name: "x", bootUrl: "/b.js", staticBlock: '<div id="declare-static">Y</div>' });
   assert.match(html, /<div id="host"><div id="declare-static">Y<\/div><\/div>/);
 });

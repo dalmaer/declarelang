@@ -18,9 +18,11 @@ selects what the URL returns; exactly one applies, and their absence runs the ap
 | reader | `?viewer=reader` | the code viewer, reader tab — highlighted source, block comments as Markdown |
 | source | `?viewer=source` | the code viewer, verbatim-source tab |
 | edit | `?viewer=edit` | the code viewer, live-edit tab |
+| sizes tab | `?viewer=sizes` | the code viewer, sizes tab — the `?sizes` report presented |
 | file | `?file` | the exact source bytes, `text/plain` (curl, an `include`) |
 | segments | `?segments` | the highlighter's segments as JSON |
 | extract | `?extract` | the static-extraction document — semantic HTML for crawlers |
+| sizes | `?sizes` | what the production build is made of and what each part weighs, as JSON (`declarec --sizes --json`) |
 
 ## Modifiers
 
@@ -29,7 +31,7 @@ Three modifiers change *how* a program compiles, and compose onto a run or a bui
 - `?render=canvas` — render through a single `<canvas>` instead of managed DOM; `?render=dom`
   the reverse. Without either, the program's own flags (`defaultFlags [ render = canvas ]`)
   decide, and DOM when they say nothing.
-- `?crawler` — embed the extracted static document in the run page (the client clears it at boot);
+- `?crawler=true` — embed the extracted static document in the run page (the client clears it at boot);
   without it, the program's own `defaultFlags [ crawler = true ]` asks for the same.
 - `?kernel=js` — with `?build`, carry the JavaScript kernel instead of the WebAssembly one: a
   smaller download, the same results ([kernel.md](../system-design/kernel.md) §10); without it,
@@ -59,7 +61,7 @@ https://…/index.html?apps/desktop/
 ```
 
 The whole query is read as a path when it looks like one — a `/` with no `=` before it — so
-`?render=canvas` and `?crawler` can never be mistaken for a target. The entry page installs
+`?render=canvas` and `?crawler=true` can never be mistaken for a target. The entry page installs
 the service worker **first** and only then navigates, so the real URL arrives with the worker
 in control and becomes a run page. Under the dev server it simply redirects, since the server
 answers the target directly. A fragment is carried through, so

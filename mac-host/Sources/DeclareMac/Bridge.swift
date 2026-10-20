@@ -235,9 +235,9 @@ final class Bridge {
 
     /// The ONE network session, deliberately cache-LESS. URLSession's own disk
     /// cache is not merely redundant here, it is wrong: fetch() already refuses
-    /// it (`.reloadIgnoringLocalCacheData`, see the note there) because it once
-    /// handed boot a stale `?program` body, and the compile cache below owns
-    /// revalidation where the etag is. Leaving the shared session in place for
+    /// it (`.reloadIgnoringLocalCacheData`, see the note there) because a cached
+    /// body once outlived the file it came from, and the compile cache
+    /// (CompileService) owns freshness, checking every source by its hash. Leaving the shared session in place for
     /// images meant the OS cache filled up anyway — and under TWO identities,
     /// since Foundation keys it by executable name when the bare binary runs and
     /// by bundle id when the .app does (~/Library/Caches/DeclareMac and
@@ -247,14 +247,6 @@ final class Bridge {
         c.urlCache = nil
         c.requestCachePolicy = .reloadIgnoringLocalCacheData
         return URLSession(configuration: c)
-    }()
-
-    /// Where the platform's own files live (the client compile cache).
-    private lazy var cacheDir: URL = {
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        let d = base.appendingPathComponent("Declare", isDirectory: true)
-        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
-        return d
     }()
 
     init(view: DeclareView) {
@@ -607,19 +599,6 @@ final class Bridge {
             guard let self, let p = self.path(for: d) else { return true }
             return p.contains(CGPoint(x: x, y: y), using: .winding)
         } as @convention(block) (String, Double, Double) -> Bool, forKeyedSubscript: "pathHit")
-
-        // The client-side compiled-program cache.
-        host.setObject({ [weak self] (key: String) -> String in
-            guard let self else { return "" }
-            let f = self.cacheDir.appendingPathComponent(Self.hash(key) + ".json")
-            return (try? String(contentsOf: f, encoding: .utf8)) ?? ""
-        } as @convention(block) (String) -> String, forKeyedSubscript: "cacheGet")
-
-        host.setObject({ [weak self] (key: String, value: String) in
-            guard let self else { return }
-            let f = self.cacheDir.appendingPathComponent(Self.hash(key) + ".json")
-            try? value.write(to: f, atomically: true, encoding: .utf8)
-        } as @convention(block) (String, String) -> Void, forKeyedSubscript: "cacheSet")
 
         // Rich text: laid out by AppKit NOW (the flow's height is a fact the
         // settle needs), returning the height the runtime sizes the view to.
@@ -1274,12 +1253,11 @@ final class Bridge {
             return
         }
         var req = URLRequest(url: url)
-        // NEVER the URL cache. The JS boot layer runs its own cache with etag
-        // revalidation (mac-boot fromServer + H.cacheGet), so a second cache at
-        // this level can only disagree with it — and did: URLSession's disk
-        // cache handed boot a PRE-FIX ?program body (stale extracted deps, so a
-        // constraint wired without its dataset edge) while every fresh probe of
-        // the same URL answered current. One cache, owned where the etag is.
+        // NEVER the URL cache. The compile cache (CompileService) checks each
+        // source it was built from by its hash, so a second cache at this level
+        // can only disagree with it — and did: URLSession's disk cache once
+        // handed boot a stale body while every fresh probe of the same URL
+        // answered current. One cache, owned where freshness is checked.
         req.cachePolicy = .reloadIgnoringLocalCacheData
         req.httpMethod = method
         if let d = headersJSON.data(using: .utf8),
@@ -1446,8 +1424,8 @@ final class Bridge {
 
 /// The streaming half of fetch(): one session whose delegate hands each reply
 /// to the runtime as it arrives — head, chunks, end — and lets a request be
-/// cancelled by the id the env gave it. Cache-less, like Bridge.net (the boot
-/// layer owns caching where the etag is).
+/// cancelled by the id the env gave it. Cache-less, like Bridge.net (the
+/// compile cache owns freshness).
 final class NetStream: NSObject, URLSessionDataDelegate {
     static let shared = NetStream()
     private let lock = NSLock()

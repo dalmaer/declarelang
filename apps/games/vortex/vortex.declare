@@ -49,7 +49,7 @@ include [ "screens.declare" ]
 
 include [ "sound.declare" ]
 
-defaultFlags [ render = canvas ]
+defaultFlags [ render = canvas, accessibility = false ]
 
 // numbers and lanes: functions of their arguments
 

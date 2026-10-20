@@ -4,7 +4,7 @@
 
 App [ textColor = 0x172530,
     row: View [ x = 20, y = 20, height = 40, width = { this.contentWidth },
-        layout: SimpleLayout [ axis = x, spacing = 24 ],   // an Icon centers itself on y
+        layout: SimpleLayout [ axis = x, spacing = 24, align = center ],
         AutoIcon [ iconSize = 16 ],
         AutoIcon [ iconSize = 24 ],
         AutoIcon [ iconSize = 32 ],

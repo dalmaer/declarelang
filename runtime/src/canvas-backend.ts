@@ -134,6 +134,7 @@ import { routeInput, holdCaptureActive, type HitTarget } from "./input.js";
 import { hitWalk, wheelWalk, fieldWalk, contentExtentOf, cursorAt, type SceneSurface } from "./scene-walk.js";
 import { App, View } from "./view.js";
 import { rootToLocal, type InteractionView } from "./interaction.js";
+import { applyPurpose } from "./purpose.js";
 
 
 /** The root-space point of the wheel being walked (set at the wheel entry,
@@ -2259,7 +2260,7 @@ class CanvasSurface implements Surface, SceneSurface {
     // Parity with the DOM backend's editable: the field's inset, the
     // spellcheck election, and the wrap mode all come from the one spec —
     // the overlay is the same editable, positioned differently.
-    el.spellcheck = spec.spellcheck;
+    applyPurpose(el, spec.purpose, spec.concealed, spec.spellcheck);
     el.style.padding = insetCss(spec.padding);
     if (el instanceof HTMLTextAreaElement) {
       el.wrap = spec.wrap ? "soft" : "off";
@@ -2277,7 +2278,8 @@ class CanvasSurface implements Surface, SceneSurface {
     const spec = this.edit;
     if (spec === null || this.editEl !== null) return;
     const empty = spec.value === "";
-    const text = empty ? spec.placeholder : spec.value;
+    // a concealed field shows a dot for each character, as its element does
+    const text = empty ? spec.placeholder : spec.concealed ? "\u2022".repeat([...spec.value].length) : spec.value;
     if (text === "") return;
     const st = spec.style;
     const font = fontString(st);

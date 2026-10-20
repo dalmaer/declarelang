@@ -32,6 +32,11 @@ the same plain number** — one value, repeated or read from a shared attribute
 label: aggregating over sibling rows is exactly what the constraint system refuses, so
 the shared column is a value you state rather than one the form discovers.
 
+## fieldLabel
+The caption, provided to what the field holds: a `TextInput`, `Switch`, `Checkbox`, `Slider` or
+`Combobox` inside takes it as its name to a screen reader unless it has its own
+(`accessibilityLabel`). A control of your own reads it the same way —
+`accessibilityLabel = { provided("fieldLabel", "") }`.
 */
 
 class Field [
@@ -39,6 +44,11 @@ class Field [
 
     label:      string = "",
     labelWidth: number = 96,
+
+    // the caption names the control it holds, to a screen reader as to the eye:
+    // provided, and the library's value controls take it as their name
+
+    fieldLabel: string = { label },
 
     layout: SimpleLayout [ axis = x, spacing = 12 ],
 

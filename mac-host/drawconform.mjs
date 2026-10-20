@@ -214,7 +214,7 @@ if (ONLY !== "mac") {
 let macOk = false;
 if (ONLY !== "web") {
   process.stdout.write("launching the native host… ");
-  macOk = await launchNative(URL_ + "?render=mac");
+  macOk = await launchNative(URL_);
   console.log(macOk ? "up" : "NO WINDOW");
 }
 if (macOk) {

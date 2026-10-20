@@ -84,8 +84,9 @@ outside the box it resizes.
 
 A child can also ask for the room that is left. [`flexes = true`](declare-docs:View.flexes) hands the
 child's size along the flow to the layout: the children that do not flex keep their own
-sizes, and the flexing ones share what remains — the height in a column, the width in a
-row. Across the flow it is aligned like any other child. It is how a page frame is written:
+sizes, and the flexing ones share what remains, equally — the height in a column, the
+width in a row. Four chips across a row are each `flexes = true`, never
+`width = { (parent.width - 24) / 4 }`. Across the flow it is aligned like any other child. It is how a page frame is written:
 
 ```declare
 App [ width = 320, height = 200, fill = white, textColor = black,

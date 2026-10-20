@@ -30,7 +30,7 @@ focus, keyboard activation: [`Control`](declare-docs:Control) owns all of it, so
 same floor `Button` does.
 
 ```declare
-class Stepper extends Control [ width = 96, height = 28, cornerRadius = 7,
+class Counter extends Control [ width = 96, height = 28, cornerRadius = 7,
     value: number = 0,
     step:  number = 1,
 
@@ -47,7 +47,7 @@ App [ width = 320, height = 130, theme = { SanFrancisco },
     n: number = 0,
     col: View [ x = 20, y = 20,
         layout: SimpleLayout [ axis = y, spacing = 12 ],
-        Stepper [ value = { app.n }, input(v: number) { app.n = v } ],
+        Counter [ value = { app.n }, input(v: number) { app.n = v } ],
         Text [ textColor = { provided("theme").text }, text = { `count: ${app.n}` } ]
         ]
     ]
@@ -72,17 +72,17 @@ included. To keep the base's behavior as well, call it — `super.press()` — b
 work, after it, or only on some paths:
 
 ```declare
-class Stepper extends Control [ width = 96, height = 28, value: number = 0,
+class Counter extends Control [ width = 96, height = 28, value: number = 0,
     input(v: number) { value = v },
     press() { input(value + 1) }
     ]
 
-class BoundedStepper extends Stepper [ max: number = 5,
+class BoundedCounter extends Counter [ max: number = 5,
     press() { if (value < max) super.press() }
     ]
 
 App [ width = 320, height = 60, theme = { SanFrancisco },
-    BoundedStepper [ x = 20, y = 16, fill = { provided("theme").control } ]
+    BoundedCounter [ x = 20, y = 16, fill = { provided("theme").control } ]
     ]
 ```
 
@@ -291,9 +291,9 @@ class BoltIcon extends Icon [
 App [ width = 320, height = 120, fill = white, textColor = black,
     row: View [ x = 20, y = 24,
         layout: SimpleLayout [ axis = x, spacing = 18 ],
-        BoltIcon [ iconSize = 16 ],
-        BoltIcon [ iconSize = 24 ],
-        BoltIcon [ iconSize = 44 ]
+        BoltIcon [ y = center, iconSize = 16 ],
+        BoltIcon [ y = center, iconSize = 24 ],
+        BoltIcon [ y = center, iconSize = 44 ]
         ]
     ]
 ```

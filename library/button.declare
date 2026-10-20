@@ -122,6 +122,11 @@ Follows `inkColor`, the button's one ink decision, so the label and the icon can
 include [ "control.declare", "icons/icon.declare" ]
 
 class Button extends Control [
+    // a button, named by the label it shows (a button's name comes from its
+    // text); an icon-only button is named at its use site with accessibilityLabel
+
+    accessibilityRole = button,
+
     // the baseline a row aligns this control by: its label's (declared, never discovered)
 
     baseline: number = { this.run.y + this.run.cap.y + this.run.cap.baseline },
@@ -171,9 +176,9 @@ class Button extends Control [
         width = { this.contentWidth },
         layout: SimpleLayout [ axis = x, spacing = { classroot.gap } ],
 
-        ico:   IconHost [ kind = { classroot.iconLeft },  ink = { classroot.inkColor } ],
+        ico:   IconHost [ y = center, kind = { classroot.iconLeft },  ink = { classroot.inkColor } ],
         cap:   TextLabel [ wrap = false, fontWeight = semibold,
             visible = { classroot.label != "" }, text = { classroot.label } ],
-        trail: IconHost [ kind = { classroot.rightIcon }, ink = { classroot.inkColor } ]
+        trail: IconHost [ y = center, kind = { classroot.rightIcon }, ink = { classroot.inkColor } ]
         ]
     ]

@@ -1,13 +1,23 @@
-App [ width = 560, height = 300, fill = #E6E9EE,
-    Window [ x = 40, y = 40, width = 240, height = 160, rotation = -4, cornerRadius = 10,
-        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
-        more: Menu [ items = { [ ({ id: "rename", label: "Rename" }), ({ id: "copy", label: "Duplicate" }) ] } ],
-        Text [ x = 16, y = 16, text = "A window" ],
-        Button [ x = 16, y = 52, label = "Options", menu = { parent.more } ]
+App [ width = 640, height = 360, fill = { provided("theme").background },
+    notesOpen: boolean = true,
+    Button [ x = 20, y = 316, label = "Show notes", disabled = { app.notesOpen },
+        onClick() { app.notesOpen = true }
         ],
-    Window [ x = 300, y = 70, width = 220, height = 140, cornerRadius = 10,
-        fill = white, shadow = { shadow(0, 6, 20, 0x00000033) },
-        TextInput [ x = 16, y = 16, width = 188 ],
-        TextInput [ x = 16, y = 56, width = 188 ]
+    Window [ x = 30, y = 30, width = 280, height = 190, title = "Settings",
+        more: Menu [ items = { [ ({ id: "reset", label: "Reset" }), ({ id: "copy", label: "Copy settings" }) ] } ],
+        View [ width = 100%, padding = 16,
+            layout: SimpleLayout [ axis = y, spacing = 12 ],
+            Checkbox [ label = "Show line numbers" ],
+            Checkbox [ label = "Wrap long lines" ],
+            Button [ label = "More", menu = { parent.parent.more } ]
+            ]
+        ],
+    Window [ x = 330, y = 60, width = 280, height = 220, title = "Notes", resizable = true,
+        open = { app.notesOpen },
+        input(v: boolean) { app.notesOpen = v },
+        View [ width = 100%, padding = 16,
+            layout: SimpleLayout [ axis = y, spacing = 10 ],
+            TextInput [ width = 100%, placeholder = "Title" ]
+            ]
         ]
     ]

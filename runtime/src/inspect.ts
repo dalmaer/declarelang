@@ -13,6 +13,7 @@
 import { Node, authoredName } from "./node.js";
 import { hitAt, traceHitAt, rootFrameOrigin, rootFrameBox, type InteractionView } from "./interaction.js";
 import { View } from "./view.js";
+import { semanticTree, formatSemantics } from "./semantics.js";
 import { declarationsOf, isSet, ownerOf, ownValues, ownedSlots } from "./attributes.js";
 import { materializationInfo, type MaterializationDiag } from "./replicate.js";
 import { sharedClock, browserScheduler, type FrameScheduler } from "./animate.js";
@@ -233,17 +234,38 @@ function intersectBox(a: { x: number; y: number; width: number; height: number }
 /** Resolve a dotted inspect path (`app.col.opts`, `app.col.3`) to the node.
  *  Returns null (never throws) on a miss — the caller owns the message. */
 export function find(root: Node, path: string): Node | null {
-  const segs = path.split(".").filter((s) => s !== "");
+  // a step is a member's name, a child's index, or what a view says — its
+  // label, its accessible name or its text (`app.seg.Two`), quoted when it
+  // holds a dot or a space (`app.menu."Save As…"`)
+  const segs = (path.match(/"[^"]*"|[^.]+/g) ?? []).filter((s) => s !== "");
   let cur: Node = root;
   for (let i = segs[0] === "app" ? 1 : 0; i < segs.length; i++) {
-    const seg = segs[i];
-    const asIndex = /^\d+$/.test(seg) ? cur.children[Number(seg)] : undefined;
-    const asName = (cur as unknown as Record<string, unknown>)[seg];
-    const next = asIndex ?? (asName instanceof Node ? asName : undefined);
+    const raw = segs[i];
+    const quoted = raw.startsWith('"');
+    const seg = quoted ? raw.slice(1, -1) : raw;
+    const asIndex = !quoted && /^\d+$/.test(seg) ? cur.children[Number(seg)] : undefined;
+    const asName = quoted ? undefined : (cur as unknown as Record<string, unknown>)[seg];
+    const next = asIndex ?? (asName instanceof Node ? asName : undefined) ?? said(cur, seg);
     if (next === undefined) return null;
     cur = next;
   }
   return cur;
+}
+
+/** The nearest view inside `from` (level by level) that says `words`: its label,
+ *  its accessible name, or its text. */
+function said(from: Node, words: string): Node | undefined {
+  const says = (n: Node): boolean => {
+    const a = n as unknown as Record<string, unknown>;
+    return a.label === words || a.accessibilityLabel === words || a.text === words;
+  };
+  let level: Node[] = [...from.children];
+  while (level.length > 0) {
+    const hit = level.find(says);
+    if (hit !== undefined) return hit;
+    level = level.flatMap((n) => [...n.children]);
+  }
+  return undefined;
 }
 
 // ── provenance: WHY does this slot have this value ──────────────────────────
@@ -493,6 +515,14 @@ export function bridgeFor(root: Node): Record<string, unknown> {
       return n !== null ? explain(n, attr) : null;
     },
     stats: () => stats(root),
+    /** What assistive technology is given: the semantic tree (accessibility.md),
+     *  as indented text, or as data with `asData`. */
+    semantics: (path?: string, asData = false) => {
+      const n = path !== undefined ? find(root, path) : root;
+      if (!(n instanceof View)) return null;
+      const t = semanticTree(n);
+      return asData ? t : formatSemantics(t);
+    },
     /** Geometry + causality queries — the same set the Inspector's panes use, so
      *  an agent, an assert script and the UI all ask the identical questions. */
     slots: (path: string) => { const n = find(root, path); return n === null ? [] : slotsOf(n); },
@@ -569,6 +599,7 @@ const BRIDGE_HELP: Record<string, string> = {
   at: "at(x, y, pierce?) — what a press at this point would land on (the router's own answer); pierce=true includes pointer-transparent views",
   explainHit: "explainHit(x, y, pierce?) — the hit walk's decisions in order: what took the point and what it stepped over",
   stats: "stats() — node/constraint counts for the whole tree",
+  semantics: "semantics(path?, asData?) — what a screen reader is given: the semantic tree under the node (default the app) — roles, names, values, states, actions — as indented text, or as data",
   evaluate: "evaluate(path, src) — run Declare in the node's scope: read ('width'), compute ('1+2'), set ('width = 40'), bind ('width = { parent.width/2 }'). Returns {ok, text, value} synchronously once primed",
   trace: "trace — the wake trace: start(n) records the last n settles; read() → [{ n, at, ms, origin, runs, triggers, changes }] with every changed slot named and the rule that wrote it; text() the same as lines; stop()/clear(). THE 'why did this settle happen, and what did it change' call — explain()'s other half",
   clock: "clock — the driven clock: manual()/auto()/step(ms)/settleMotion() for deterministic motion in tests; settling — finite motion in flight now",

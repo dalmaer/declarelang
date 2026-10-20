@@ -35,6 +35,8 @@ import { onDprChange } from "./dpr.js";
 import { routeInput, holdCaptureActive } from "./input.js";
 import { lockFocusZoom } from "./viewport-lock.js";
 import { observeVisibility, refreshObserved } from "./dom-visibility.js";
+import { installDomSemantics } from "./semantics-dom.js";
+import { applyPurpose } from "./purpose.js";
 /** A child is being moved (insertChild): a native blur it causes is not the
  *  person leaving the field. */
 let MOVING_FOCUS = false;
@@ -471,6 +473,14 @@ export class DomBackend {
      *  fragment; routing still follows in-app). A URL = an embedder that knows
      *  the child's true program address, restoring the native affordances. */
     linkBase = null;
+    // What each view is to assistive technology, on its own element, and real
+    // focus (accessibility.md §5.2) — installed before the first surface, since a
+    // mount attaches the whole tree before it attaches the root; unless the
+    // program leaves the layer out.
+    constructor() {
+        if ((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) && typeof document !== "undefined")
+            installDomSemantics(document);
+    }
     createSurface() {
         const s = new DomSurface();
         s.linkBase = this.linkBase;
@@ -528,6 +538,7 @@ export class DomBackend {
         // since an island's default is `manipulation` (the finger belongs to the
         // host page's regime), and the root element is not yet in the host here.
         root.embeddedRoot = embedded;
+        root.applyLanguage();
         root.refreshTouchAction();
         // …but touch-action alone does not retire double-tap zoom on iOS.
         // Measured (2026-08-06, iOS 18.2 sim, tools/internal/sim): with
@@ -776,6 +787,8 @@ function ensureClipBoxFor(el) {
 /** Each drawing's canvas → the surface that rasters it: a `scaling` change on an
  *  ancestor re-rasters the drawings inside (setScaling). */
 const DRAWING_OF = new WeakMap();
+/** The roles a row count and a row index belong on. */
+const GRIDDY = new Set(["grid", "treegrid", "table", "row"]);
 export class DomSurface {
     element;
     textEl = null;
@@ -898,6 +911,19 @@ export class DomSurface {
      *  host page — its gesture default is `manipulation`, never the geometry
      *  read (refreshTouchAction). */
     embeddedRoot = false;
+    /** The app's language (App.language), kept until the root knows whether it
+     *  is the page or embedded in one (attachRoot). */
+    language = "";
+    setLanguage(lang) { this.language = lang; this.applyLanguage(); }
+    /** A page's language is the <html> element's; an embedded app's, its own root's. */
+    applyLanguage() {
+        if (!this.isRoot || this.language === "")
+            return;
+        if (this.embeddedRoot)
+            this.element.lang = this.language;
+        else
+            this.element.ownerDocument.documentElement.lang = this.language;
+    }
     /** This surface is an app's root (attachRoot stamps it, with the
      *  `data-declare-app` mark other code reads off the DOM). */
     isRoot = false;
@@ -1089,6 +1115,8 @@ export class DomSurface {
         if (s.opacity !== "" && s.opacity !== String(o) && s.willChange === "")
             s.willChange = "opacity";
         s.opacity = String(o);
+        // unseen is unread: a screen reader passes over what has faded out
+        this.setFaded?.(o === 0);
     }
     // Scale + rotation compose into ONE CSS transform about one origin — the
     // runtime pushes both calls together (view.ts pushTransform), so the pair
@@ -1309,6 +1337,14 @@ export class DomSurface {
         // embedding host page — the rect/layout ratio unwinds exactly that.
         const k = el.offsetWidth > 0 ? r.width / el.offsetWidth : 1;
         return carveHitCtx().isPointInPath(this.clipObj, (cx - r.left) / k, (cy - r.top) / k);
+    }
+    /** Whether a point in the view's own frame is inside its Shape clip, for the
+     *  hit walk (interaction.ts): the same path the browser clips hits by. */
+    insideClip(lx, ly) {
+        if (this.clipData === null)
+            return lx >= 0 && ly >= 0 && lx < this.element.offsetWidth && ly < this.element.offsetHeight;
+        this.clipObj ??= new Path2D(this.clipData);
+        return carveHitCtx().isPointInPath(this.clipObj, lx, ly);
     }
     /** True when this surface opts out of its parent's box-clip (ignoreClip). */
     ignoresClip = false;
@@ -1716,18 +1752,19 @@ export class DomSurface {
     scrollListener;
     scrollReport;
     scrollXReport;
-    // Windowing-aware AT (backend.ts): the logical extent/position of a
-    // windowed replication, spoken in ARIA — the browser's protocol for
-    // "row N of M without M nodes". aria-rowcount on the block container,
-    // aria-rowindex per materialized row (1-based); null clears both when
-    // windowing disengages.
     setRowCount(n) {
+        // a row count and index are a grid's (ARIA allows them nowhere else); an item
+        // of a list or a list box says its place with aria-posinset (semantics-dom.ts)
+        if (n !== null && !GRIDDY.has(this.element.getAttribute("role") ?? ""))
+            return;
         if (n === null)
             this.element.removeAttribute("aria-rowcount");
         else
             this.element.setAttribute("aria-rowcount", String(n));
     }
     setRowIndex(i) {
+        if (i !== null && !GRIDDY.has(this.element.getAttribute("role") ?? ""))
+            return;
         if (i === null)
             this.element.removeAttribute("aria-rowindex");
         else
@@ -2191,8 +2228,8 @@ export class DomSurface {
         // free — applyEditStyle runs a fontMetrics MEASURE per call, and every
         // style write invites a recalc. The scrub bench (recycled editor cells)
         // made the blanket reapply visible.
-        if (prev === null || prev.spellcheck !== spec.spellcheck)
-            el.spellcheck = spec.spellcheck;
+        if (prev === null || prev.spellcheck !== spec.spellcheck || prev.purpose !== spec.purpose || prev.concealed !== spec.concealed)
+            applyPurpose(el, spec.purpose, spec.concealed, spec.spellcheck);
         if (prev === null || insetCss(prev.padding) !== insetCss(spec.padding))
             el.style.padding = insetCss(spec.padding);
         // no-wrap = one line per line + horizontal scroll (both native to a textarea
@@ -2427,6 +2464,11 @@ export class DomSurface {
             for (const u of this.maskUsers)
                 u.applyMask(); // a stencil's bitmap arrived
         if (image !== null) {
+            // the bitmap is the view's content: what the picture IS — its name, or that it
+            // is decoration — is said on the view's own element (semantics-dom.ts), so the
+            // <img> itself is never read (no file name read aloud)
+            if (image instanceof HTMLImageElement && !image.hasAttribute("alt"))
+                image.alt = "";
             const s = image.style;
             s.position = "absolute";
             s.left = "0";
@@ -2541,6 +2583,9 @@ export class DomSurface {
             c.height = 0;
             c.style.position = "absolute";
             c.style.pointerEvents = "none"; // content is inert — hits are box-geometry
+            // what a drawing says, its view says (its role and name, on the view's element)
+            if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__)
+                c.setAttribute("aria-hidden", "true");
             this.placeContent(c, this.imgEl);
             this.drawEl = c;
             DRAWING_OF.set(c, this);
@@ -2966,4 +3011,52 @@ export function watchScrolling(target, report) {
 /** The page scroll's watch (boot.ts), so a request to the page marks its motion. */
 let PAGE_WATCH = null;
 export function setPageScrollWatch(w) { PAGE_WATCH = w; }
+// What a view is to assistive technology, on its own element (semantics-dom.ts):
+// the attributes last written are removed when the next set no longer has them.
+// Attached only in a build that carries the layer, so a build without it — a
+// canvas game carries this module for its fields — carries none of it.
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) {
+    const SEM = new WeakMap();
+    function setSemantics(attrs) {
+        // a field says it on its native editable, which is what holds the focus; a
+        // view that is a link, on the <a> that covers it — what is focused and followed
+        // (its role there, so a button that navigates is one control, not two)
+        const own = this;
+        const el = own.editEl ?? own.linkEl ?? this.element;
+        const last = SEM.get(this);
+        // written to another element last time (a link that arrived since): take them off it
+        if (last !== undefined && last.el !== el && last.attrs !== null)
+            for (const k of Object.keys(last.attrs))
+                last.el.removeAttribute(k);
+        const was = last !== undefined && last.el === el ? last.attrs : null;
+        if (was !== null)
+            for (const k of Object.keys(was))
+                if (attrs === null || !(k in attrs))
+                    el.removeAttribute(k);
+        if (attrs !== null)
+            for (const [k, v] of Object.entries(attrs))
+                if (was?.[k] !== v)
+                    el.setAttribute(k, v);
+        if (attrs !== null && "tabindex" in attrs)
+            el.style.outline = "none"; // the focus ring is Declare's own
+        SEM.set(this, { el, attrs });
+    }
+    DomSurface.prototype.setSemantics = setSemantics;
+    // a view faded to nothing is hidden from assistive technology, as it is from
+    // the eye — at the crossing only, so a fade writes the attribute twice at most
+    const FADED = new WeakSet();
+    DomSurface.prototype.setFaded = function (faded) {
+        if (faded === FADED.has(this))
+            return;
+        if (faded) {
+            FADED.add(this);
+            this.element.setAttribute("aria-hidden", "true");
+            return;
+        }
+        FADED.delete(this);
+        const sem = SEM.get(this);
+        if (!(sem?.el === this.element && sem.attrs?.["aria-hidden"] === "true"))
+            this.element.removeAttribute("aria-hidden");
+    };
+}
 //# sourceMappingURL=dom-backend.js.map

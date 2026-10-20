@@ -77,6 +77,10 @@ export declare const Diag: {
     centersByHand: (axis: "x" | "y", pos: Pos) => DeclareError;
     animatorNeverStarts: (tag: string, name: string | null, pos: Pos) => DeclareError;
     buttonPressOverride: (owner: string, pos: Pos) => DeclareError;
+    accessibilityContract: (message: string, pos: Pos) => DeclareError;
+    accessibilityRoleComputed: (pos: Pos) => DeclareError;
+    accessibilityNoName: (owner: string, role: string, pos: Pos) => DeclareError;
+    accessibilityDrawnFocusable: (owner: string, pos: Pos) => DeclareError;
     afterInValue: (pos: Pos) => DeclareError;
     scriptWrite: (name: string, pos: Pos) => DeclareError;
     classrootOutsideClass: (where: string, pos: Pos) => DeclareError;

@@ -91,7 +91,7 @@ const ONLY = onlyIx === -1 ? null
 
 // Every rule command runs under a HARD deadline, killed outright on overrun
 // (SIGKILL — no cooperation asked). Several rules execute app code in-process
-// (dist --crawler, prewarm, bake-crawler boot real programs), so an app bug —
+// (dist --crawler=true, prewarm, bake-crawler boot real programs), so an app bug —
 // a leaked timer, a runaway loop, a never-settling fetch — must be able to
 // fail a BUILD STEP but never wedge the pipeline (2026-08-08: four derive
 // runs from three sessions sat forever behind one app's setInterval). 300s is
@@ -383,7 +383,7 @@ for (const r of RULES) {
   try { r.run(); } catch (e) {
     if (e.code === "ETIMEDOUT" || e.signal === "SIGKILL") {
       console.error(`derive: ${r.name} KILLED after ${RULE_TIMEOUT_MS / 1000}s — a build step may not hang.`);
-      console.error(`  Rules that boot app code (dist --crawler, prewarm, bake-crawler) inherit the app's bugs:`);
+      console.error(`  Rules that boot app code (dist --crawler=true, prewarm, bake-crawler) inherit the app's bugs:`);
       console.error(`  a leaked timer, a runaway loop, a fetch that never settles. Find the app, fix the bug.`);
       console.error((e.stdout ?? "") + (e.stderr ?? ""));
       process.exit(1);

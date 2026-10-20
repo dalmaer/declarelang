@@ -38,6 +38,7 @@
     "puppeteer-core": "^23.11.1"
   },
   "devDependencies": {
+    "axe-core": "4.10.2",
     "markdown-it": "^15.0.1",
     "ws": "^8.21.1"
   },

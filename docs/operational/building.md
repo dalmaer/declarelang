@@ -16,7 +16,7 @@ never read by the running program), and whatever the program's `ship` block name
 `programs/` folder with one compiled program per island, a `files/` folder for what it reads
 from elsewhere, the compiler and the library's source when it compiles at run time.
 Deployable to any static host, as a folder that needs nothing outside itself. On the flagship calendar it lands
-around **<!--stat:calendar.wireKB-->131<!--/stat--> KB gzipped** — and that is the figure the
+around **<!--stat:calendar.wireKB-->136<!--/stat--> KB gzipped** — and that is the figure the
 homepage prints, measured on the build its own calendar page ships. The module carries
 everything a page needs and nothing else: the runtime's run path, your program, and the web
 host — the URL and history mirror (`app.location` ↔ the fragment, Back and Forward), island
@@ -28,7 +28,7 @@ for one. Five things keep it small:
   function — no `new Function` at startup, and no `eval` needed at all.
 - **Run-path only.** esbuild bundles the runtime's render path and tree-shakes the rest — the
   parser, checker, and typechecker never ship.
-- **One backend.** The one `--render` names (`--canvas` for the single-`<canvas>` renderer),
+- **One backend.** The one `--render=` names (`--render=canvas` for the single-`<canvas>` renderer),
   else the program's own (`defaultFlags [ render = canvas ]`), else DOM; only the chosen one
   is bundled.
 - **Slim registry.** Only the classes the app can actually instantiate are included. If a
@@ -127,16 +127,46 @@ prose that remains is one sentence — the `.error` an app may show.
 | flag | effect |
 |---|---|
 | `-o <dir>` | output directory (default `dist`) |
-| `--canvas` | canvas backend instead of DOM |
-| `--crawler` | bake the extracted static document into `index.html` (crawlers read it; the client clears it at boot) |
-| `--kernel js` | carry the JavaScript reactive kernel instead of the WebAssembly one: about 9 KB gzipped smaller, the same results, somewhat slower on view-heavy work and at startup on phones. `wasm` is the default |
+| `--render=canvas` | canvas backend instead of DOM (`--render=dom` the reverse) |
+| `--crawler=true` | bake the extracted static document into `index.html` (crawlers read it; the client clears it at boot) |
+| `--kernel=js` | carry the JavaScript reactive kernel instead of the WebAssembly one: about 9 KB gzipped smaller, the same results, somewhat slower on view-heavy work and at startup on phones. `wasm` is the default |
 | `--extract` | also write the static document standalone as `<name>.extract.html` |
 | `--debug` | a developer's build: the program verbatim, positions, prose, the Inspector, no slimming. For a program that needs some of that *in production*, declare it — `ship [ inspector = true ]` |
+| `--sizes` | after the build, report what it is made of and what each part weighs (below); with `--json`, the report alone as JSON |
 | `--quiet` | suppress progress output |
 
 A program's own [`defaultFlags [ … ]`](declare-docs:language:defaultFlags) block sets its defaults for
-`--render`, `--crawler` and `--kernel`; a switch given here wins over it. `--no-crawler`
-turns off a crawl the program's block asks for.
+`render`, `crawler` and `kernel`; a modifier given here wins over it, so `--crawler=false`
+turns off a crawl the program's block asks for. They are spelled `--name=value`, with the
+same names and values as in a URL and in the block ([Modifiers](declare-docs:operational:flags)).
+
+## What a build weighs: `--sizes`
+
+`--sizes` accounts for every byte the build ships, compressed:
+
+- **The four parts.** The program (its declarations, its App's tree, its precompiled
+  bodies), the runtime, the kernel and the page.
+- **Every file the program was made from**, and how it came in: the program's own, named
+  in an `include`, pulled in for a class it declares (and which file named that class),
+  or provided by the library (the focus ring with any control, the tooltip with any
+  `tooltipLabel`). Under each file are its declarations and what each weighs.
+- **Every runtime module**, with the capability that brought it aboard and what in the
+  program asked for it (as `--why` gives).
+
+```bash
+npx declarec apps/calendar/calendar.declare --sizes
+```
+
+The parts are measured. Within a part, a piece's figure is an estimate, because gzip
+compresses each piece against its neighbors and no piece has a compressed size of its own:
+
+- A declaration's figure is what removing it would save: the program compressed with it,
+  less the program compressed without it, scaled so the pieces sum to the program.
+- A module's figure is its share of the runtime's bytes.
+
+The dev server answers the same report as JSON at the program's address with `?sizes`, and
+presents it in the Viewer's Sizes tab, `?viewer=sizes`
+([the dev server](declare-docs:operational:dev-server)).
 
 ## Two ways to deploy
 

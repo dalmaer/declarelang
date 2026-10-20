@@ -111,4 +111,7 @@ defineAttributes(Image, {
     naturalWidth: { def: 0 },
     naturalHeight: { def: 0 },
 });
+// what a Image is to assistive technology (View.$leafRole), in a build with the layer
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__)
+    Image.prototype.$leafRole = () => "image";
 //# sourceMappingURL=image.js.map

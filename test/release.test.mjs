@@ -103,7 +103,7 @@ await test("no silent markers: every <!--stat:…--> in a stamp target is one th
   const formats = new Set([...src.matchAll(/^\s*"([a-zA-Z0-9.]+)":\s*\(\)/gm)].map((m) => m[1]));
   const targets = [
     "README.md", "docs/declare.md", "apps/homepage/declare-faq.md", "docs/tenets/1 SATOR.md",
-    "docs/guide/25-packaging.md", "docs/operational/building.md",
+    "docs/guide/26-packaging.md", "docs/operational/building.md",
     ...(existsSync(resolve(ROOT, "releases")) ? readdirSync(resolve(ROOT, "releases")).filter((f) => f.endsWith(".md")).map((f) => `releases/${f}`) : []),
   ];
   let seen = 0;

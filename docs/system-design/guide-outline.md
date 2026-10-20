@@ -233,7 +233,7 @@ inside an app, no iframe) — which the docs and homepage themselves use.
 **Why:** the app-meets-world chapter — everything that isn't the tree itself. Teach: the
 host contract (top-level = window, embedded = container, auto-detected); deep focus
 (traps, tab order) completing 23; the capabilities contract (`docs/system-design/capabilities.md` —
-the enumerable environment surface); SEO / static extraction (`?extract`, `?crawler`, what
+the enumerable environment surface); SEO / static extraction (`?extract`, `?crawler=true`, what
 crawlers see) as a shipped feature with a one-command story; and **the host channel**
 *(added 2026-07-14)*: `app.navigate` for links out, and the route-mirroring idiom (an
 `app.route` attribute the host reflects to the URL hash — deep links and the back button,
@@ -248,7 +248,7 @@ infrastructure. Teach: the terminator comma; leaves on one line; header-line con
 hanging closers; comment style incl. `/* */` literate Markdown (the reader view renders
 it — the calendar and homepage are *written to be read*); the formatter as enforcement
 (`tools/format.mjs`); "one way to write each thing."
-**Salvage:** old `28-formatting.md` is close; align to formatting.md's canon and trim.
+**Salvage:** old `29-formatting.md` is close; align to formatting.md's canon and trim.
 
 ---
 
@@ -268,7 +268,7 @@ lives in `operational/` — this chapter is the concepts.
 
 ### 41 · Ship it
 **Why:** the exit door. Teach: `declarec` / `?build` (self-contained ~50 KB bundle);
-hosting the distro vs shipping a build; `--crawler` baking; what prewarm does for curated
+hosting the distro vs shipping a build; `--crawler=true` baking; what prewarm does for curated
 apps (one paragraph, so the two "precompiled" senses never confuse). Command sequences →
 `operational/building.md`; this chapter is orientation.
 **Salvage:** old `35-shipping.md` thins into this + operational.

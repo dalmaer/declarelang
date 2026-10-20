@@ -1,0 +1,50 @@
+/*
+# SearchField
+
+A text field for searching, that a screen reader announces as a search field, with "Search"
+as its placeholder until you give it your own. Its look is the theme's: a stadium — round at
+both ends, `searchFieldCornerRadius = "round"` — unless the theme gives that token a radius (a
+square-cornered house style gives it its `fieldCornerRadius`), with `searchFieldHeight`, `searchFieldPadding`, and
+`searchFieldFill` and `searchFieldStroke` (the theme's `surface` and `line` when unset).
+Everything else is `TextInput`'s: `text`, `onInput`, `onEnter`, the value pattern.
+
+```declare
+App [ width = 400, height = 100, q: string = "",
+    find: SearchField [ x = 20, y = 20, width = 260, placeholder = "Search messages",
+        onInput(t: string) { app.q = "" + t } ],
+    Text [ x = 20, y = 64, text = { app.q == "" ? "type to search" : "searching for " + app.q } ]
+    ]
+```
+
+## placeholder
+"Search" unless you name what is searched ("Search messages") — it is also the field's name to
+a screen reader when no `accessibilityLabel` is set.
+
+## height
+The theme's `searchFieldHeight`.
+
+## cornerRadius
+The theme's `searchFieldCornerRadius`: `"round"` (the default) for round ends at any height, or
+a radius, capped at half the height.
+
+## padding
+The theme's `searchFieldPadding` at each end, so the text sits clear of round ends.
+
+## fill
+The theme's `searchFieldFill`, else its `surface`.
+
+## stroke
+The theme's `searchFieldStroke`, else its `line`, turning to its `accent` while the field has
+the focus.
+*/
+
+class SearchField extends TextInput [ height = { provided("theme").searchFieldHeight },
+    // round at both ends (the theme's "round", the default), or the radius the theme gives
+
+    cornerRadius = { typeof provided("theme").searchFieldCornerRadius == "number" ? Math.min(provided("theme").searchFieldCornerRadius, height / 2) : height / 2 },
+    accessibilityRole = searchBox,
+    placeholder = "Search",
+    padding = { [0, provided("theme").searchFieldPadding, 0, provided("theme").searchFieldPadding] },
+    fill = { provided("theme").searchFieldFill ?? provided("theme").surface },
+    stroke = { stroke(1, this.focused ? provided("theme").accent : (provided("theme").searchFieldStroke ?? provided("theme").line)) }
+    ]

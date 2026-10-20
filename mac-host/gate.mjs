@@ -238,7 +238,7 @@ async function measure(prog, send, windowId, outDir, booted = false) {
   let before = NaN, loaded = "ok";
   if (!booted) {
     before = await layerCount(send);
-    await send(`eval __declareBoot(${JSON.stringify(hostUrl(prog) + "?render=mac")}); 'ok'`);
+    await send(`eval __declareBoot(${JSON.stringify(hostUrl(prog))}); 'ok'`);
     // the host's own verdict: `ok` at the new program's first frame, or its error
     // (__declareBoot announces the load before eval returns, so this is this load's)
     loaded = await send("waitload 30", 35000);
@@ -281,7 +281,7 @@ try {
       await Promise.all(Array.from({ length: Math.min(LANES, todo.length) }, async (_, k) => {
         let i = next++;
         // named for this run, so a lane a crashed run left open never blocks the next
-        const lane = await openLane(`gate${process.pid}-${k + 1}`, `${hostUrl(todo[i])}?render=mac`, main);
+        const lane = await openLane(`gate${process.pid}-${k + 1}`, hostUrl(todo[i]), main);
         lanes.push(lane);
         await lane.send("attach gate");
         const v = await lane.send("waitload 30", 35000);

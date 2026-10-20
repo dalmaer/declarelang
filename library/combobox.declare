@@ -111,6 +111,13 @@ type-then-Enter path.
 
 ## height
 From the theme's `comboboxHeight` (30 by default).
+
+## accessibilityExpanded
+Whether the list is open — what a screen reader hears as the combobox expanded or collapsed.
+
+## accessibilityLabel
+The caption of a `Field` around it, else the `placeholder`, unless the use site names the combobox — its name to a screen reader, carried by
+the field inside, which is what holds the focus.
 */
 
 include [ "control.declare", "menu.declare" ]
@@ -118,6 +125,12 @@ include [ "control.declare", "menu.declare" ]
 use [ Menu ]
 
 class Combobox extends Control [
+    // a field and the list it drops: a combobox, expanded while its list is open;
+    // the field inside is the text field a screen reader edits
+
+    accessibilityRole = combobox,
+    accessibilityLabel = { provided("fieldLabel", "") || placeholder },
+    accessibilityExpanded = { this.listShown() },
     width = 220,
 
     // one Tab stop: the entry is the stop, the combobox around it is not
@@ -177,9 +190,11 @@ class Combobox extends Control [
 
     ensureList() {
         if (list != null) return
-        list = (this.parent as View).createView("Menu", ({ }))
+        // a list of choices: a listbox of options, as a combobox's is everywhere
+        list = (this.parent as View).createView("Menu", ({ accessibilityRole: "listbox", asList: true }))
         const m = this.list as any
         m.typeahead = false                       // its letters are the entry's
+        m.takesFocus = false                      // the focus stays in the entry, which names the row
         m.picked = (id) => this.pickIndex(parseInt(id))
         },
 
@@ -187,7 +202,7 @@ class Combobox extends Control [
         this.ensureList()
         const m = this.list as any
         m.minWidth = this.width        // at least the field's width; a long label may widen it
-        m.items = (this.matches ?? []).map((o, i) => ({ id: "" + i, label: this.labelOf(o) }))
+        m.items = (this.matches ?? []).map((o, i) => ({ id: "" + i, label: this.labelOf(o), selected: o === value }))
         },
 
     closeList() { if (list != null) (this.list as any).close() },
@@ -209,6 +224,11 @@ class Combobox extends Control [
         width = { classroot.width },
         height = { classroot.height },
         placeholder = { classroot.placeholder },
+
+        // the field is what a screen reader edits, so it carries the combobox's name
+
+        accessibilityLabel = { classroot.accessibilityLabel },
+        accessibilityActiveItem = { classroot.list == null ? null : (classroot.list as any).accessibilityActiveItem },
         focusable = { !classroot.disabled },
         onInput(t: string) {
             classroot.query = "" + t

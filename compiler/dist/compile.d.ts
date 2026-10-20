@@ -50,6 +50,19 @@ export interface Compiled {
      *  that crossed a boundary rebuilds from `source` (programFromCompiled).
      *  Copy a result with `carryProgram`, which a spread would lose. */
     readonly program?: Program;
+    /** Every file the program was made from and how each came in: the program's
+     *  own, named in an `include`, pulled for a tag it declares (`auto`), or a
+     *  manifest's provided singleton. `by` is the file that brought it, null for
+     *  the program's own; `name` the tag or class. The program's own file is
+     *  "", as it is in a position (a compile knows no name for it). A build's account of itself
+     *  (declarec --sizes) reads it. Present exactly when `source` is. */
+    sources?: readonly CompiledSource[];
+}
+export interface CompiledSource {
+    file: string;
+    how: "program" | "include" | "auto" | "provided";
+    by: string | null;
+    name?: string;
 }
 /** A copy of a compile result (`{ ...from, ...extra }`) that keeps its program. */
 export declare function carryProgram<T extends Compiled, X extends object>(from: T, extra: X): T & X;
@@ -73,6 +86,14 @@ export interface CompileOptions {
     } | {
         error: string;
     }>;
+    /** The `accessibility` flag a request or a command names (`--accessibility=false`):
+     *  it wins over the program's own `defaultFlags`. Off, the accessibility warnings
+     *  are skipped and every `accessibility…` member is compiled away
+     *  (docs/system-design/accessibility.md §4.1). */
+    accessibility?: boolean;
+    /** The main file's path, when there is one: its name names the program in messages
+     *  (a class that takes a library name is offered `<Program><Class>`). */
+    mainId?: string;
 }
 /** Compile a Declare source: full diagnostics (include resolve + check + scope
  *  resolution), and a SELF-CONTAINED resolved source the zero-dependency

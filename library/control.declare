@@ -27,7 +27,7 @@ Extend it to make your own control a first-class one — focusable, keyboard-act
 and styled off the same state pair as everything the library ships:
 
 ```declare
-class Stepper extends Control [ width = 90, height = 26, cornerRadius = 6,
+class Counter extends Control [ width = 90, height = 26, cornerRadius = 6,
     n: number = 0,
     fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : provided("theme").control },
     press() { n = n + 1 },
@@ -35,7 +35,7 @@ class Stepper extends Control [ width = 90, height = 26, cornerRadius = 6,
     ]
 
 
-App [ Stepper [ x = 20, y = 20 ] ]
+App [ Counter [ x = 20, y = 20 ] ]
 ```
 
 
@@ -75,6 +75,15 @@ True while `menu` is showing *and* this control is what opened it. **Derived, ne
 written** — a flag set on open goes stale the moment the menu closes some other way
 (Escape, a pick, a press on the backdrop) and strands the control in its held-open
 look forever.
+
+## accessibilityRole
+`button`: a control is something a person presses, and a screen reader says so with no word
+from the program. A control that is something else — a checkbox, a slider, a tab — names its
+own role.
+
+## accessibilityExpanded
+Whether the control's `menu` is open — follows `menuOpen`, so a screen reader hears a
+menu button as collapsed or expanded. Unset (null) on a control with no menu.
 
 ## rightIcon
 What actually renders on the right: `iconRight` when set, else the disclosure chevron
@@ -124,7 +133,12 @@ menus open on **press**, not release, as the platform does. **An override must k
 `Focus.focus(this)` call**, or clicking the control strands the keyboard elsewhere.
 
 ## onKeyDown
-Space and Enter run `press()`; ArrowDown opens `menu`. Ignores auto-repeat.
+Space and Enter run `press()`; ArrowDown opens `menu`. On a `slider`, the arrow keys
+run `accessibilityIncrement()` and `accessibilityDecrement()` — the methods a screen
+reader's adjust gesture calls, which the `slider` role requires a control to have — so
+the keyboard and assistive technology move the value by one path; on a `spinButton`, Up and
+Down do the same. Ignores auto-repeat for activation, not for the arrows.
+
 
 ## onClick
 A click runs `press()` unless the control is disabled — so a control that overrides
@@ -154,6 +168,10 @@ class Control [
     focusVisible: boolean = false,
 
     focusable = { !disabled },
+
+    // something a person presses, to a screen reader as to the eye
+
+    accessibilityRole = button,
 
     // The keyboard affordance is the app-level FocusRing (focusring.declare —
     // one traveling indicator, declared once in the App), not a per-control
@@ -191,6 +209,11 @@ class Control [
     // menu-dropping control wears the same mark.
 
     rightIcon: string = { this.iconRight != "" ? this.iconRight : this.menu != null ? "ChevronIcon" : "" },
+
+    // a control that drops a menu says whether its menu is open; one that drops
+    // none says nothing of the kind
+
+    accessibilityExpanded = { this.menu != null ? this.menuOpen : null },
 
     openMenu() {
         if (this.menu == null || this.disabled) return
@@ -244,9 +267,13 @@ class Control [
     // Down opens a menu control — the platform convention, and the reason `menu`
     // is a role rather than an icon: a chevron drawn by hand brings none of this.
 
+    // A slider's arrows step it, by the same methods a screen reader calls.
+
     onKeyDown(e: KeyEvent) {
         if (!disabled && !e.repeat && (e.key == "Enter" || e.key == " ")) press()
         else if (!disabled && !e.repeat && e.key == "ArrowDown" && this.menu != null) this.openMenu()
+        else if (!disabled && accessibilityRole == "slider" && e.key.startsWith("Arrow")) (this as any)[e.key == "ArrowRight" || e.key == "ArrowUp" ? "accessibilityIncrement" : "accessibilityDecrement"]()
+        else if (!disabled && accessibilityRole == "spinButton" && (e.key == "ArrowUp" || e.key == "ArrowDown")) (this as any)[e.key == "ArrowUp" ? "accessibilityIncrement" : "accessibilityDecrement"]()
         else super.onKeyDown(e)
         },
 

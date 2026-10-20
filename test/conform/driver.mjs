@@ -179,7 +179,7 @@ export function macDriver({ inPath = CTL_IN, outPath = CTL_OUT } = {}) {
         return m ? +m[1] : NaN;
       };
       const before = await layers();
-      await ctl(`eval __declareBoot(${JSON.stringify(url + "?render=mac")}); 'ok'`);
+      await ctl(`eval __declareBoot(${JSON.stringify(url)}); 'ok'`);
       const t0 = Date.now();
       let changed = Number.isNaN(before), stable = 0, last = NaN;
       while (Date.now() - t0 < 20000) {

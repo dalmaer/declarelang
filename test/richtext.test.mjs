@@ -221,8 +221,8 @@ Body with \`inline code\` here.
   });
 
   // The palette comes from the theme and textColor: with nothing said the ink is
-  // the theme's `text`, links its `accent`; a textColor (set or provided) is the
-  // ink, and links keep the accent.
+  // the theme's `text`, links its `linkColor` (its `accent` where it names none); a
+  // textColor (set or provided) is the ink, and links keep the theme's colour.
   const palDoc = `App [ width = 480,
     box: View [ x = 0, y = 0, width = 480, height = 400, theme = SanFranciscoDark,
       a: HTMLText [ x = 20, y = 20, width = 440, html = "<h2>Themed</h2><p>see <a href='#x'>alink</a></p>" ],
@@ -244,14 +244,14 @@ Body with \`inline code\` here.
       }) };
     } finally { await page.close(); }
   })();
-  await test("rich text inks from the theme's text and links from its accent", () => {
+  await test("rich text inks from the theme's text and links from its linkColor", () => {
     assert.equal(pal.errs.length, 0, pal.errs.slice(0, 2).join(" | "));
     assert.equal(pal.probe.heading, "rgb(231, 238, 242)", "heading not the theme's text: " + pal.probe.heading);
-    assert.equal(pal.probe.alink, "rgb(76, 141, 255)", "link not the theme's accent: " + pal.probe.alink);
+    assert.equal(pal.probe.alink, "rgb(76, 141, 255)", "link not the theme's linkColor: " + pal.probe.alink);
   });
-  await test("a provided textColor is the rich text's ink; links keep the accent", () => {
+  await test("a provided textColor is the rich text's ink; links keep the theme's colour", () => {
     assert.equal(pal.probe.inked, "rgb(170, 34, 51)", "body not the provided textColor: " + pal.probe.inked);
-    assert.equal(pal.probe.blink, "rgb(76, 141, 255)", "link lost the accent: " + pal.probe.blink);
+    assert.equal(pal.probe.blink, "rgb(76, 141, 255)", "link lost the theme's colour: " + pal.probe.blink);
   });
 
   const canvas = await render("canvas");

@@ -79,14 +79,15 @@ import { setStyleBundles, bundleRecord } from "./style-bundles.js";
 import { THEME_PRESETS } from "./themes.js";
 import { compileBody, compileExpr, withScriptScope, evalScript } from "./expr.js";
 import { coerce, coerceToken, isPercent, isAlign, nullablePrimitive } from "./value.js";
-import { defineAttributes, noteUseSiteSet, recordDeclarations, setBound, provideWrite, declaredRules } from "./attributes.js";
+import { defineAttributes, noteUseSiteSet, recordDeclarations, setBound, provideWrite, declaredRules, isSet, ownerOf } from "./attributes.js";
+import { contractGaps, contractMessage } from "./a11y-roles.js";
 import { bindConstraint, bindDeclDefault, provideBind, bindPercent, bindAlign, percentRule, alignRule, bindData, bindDatapath, bindCursor, isTransformSlot } from "./bind.js";
 import { bindTwoWay, bindTwoWayDynamic } from "./editor.js";
 import { Replicator } from "./replicate.js";
 import { classOfFor, KindedReplicator } from "./class-for.js";
 import { createWindowing } from "./virtualize.js";
 import { staticSegs } from "./path-plan.js";
-import { provideViewCreator, provideInlineViewHost } from "./view.js";
+import { provideViewCreator, provideInlineViewHost, provideBuiltProbe, ROLE_LOCK } from "./view.js";
 import { toCursor } from "./data.js";
 import { validateDoc } from "./data-schema.js";
 import { resolveShapes, shapeNames } from "./shape-resolve.js";
@@ -514,6 +515,8 @@ function orderProvisions(provisions) {
  *  view arrived (the initial build, or a later replication reconcile whose
  *  own initTree ran before the root's walk reached it). */
 const INITED = new WeakSet();
+if (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__)
+    provideBuiltProbe((v) => INITED.has(v));
 /** Mark a whole subtree as already-inited WITHOUT firing anything — the
  *  membership-anchored lifecycle (materialization.md §2, RULED 2026-07-30):
  *  onInit fires once per record-MEMBERSHIP, so when the reconciler
@@ -666,9 +669,21 @@ isShapeType = () => false) {
     // from a minified one, so every user class read back as its base ("View")
     // instead of `Shot`, `Ev`, `DockIcon` — the names introspection documents.
     Object.defineProperty(cls, "name", { value: name, configurable: false });
+    // A CLASS's accessibility facts are what the class IS to assistive
+    // technology, read by the semantic tree and its platform hosts — and written
+    // by nothing. So they are the class's own defaults: a word or a literal
+    // (`accessibilityRole = slider`) is the class default, a formula
+    // (`accessibilityValue = { value }`) its live default, evaluated when read —
+    // never a constraint or a write on every instance. A Checkbox or a Slider
+    // costs what it did before the layer until something asks what it is; a use
+    // site's own value, or a write, takes the slot as ever. (They join the
+    // declarations' specs: a class's attributes are defined in one call.)
+    const a11y = !outer && (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) ? classAccessibility(body, name) : null;
+    if (a11y !== null && body.decls.length === 0)
+        defineAttributes(cls, a11y);
     if (body.decls.length > 0) {
         const probe = new B();
-        const specs = {};
+        const specs = a11y !== null ? { ...a11y } : {};
         const declRecords = {};
         const defs = defaults();
         for (const d of body.decls) {
@@ -750,6 +765,37 @@ isShapeType = () => false) {
         recordDeclarations(cls, declRecords);
     }
     return cls;
+}
+/** A class body's accessibility facts as the class's own attribute specs (see
+ *  synthesize): a literal the class default, a `{ }` a live default — taken out
+ *  of the body, so no instance installs them. Null when the body states none. */
+function classAccessibility(body, name) {
+    const a11y = {};
+    for (const a of body.attrs) {
+        if (!a.name.startsWith("accessibility"))
+            continue;
+        const v = a.value;
+        const text = a.name === "accessibilityLabel" || a.name === "accessibilityHint" || a.name === "accessibilityValueText";
+        if (v.kind === "code") {
+            const c = compileExpr(v.src);
+            if ("error" in c)
+                throw new DeclareError(`${name}.${a.name} = { … } ${c.error}`, v.pos);
+            a11y[a.name] = { def: text ? "" : null, defBinding: c.fn };
+        }
+        else if (v.kind === "ident") {
+            a11y[a.name] = { def: v.name === "true" ? true : v.name === "false" ? false : v.name === "null" ? null : v.name };
+        }
+        else if (v.kind === "string" || v.kind === "number")
+            a11y[a.name] = { def: v.value };
+        else
+            continue;
+        if (a.name === "accessibilityRole")
+            a11y[a.name].push = ROLE_LOCK;
+    }
+    if (Object.keys(a11y).length === 0)
+        return null;
+    body.attrs = body.attrs.filter((a) => !Object.hasOwn(a11y, a.name));
+    return a11y;
 }
 /** The anonymous one-off subclasses (language §5): an instance with inline
  *  declarations gets one, synthesized once per source element — a class-body
@@ -1750,6 +1796,18 @@ export function createViewIn(root, tag, parent, props) {
                 ? toCursor(v, "createView: the datapath prop")
                 : v;
             made.view[k] = val;
+        }
+        // A role given here, not by the class, is the one contract the compiler
+        // could not see: check it now, in the compiler's words (a11y-roles.ts) —
+        // a developer's check, which a production build leaves out with the table
+        if ((typeof __DECLARE_PRODUCTION__ === "undefined" || !__DECLARE_PRODUCTION__)
+            && (typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__)
+            && typeof props.accessibilityRole === "string" && props.accessibilityRole !== "none") {
+            const role = props.accessibilityRole;
+            const v = made.view;
+            const gaps = contractGaps(role, (n) => n in props || isSet(made.view, n) || ownerOf(made.view, n) !== null, (m) => typeof v[m] === "function");
+            if (gaps.length > 0)
+                throw new DeclareError(`createView: ${contractMessage(tag, role, gaps)}`);
         }
     }
     made.finish();

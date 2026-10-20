@@ -22,8 +22,8 @@
 // worker imports it as a MODULE worker — one source of truth, tested by
 // test/serve-parity.test.mjs.
 
-import { requestType, REQ } from "../compiler/dist/reqtypes.js";
-export { requestType, REQ };
+import { requestType, REQ, viewerTab } from "../compiler/dist/reqtypes.js";
+export { requestType, REQ, viewerTab };
 
 /** HTML-escape text and attribute values (the SW's escaping, adopted verbatim). */
 export function escapeHtml(s) {
@@ -56,7 +56,7 @@ export function isEntryPage(pathname) {
  *
  *  The grammar: the whole search string is the target when it reads as a relative
  *  path, i.e. it contains "/" with no "=" before it — `?apps/calendar`,
- *  `?apps/docs/docs.declare?render=canvas`. An ordinary flag query (`?crawler`,
+ *  `?apps/docs/docs.declare?render=canvas`. An ordinary flag query (`?crawler=true`,
  *  `?render=canvas`) can never match, which is what lets one page carry both.
  *
  *  `href` is the entry page's own full location. Same-origin and confined to that
@@ -97,7 +97,7 @@ export function programName(urlPath) {
  *   name: string,             // page title
  *   bootUrl: string,          // the declare-boot.js module URL (the SW busts it with ?v=BUILD_ID;
  *                             //   the dev server uses the root-relative path it rebuilds on demand)
- *   staticBlock?: string,     // baked #declare-static for a crawler (the server's ?crawler flag);
+ *   staticBlock?: string,     // baked #declare-static for a crawler (the server's ?crawler=true flag);
  *                             //   the SW never bakes at request time (crawlers don't install workers)
  *   iconBase?: string|null,   // if set, emit favicon links resolved against it (…/ ending in a slash)
  * }}
@@ -165,7 +165,7 @@ function shell({ name, staticBlock, iconBase, title, script, bootUrl, preloads =
       `<link rel="icon" type="image/png" sizes="256x256" href="${escapeHtml(iconBase + "favicon.png")}">\n`
     : "";
   const preload = preloadLinks(preloads);
-  // When a crawler block is baked in (the ?crawler flag), a SYNCHRONOUS classic script
+  // When a crawler block is baked in (the ?crawler=true flag), a SYNCHRONOUS classic script
   // immediately after the host removes it BEFORE the first paint — so a human never
   // flashes the bare extraction text while the async app module loads. This is NOT
   // hiding: nothing is ever CSS-hidden (display:none / off-screen / opacity:0 — the

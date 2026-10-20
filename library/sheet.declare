@@ -37,10 +37,11 @@ Its width as a side sheet or a floating card.
 How far its handle has been pulled down — a swipe past a quarter of its height puts it away.
 
 ## hostW
-The width of the layer it paints in.
+The width of the layer it paints in: its window's, or the browser window's — not the
+App's, which on a page that scrolls is as tall as the page.
 
 ## hostH
-The height of the layer it paints in.
+The height of the layer it paints in: its window's, or the browser window's.
 
 ## width
 The whole width at the bottom; `sheetWidth` at the end edge or as a card.
@@ -61,6 +62,7 @@ Its open blend, as a card; a sheet at an edge slides rather than fades.
 include [ "floating.declare" ]
 
 class Sheet extends Floating [
+    accessibilityRole = dialog,
     kind = "modal",
     sharesProgram = false,
     pressPolicy = "dismiss",
@@ -75,8 +77,8 @@ class Sheet extends Floating [
     sheetWidth: number = { this.form == "end" ? 420 : 520 },
     dragY: number = 0,
 
-    hostW: number = { this.host != null ? this.host.width : app.width },
-    hostH: number = { this.host != null ? this.host.height : app.height },
+    hostW: number = { this.host != null ? this.host.width : app.hostWidth > 0 ? app.hostWidth : app.width },     // a window's, else the browser window's
+    hostH: number = { this.host != null ? this.host.height : app.hostHeight > 0 ? app.hostHeight : app.height },
 
     width = { this.form == "bottom" ? this.hostW : Math.min(this.sheetWidth, this.hostW - (this.form == "center" ? 48 : 0)) },
     height = { this.form == "end" ? this.hostH : Math.min(this.body.contentHeight + (this.form == "bottom" ? 20 : 0), this.hostH - (this.form == "bottom" ? 24 : 48)) },

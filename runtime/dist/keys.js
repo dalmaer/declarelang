@@ -535,7 +535,9 @@ export class KeysService {
             // browser's defaults (page scroll) must stand down. A native editable
             // (its own element focused) keeps every default: typing a space in a
             // field is a space.
-            if (document.activeElement === document.body || document.activeElement === null) {
+            // (A focused view's own element holds the DOM's focus — accessibility.md
+            // §5.2 — and is no native editable, so it counts as the control's too.)
+            if (!isField(document.activeElement)) {
                 const nav = ev.key === " " || ev.key === "ArrowUp" || ev.key === "ArrowDown" || ev.key === "ArrowLeft" || ev.key === "ArrowRight";
                 const jump = ev.key === "Home" || ev.key === "End" || ev.key === "PageUp" || ev.key === "PageDown";
                 if ((nav && (focusHolds() || this.navClaimed())) || (jump && this.navClaimed()))

@@ -25,6 +25,8 @@ export const ABSTRACT_SCHEMAS: ReadonlySet<string> = new Set(["Media", "Editor",
 // no runtime import. instantiate.ts keeps the twin tag → class table.
 
 import { enumType, numericEnumType, type AttrType } from "./value.js";
+import { ROLES, LIVE, SORTS } from "./a11y-vocab.js";
+import { PURPOSE_NAMES } from "./purpose.js";
 
 // The weight vocabulary: the nine CSS keywords (aliases for the hundreds) plus
 // `normal`/`bold`, OR any number 1–1000 — OpenType's usWeightClass line, which a
@@ -331,6 +333,39 @@ const ViewSchema: ClassSchema = {
     // is the view tree (no numeric tabindex), customized by `tabOrder()`.
     focusable: { kind: "boolean" },
     focusScope: enumType("FocusScope", "none", "stop", "capture", "region", "modal"),
+    // Accessibility (docs/system-design/accessibility.md §3): what the view IS to
+    // assistive technology. `accessibilityRole` is a token from a closed
+    // vocabulary, fixed for the view's life, and a CONTRACT the compiler checks
+    // (a11y-roles.ts): a slider must set its value, min and max and have its
+    // increment and decrement methods, whatever class it is. `accessibilityLabel`
+    // is the accessible name (not the visible `label` a control shows),
+    // `accessibilityHint` a longer description, `accessibilityLive` whether
+    // changes are announced. The rest are what roles read, unset (null) until a
+    // class binds them. None costs anything on a view that leaves it unset.
+    ...((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) ? {
+      accessibilityRole: enumType("AccessibilityRole", ...ROLES),
+      accessibilityLabel: { kind: "string" },
+      accessibilityHint: { kind: "string" },
+      accessibilityLive: enumType("AccessibilityLive", ...LIVE),
+      accessibilityValue: { kind: "number", nullable: true },
+      accessibilityMin: { kind: "number", nullable: true },
+      accessibilityMax: { kind: "number", nullable: true },
+      accessibilityStep: { kind: "number", nullable: true },
+      accessibilityValueText: { kind: "string" },
+      accessibilityChecked: { kind: "boolean", nullable: true },
+      accessibilityPressed: { kind: "boolean", nullable: true },
+      accessibilitySelected: { kind: "boolean", nullable: true },
+      // the item inside this composite the keyboard is on, while focus stays on it
+      accessibilityActiveItem: { kind: "class", of: "View" },
+      // which way the column a header heads is sorted
+      accessibilitySort: enumType("AccessibilitySort", ...SORTS),
+      // whether more than one item of this list, grid or tree can be selected at once
+      accessibilityMultiselectable: { kind: "boolean" },
+      accessibilityLevel: { kind: "number", nullable: true },
+      accessibilityExpanded: { kind: "boolean", nullable: true },
+      accessibilityPosInSet: { kind: "number", nullable: true },
+      accessibilitySetSize: { kind: "number", nullable: true },
+    } : {}),
     // Anchor name (location.md §6): give a view a name and a fragment `@name`
     // brings it into view. This is the "named view" half of the reveal namespace
     // (heading slugs are the other); resolution is views-before-slugs, preorder,
@@ -360,6 +395,8 @@ const ViewSchema: ClassSchema = {
     // A replicated view's index in the array it presents (-1 on a view no
     // replication made) — a fact the replicator keeps, never set.
     rowIndex: { kind: "number" },
+    firstVisibleRow: { kind: "number" },
+    lastVisibleRow: { kind: "number" },
     // Replication metadata, declared on the replicated child and consumed by
     // the Replicator (stripped from the template — not a live slot on the
     // instance). It is in the schema so it DOCUMENTS ITSELF (the reference is
@@ -389,7 +426,7 @@ const ViewSchema: ClassSchema = {
   // Nothing writes the facts — not an assignment, not an Animator (an animator
   // drives a slot; a fact is not one — the checker refuses both, naming the
   // verb). This is what makes "who scrolls" invisible to a program.
-  readOnly: ["contentWidth", "contentHeight", "childViews", "virtualized", "rowIndex", "hovered", "pressed", "focused", "onScreen", "visibleRect", "apparentScale", "scrollX", "scrollY", "scrolling"],
+  readOnly: ["contentWidth", "contentHeight", "childViews", "virtualized", "rowIndex", "firstVisibleRow", "lastVisibleRow", "hovered", "pressed", "focused", "onScreen", "visibleRect", "apparentScale", "scrollX", "scrollY", "scrolling"],
   // R5: the pointer trio (click = press and release on the same view — the
   // shared router's rule, input.ts) plus the construction-complete lifecycle
   // event `init` (Appendix A's onInit). Hover (pointerOver/Out) waits for its
@@ -438,6 +475,11 @@ const AppSchema: ClassSchema = {
     // the OS color-scheme, `prefers-color-scheme: dark` — the runtime feeds it and
     // keeps it live as the system theme flips, so an app themes off `app.dark`.
     dark: { kind: "boolean" },
+    // the person's accessibility preferences, fed live by the host — reduceMotion
+    // (prefers-reduced-motion), increaseContrast (prefers-contrast: more),
+    // reduceTransparency (prefers-reduced-transparency), textScale — and read
+    // anywhere as provided("accessibilitySettings")
+    accessibilitySettings: { kind: "object" },
     // Is the page this app lives on VISIBLE — the browser's Page Visibility
     // fact (visibilitychange), fed live: false when the tab is hidden, the
     // window minimized, or the display asleep; true again on return. The
@@ -543,6 +585,11 @@ const AppSchema: ClassSchema = {
     // not a mechanism, just a binding. "" (the default) = no opinion; the host
     // keeps its served title.
     appName: { kind: "string" },
+    // `language` — the language the program's text is in, as a BCP 47 tag ("en",
+    // "fr-CA"): what a screen reader speaks it with, and a translator and a
+    // crawler read. A top-level program's page carries it (<html lang>); an
+    // embedded one's root, so a French program inside an English page is French.
+    language: { kind: "string" },
     // `revealInset` — the scroll-margin analogue (location.md §0.5.4): a reveal
     // lands this many pixels short of the viewport top, clearing fixed chrome
     // (a 56px sticky header) without per-page marker views. One knob, app-wide.
@@ -657,6 +704,9 @@ export const TextSchema: ClassSchema = {
     // Wrapping (docs/system-design/text-and-markdown.md): a bounded-width run wraps by
     // default; `wrap = false` forces a single line. `textAlign` pairs with it.
     wrap: { kind: "boolean" },
+    // Where a run with no width of its own wraps — and it then takes the width
+    // of its widest line, so a bubble is as wide as its words up to this. 0 = one line.
+    wrapWidth: { kind: "number" },
     // LINE CLAMP: at most this many lines, the last ending in an ellipsis that
     // FITS (measure.ts clampLines is the rule every renderer clamps through).
     // With `wrap = false` it is a one-line ellipsis.
@@ -877,6 +927,9 @@ const TextInputSchema: ClassSchema = {
     // a multi-line field whose Return fires `enter` (a chat composer); Shift-Return types the break
     enterSubmits: { kind: "boolean" },
     spellcheck: { kind: "boolean" },
+    // what the field holds, told to the platform: autofill, keyboard, capitalization (purpose.ts)
+    purpose: enumType("Purpose", ...PURPOSE_NAMES),
+    concealed: { kind: "boolean" },
     wrap: { kind: "boolean" },
     padding: { kind: "inset" },
     // The UNCONTROLLED seed (cf. React's defaultValue vs value): `text` follows
@@ -921,6 +974,9 @@ export const RichTextSchema: ClassSchema = {
     // its height occupies. `truncated` says whether anything was dropped.
     maxLines: { kind: "number" },
     truncated: { kind: "boolean" },
+    // The line length a rich text with no width of its own wraps at (640, the
+    // reading measure, unless set); it then takes the width of its widest line.
+    wrapWidth: { kind: "number" },
     bodyColor: { kind: "color" },
     // `fontScale` multiplies every type size in the flow (body, headings, code) —
     // a font-size zoom a reader control can drive; 1 = the natural sizes. Not

@@ -29,7 +29,7 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { FLAG_SPECS, DEFAULT_FLAGS } from "../../../compiler/dist/flags.js";
+import { FLAG_SPECS, DEFAULT_FLAGS, flagWords } from "../../../compiler/dist/flags.js";
 import { REQ } from "../../../compiler/dist/reqtypes.js";
 import { DIAGNOSTIC_CATALOG } from "../../../runtime/dist/diagnostics.js";
 import { LANGUAGE_API } from "../../../compiler/dist/scaffold.js";
@@ -542,7 +542,7 @@ const enumsDoc = (spine, types) => ["# Enums", "", "*The language's fixed token 
 const colorsDoc = (spine) => ["# Named colors", "",
   "*The color names a **bare** slot accepts — `fill = navy`, `textColor = slategray` — the CSS set, with the hex each stands for. Inside a `{ }` body write the number: `0x000080`, not `navy`; the checker names the rewrite. A hex literal takes alpha as a fourth pair: `#RRGGBBAA`.*", "",
   "| name | hex |", "|---|---|", ...Object.entries(spine.colors).map(([n, hex]) => `| \`${n}\` | \`${hex}\` |`)].join("\n");
-const flagsDoc = (spine) => ["# Compile flags", "", "*Modifiers on a program URL (`?…`), the `declarec` CLI (`--…`), and the JS API — one set of names.*", "",
+const flagsDoc = (spine) => ["# Compile flags", "", "*Modifiers, one set of names and values, written `name = value` in a program's `defaultFlags`, `?name=value` on a URL, and `--name=value` to `declarec`.*", "",
   "| flag | what it does | default |", "|---|---|---|", ...spine.flags.map((f) => `| \`${f.name}\` | ${f.description} | \`${f.default}\` |`)].join("\n");
 // One line per code, from the compiler's own catalog (diagnostics.ts), grouped by
 // the phase that raises it — the page answers "what is DECLARE4014?" on sight.
@@ -565,10 +565,11 @@ const REQUEST_LINES = {
   reader: ["`?viewer`", "Declare Viewer's Reader: the source highlighted, its block comments rendered as prose"],
   source: ["`?viewer=source`", "the Viewer showing the source verbatim"],
   edit: ["`?viewer=edit`", "the Viewer's workbench: the source in an editor, the running program below it"],
+  "sizes-tab": ["`?viewer=sizes`", "the Viewer's Sizes tab: what the production package is made of and what each part weighs, every file and runtime module with what brought it aboard"],
   file: ["`?file`", "the raw source file as plain text — what an `include` or `curl` reads"],
   segments: ["`?segments`", "the Reader's data alone — the highlighted segments as JSON, for tooling"],
   extract: ["`?extract`", "the HTML a crawler reads: the program's content at its first frame"],
-  program: ["`?program`", "the compiled program as JSON, for a host with its own renderer (the Mac app)"],
+  sizes: ["`?sizes`", "what the production package is made of and what each part weighs, as JSON — on the dev server, as `?build` is"],
 };
 const requestsDoc = (spine) => {
   const missing = Object.values(spine.requests).filter((r) => !REQUEST_LINES[r]);
@@ -762,9 +763,9 @@ const sharedTypesDoc = (spine) => {
 // type exactly once, so a new enum or a new PRELUDE declaration fails the
 // assembly until it is placed.
 const TYPE_GROUPS = [
-  ["Enums", ["Axis", "Backface", "Blend", "Claim", "Credentials", "CrossAlign", "Edges",
+  ["Enums", ["AccessibilityLive", "AccessibilityRole", "AccessibilitySort", "Axis", "Backface", "Blend", "Claim", "Credentials", "CrossAlign", "Edges",
              "FitAlign", "FocusScope", "FontLate", "FontWeight", "Justify", "Motion", "Numerals", "NumeralWidth",
-             "OutsidePress", "Process", "Scaling", "ScrollAnchor", "ScrollBelow", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
+             "OutsidePress", "Process", "Purpose", "Scaling", "ScrollAnchor", "ScrollBelow", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
   ["Values", ["Color", "Fill", "Gradient", "Length", "Percent", "Radius", "Inset", "Shape", "Stroke", "BoxStroke", "Outline",
               "Shadow", "Filter", "Backdrop", "Theme", "MotionCurve", "Cursor", "TextMeasure", "IslandPost", "IslandNavigation", "DelayHandle"]],
   ["Text", ["TextStyle", "TextStyles", "BlockGeometry", "RichTextLayout"]],
@@ -1068,11 +1069,10 @@ function inject(file, name, block) {
 
 function flagsTable(spine) {
   const rows = spine.flags.map((f) => {
-    const url = f.kind === "bool" ? `\`?${f.name}\`` : `\`?${f.name}=${f.default}\``;
-    const cli = f.kind === "bool" ? `\`--${f.name}\`` : `\`--${f.name} ${f.default}\`` + (f.name === "render" ? " / `--canvas`" : "");
-    return `| **${f.name}** | ${f.description} | ${cli} | ${url} | \`${f.default}\` |`;
+    const values = flagWords(f).map((w) => `\`${w}\``).join(", ");
+    return `| **${f.name}** | ${f.description} | ${values} | \`${f.default}\` |`;
   });
-  return ["| modifier | what it does | CLI (`declarec`) | URL | default |", "|---|---|---|---|---|", ...rows].join("\n");
+  return ["| modifier | what it does | values | default |", "|---|---|---|---|", ...rows].join("\n");
 }
 
 function setupBlock(spine) {

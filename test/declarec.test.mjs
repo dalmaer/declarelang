@@ -105,6 +105,67 @@ await test("buildProduction carries the page host, the program, and no parser", 
   }
 });
 
+// A registry warning is moved onto the author's file once. Moved twice, a line
+// in the program was read as a line of the merged text, and the warning
+// named a library file the program never wrote.
+await test("a link warning names the program's own line, past the library it includes", async () => {
+  const src = `App [ width = 100, height = 100,
+    Button [ label = "go" ],
+    View [ width = 10, height = 10, onClick() { app.location = "x" } ]
+    ]`;
+  const built = await compileProgram(src, { originDir: resolve(HERE, "../apps/calendar") });
+  const w = built.warnings.find((e) => /crawler cannot see this edge/.test(e.message));
+  assert.ok(w, "the warning is given");
+  assert.equal(w.pos.line, 3);
+  assert.ok(!w.pos.file, `the program's own file, not ${w.pos.file}`);
+});
+
+// A body the minifier cannot parse ships as written, comments and all, and
+// says nothing — so every method's wrapper must parse, parameters included.
+await test("minifyBodies strips a method that takes parameters", async () => {
+  const { minifyBodies } = await import("../tools/declarec.mjs");
+  const built = await compileProgram(`App [ width = 100, height = 100,
+    step(by: number, why: string) {
+        // a comment that must not ship
+        const next = by + 1
+        return next
+        }
+    ]`);
+  assert.ok(built.program, built.report);
+  await minifyBodies(built.program);
+  const m = built.program.root.methods.find((x) => x.name === "step");
+  assert.ok(!m.body.includes("must not ship") && !m.body.includes("\n"), m.body);
+});
+
+// THE SIZES REPORT (declarec --sizes): every byte the build ships, accounted
+// for — the parts sum to the total, the files to the program, the modules to the
+// runtime — and every file says how it came in.
+await test("--sizes accounts for the whole build, and says how each file came in", async () => {
+  const src = readFileSync(resolve(HERE, "../apps/calendar/calendar.declare"), "utf8");
+  const out = await buildProduction(src, { name: "calendar", originDir: resolve(HERE, "../apps/calendar"), sizes: true });
+  assert.ok(out.ok, out.report ?? "");
+  const r = out.sizesReport;
+  const sum = (xs) => xs.reduce((t, x) => t + x.gzip, 0);
+  const near = (a, b, what) => assert.ok(Math.abs(a - b) <= 2 + b / 1000, `${what}: ${a} vs ${b}`);
+  assert.equal(r.total.gzip, out.sizes.totalGzip);
+  near(sum(Object.values(r.parts)), r.total.gzip, "the parts");
+  near(sum(r.files), r.parts.program.gzip, "the files");
+  near(sum(r.modules), r.parts.runtime.gzip, "the modules");
+  const how = Object.fromEntries(r.files.map((f) => [f.file, f]));
+  assert.equal(how["calendar.declare"].how, "program");
+  assert.ok(how["calendar.declare"].pieces.some((p) => p.kind === "class" && p.name === "Ev"));
+  assert.deepEqual([how["library/button.declare"].how, how["library/button.declare"].name], ["auto", "Button"]);
+  assert.deepEqual([how["library/textlabel.declare"].how, how["library/textlabel.declare"].by], ["auto", "library/button.declare"]);
+  assert.deepEqual([how["library/focusring.declare"].how, how["library/focusring.declare"].name], ["provided", "FocusRing"]);
+  assert.deepEqual([how["library/floating.declare"].how, how["library/floating.declare"].by], ["include", "library/tooltip.declare"]);
+  const draw = r.modules.find((m) => m.module === "draw");
+  assert.deepEqual([draw.status, draw.capability, draw.reason], ["aboard", "draw", "declares draw()"]);
+  assert.ok(!r.modules.some((m) => m.module === "kernel-wasm"), "the kernel is a part of its own");
+  assert.ok(r.parts.kernel.gzip > 5000);
+  assert.ok(out.sizesReport !== undefined && (await buildProduction(src, { name: "calendar", originDir: resolve(HERE, "../apps/calendar") })).sizesReport === undefined,
+    "a build not asked for the report does not make one");
+});
+
 // THE SHIP BLOCK (runtime/src/parser.ts Ship) — what a package carries beyond
 // what its source names. Islands: a build compiles the programs its islands
 // name and ships them beside the app; a computed name is declared with
@@ -464,8 +525,19 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // its content; a changing opacity on its own layer for Safari — measured
   // 131.0 KB. A build whose list grew by 5 MB per hundred scroll jumps was
   // never a smaller build; it was a leaking one.
+  //
+  // 132 → 136 KB (2026-10-18, accessibility, docs/system-design/accessibility.md):
+  // what every control is to a screen reader, on its own element, and real DOM
+  // focus (semantics-dom), the role vocabulary — landmarks, list boxes, trees —
+  // and the contracts createView checks, each class's accessibility facts as its
+  // defaults, whether what a control opens is open, links named from their text,
+  // Accessibility.announce, App.language, and the program's own roles and names;
+  // and, not accessibility, the rows a list has in view (firstVisibleRow) —
+  // measured 135.1 KB. The role table and semantics-dom are where to trim. A program that leaves the layer out
+  // (`accessibility = false`, the games) carries none of it. A build that a
+  // screen reader could not read was never a smaller build; it was a mute one.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 132 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 136 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 
@@ -489,7 +561,7 @@ await test("every capability's stand-ins mirror the modules they replace", async
   // pinned here is the manifest itself: every module exists, every stand-in
   // generates, every export is answered, and no inert names a missing export.
   const { CAPABILITIES, standIn, subsetModule, exportsOf } = await import("../compiler/dist/capabilities.js");
-  const noFacts = { classes: new Set(), ownClasses: new Set() };
+  const noFacts = { classes: new Set(), ownClasses: new Set(), mentions: new Set() };
   for (const cap of CAPABILITIES) {
     const names = new Set();
     for (const m of cap.modules) {
@@ -554,8 +626,8 @@ await test("closure freshness: an edit to an INCLUDED file invalidates the build
   assert.equal(isUpToDate(out.closure, { ...out.closure.props, render: "canvas" }, diskProbe), false, "a flag change invalidates");
 });
 
-// ── --crawler: the static extraction baked into the built page ──────────────────
-await test("--crawler embeds the extracted document in the host; the entry clears it at boot", async () => {
+// ── --crawler=true: the static extraction baked into the built page ──────────────────
+await test("--crawler=true embeds the extracted document in the host; the entry clears it at boot", async () => {
   const src = `App [
   m: Markdown [ width = 400, text = "# Shipped\\n\\nStatic words for crawlers." ],
   n: number = 2,

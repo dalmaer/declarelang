@@ -148,6 +148,10 @@ pointer re-derives the spans mid-drag and flickers.
 ## isDataGrid
 **Internal.** The marker rows and headers guard on — not API.
 
+## inHeader
+Whether the keyboard position is in the header row: Up from the first row goes there,
+Left and Right move along the headers, Enter or Space sorts by the column, Down comes back.
+
 ## activeCol
 The active cell's column — with Table's active row, the grid's keyboard position. Left and Right move it.
 
@@ -231,6 +235,8 @@ class Column [
 
 
 class DataGrid extends Table [
+    accessibilityRole = grid,
+
     // the marker rows and headers guard on
 
     isDataGrid: boolean = true,
@@ -347,6 +353,12 @@ class DataGrid extends Table [
 
     activeCol: number = 0,
 
+    // the keyboard position may be in the header row: Up from the first row goes
+    // there, Left and Right move along the headers, Enter or Space sorts by the
+    // column, Down comes back to the rows
+
+    inHeader: boolean = false,
+
     activeCell() -> GridCell? {
         const inst = this.children.find((c) => (c as TableRow).isTableRow === true && (c as TableRow).tableIndex() == activeIndex)
         if (inst == null) return null
@@ -375,6 +387,15 @@ class DataGrid extends Table [
         const plain = !e.meta && !e.ctrl && !e.alt
         if (e.key == "ArrowRight" && plain) { activeCol = Math.min(n - 1, activeCol + 1); return }
         if (e.key == "ArrowLeft" && plain) { activeCol = Math.max(0, activeCol - 1); return }
+        if (inHeader) {
+            if (e.key == "ArrowDown" && plain) inHeader = false
+            else if ((e.key == "Enter" || e.key == " ") && plain && !e.repeat) {
+                const c = this.colData.value.cols[activeCol]
+                if (c != null) this.headerClick("" + c.id)
+                }
+            return
+            }
+        if (e.key == "ArrowUp" && plain && activeIndex <= 0) { inHeader = true; return }
         const cell = this.activeCell()
         if (cell != null && plain && !e.repeat) {
             if ((e.key == "Enter" || e.key == "F2") && cell.k != "text") { this.enterCell(cell, ""); return }
@@ -469,9 +490,24 @@ class DataGrid extends Table [
         ignoreClip = true,
         fill = { provided("theme").surface },
         datapath = { classroot.colData.value },
+        accessibilityRole = row,
 
         View [ datapath = :cols[], claim = x,
             colid: string = { "" + :id },
+
+            // a column header: named by its title, saying how its column is sorted;
+            // the keyboard's position when the grid's is in the header row
+
+            accessibilityRole = columnHeader,
+            accessibilitySort = { (classroot as DataGrid).sortOn != colid ? "none" : (classroot as DataGrid).sortDir == "desc" ? "descending" : "ascending" },
+            ci: number = { 0 + (:i ?? 0) },
+            activeHere: boolean = { (classroot as DataGrid).focused && (classroot as DataGrid).inHeader && (classroot as DataGrid).activeCol == ci },
+            trackChanges = ["activeHere"],
+            onChange(e: ChangeEvent) {
+                const g = classroot as DataGrid
+                if (activeHere) g.activeView = this
+                else if (g.activeView == this) g.activeView = null
+                },
             x = { dragging && moved ? dragX : :x },
             width = { :width },
             height = 100%,
@@ -491,9 +527,9 @@ class DataGrid extends Table [
             // shadowed, rounded card floating over its neighbors
 
             fill = { dragging && moved ? provided("theme").surface : null },
-            stroke = { dragging && moved ? stroke(1.5, provided("theme").accent) : null },
+            stroke = { dragging && moved ? stroke(1.5, provided("theme").accent) : activeHere ? stroke(2, provided("theme").accent) : null },
             shadow = { dragging && moved ? (provided("theme").dragShadow) : null },
-            cornerRadius = { dragging && moved ? 6 : 0 },
+            cornerRadius = { dragging && moved ? 6 : activeHere ? provided("theme").gridCellCornerRadius : 0 },
             opacity = { dragging && moved ? 0.95 : 1 },
 
             onPointerDown(e: PointerEvent) {
@@ -621,6 +657,9 @@ cursor is its column, not the row.
 ## setFlag()
 The same for a boolean field — what a `"check"` cell calls.
 
+## trackChanges
+Empty: in a grid the keyboard is on a cell, and the cell reports itself, not the row.
+
 ## isGridRow
 **Internal.** The marker identifying a generated grid row — not API.
 
@@ -629,7 +668,9 @@ From the theme's `gridRowHeight` (28 by default); the header row is `gridHeaderH
 */
 
 class GridRow extends TableRow [
+    accessibilityRole = row,
     isGridRow: boolean = true,
+    trackChanges = [],               // in a grid the keyboard is on a cell, which reports itself
 
     height = { provided("theme").gridRowHeight },
 
@@ -694,6 +735,13 @@ The `DataGrid` its row belongs to, or null under a plain table.
 ## activeHere
 Whether it is the grid's active cell while the grid has focus.
 
+## trackChanges
+`activeHere`, so the cell can tell its grid when it becomes the active one.
+
+## onChange
+The cell that becomes the grid's active cell records itself as the grid's `activeView`,
+which the grid names to a screen reader; one that stops being it takes itself back.
+
 ## x
 Its column's offset in the row.
 
@@ -708,6 +756,7 @@ From the theme's `gridCellCornerRadius` (3 by default): the active cell's outlin
 */
 
 class GridCell [ x = { :x }, width = { :width }, height = 100%, clip = true,
+    accessibilityRole = cell,
     row: GridRow? = null,
     k: string = { "" + (:kind ?? "text") },
     fld: string = { "" + :field },
@@ -718,9 +767,19 @@ class GridCell [ x = { :x }, width = { :width }, height = 100%, clip = true,
     // grid has focus
 
     dataGrid: DataGrid? = { this.row != null && (this.row.parent as DataGrid).isDataGrid === true ? this.row.parent as DataGrid : null },
-    activeHere: boolean = { this.dataGrid != null && this.dataGrid.focused && this.row != null && this.row.active && this.dataGrid.activeCol == this.ci },
+    activeHere: boolean = { this.dataGrid != null && this.dataGrid.focused && !this.dataGrid.inHeader && this.row != null && this.row.active && this.dataGrid.activeCol == this.ci },
     stroke = { this.activeHere ? stroke(2, provided("theme").accent) : null },
     cornerRadius = { provided("theme").gridCellCornerRadius },
+
+    // the active cell says so to its grid, which names it to a screen reader
+
+    trackChanges = ["activeHere"],
+    onChange(e: ChangeEvent) {
+        const g = this.dataGrid
+        if (g == null) return
+        if (this.activeHere) g.activeView = this
+        else if (g.activeView == this) g.activeView = null
+        },
 
     // a cell's control taking focus — by a press or by Tab inside the row —
     // makes this the active cell
@@ -763,6 +822,7 @@ class EditCell extends GridCell [
     before: string = "",      // the value when the edit began, for Esc to restore
 
     ed: TextInput [ x = 4, y = 3, fontSize = { provided("theme").gridFontSize },
+        accessibilityLabel = { "" + (:title ?? "") },                // named by its column
         width = { parent.width - 8 },
         height = { parent.height - 6 },
         initial = { "" + (classroot.value ?? "") },
@@ -788,6 +848,7 @@ A `DataGrid` cell that shows a boolean value as a `Checkbox` and writes it back 
 
 class CheckCell extends GridCell [
     ck: Checkbox [ label = "", x = center, y = center,
+        accessibilityLabel = { "" + (:title ?? "") },                // named by its column
         onFocus() { super.onFocus(); classroot.takeActive() },
         checked = { classroot.value == true },
         input(v: boolean) { if (classroot.row != null) classroot.row.setFlag(classroot.fld, v) }

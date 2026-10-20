@@ -27,6 +27,7 @@ import { colorToCss, insetSides, isGradient, radiusFit, strokeUniform } from "./
 import { routeInput } from "./input.js";
 import { hitWalk, wheelWalk, traceWalk, contentExtentOf, insideRoundedBox, cursorAt } from "./scene-walk.js";
 import { strokeSides } from "./stroke-sides.js";
+import { hintsOf } from "./purpose.js";
 /** The root-space point of the wheel being walked (set at the wheel entry,
  *  read where a claimant hears it): every pointer event carries both frames. */
 let WHEEL_ROOT = { x: 0, y: 0 };
@@ -1215,7 +1216,8 @@ class MacSurface {
         }
         editCallbacks.set(this.id, spec);
         emit(OP.EDIT, this.id, {
-            multiline: spec.multiline === true, spellcheck: spec.spellcheck !== false,
+            multiline: spec.multiline === true, spellcheck: spec.spellcheck !== false && hintsOf(spec.purpose).prose,
+            purpose: spec.purpose ?? "text", concealed: spec.concealed === true,
             enterSubmits: spec.enterSubmits === true,
             wrap: spec.wrap !== false, padding: insetSides(spec.padding ?? 0),
             value: spec.value ?? "", placeholder: spec.placeholder ?? "",
