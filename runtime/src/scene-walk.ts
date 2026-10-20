@@ -45,6 +45,8 @@ export interface SceneSurface {
   extentFloor(): number;
   /** The content inset (padding) at the end of an axis: bottom for y, right for x. */
   trailingInset(axis: "x" | "y"): number;
+  /** An editable text field, painted while it has no element (canvas-backend). */
+  editable?(): boolean;
 }
 
 const scroller = (s: SceneSurface): boolean => s.scrolls || s.scrollsX;
@@ -123,6 +125,17 @@ export function hitWalk(s: SceneSurface, px: number, py: number): HitTarget | nu
     if (pinch !== undefined && hold !== undefined && context !== undefined) break;
   }
   return { key: t, sink: t.sink!, ...t.wants, pinch, hold, context, x, y, cursor: cursorAt(s, px, py) };
+}
+
+/** The text field a press at a point in `s`'s parent frame lands on: the topmost view there
+ *  that takes a press or is a field, when it is a field — a press on a view over a field
+ *  stays that view's. */
+const FIELD: HitAccept<SceneSurface> = (s) =>
+  s.pe === "none" ? "passed over — pointerEvents = \"none\"" : s.sink !== null || s.editable?.() === true ? null : "neither takes a press nor is a field";
+export function fieldWalk(s: SceneSurface, px: number, py: number): SceneSurface | null {
+  const [lx, ly] = local(s, px, py);
+  const t = walkHit(s, lx, ly, SURFACES, FIELD);
+  return t !== null && t.editable?.() === true ? t : null;
 }
 
 /** Where a wheel goes, from a point in `s`'s parent frame: delivered to a

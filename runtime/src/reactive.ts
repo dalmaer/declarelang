@@ -1006,6 +1006,11 @@ function freeRetired(): void {
  *  tooling) can force a deterministic settle. Throws DeclareError on a
  *  constraint cycle. */
 let settleCount = 0;
+/** What settling has cost since the page began (or since a tool zeroed it): the count and
+ *  the time, in every renderer and host alike — a settle is the same work wherever it runs.
+ *  Read by measuring tools as `globalThis.__declareMeter`; only in builds with the
+ *  development switches, so a shipped bundle neither carries nor pays for it. */
+type Meter = { settles: number; settleMs: number };
 export function settle(): void {
   if (K === null || inSettle) return;
   // DIAGNOSTIC: `globalThis.__declareSettleTrace = true` prints who keeps
@@ -1017,8 +1022,14 @@ export function settle(): void {
   inSettle = true;
   stepsRan = false;
   let r: number;
-  try { r = K.settle(); }
-  finally { inSettle = false; }
+  if (typeof __DECLARE_DEV_SWITCHES__ !== "undefined" && __DECLARE_DEV_SWITCHES__) {
+    const m = ((globalThis as { __declareMeter?: Meter }).__declareMeter ??= { settles: 0, settleMs: 0 }), t0 = performance.now();
+    try { r = K.settle(); }
+    finally { inSettle = false; m.settles++; m.settleMs += performance.now() - t0; }
+  } else {
+    try { r = K.settle(); }
+    finally { inSettle = false; }
+  }
   if (traceHook !== null) traceHook.after(r);
   if (r < 0 || pendingError !== null) {
     const e = pendingError ?? new DeclareError(`kernel: settle failed (${r})`);

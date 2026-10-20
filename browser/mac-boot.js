@@ -17,7 +17,7 @@
 import { buildProgram, mountApp, settle, observe, provideTransport, provideMeasurer, fontsReady, bridgeFor, kernelReadySync,
          Keys, Focus, deliverKeys, setInspectionTarget, linkIslandTenant, islandProvisions, setAppAssetBase,
          scrollPlaces, holdScrollPlaces, dropScrollPlaces, islandNavigation, provideHostServices,
-         provideFilesHost, deliverFiles } from "../runtime/dist/index.js";
+         provideFilesHost, deliverFiles, feedPointer } from "../runtime/dist/index.js";
 import { MacBackend, flushOps, provideHitPath, macScrollFacts, macWheel, macRichHeight, macRichLink,
          macEditInput, macEditFocus, macEditEnter, macEditSelect, embedsPending, mountEmbed, clearEmbed, surfaceById,
          publishChildName, islandViewById, macScrollTo, surfaceOrigin, createOverlaySurface, rootBox,
@@ -299,7 +299,6 @@ export async function macBoot(url) {
   currentApp = app;
   globalThis.__app = app;
   liveApps.set(app, null);       // the root app can publish live edits too
-  installChildPointerEnv();
 
   // A deep link is an initial state: seed location BEFORE the first paint.
   const hash = new URL(base).hash.replace(/^#/, "");
@@ -684,50 +683,13 @@ const embedUnlinks = new Map();   // surfaceId -> the bridge unlink (islands des
 const liveApps = new Map();
 /** The last (card, source) each app published, so a mount happens once per edit. */
 const liveSigs = new Map();
-/** Each mounted child app → the island surface it sits in, for the pointer
- *  environment below. */
+/** Each mounted child app → the island surface it sits in. */
 const childIslands = new Map();
+/** Each mounted child app → what stops its pointer feed (feedPointer). */
+const pointerStops = new Map();
+const stopPointer = (child) => { pointerStops.get(child)?.(); pointerStops.delete(child); };
 // debug handle: the mounted child apps, for `ctl.mjs eval`
 globalThis.__children = () => [...liveApps.keys()].filter((a) => childIslands.has(a));
-
-// ── the child pointer environment ───────────────────────────────────────────
-//
-// A child app is ATTACHED, not mounted, so `wireEnvironment` never runs for it:
-// its `app.pointerX/Y`, `hovering` and `pointerDown` sit at their defaults
-// forever. Every child-app interaction that reads them is then silently dead —
-// the Viewer's edit-pane divider reads `app.pointerY`, so its press registered
-// (a hit, routed through the shared surface tree) and the drag then computed
-// against a pointerY frozen at 0.
-//
-// The web gets this from `wireEnvironmentEmbedded`, offsetting the event by the
-// island element's rect. There is no element here, so the surface tree supplies
-// the origin instead.
-//
-// ⚠ This MUST run before the event is routed. Doing it from the per-frame
-// follow loop (the obvious place) leaves the child's pointer one event stale,
-// and a press-then-drag inside a single frame reads the PRESS point for the
-// whole gesture — the divider then jumped to wherever it was grabbed and
-// stayed. Hooking the one entry point is what makes the ordering right.
-function installChildPointerEnv() {
-  const g = globalThis;
-  const orig = g.__declarePointer;
-  if (typeof orig !== "function" || g.__declareChildPointerEnv) return;
-  g.__declareChildPointerEnv = true;
-  g.__declarePointer = (type, x, y, buttons, mods) => {
-    for (const [child] of liveApps) {
-      const islandId = childIslands.get(child);
-      if (islandId === undefined) continue;
-      const [ox, oy] = surfaceOrigin(islandId);
-      const px = x - ox, py = y - oy;
-      if (child.pointerX !== px) child.pointerX = px;
-      if (child.pointerY !== py) child.pointerY = py;
-      if (type === "pointerdown" && !child.pointerDown) child.pointerDown = true;
-      if (type === "pointerup" && child.pointerDown) child.pointerDown = false;
-      if (!child.hovering) child.hovering = true;
-    }
-    orig(type, x, y, buttons, mods);
-  };
-}
 
 function wireEmbeds() {
   const pend = embedsPending();
@@ -854,9 +816,10 @@ function mountCompiled(surfaceId, compiled, assetUrl) {
   // the previous tenant's bridge dies with it
   const priorUnlink = embedUnlinks.get(surfaceId);
   if (priorUnlink) { embedUnlinks.delete(surfaceId); try { priorUnlink(); } catch {} }
+  const islView = islandViewById(surfaceId);
+  if (islView && islView.__childApp) stopPointer(islView.__childApp);
   clearEmbed(surfaceId);
   kernelReadySync();
-  const islView = islandViewById(surfaceId);
   const linkable = islView && typeof islView.post === "function";
   const child = buildProgram(compiled.program, { provides: linkable ? islandProvisions(islView) : undefined });
   // THE ISLAND BOUNDARY (islands.md) — the native runner is a full peer of the
@@ -889,6 +852,8 @@ function mountCompiled(surfaceId, compiled, assetUrl) {
   // window resolved every plate against the DESKTOP's directory — all 404.
   if (assetUrl) setAppAssetBase(child, assetUrl);
   mountEmbed(surfaceId, child.$surface);
+  // The pointer, in the island's frame: the runtime's, as the canvas renderer's (feedPointer).
+  if (islView) pointerStops.set(child, feedPointer(child, islView));
   child.hostWidth = box.width;
   child.hostHeight = box.height;
   // The ISLAND is a viewport — the DOM's renderChild sets `overflow: auto` on
@@ -920,12 +885,12 @@ function mountCompiled(surfaceId, compiled, assetUrl) {
   // and both already produce the frame this rides on.
   globalThis.__declareObserveFrames(() => {
     if (embedGen.get(surfaceId) !== gen) {
-      liveApps.delete(child); childIslands.delete(child);
+      liveApps.delete(child); childIslands.delete(child); stopPointer(child);
       if (islView && islView.__childApp === child) islView.__childApp = null;
       return false;                                  // a newer tenant owns this island
     }
     if (surfaceById(surfaceId) !== box) {
-      liveApps.delete(child); childIslands.delete(child);
+      liveApps.delete(child); childIslands.delete(child); stopPointer(child);
       if (islView && islView.__childApp === child) islView.__childApp = null;
       const un = embedUnlinks.get(surfaceId);
       if (un) { embedUnlinks.delete(surfaceId); try { un(); } catch {} }   // the island surface is gone — the bridge with it

@@ -1,7 +1,7 @@
 {
  "meta": {
   "version": 1,
-  "buildId": "f44605269d16",
+  "buildId": "6a1cac653b1a",
   "note": "THE single documentation model — one walkable data structure for every documented element. Read by the docs app, the desktop's embedded docs, the link registry, the eval harness, and any agent. extract.mjs writes the doc tree (reference/roots/tree/guide/tenets) here; this tool augments the SAME file in place with spine/links/meta. One file, no intermediate.",
   "pipeline": {
    "assembledFrom": [
@@ -3695,7 +3695,7 @@
    },
    "EC7919A": {
     "message": "[Declare] canvas island '…' failed to mount",
-    "at": "host-islands.js:274"
+    "at": "host-islands.js:277"
    },
    "E4FF26C": {
     "message": "[Declare] a … threw during its frame and was removed from the clock: …",
@@ -3767,11 +3767,11 @@
    },
    "EC17495": {
     "message": "a CanvasBackend hosts one tree — use a fresh backend per render",
-    "at": "canvas-backend.ts:604"
+    "at": "canvas-backend.ts:619"
    },
    "E13A1E5": {
     "message": "Canvas 2D is unavailable in this browser",
-    "at": "canvas-backend.ts:622"
+    "at": "canvas-backend.ts:637"
    },
    "E9A0ED1": {
     "message": "[Declare] canvas filter … is not expressible on this engine and was not applied.",
@@ -5039,7 +5039,7 @@
    },
    "E9CD748": {
     "message": "kernel: settle failed (…)",
-    "at": "reactive.ts:1024"
+    "at": "reactive.ts:1035"
    },
    "E3D0EC5": {
     "message": "a selective path replicates its selection fully (windowing over selections is a later increment)",

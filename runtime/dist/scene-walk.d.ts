@@ -34,6 +34,8 @@ export interface SceneSurface {
     extentFloor(): number;
     /** The content inset (padding) at the end of an axis: bottom for y, right for x. */
     trailingInset(axis: "x" | "y"): number;
+    /** An editable text field, painted while it has no element (canvas-backend). */
+    editable?(): boolean;
 }
 /** The cursor shown at a point in `s`'s parent frame, as CSS shows it on the
  *  DOM: the topmost view there that takes a press or shows a cursor of its own
@@ -45,6 +47,7 @@ export declare function cursorAt(s: SceneSurface, px: number, py: number): strin
 /** The press target under a point in `s`'s parent frame, with the cursor
  *  shown there (cursorAt). */
 export declare function hitWalk(s: SceneSurface, px: number, py: number): HitTarget | null;
+export declare function fieldWalk(s: SceneSurface, px: number, py: number): SceneSurface | null;
 /** Where a wheel goes, from a point in `s`'s parent frame: delivered to a
  *  claimant ("claimed"), left to a scroller that owns it ("scroller"), or
  *  neither (null). `root` is the point in the root's frame, which the claimant

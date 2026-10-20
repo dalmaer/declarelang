@@ -1,0 +1,8 @@
+[
+  { "app": "my-apps/desktop-dense/", "settle": 5000, "scenarios": [
+    { "name": "drag note over tracker", "steps": [["drag", 985, 157, 300, 480, 60], ["wait", 400]] },
+    { "name": "drag note back", "steps": [["drag", 300, 480, 985, 157, 60], ["wait", 400]] },
+    { "name": "scroll tracker under frost", "steps": [["wheel", 400, 600, 40, 60], ["wait", 600]] },
+    { "name": "hover tracker rows", "steps": [["move", 300, 230, 1], ["move", 300, 640, 40], ["wait", 100], ["move", 600, 250, 40], ["wait", 300]] }
+  ] }
+]

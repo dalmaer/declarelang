@@ -85,6 +85,15 @@ export function hitWalk(s, px, py) {
     }
     return { key: t, sink: t.sink, ...t.wants, pinch, hold, context, x, y, cursor: cursorAt(s, px, py) };
 }
+/** The text field a press at a point in `s`'s parent frame lands on: the topmost view there
+ *  that takes a press or is a field, when it is a field — a press on a view over a field
+ *  stays that view's. */
+const FIELD = (s) => s.pe === "none" ? "passed over — pointerEvents = \"none\"" : s.sink !== null || s.editable?.() === true ? null : "neither takes a press nor is a field";
+export function fieldWalk(s, px, py) {
+    const [lx, ly] = local(s, px, py);
+    const t = walkHit(s, lx, ly, SURFACES, FIELD);
+    return t !== null && t.editable?.() === true ? t : null;
+}
 /** Where a wheel goes, from a point in `s`'s parent frame: delivered to a
  *  claimant ("claimed"), left to a scroller that owns it ("scroller"), or
  *  neither (null). `root` is the point in the root's frame, which the claimant

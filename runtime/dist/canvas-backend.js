@@ -126,7 +126,9 @@ import { applyFilterFallback, ctxFilterSupported, parseFilter } from "./canvas-f
 import { rasterWorkerAvailable, rasterInWorker } from "./raster-client.js";
 import { onDprChange } from "./dpr.js";
 import { routeInput, holdCaptureActive } from "./input.js";
-import { hitWalk, wheelWalk, contentExtentOf, cursorAt } from "./scene-walk.js";
+import { hitWalk, wheelWalk, fieldWalk, contentExtentOf, cursorAt } from "./scene-walk.js";
+import { App, View } from "./view.js";
+import { rootToLocal } from "./interaction.js";
 /** The root-space point of the wheel being walked (set at the wheel entry,
  *  read where a claimant hears it): every pointer event carries both frames. */
 let WHEEL_ROOT = { x: 0, y: 0 };
@@ -324,6 +326,18 @@ function evictLeastValuable(except) {
     releaseRaster(victim);
     return true;
 }
+/** The overlay scrollbar, the fallback for a pane the browser does not scroll (render=gpu's
+ *  scroll.rs keeps the same numbers). Under a mouse, the Mac's (as Chromium's cocoa_scroll_bar
+ *  and native_theme_mac measure it): a `thin` thumb `inset` from the edge; under the pointer a
+ *  `thick` thumb on a `track`-wide band; the track's ends `end` in, a thumb at least `min`
+ *  long; whole until `delay` ms after the pane last moved, then fading over `fade`. Under a
+ *  finger, iOS's indicator (as Flutter's CupertinoScrollbar measures it): `touchThin`,
+ *  `touchMargin` from the edge, at least `touchMin` long, fading after `touchDelay` over
+ *  `touchFade`; held still `touchHold` ms it takes the finger, grows to `touchHeld`, and scrubs. */
+const BAR = {
+    thin: 6, thick: 10, track: 16, inset: 3, end: 2, min: 18, delay: 500, fade: 240,
+    touchThin: 3, touchHeld: 8, touchMargin: 3, touchMin: 36, touchDelay: 1200, touchFade: 250, touchHold: 100,
+};
 class ScrollLoop {
     comp;
     pending = new Map();
@@ -338,7 +352,7 @@ class ScrollLoop {
     /** An offset moved: a fact to report after paint, and damage of the
      *  scroller's box (DIRTY REGIONS) — without booking a frame, since the
      *  loop only moves offsets inside one (or right before invalidating). */
-    mark(s) { this.moved.add(s); this.comp.mark(s); }
+    mark(s, touch = false) { this.moved.add(s); this.comp.mark(s); s.barShows(touch); }
     begin(s) {
         const q = this.quiet.get(s);
         if (q !== undefined) {
@@ -435,7 +449,7 @@ class ScrollLoop {
             s.wantY = null;
             if (y !== s.scrollOffset) {
                 s.scrollOffset = y;
-                this.mark(s);
+                this.mark(s, true);
             }
         }
         if (s.scrollsX) {
@@ -443,7 +457,7 @@ class ScrollLoop {
             const x = Math.min(maxX, Math.max(0, st.contentOffsetX));
             if (x !== s.scrollXOffset) {
                 s.scrollXOffset = x;
-                this.mark(s);
+                this.mark(s, true);
             }
         }
     }
@@ -714,14 +728,27 @@ class Compositor {
         // CANVAS is by definition outside every overlay (they are separate sibling
         // elements), so blur the focused field — mobile Safari won't drop it (and the
         // keyboard) on a tap of non-focusable pixels the way desktop does.
-        canvas.addEventListener("pointerdown", () => {
+        // A press on a field (painted, with no element while it lacks focus) makes its element
+        // there and focuses it; the mouse's own default is kept from taking the focus back.
+        let pressedField = false;
+        canvas.addEventListener("pointerdown", (e) => {
             const active = document.activeElement;
             if (active instanceof HTMLElement &&
                 (active.tagName === "INPUT" || active.tagName === "TEXTAREA") &&
                 host.contains(active)) {
                 active.blur();
             }
+            if (e.button !== 0 || this.root === null)
+                return;
+            const r = canvas.getBoundingClientRect();
+            const f = this.root.fieldAt(e.clientX - r.left, e.clientY - r.top);
+            if (f !== null && f.pressEditable(e.clientX, e.clientY))
+                pressedField = e.pointerType === "mouse";
         });
+        canvas.addEventListener("mousedown", (e) => { if (pressedField) {
+            pressedField = false;
+            e.preventDefault();
+        } });
         // Per-gesture CLAIM arbitration — the canvas twin of the DOM backend's
         // per-element touch-action (its refreshTouchAction): hit-test where the
         // first finger lands, union the declared claims up the hit chain (a claim
@@ -839,12 +866,8 @@ class Compositor {
             if (this.root.scrollBy(x, y, dx, dy))
                 e.preventDefault();
         }, { passive: false });
-        // ── the OVERLAY SCROLLBAR's interaction (one design, both pointer
-        // kinds): a fine pointer near the bar WIDENS it and can grab the thumb
-        // (track press jumps-to-spot, then drags); touch has no hover — a
-        // touch-HOLD on the thumb (250ms, <8px wander) engages the scrub and
-        // widens until release. All state lives here; the app never routes. ──
         const findBar = (px, py) => {
+            const now = performance.now();
             const walk = (sf, lx, ly, ax, ay) => {
                 if (!sf.visible)
                     return null;
@@ -859,8 +882,12 @@ class Compositor {
                     if (hit !== null)
                         return hit;
                 }
-                if (sf.scrolls && !sf.pageRoot && inBox && lx >= sf.width - 16 && sf.barGeom() !== null)
-                    return { s: sf, ax, ay };
+                if (!inBox || !(sf.scrolls || sf.scrollsX) || sf.barAlpha(now) <= 0)
+                    return null;
+                if (lx >= sf.width - BAR.track && sf.barGeom(true) !== null)
+                    return { s: sf, ax, ay, vertical: true };
+                if (ly >= sf.height - BAR.track && sf.barGeom(false) !== null)
+                    return { s: sf, ax, ay, vertical: false };
                 return null;
             };
             return this.root === null ? null : walk(this.root, px, py, 0, 0);
@@ -869,6 +896,7 @@ class Compositor {
             const r = canvas.getBoundingClientRect();
             return { x: e.clientX - r.left, y: e.clientY - r.top };
         };
+        const alongOf = (b, p) => b.vertical ? p.y - b.ay : p.x - b.ax;
         let barHover = null;
         let barDrag = null;
         let barHold = null;
@@ -876,44 +904,49 @@ class Compositor {
             if (barHover === sf)
                 return;
             const was = barHover;
-            if (barHover !== null && barDrag === null)
-                barHover.barWide = false;
+            // leaving it, the bar fades from now
+            if (was !== null && barDrag === null) {
+                was.barWide = false;
+                was.barShows(false);
+            }
             barHover = sf;
-            if (sf !== null)
+            if (sf !== null) {
                 sf.barWide = true;
-            if (was !== null)
-                this.invalidateBar(was);
-            if (sf !== null)
                 this.invalidateBar(sf);
+            }
         };
         const dragMove = (e) => {
             const p = toLocal(e);
             if (barDrag !== null) {
-                barDrag.s.scrubTo(p.y - barDrag.ay - barDrag.grabDy);
+                barDrag.b.s.scrubTo(alongOf(barDrag.b, p) - barDrag.grab, barDrag.b.vertical);
             }
             else if (barHold !== null) {
-                if (barHold.engaged)
-                    barHold.s.scrubTo(p.y - barHold.ay - barHold.s.barGeom().thumbH / 2);
-                else if (Math.abs(p.y - barHold.startY) > 8)
+                const h = barHold;
+                if (h.engaged)
+                    h.b.s.scrubTo(alongOf(h.b, p) - h.b.s.barGeom(h.b.vertical).thumb / 2, h.b.vertical);
+                else if (Math.abs(p.x - h.x0) + Math.abs(p.y - h.y0) > 8)
                     dragEnd(); // it was a pan — stand down
             }
         };
         const dragEnd = () => {
-            if (barDrag !== null)
-                this.invalidate(barDrag.s);
-            if (barHold !== null)
-                this.invalidate(barHold.s);
             if (barDrag !== null) {
-                if (barDrag.s !== barHover)
-                    barDrag.s.barWide = false;
-                barDrag.s.holdBar(false);
+                const s0 = barDrag.b.s;
+                if (s0 !== barHover)
+                    s0.barWide = false;
+                s0.holdBar(false);
+                s0.barShows(false);
                 barDrag = null;
+                this.invalidate(s0);
             }
             if (barHold !== null) {
+                const s0 = barHold.b.s;
                 window.clearTimeout(barHold.timer);
-                barHold.s.barWide = false;
-                barHold.s.holdBar(false);
+                if (barHold.engaged) {
+                    s0.holdBar(false);
+                    s0.barShows(true);
+                }
                 barHold = null;
+                this.invalidate(s0);
             }
             window.removeEventListener("pointermove", dragMove, true);
             window.removeEventListener("pointerup", dragEnd, true);
@@ -937,24 +970,23 @@ class Compositor {
             const f = findBar(p.x, p.y);
             if (f === null)
                 return;
-            const g = f.s.barGeom();
-            const localY = p.y - f.ay;
-            // The CLAIM is the painted bar's pixels only — the wider proximity
-            // band is hover-widen territory, and presses there belong to the app
-            // (the desktop's inside-edge RESIZE band lives exactly in it).
-            const lx = p.x - f.ax;
-            const bw = f.s.barWide ? 9 : 5;
-            const bx = f.s.width - (f.s.barWide ? 12 : 8);
-            if (lx < bx - 1 || lx > bx + bw)
-                return;
+            const g = f.s.barGeom(f.vertical);
+            const along = alongOf(f, p);
             if (e.pointerType === "mouse") {
+                // The CLAIM is the painted bar — the track when wide, else the thumb's
+                // own strip; the rest of the band is the app's (the desktop's
+                // inside-edge RESIZE band lives exactly in it).
+                const across = f.vertical ? p.x - f.ax : p.y - f.ay;
+                const band = f.s.barWide ? BAR.track : BAR.inset + BAR.thin + 2;
+                if (across < (f.vertical ? f.s.width : f.s.height) - band)
+                    return;
                 // on the thumb → grab where held; on the track → jump-to-spot, then grab centered
-                let grabDy = localY - g.thumbY;
-                if (grabDy < 0 || grabDy > g.thumbH) {
-                    f.s.scrubTo(localY - g.thumbH / 2);
-                    grabDy = g.thumbH / 2;
+                let grab = along - g.pos;
+                if (grab < 0 || grab > g.thumb) {
+                    f.s.scrubTo(along - g.thumb / 2, f.vertical);
+                    grab = g.thumb / 2;
                 }
-                barDrag = { s: f.s, ay: f.ay, grabDy };
+                barDrag = { b: f, grab };
                 f.s.barWide = true;
                 f.s.holdBar(true);
                 e.stopPropagation();
@@ -963,17 +995,16 @@ class Compositor {
                 this.invalidate(f.s);
             }
             else {
-                // touch: only the THUMB arms, and only a HOLD engages (no hover on
-                // touch — hold IS the grab-the-indicator gesture); a pan cancels the arm
-                if (localY < g.thumbY || localY > g.thumbY + g.thumbH)
+                // touch: only the indicator (with a little slack) arms, and only a HOLD
+                // engages; a pan cancels the arm
+                if (!f.s.barTouch || along < g.pos - 10 || along > g.pos + g.thumb + 10)
                     return;
-                const hold = { s: f.s, ay: f.ay, startY: p.y, engaged: false, timer: 0 };
+                const hold = { b: f, x0: p.x, y0: p.y, engaged: false, timer: 0 };
                 hold.timer = window.setTimeout(() => {
                     hold.engaged = true;
-                    hold.s.barWide = true;
-                    hold.s.holdBar(true);
-                    this.invalidate(hold.s);
-                }, 250);
+                    hold.b.s.holdBar(true);
+                    this.invalidate(hold.b.s);
+                }, BAR.touchHold);
                 barHold = hold;
                 armWindow();
             }
@@ -1051,7 +1082,8 @@ class Compositor {
         let m = pm.translate(s.x, s.y);
         if (!affineIsIdentity(s.xform))
             m = m.multiply(new DOMMatrix([s.xform[0], s.xform[1], s.xform[2], s.xform[3], s.xform[4], s.xform[5]]));
-        return CanvasSurface.mapBox(m, s.width - 14, 0, s.width, s.height);
+        // the right band, or the whole box when the pane scrolls across too (its bottom band)
+        return s.scrollsX ? CanvasSurface.mapBox(m, 0, 0, s.width, s.height) : CanvasSurface.mapBox(m, s.width - BAR.track, 0, s.width, s.height);
     }
     /** Damage `s` without scheduling (a change made inside the frame, before
      *  its paint). */
@@ -1442,21 +1474,105 @@ class CanvasSurface {
     /** A windowed block's LOGICAL extent (setVirtualExtent — replicate.ts):
      *  the scroll range's floor when only a window of rows exists. */
     virtualExtent = 0;
-    /** The overlay scrollbar's WIDE state (pointer near, grabbed, or
-     *  touch-held) — proximity widens for a mouse, a hold widens for touch. */
+    /** The overlay scrollbar's WIDE state: the pointer on a showing bar, or a
+     *  bar grabbed (a mouse), or a finger holding the indicator. */
     barWide = false;
-    /** The bar's frame-local geometry, or null when nothing overflows. */
-    barGeom() {
-        if (!this.scrolls || this.pageRoot)
+    /** When the pane last moved (its bars show from then, barAlpha), and whether
+     *  a finger moved it (iOS's indicator then). */
+    barSeen = -Infinity;
+    barTouch = false;
+    barTimer = null;
+    /** A bar's frame-local geometry along its axis (BAR, the spec), or null when
+     *  that axis does not overflow. */
+    barGeom(vertical = true) {
+        if ((vertical ? !this.scrolls : !this.scrollsX) || this.pageRoot)
             return null;
-        const ext = this.contentExtent();
-        if (ext <= this.height + 1)
+        const ext = vertical ? this.contentExtent() : this.contentExtentX();
+        const view = vertical ? this.height : this.width;
+        if (ext <= view + 1)
             return null;
-        const trackH = this.height - 4;
-        const thumbH = Math.max(24, (this.height / ext) * trackH);
-        const maxOff = ext - this.height;
-        const thumbY = 2 + (maxOff > 0 ? (this.scrollOffset / maxOff) * (trackH - thumbH) : 0);
-        return { trackH, thumbH, thumbY, ext };
+        const other = vertical ? this.scrollsX && this.contentExtentX() > this.width + 1 : this.scrolls && this.contentExtent() > this.height + 1;
+        const touch = this.barTouch;
+        const start = touch ? BAR.touchMargin : BAR.end;
+        const corner = !other ? 0 : touch ? BAR.touchMargin + BAR.touchHeld : BAR.track;
+        const len = view - 2 * start - corner;
+        const thumb = Math.min(len, Math.max(touch ? BAR.touchMin : BAR.min, (view / ext) * len));
+        const off = vertical ? this.scrollOffset : this.scrollXOffset, max = ext - view;
+        const pos = start + (max > 0 ? (off / max) * (len - thumb) : 0);
+        return { start, len, thumb, pos, ext, view };
+    }
+    /** How much of the bars shows at `now`: whole while held or under the
+     *  pointer, else whole until the delay after the pane last moved, then fading. */
+    barAlpha(now) {
+        if (this.barHeld || this.barWide)
+            return 1;
+        const delay = this.barTouch ? BAR.touchDelay : BAR.delay, fade = this.barTouch ? BAR.touchFade : BAR.fade;
+        const e = now - this.barSeen;
+        return e < delay ? 1 : Math.max(0, 1 - (e - delay) / fade);
+    }
+    /** The pane moved: its bars show, and fade from now (`touch`: a finger moved it). */
+    barShows(touch) {
+        this.barSeen = performance.now();
+        this.barTouch = touch;
+        this.compositor.invalidateBar(this);
+    }
+    /** Whether the bars sit on dark content (the nearest solid fill up from the
+     *  pane): a light thumb then, as the platform's. */
+    barOnDark() {
+        for (let s = this; s !== null; s = s.parent) {
+            const m = s.fill !== null ? /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(s.fill) : null;
+            if (m === null || (m[2] !== undefined && parseInt(m[2], 16) < 128))
+                continue;
+            const v = parseInt(m[1], 16);
+            return (0.2126 * (v >> 16) + 0.7152 * ((v >> 8) & 255) + 0.0722 * (v & 255)) / 255 < 0.5;
+        }
+        return false;
+    }
+    /** Paint the bars (frame-local), and book the paint that fades them. */
+    paintBars(ctx) {
+        const now = performance.now();
+        const a = this.barAlpha(now);
+        if (this.barTimer !== null) {
+            clearTimeout(this.barTimer);
+            this.barTimer = null;
+        }
+        if (a < 1 || !(this.barHeld || this.barWide)) {
+            // the next look: the delay's end, then each frame of the fade
+            const delay = (this.barTouch ? BAR.touchDelay : BAR.delay) - (now - this.barSeen);
+            if (a > 0)
+                this.barTimer = setTimeout(() => { this.barTimer = null; this.compositor.invalidateBar(this); }, Math.max(16, delay));
+        }
+        if (a <= 0)
+            return;
+        const dark = this.barOnDark();
+        const rgba = (r, g, b, al) => `rgba(${r}, ${g}, ${b}, ${al * a})`;
+        ctx.save();
+        for (const vertical of [true, false]) {
+            const g = this.barGeom(vertical);
+            if (g === null)
+                continue;
+            const cross = vertical ? this.width : this.height;
+            const rect = (c0, t, p, l) => vertical ? [c0, p, t, l] : [p, c0, l, t];
+            const fill = (r, rad, style) => {
+                ctx.fillStyle = style;
+                ctx.beginPath();
+                ctx.roundRect(r[0], r[1], r[2], r[3], rad);
+                ctx.fill();
+            };
+            if (this.barTouch) {
+                const t = this.barHeld ? BAR.touchHeld : BAR.touchThin;
+                fill(rect(cross - BAR.touchMargin - t, t, g.pos, g.thumb), t / 2, dark ? rgba(255, 255, 255, 0.5) : rgba(0, 0, 0, 0.35));
+                continue;
+            }
+            if (this.barWide) {
+                const c0 = cross - BAR.track;
+                fill(rect(c0, BAR.track, 0, g.view), 0, dark ? rgba(204, 204, 204, 0.15) : rgba(248, 248, 248, 0.77));
+                fill(rect(c0, 1, 0, g.view), 0, dark ? rgba(229, 229, 229, 0.2) : rgba(223, 223, 223, 0.98));
+            }
+            const t = this.barWide ? BAR.thick : BAR.thin;
+            fill(rect(cross - BAR.inset - t, t, g.pos, g.thumb), t / 2, dark ? rgba(255, 255, 255, 0.5) : rgba(0, 0, 0, 0.5));
+        }
+        ctx.restore();
     }
     /** Drive the scroll from a bar-scrub position (frame-local thumb top). */
     /** A hand on this scroller's bar: the scroll is live until it lets go, and
@@ -1469,18 +1585,28 @@ class CanvasSurface {
         this.reportScrolling(on);
     }
     scrollbarHeld() { return this.barHeld; }
-    scrubTo(thumbTop) {
-        const g = this.barGeom();
+    /** Drive the scroll from a bar-scrub position (the thumb's frame-local start on its axis). */
+    scrubTo(thumbAt, vertical = true) {
+        const g = this.barGeom(vertical);
         if (g === null)
             return;
-        const span = g.trackH - g.thumbH;
-        const frac = span > 0 ? Math.min(1, Math.max(0, (thumbTop - 2) / span)) : 0;
-        const next = frac * (g.ext - this.height);
-        this.wantY = null;
-        if (next === this.scrollOffset)
-            return;
-        this.scrollOffset = next;
-        this.onScrollCb?.(next);
+        const span = g.len - g.thumb;
+        const frac = span > 0 ? Math.min(1, Math.max(0, (thumbAt - g.start) / span)) : 0;
+        const next = frac * (g.ext - g.view);
+        if (vertical) {
+            this.wantY = null;
+            if (next === this.scrollOffset)
+                return;
+            this.scrollOffset = next;
+            this.onScrollCb?.(next);
+        }
+        else {
+            if (next === this.scrollXOffset)
+                return;
+            this.scrollXOffset = next;
+            this.onScrollXCb?.(next);
+        }
+        this.barShows(this.barTouch);
         this.compositor.invalidate(this);
     }
     onScrollCb = null;
@@ -2234,70 +2360,164 @@ class CanvasSurface {
             this.maybeUnregisterOverlay(); // the embed overlay may still ride this surface
             return;
         }
-        const host = this.compositor.hostElement();
-        const tag = spec.multiline ? "textarea" : "input";
-        let el = this.editEl;
-        if (host !== null && (el === null || el.tagName.toLowerCase() !== tag)) {
-            el?.remove();
-            el = document.createElement(tag);
-            const s = el.style;
-            // A transparent overlay over the shared canvas, absolutely positioned in
-            // the host (reposition() glues it to the surface box each frame).
-            s.position = "absolute";
-            s.margin = "0";
-            s.padding = "0";
-            s.border = "0";
-            s.boxSizing = "border-box";
-            s.background = "transparent";
-            s.outline = "none";
-            // The editable is selectable even though the canvas is not — the caret
-            // and selection are the field's whole purpose.
-            s.userSelect = "text";
-            s.webkitUserSelect = "text";
-            s.touchAction = "auto";
-            s.resize = "none";
-            const self = el;
-            el.addEventListener("input", () => this.edit?.onInput(self.value));
-            el.addEventListener("focus", () => this.edit?.onFocus());
-            el.addEventListener("blur", () => this.edit?.onBlur());
-            watchSelection(el, (s, e) => this.edit?.onSelect?.(s, e));
-            el.addEventListener("keydown", (e) => {
-                const k = e;
-                if (k.key !== "Enter" || k.isComposing)
-                    return;
-                const ml = this.edit?.multiline ?? false;
-                if (!ml) {
-                    this.edit?.onEnter?.();
-                    return;
-                }
-                // a multi-line field that submits on Return: Shift-Return is the line break
-                if (this.edit?.enterSubmits === true && !k.shiftKey) {
-                    k.preventDefault();
-                    this.edit?.onEnter?.();
-                }
-            });
-            host.appendChild(el);
-            this.editEl = el;
-        }
         this.edit = spec;
-        if (el !== null) {
-            if (el.value !== spec.value)
-                el.value = spec.value; // guard the caret against an echo
-            // Parity with the DOM backend's editable: the field's inset, the
-            // spellcheck election, and the wrap mode all come from the one spec —
-            // the overlay is the same editable, positioned differently.
-            el.spellcheck = spec.spellcheck;
-            el.style.padding = insetCss(spec.padding);
-            if (el instanceof HTMLTextAreaElement) {
-                el.wrap = spec.wrap ? "soft" : "off";
-                el.style.whiteSpace = spec.wrap ? "pre-wrap" : "pre";
-                el.style.overflow = "auto";
-            }
-            el.placeholder = spec.placeholder;
-            applyCanvasEditStyle(el, spec.style);
+        const el = this.editEl;
+        if (el !== null && el.tagName.toLowerCase() !== (spec.multiline ? "textarea" : "input")) {
+            // a field that changed kind while focused is made again, still focused
+            const had = document.activeElement === el;
+            this.hideEditable();
+            if (had)
+                this.showEditable()?.focus({ preventScroll: true });
         }
+        else if (el !== null)
+            this.styleEditable(el, spec);
         this.compositor.registerEditable(this);
         this.reposition();
+        this.compositor.invalidate(this);
+    }
+    /** The field's DOM element, made now if it has none: a field is an element over the
+     *  canvas only while it has focus; otherwise the surface paints its text
+     *  (paintEditText). Null before the host exists. */
+    showEditable() {
+        if (this.editEl !== null)
+            return this.editEl;
+        const spec = this.edit;
+        const host = this.compositor.hostElement();
+        if (spec === null || host === null)
+            return null;
+        const el = document.createElement(spec.multiline ? "textarea" : "input");
+        const s = el.style;
+        // A transparent overlay over the shared canvas, absolutely positioned in
+        // the host (reposition() glues it to the surface box each frame).
+        s.position = "absolute";
+        s.margin = "0";
+        s.padding = "0";
+        s.border = "0";
+        s.boxSizing = "border-box";
+        s.background = "transparent";
+        s.outline = "none";
+        // The editable is selectable even though the canvas is not — the caret
+        // and selection are the field's whole purpose.
+        s.userSelect = "text";
+        s.webkitUserSelect = "text";
+        s.touchAction = "auto";
+        s.resize = "none";
+        const self = el;
+        el.addEventListener("input", () => this.edit?.onInput(self.value));
+        el.addEventListener("focus", () => this.edit?.onFocus());
+        el.addEventListener("blur", () => { this.edit?.onBlur(); if (this.editEl === self)
+            this.hideEditable(); });
+        watchSelection(el, (s, e) => this.edit?.onSelect?.(s, e));
+        el.addEventListener("keydown", (e) => {
+            const k = e;
+            if (k.key !== "Enter" || k.isComposing)
+                return;
+            const ml = this.edit?.multiline ?? false;
+            if (!ml) {
+                this.edit?.onEnter?.();
+                return;
+            }
+            // a multi-line field that submits on Return: Shift-Return is the line break
+            if (this.edit?.enterSubmits === true && !k.shiftKey) {
+                k.preventDefault();
+                this.edit?.onEnter?.();
+            }
+        });
+        host.appendChild(el);
+        this.editEl = el;
+        this.styleEditable(el, spec);
+        this.reposition();
+        this.compositor.invalidate(this);
+        return el;
+    }
+    /** Take the field's element away (it lost focus): the surface paints its text again. */
+    hideEditable() {
+        const el = this.editEl;
+        if (el === null)
+            return;
+        this.editEl = null;
+        el.remove();
+        this.compositor.invalidate(this);
+    }
+    /** Is this surface an editable field? */
+    editable() { return this.edit !== null; }
+    /** A press on the field at page point (cx, cy): its element, made there, focused, with the
+     *  caret where the press was (a single line is read across its middle). */
+    pressEditable(cx, cy) {
+        const el = this.showEditable();
+        if (el === null)
+            return false;
+        const r = el.getBoundingClientRect();
+        const y = el instanceof HTMLTextAreaElement ? cy : r.top + r.height / 2;
+        const cp = document
+            .caretPositionFromPoint?.(cx, y);
+        el.focus({ preventScroll: true });
+        const at = cp != null && cp.offsetNode === el ? cp.offset : el.value.length;
+        try {
+            el.setSelectionRange(at, at);
+        }
+        catch { /* input types without selection */ }
+        return true;
+    }
+    /** The editable's spec onto its element: value, inset, spellcheck, wrap, placeholder, style. */
+    styleEditable(el, spec) {
+        if (el.value !== spec.value)
+            el.value = spec.value; // guard the caret against an echo
+        // Parity with the DOM backend's editable: the field's inset, the
+        // spellcheck election, and the wrap mode all come from the one spec —
+        // the overlay is the same editable, positioned differently.
+        el.spellcheck = spec.spellcheck;
+        el.style.padding = insetCss(spec.padding);
+        if (el instanceof HTMLTextAreaElement) {
+            el.wrap = spec.wrap ? "soft" : "off";
+            el.style.whiteSpace = spec.wrap ? "pre-wrap" : "pre";
+            el.style.overflow = "auto";
+        }
+        el.placeholder = spec.placeholder;
+        applyCanvasEditStyle(el, spec.style);
+    }
+    /** A field without its element (not focused): its value, or its placeholder in the
+     *  browser's placeholder grey, as the element would show it — inside the padding,
+     *  clipped to the box, one line in the middle of it, several from the top. */
+    paintEditText(ctx) {
+        const spec = this.edit;
+        if (spec === null || this.editEl !== null)
+            return;
+        const empty = spec.value === "";
+        const text = empty ? spec.placeholder : spec.value;
+        if (text === "")
+            return;
+        const st = spec.style;
+        const font = fontString(st);
+        const m = fontMetrics(font);
+        const lh = m.ascent + m.descent;
+        const [pt, pr, pb, pl] = insetSides(spec.padding ?? 0);
+        const tw = this.width - pl - pr;
+        const ls = st.letterSpacing ?? 0;
+        const lines = !spec.multiline ? [text.replace(/\n/g, " ")]
+            : spec.wrap && tw > 0 ? text.split("\n").flatMap((l) => wrapLines(l, font, tw, ls))
+                : text.split("\n");
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(0, 0, this.width, this.height);
+        ctx.clip();
+        ctx.font = font;
+        ctx.fillStyle = empty ? "#757575" : colorToCss(st.color);
+        ctx.textBaseline = "alphabetic";
+        const lsCtx = ctx;
+        if (ls !== 0)
+            lsCtx.letterSpacing = ls + "px";
+        const top = spec.multiline ? pt : pt + (this.height - pt - pb - lh) / 2;
+        const align = st.align ?? "left";
+        for (let i = 0; i < lines.length; i++) {
+            let x = pl;
+            if (align !== "left" && tw > 0) {
+                const w = textWidth(lines[i], font, ls);
+                x += align === "center" ? (tw - w) / 2 : tw - w;
+            }
+            ctx.fillText(lines[i], x, top + m.ascent + i * lh);
+        }
+        ctx.restore();
     }
     /** The caret/selection write half (TextInput.select, #22): land the range on
      *  the native element. For a collapsed range at either extreme, bring the
@@ -2327,12 +2547,16 @@ class CanvasSurface {
         }
     }
     activateEditable(active) {
+        if (active) {
+            this.showEditable()?.focus();
+            return;
+        }
         if (this.editEl === null)
             return;
-        if (active)
-            this.editEl.focus();
-        else
+        if (document.activeElement === this.editEl)
             this.editEl.blur();
+        else
+            this.hideEditable();
     }
     /** Re-apply the retained editable spec — used by the compositor once the host
      *  exists, since a TextInput's setEditable runs during the attach walk, before
@@ -2472,6 +2696,10 @@ class CanvasSurface {
     }
     /** The press target under (px,py), given in the PARENT's space — the shared
      *  scene walk (scene-walk.ts). */
+    /** The text field a press at (px, py) — parent-local, as hit's — lands on. */
+    fieldAt(px, py) {
+        return fieldWalk(this, px, py);
+    }
     hit(px, py) {
         return hitWalk(this, px, py);
     }
@@ -2726,10 +2954,17 @@ class CanvasSurface {
         if (this.editEl === null && this.edit === null && this.embedEl === null && this.pendingEmbed === null)
             this.compositor.unregisterEditable(this);
     }
-    /** Route a wheel delta to the innermost scrolling surface under (px,py) in
-     *  PARENT-local space; true when consumed. Mirrors hit's transform so it
-     *  targets exactly what the user sees; the compositor requests the repaint. */
+    /** Route a wheel delta to the scrolling surfaces under (px,py) in PARENT-local
+     *  space, each axis to the innermost pane that scrolls on it; true when any was
+     *  consumed. Mirrors hit's transform so it targets exactly what the user sees; the
+     *  compositor requests the repaint. */
     scrollBy(px, py, dx, dy) {
+        return this.wheelRoute(px, py, { dx, dy });
+    }
+    /** scrollBy's walk: `d` holds what is still to be taken, zeroed axis by axis as panes
+     *  take it — a vertical pane takes the vertical delta and lets a horizontal one pass to
+     *  an enclosing horizontal pane (a column in a strip of columns), and the reverse. */
+    wheelRoute(px, py, d) {
         // Opacity is paint, not presence — a wheel is input, routed by position, and
         // it reaches a transparent scroller exactly as a click reaches a transparent
         // sink (see hit()). Only `visible` means "not there".
@@ -2745,31 +2980,36 @@ class CanvasSurface {
             return false;
         const cy = this.scrolls ? ly + this.scrollOffset : ly;
         const cx = this.scrollsX ? lx + this.scrollXOffset : lx;
+        let took = false;
         for (let i = this.children.length - 1; i >= 0; i--) {
             const c = this.children[i];
-            if (c.scrollBy(this.scrollsX && c.ignoresScroll ? lx : cx, this.scrolls && c.ignoresScroll ? ly : cy, dx, dy))
-                return true;
+            if (c.wheelRoute(this.scrollsX && c.ignoresScroll ? lx : cx, this.scrolls && c.ignoresScroll ? ly : cy, d)) {
+                took = true;
+                break;
+            }
         }
+        if (d.dx === 0 && d.dy === 0)
+            return took;
         // the page root's own scroll is the browser's — never consumed here
         if (this.pageRoot || !inBox)
-            return false;
-        // a horizontal pane takes the horizontal delta and lets a vertical one pass
-        // to whatever scrolls vertically here or above (the DOM backend's rule).
-        // The delta is QUEUED on the scroll loop — applied next frame, painted,
-        // then reported — and the pane CONTAINS: consumed even at its limit
-        // (arbitration rule 2 — no chaining to the page).
+            return took;
+        // Each axis to the pane that scrolls on it (the DOM backend's rule). The delta
+        // is QUEUED on the scroll loop — applied next frame, painted, then reported —
+        // and the pane CONTAINS: consumed even at its limit (arbitration rule 2 — no
+        // chaining to the page). A pane that scrolls neither way takes nothing.
         const loop = this.compositor.scrollLoop;
-        if (this.scrollsX && dx !== 0) {
-            loop.enqueue(this, dx, 0);
-            if (!this.scrolls)
-                return true;
+        if (this.scrollsX && d.dx !== 0) {
+            loop.enqueue(this, d.dx, 0);
+            d.dx = 0;
+            took = true;
         }
         if (this.scrolls) {
-            if (dy !== 0)
-                loop.enqueue(this, 0, dy);
-            return true;
+            if (d.dy !== 0)
+                loop.enqueue(this, 0, d.dy);
+            d.dy = 0;
+            took = true;
         }
-        return false;
+        return took;
     }
     /** The innermost scrolling pane under (px,py) in PARENT-local space — a
      *  touch session's target (scrollBy's walk, without a delta). Never the page
@@ -3616,6 +3856,8 @@ class CanvasSurface {
         }
         if (this.drawing !== null)
             this.paintDrawing(ctx);
+        if (this.edit !== null)
+            this.paintEditText(ctx);
         if (this.text !== "" && this.font !== "") {
             // The run lives in the box less the padding: origin at the leading
             // insets, wrapping and aligning within what is left.
@@ -3788,27 +4030,9 @@ class CanvasSurface {
                 child.paint(ctx);
             }
             ctx.restore();
-            // the SCROLLBAR: canvas panes had none at all (the DOM pane gets the
-            // platform's overlay bar for free) — a thumb proportional to the
-            // content, on the right edge, whenever the content overflows.
-            const g = this.barGeom();
-            if (g !== null) {
-                const wide = this.barWide;
-                const bw = wide ? 9 : 5;
-                const bx = this.width - (wide ? 12 : 8);
-                ctx.save();
-                if (wide) {
-                    ctx.fillStyle = "rgba(128, 134, 140, 0.14)";
-                    ctx.beginPath();
-                    ctx.roundRect(bx - 1.5, 1, bw + 3, this.height - 2, (bw + 3) / 2);
-                    ctx.fill();
-                }
-                ctx.fillStyle = wide ? "rgba(110, 116, 122, 0.72)" : "rgba(128, 134, 140, 0.5)";
-                ctx.beginPath();
-                ctx.roundRect(bx, g.thumbY, bw, g.thumbH, bw / 2);
-                ctx.fill();
-                ctx.restore();
-            }
+            // the overlay scrollbars (the fallback for a pane the browser does not
+            // scroll): hidden at rest, a thin thumb while the pane moves (BAR)
+            this.paintBars(ctx);
         }
         else {
             for (const child of this.children) {
@@ -4033,5 +4257,63 @@ function replayOnScene(ctx, list, clip) {
     ctx.globalCompositeOperation = "source-over";
     ctx.drawImage(layer, x0, y0);
     ctx.restore();
+}
+/** The pointer for a tenant composed into `island` — its root surface a child of the island's
+ *  (boot.ts mountEmbeddedApp; the Mac's mac-boot.js `mountCompiled`). Such a tenant has no
+ *  element and no input router of its own, so nothing hands it the pointer as
+ *  `wireEnvironmentEmbedded` hands an element-mounted one: these listeners do, until the
+ *  returned function stops them. Window, capture phase, added after its host's
+ *  (wireEnvironment, or the host tenant's own), so each event finds the host's facts current
+ *  and lands before the event is routed (a press-then-drag inside one frame must not read
+ *  the press point). Its coordinates are its island box's frame (the hit walk's mapping,
+ *  rootToLocal: scroll, scale, rotation, 3D) and follow the pointer out of the box, so a drag
+ *  that leaves it continues (the DOM's pointer capture); the press is its own only when it
+ *  began inside the box; hover is inside the box. Only the renderers that compose call it,
+ *  so it lives with the canvas renderer, and a DOM build carries none of it. */
+export function feedPointer(app, island) {
+    let top = island;
+    while (top.parent instanceof View)
+        top = top.parent;
+    if (!(top instanceof App))
+        return () => { };
+    const host = top;
+    const feed = (type) => {
+        if (island.$surface === null)
+            return;
+        const [lx, ly] = rootToLocal(island, host.pointerX + host.scrollX, host.pointerY + host.scrollY);
+        const inside = lx >= 0 && ly >= 0 && lx < island.width && ly < island.height;
+        if (app.pointerX !== lx)
+            app.pointerX = lx;
+        if (app.pointerY !== ly)
+            app.pointerY = ly;
+        if (type !== "out" && app.lastPointerType !== host.lastPointerType)
+            app.lastPointerType = host.lastPointerType;
+        if (type === "down" && inside && !app.pointerDown)
+            app.pointerDown = true;
+        if (type === "up" && app.pointerDown)
+            app.pointerDown = false;
+        const hovering = type !== "out" && host.hovering && inside;
+        if (app.hovering !== hovering)
+            app.hovering = hovering;
+        const overText = hovering && host.pointerOverText;
+        if (app.pointerOverText !== overText)
+            app.pointerOverText = overText;
+    };
+    const move = () => feed("move"), down = () => feed("down"), up = () => feed("up");
+    const out = (e) => { if (e.relatedTarget === null)
+        feed("out"); };
+    const w = window;
+    w.addEventListener("pointermove", move, { passive: true, capture: true });
+    w.addEventListener("pointerdown", down, { passive: true, capture: true });
+    w.addEventListener("pointerup", up, { passive: true, capture: true });
+    w.addEventListener("pointercancel", up, { passive: true, capture: true });
+    w.addEventListener("pointerout", out);
+    return () => {
+        w.removeEventListener("pointermove", move, { capture: true });
+        w.removeEventListener("pointerdown", down, { capture: true });
+        w.removeEventListener("pointerup", up, { capture: true });
+        w.removeEventListener("pointercancel", up, { capture: true });
+        w.removeEventListener("pointerout", out);
+    };
 }
 //# sourceMappingURL=canvas-backend.js.map

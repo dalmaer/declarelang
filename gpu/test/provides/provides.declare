@@ -1,0 +1,6 @@
+// The page as the topmost host: a value the page provides, read with hostProvided.
+
+App [ fill = #FFFFFF,
+    greeting: string = { hostProvided("greeting", "none") },
+    Text [ x = 20, y = 20, text = { app.greeting }, fontSize = 24 ]
+    ]

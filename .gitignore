@@ -95,3 +95,13 @@ test/artifacts/
 
 # a scratch copy of the native host for the native-partition experiment (2026-09-16)
 mac-host-test/
+
+# render=gpu (gpu/): the engine's Rust build tree and the built engine and scripts are
+# per-machine, built by `node gpu/build.mjs` (gpu/README.md § Building and looking), as the
+# Mac app is; the sources, the vendored Vello and the fonts are tracked. The baseline's
+# pictures are saved per machine (`node gpu/baseline.mjs --save`), as are the test data a
+# script makes.
+gpu/engine/target/
+gpu/dist/
+gpu/test/baseline/
+gpu/test/calendar-busy/data/

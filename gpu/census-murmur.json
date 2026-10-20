@@ -1,0 +1,161 @@
+[
+ {
+  "app": "my-apps/murmur/",
+  "settle": 2500,
+  "scenarios": [
+   {
+    "name": "open long thread",
+    "steps": [
+     [
+      "click",
+      170,
+      175
+     ],
+     [
+      "wait",
+      2000
+     ]
+    ]
+   },
+   {
+    "name": "scroll history up",
+    "steps": [
+     [
+      "wheel",
+      800,
+      400,
+      -40,
+      60
+     ],
+     [
+      "wait",
+      600
+     ]
+    ]
+   },
+   {
+    "name": "scroll history down",
+    "steps": [
+     [
+      "wheel",
+      800,
+      400,
+      40,
+      60
+     ],
+     [
+      "wait",
+      600
+     ]
+    ]
+   },
+   {
+    "name": "live feed 8s",
+    "steps": [
+     [
+      "wait",
+      8000
+     ]
+    ]
+   },
+   {
+    "name": "type + send",
+    "steps": [
+     [
+      "click",
+      700,
+      772
+     ],
+     [
+      "type",
+      "on my way, twenty minutes"
+     ],
+     [
+      "key",
+      "Enter"
+     ],
+     [
+      "wait",
+      1500
+     ]
+    ]
+   },
+   {
+    "name": "answer arrives",
+    "steps": [
+     [
+      "wait",
+      10000
+     ]
+    ]
+   },
+   {
+    "name": "switch thread",
+    "steps": [
+     [
+      "click",
+      170,
+      250
+     ],
+     [
+      "wait",
+      1500
+     ]
+    ]
+   }
+  ]
+ },
+ {
+  "app": "my-apps/murmur/",
+  "settle": 4000,
+  "label": "100x",
+  "scenarios": [
+   {
+    "name": "100x (service --scale=100): open long thread",
+    "steps": [
+     [
+      "click",
+      170,
+      175
+     ],
+     [
+      "wait",
+      2500
+     ]
+    ]
+   },
+   {
+    "name": "100x: scroll history up",
+    "steps": [
+     [
+      "wheel",
+      800,
+      400,
+      -60,
+      90
+     ],
+     [
+      "wait",
+      600
+     ]
+    ]
+   },
+   {
+    "name": "100x: scroll history down",
+    "steps": [
+     [
+      "wheel",
+      800,
+      400,
+      60,
+      90
+     ],
+     [
+      "wait",
+      600
+     ]
+    ]
+   }
+  ]
+ }
+]

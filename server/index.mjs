@@ -116,9 +116,17 @@ if (typeof process.send === "function") {
   });
 }
 
+// `--host localhost` answers on both loopbacks: a browser may resolve localhost to ::1 first,
+// and Node binds a name to one address only.
+if (HOST === "localhost") {
+  http.createServer(server.handler).on("upgrade", server.upgrade)
+    .on("error", (e) => console.error(`dev server: not on [::1]:${PORT} (${e.code}) — 127.0.0.1 only`))
+    .listen(PORT, "::1");
+}
+
 http.createServer(server.handler)
   .on("upgrade", server.upgrade)
-  .listen(PORT, HOST, () => {
+  .listen(PORT, HOST === "localhost" ? "127.0.0.1" : HOST, () => {
     // the banner — printed every start, because most of the "forgotten magic"
     // failure mode is really "the server knew and did not say" (mounts.mjs)
     // Bound wide, name the LAN address too — the whole point of --host is a

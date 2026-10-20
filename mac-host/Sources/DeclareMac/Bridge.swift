@@ -80,7 +80,10 @@ final class Bridge {
     private final class RuntimeThread: Thread {
         let ready = DispatchSemaphore(value: 0)
         private(set) var loop: CFRunLoop!
+        /// This thread's mach port, for its CPU time (`Bridge.threadCPU`).
+        private(set) var port: thread_act_t = 0
         override func main() {
+            port = mach_thread_self()
             loop = CFRunLoopGetCurrent()
             // a port keeps the loop alive with nothing else scheduled
             RunLoop.current.add(Port(), forMode: .common)
@@ -130,6 +133,29 @@ final class Bridge {
     var cachedScale: CGFloat = 2
     var cachedAppearance = "light"
     // commit-pipeline instrumentation (benchmarks)
+    /// Where the process's CPU goes, by layer (`stats` LAYERS line): each thread's CPU time
+    /// (mach thread_info), the process's (getrusage), and the runtime thread's calls into
+    /// the host that are not JavaScript — text measuring and decoding commits. Those two are
+    /// timed per call, so only in a host launched with DECLARE_METER (gpu/costs.mjs).
+    static let meter = ProcessInfo.processInfo.environment["DECLARE_METER"] != nil
+    static func threadCPU(_ port: thread_act_t) -> Double {
+        var info = thread_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<thread_basic_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { thread_info(port, thread_flavor_t(THREAD_BASIC_INFO), $0, &count) }
+        }
+        guard kr == KERN_SUCCESS else { return 0 }
+        return Double(info.user_time.seconds + info.system_time.seconds) * 1000
+            + Double(info.user_time.microseconds + info.system_time.microseconds) / 1000
+    }
+    static func processCPU() -> Double {
+        var u = rusage()
+        getrusage(RUSAGE_SELF, &u)
+        return Double(u.ru_utime.tv_sec + u.ru_stime.tv_sec) * 1000 + Double(u.ru_utime.tv_usec + u.ru_stime.tv_usec) / 1000
+    }
+    private let mainPort: thread_act_t = pthread_mach_thread_np(pthread_self())
+    private var cpuAtReset = (runtime: 0.0, main: 0.0, process: 0.0)
+    private var measureMs = 0.0, measureN = 0, decodeMs = 0.0
     var commitCount = 0
     var commitMsTotal = 0.0
     var commitMsMax = 0.0
@@ -282,7 +308,9 @@ final class Bridge {
             guard let self else { return }
             // the JSON is decoded HERE, on the runtime thread; the layer tree
             // applies the decoded ops on main, in order, one hop later
+            let d0 = Bridge.meter ? CFAbsoluteTimeGetCurrent() : 0
             let ops = LayerTree.decode(json)
+            if Bridge.meter { self.decodeMs += (CFAbsoluteTimeGetCurrent() - d0) * 1000 }
             let bytes = json.utf8.count
             let head = self.statsTracing ? String(json.prefix(180)) : ""
             DispatchQueue.main.async { [weak self] in
@@ -322,7 +350,11 @@ final class Bridge {
         } as @convention(block) (String) -> Void, forKeyedSubscript: "commit")
 
         host.setObject({ [weak self] (text: String, font: String, ls: Double) -> [Double] in
-            TextEngine.measure(text: text, font: font, letterSpacing: ls, scale: self?.cachedScale ?? 2)
+            guard Bridge.meter else { return TextEngine.measure(text: text, font: font, letterSpacing: ls, scale: self?.cachedScale ?? 2) }
+            let m0 = CFAbsoluteTimeGetCurrent()
+            let r = TextEngine.measure(text: text, font: font, letterSpacing: ls, scale: self?.cachedScale ?? 2)
+            if let self { self.measureMs += (CFAbsoluteTimeGetCurrent() - m0) * 1000; self.measureN += 1 }
+            return r
         } as @convention(block) (String, String, Double) -> [Double], forKeyedSubscript: "measure")
 
         host.setObject({ [weak self] (handle: Int) -> [Double] in
@@ -875,6 +907,8 @@ final class Bridge {
         tree.describedN = 0; tree.rasterizedN = 0
         TextLayer.drawCount = 0; TextLayer.drawMs = 0; TextLayer.buildCount = 0; TextLayer.statsOn = true
         RichOverlay.redrawCount = 0; RichOverlay.redrawMP = 0; RichOverlay.redrawMs = 0; RichOverlay.statsOn = true; tree.statsOn = true
+        measureMs = 0; measureN = 0; decodeMs = 0
+        cpuAtReset = (Bridge.threadCPU(runtimeThread.port), Bridge.threadCPU(mainPort), Bridge.processCPU())
         statsStart = CFAbsoluteTimeGetCurrent()
     }
     private var statsStart: CFAbsoluteTime = 0
@@ -930,6 +964,9 @@ final class Bridge {
           + String(format: "\n    parse=%.0fms  build=%.0fms (n=%d)  layout=%.0fms",
                    tree.richParseMs, RichOverlay.RichStats.buildMs, RichOverlay.RichStats.buildN,
                    RichOverlay.RichStats.ensureMs)
+          + String(format: "\n  LAYERS cpu ms runtime=%.1f main=%.1f process=%.1f  measure=%.1f (n=%d) decode=%.1f apply=%.1f caCommitCpu=%.1f",
+                   Bridge.threadCPU(runtimeThread.port) - cpuAtReset.runtime, Bridge.threadCPU(mainPort) - cpuAtReset.main,
+                   Bridge.processCPU() - cpuAtReset.process, measureMs, measureN, decodeMs, commitMsTotal, tree.caCommitCpuMsTotal)
           + "\n  opMs: " + tree.opMs.sorted { $0.value > $1.value }.prefix(6).map { String(format: "%@=%.0fms", opName($0.key), $0.value) }.joined(separator: " ")
           + "\n  redrawn: " + drawnNames()
           // WHOSE raster, and how many pixels of it. "888 rasters" is not a

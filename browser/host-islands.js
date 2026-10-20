@@ -6,7 +6,7 @@
 // capability, compiler/src/capabilities.ts); there, wireIslands is a stand-in
 // whose methods do nothing.
 
-import { mapUrl, renderProgramAsync, afterSettle, disposeApp, DomBackend, observe, provideHostServices, onIslandSlot, setAppAssetBase, assetBaseFor, linkIslandTenant, islandProvisions, islandNavigation, mountEmbeddedApp, kernelReady, onDiscard } from "../runtime/dist/host-api.js";
+import { mapUrl, renderProgramAsync, afterSettle, disposeApp, DomBackend, observe, provideHostServices, onIslandSlot, setAppAssetBase, assetBaseFor, linkIslandTenant, islandProvisions, islandNavigation, mountEmbeddedApp, feedPointer, kernelReady, onDiscard } from "../runtime/dist/host-api.js";
 
 /** Wire the islands of `app`, the app bootHost just mounted in `host`. Returns
  *  `renderChild` (a live edit re-renders an island through it), `retry` (the
@@ -260,10 +260,13 @@ export function wireIslands({ app, host, cfg, seeds, compile, navServices, resol
         catch (e) { console.error(`[Declare] ${name || "island"}: ${e.message}`); }
       }
       mountEmbeddedApp(childApp, view);
+      // the pointer, in the island's frame: with no element, nothing else hands it over
+      const stopPointer = feedPointer(childApp, view);
       // discarded with its window: the bridge, then the program (as the DOM mount)
       onDiscard(view, () => {
         if (view.__childApp !== childApp) return;
         try { childApp.__unlink?.(); } catch {}
+        stopPointer();
         disposeApp(childApp);
         view.__childApp = null;
       });

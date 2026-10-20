@@ -1,0 +1,70 @@
+[
+ {"app":"apps/calendar/","scenarios":[
+  {"name":"month→week","steps":[["click",1075,30],["wait",1300]]},
+  {"name":"week→year","steps":[["click",1221,30],["wait",1300]]},
+  {"name":"year→month","steps":[["click",1148,30],["wait",1300]]},
+  {"name":"next month","steps":[["click",736,30],["wait",1300]]},
+  {"name":"hover cells","steps":[["hover",[[300,300],[500,300],[700,450],[900,600],[300,600]]]]}]},
+ {"app":"apps/tracker/","scenarios":[
+  {"name":"scroll list","steps":[["wheel",500,400,40,60],["wait",600]]},
+  {"name":"hover rows","steps":[["hover",[[400,200],[400,300],[400,400],[400,500],[400,600]]]]},
+  {"name":"type search","steps":[["click",360,28],["type","cache"],["wait",800]],"after":[["key","Escape"]]},
+  {"name":"10K→100K","steps":[["click",1124,28],["wait",1500]]}]},
+ {"app":"apps/weather/","scenarios":[
+  {"name":"idle (sky)","steps":[["wait",2000]]},
+  {"name":"scroll main","steps":[["wheel",800,500,40,60],["wait",600]]},
+  {"name":"scroll cities","steps":[["wheel",170,400,40,60],["wait",600]]},
+  {"name":"pick city","before":[["wheel",170,400,-40,70],["wait",800]],"steps":[["click",170,210],["wait",1500]]}]},
+ {"app":"apps/desktop/","scenarios":[
+  {"name":"drag window","steps":[["drag",470,122,700,300,50],["wait",300]]},
+  {"name":"open calendar","steps":[["click",531,755],["wait",1500]]},
+  {"name":"menu File","steps":[["click",125,16],["wait",600]],"after":[["key","Escape"],["wait",300]]}]},
+ {"app":"apps/birds/","scenarios":[
+  {"name":"scroll grid","steps":[["wheel",640,400,40,60],["wait",600]]},
+  {"name":"hover cards","steps":[["hover",[[209,300],[424,300],[640,300],[856,300],[1071,300]]]]},
+  {"name":"open card","before":[["wheel",640,400,-40,70],["wait",800]],"steps":[["click",209,215],["wait",1500]]}]},
+ {"app":"apps/docs/","scenarios":[
+  {"name":"scroll page","steps":[["wheel",560,500,40,60],["wait",600]]},
+  {"name":"expand Building","steps":[["click",67,336],["wait",800]]},
+  {"name":"Reference tab","steps":[["click",167,83],["wait",1000]]}]},
+ {"app":"apps/sampler/","scenarios":[
+  {"name":"switch+check","steps":[["click",217,254],["wait",500],["click",58,254],["wait",500]]},
+  {"name":"drag slider","steps":[["drag",160,422,310,422,40],["wait",300]]},
+  {"name":"accordion","steps":[["click",760,658],["wait",800]]},
+  {"name":"menu open","steps":[["click",608,294],["wait",600]],"after":[["key","Escape"]]},
+  {"name":"Table tab","steps":[["click",640,26],["wait",1000]]},
+  {"name":"DataGrid scroll","before":[["click",703,26],["wait",1000]],"steps":[["wheel",640,450,40,60],["wait",600]]}]},
+ {"app":"apps/swatchbook/","scenarios":[
+  {"name":"Effects tab","steps":[["click",600,26],["wait",1500]]},
+  {"name":"Transforms tab","steps":[["click",678,26],["wait",1500]]},
+  {"name":"Drawing tab","steps":[["click",833,26],["wait",1500]]},
+  {"name":"Combined tab","steps":[["click",988,26],["wait",1500]]},
+  {"name":"Combined scroll","steps":[["wheel",640,450,40,60],["wait",600]]}]},
+ {"app":"apps/marketmap/","scenarios":[
+  {"name":"scrub timeline","steps":[["drag",1247,53,300,53,60],["wait",800]]},
+  {"name":"chip: covid","steps":[["click",155,82],["wait",1500]]},
+  {"name":"hover tiles","steps":[["hover",[[160,250],[360,320],[540,270],[760,200],[960,330]]]]},
+  {"name":"zoom tile","steps":[["click",160,250],["wait",1500]]}]},
+ {"app":"apps/homepage/","scenarios":[
+  {"name":"idle","steps":[["wait",2000]]},
+  {"name":"scroll","steps":[["wheel",640,400,40,60],["wait",600]]}]},
+ {"app":"apps/architecture/","scenarios":[
+  {"name":"scroll","steps":[["wheel",640,400,40,60],["wait",600]]}]},
+ {"app":"apps/lzx-calendar/","scenarios":[
+  {"name":"→week","steps":[["click",237,13],["wait",1500]]},
+  {"name":"→month","steps":[["click",297,13],["wait",1500]]}]},
+ {"app":"apps/lzx-dashboard/","scenarios":[
+  {"name":"guest","steps":[["click",608,296],["wait",2500]]}]},
+ {"app":"apps/games/tempest/","scenarios":[
+  {"name":"attract","steps":[["wait",3000]]},
+  {"name":"play","before":[["key","Enter"],["wait",800],["key","Enter"],["wait",1500]],"steps":[["keydown","ArrowLeft"],["keydown","Space"],["wait",1500],["keyup","ArrowLeft"],["keydown","ArrowRight"],["wait",1500],["keyup","ArrowRight"],["keyup","Space"]]}]},
+ {"app":"apps/games/vortex/","scenarios":[
+  {"name":"attract","steps":[["wait",3000]]},
+  {"name":"play","before":[["key","Enter"],["wait",1500]],"steps":[["keydown","ArrowLeft"],["keydown","Space"],["wait",1500],["keyup","ArrowLeft"],["keydown","ArrowRight"],["wait",1500],["keyup","ArrowRight"],["keyup","Space"]]}]},
+ {"app":"apps/games/stargate/","scenarios":[
+  {"name":"attract","steps":[["wait",3000]]},
+  {"name":"play","before":[["key","Enter"],["wait",1500]],"steps":[["keydown","'"],["keydown","Enter"],["wait",1500],["keydown","q"],["wait",700],["keyup","q"],["keyup","'"],["wait",800],["keyup","Enter"]]}]},
+ {"app":"apps/games/asteroids/","scenarios":[
+  {"name":"attract","steps":[["wait",3000]]},
+  {"name":"play","before":[["key","Enter"],["wait",1500]],"steps":[["keydown","ArrowLeft"],["keydown","ArrowUp"],["keydown","Space"],["wait",1500],["keyup","ArrowLeft"],["wait",1500],["keyup","ArrowUp"],["keyup","Space"]]}]}
+]

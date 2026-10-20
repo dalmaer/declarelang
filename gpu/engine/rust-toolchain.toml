@@ -1,0 +1,4 @@
+# The toolchain the engine is built with (`node gpu/build.mjs`); rustup installs it on first use.
+[toolchain]
+channel = "1.99.0"
+targets = ["wasm32-unknown-unknown"]

@@ -135,7 +135,8 @@
     }
     let s = out.join("/");
     if (abs) s = "/" + s;
-    if (p.endsWith("/") && !s.endsWith("/")) s += "/";
+    // a path ending in a directory ("/", "/.", "/..") keeps its trailing slash
+    if (/(^|\/)(\.\.?)?$/.test(p) && !s.endsWith("/")) s += "/";
     return s;
   }
   class DeclareURLSearchParams {

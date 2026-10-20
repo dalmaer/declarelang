@@ -1,0 +1,21 @@
+[
+  { "app": "apps/weather/", "viewport": [390, 844], "settle": 2500, "scenarios": [
+    { "name": "phone: open city", "steps": [["click", 195, 300], ["wait", 1500]] },
+    { "name": "phone: next city", "steps": [["click", 292, 807], ["wait", 1200]] },
+    { "name": "phone: swipe city", "steps": [["drag", 320, 420, 60, 420, 30], ["wait", 1200]] },
+    { "name": "phone: back to list", "steps": [["click", 349, 807], ["wait", 1500]] }
+  ] },
+  { "app": "apps/tracker/", "scenarios": [
+    { "name": "open row", "steps": [["click", 300, 178], ["wait", 1200]] },
+    { "name": "close row", "steps": [["key", "Escape"], ["wait", 1200]] }
+  ] },
+  { "app": "apps/desktop/", "settle": 2500, "scenarios": [
+    { "name": "dock magnify", "steps": [["move", 230, 750, 1], ["move", 1050, 750, 60], ["move", 640, 600, 10], ["wait", 600]] },
+    { "name": "minimize window", "steps": [["click", 158, 121], ["wait", 1200]] },
+    { "name": "open books", "steps": [["click", 460, 750], ["wait", 1500]] }
+  ] },
+  { "app": "apps/birds/", "scenarios": [
+    { "name": "open card", "steps": [["click", 209, 215], ["wait", 1500]] },
+    { "name": "back to grid", "steps": [["key", "Escape"], ["wait", 1500]] }
+  ] }
+]

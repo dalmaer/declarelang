@@ -1,0 +1,39 @@
+[
+ {
+  "app": "my-apps/marketcharts/",
+  "settle": 2500,
+  "scenarios": [
+   {
+    "name": "scrub timeline",
+    "steps": [
+     [
+      "drag",
+      1247,
+      53,
+      300,
+      53,
+      60
+     ],
+     [
+      "wait",
+      800
+     ]
+    ]
+   },
+   {
+    "name": "chip: covid",
+    "steps": [
+     [
+      "click",
+      155,
+      82
+     ],
+     [
+      "wait",
+      1500
+     ]
+    ]
+   }
+  ]
+ }
+]

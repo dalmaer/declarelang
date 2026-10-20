@@ -1,0 +1,12 @@
+[
+ {"app":"my-apps/atlas/","settle":3000,"scenarios":[
+  {"name":"idle (world)","steps":[["wait",1500]]},
+  {"name":"pan world","steps":[["drag",640,400,340,300,60],["wait",400]]},
+  {"name":"wheel zoom in (Europe)","steps":[["wheel",700,230,-25,40],["wait",1200]]},
+  {"name":"fly to Paris (z13)","steps":[["click",116,73],["wait",4000]]},
+  {"name":"pan Paris z13","steps":[["drag",640,400,340,250,60],["wait",400]]},
+  {"name":"wheel zoom in Paris → z16","steps":[["wheel",640,400,-25,40],["wait",1500]]},
+  {"name":"fly Paris → Tokyo","steps":[["click",178,73],["wait",4500]]},
+  {"name":"pan Tokyo z14","steps":[["drag",640,400,900,600,60],["wait",400]]},
+  {"name":"fly Tokyo → World","steps":[["click",56,73],["wait",4000]]}]}
+]

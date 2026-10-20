@@ -48,7 +48,7 @@ import { loadBuild, relativize } from "./prewarm-cache.js";
 import { prewarmedEntry } from "./prewarm-manifest.js";
 import { isEntryPage, launchTarget } from "./serve-core.js";
 import { fnv1a, isUpToDate, lookupKey } from "../compiler/dist/closure.js";
-import { hydrateProgram } from "../runtime/dist/host-api.js";
+import { hydrateProgram, externalValue } from "../runtime/dist/host-api.js";
 
 const ROOT = new URL("../", import.meta.url);
 
@@ -404,6 +404,18 @@ export default async function boot(cfg) {
       const n = stamp.files.length;
       console.log(`[Declare] built ${when} from ${stamp.main ?? "(source)"}${n > 0 ? ` + ${n} included file${n === 1 ? "" : "s"}` : ""} · dev server pid ${stamp.server.pid} · root ${stamp.server.root}`);
     }
+  }
+
+  // render=gpu: the program, resolved as above, runs in a worker drawing on WebGPU
+  // (gpu/). Loaded by address, so none of it is in this bundle; it is built on each machine
+  // (`node gpu/build.mjs`), so a tree may not have it. The error page itself runs in the DOM.
+  if (!showingErrorPage && new URLSearchParams(location.search).get("render") === "gpu") {
+    if (!("gpu" in navigator)) return showError("render=gpu draws with WebGPU, which this browser does not offer.", mainUrl.href);
+    let shell;
+    try { shell = await import(new URL("../gpu/dist/shell.js", import.meta.url).href); }
+    catch { return showError("render=gpu is not built in this tree. Build it with `node gpu/build.mjs` (it needs Rust; see gpu/README.md), then reload.", mainUrl.href); }
+    return shell.bootGpu({ program: programObj, main: mainUrl.href, host: cfg.host, provides: cfg.provides, externalValue,
+      island: { prewarm: (u) => prewarmIsland(u, ROOT), serverCompile, compiler: () => loadCompiler().then(ensureLibrary) } });
   }
 
   // THE PAGE — from here the boot is browser/boot-page.js, the one every host

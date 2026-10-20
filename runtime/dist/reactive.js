@@ -1157,11 +1157,24 @@ export function settle() {
     inSettle = true;
     stepsRan = false;
     let r;
-    try {
-        r = K.settle();
+    if (typeof __DECLARE_DEV_SWITCHES__ !== "undefined" && __DECLARE_DEV_SWITCHES__) {
+        const m = (globalThis.__declareMeter ??= { settles: 0, settleMs: 0 }), t0 = performance.now();
+        try {
+            r = K.settle();
+        }
+        finally {
+            inSettle = false;
+            m.settles++;
+            m.settleMs += performance.now() - t0;
+        }
     }
-    finally {
-        inSettle = false;
+    else {
+        try {
+            r = K.settle();
+        }
+        finally {
+            inSettle = false;
+        }
     }
     if (traceHook !== null)
         traceHook.after(r);
