@@ -49,6 +49,8 @@ include [ "screens.declare" ]
 
 include [ "sound.declare" ]
 
+include [ "../touch-pad.declare" ]
+
 defaultFlags [ render = canvas, accessibility = false ]
 
 // numbers and lanes: functions of their arguments
@@ -395,13 +397,13 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
     advance(dt: number) {
         t = t + dt
         if (playing && !demo) {
-            const dir = (held(["ArrowRight", "KeyS"]) ? 1 : 0) - (held(["ArrowLeft", "KeyA"]) ? 1 : 0)
+            const dir = (held(["ArrowRight", "KeyS"]) || pad.isDown("right") ? 1 : 0) - (held(["ArrowLeft", "KeyA"]) || pad.isDown("left") ? 1 : 0)
             if (dir == 0) spinCarry = 0
             else {
                 spinCarry = spinCarry + dt * 11
                 while (spinCarry >= 1) { spin(dir); spinCarry = spinCarry - 1 }
                 }
-            if (held(["Space", "Enter"])) {
+            if (held(["Space", "Enter"]) || pad.isDown("fire")) {
                 fireCarry = fireCarry + dt
                 if (fireCarry >= 0.13) { fire(); fireCarry = 0 }
                 }
@@ -594,7 +596,7 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
 
     demoCard: Notice [ y = { app.height - 110 }, visible = { app.demo },
         Headline [ fontSize = 20, text = "DEMO" ],
-        Subline [ text = "PRESS RETURN TO PLAY" ]
+        Subline [ text = { app.touchDevice ? "PRESS START TO PLAY" : "PRESS RETURN TO PLAY" } ]
         ],
 
     pauseCard: Notice [ visible = { app.paused },
@@ -605,6 +607,26 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
     overCard: Notice [ visible = { app.mode == "over" },
         Headline [ fontSize = 56, text = "GAME OVER" ],
         Subline [ text = { "SCORE " + app.score + "   ·   LEVEL " + app.level } ],
-        Subline [ text = "RETURN TO PLAY AGAIN" ]
+        Subline [ text = { app.touchDevice ? "START TO PLAY AGAIN" : "RETURN TO PLAY AGAIN" } ]
+        ],
+
+    // On a touch screen, Tempest's controls as its panel has them: spin under the left hand,
+    // superzapper and fire under the right (../touch-pad.declare). A button newly pressed is
+    // the press of its key; spin and fire held are read in the frame step.
+
+    pad: TouchPad [ startShown = { app.mode == "attract" || app.mode == "over" || app.demo },
+        ink = { provided("theme").claw },
+        fieldX = { app.tube.cx - app.tube.radius }, fieldY = { app.tube.cy - app.tube.radius },
+        fieldW = { 2 * app.tube.radius }, fieldH = { 2 * app.tube.radius },
+        buttonDown(id: string) {
+            const code = id == "left" ? "ArrowLeft" : id == "right" ? "ArrowRight" : id == "fire" ? "Space" : id == "zap" ? "ArrowDown" : "Enter"
+            app.press(code)
+            },
+        keys = { [
+            { id: "left", label: "SPIN LEFT", icon: "ccw", side: "left", col: 0, row: 0 },
+            { id: "right", label: "SPIN RIGHT", icon: "cw", side: "left", col: 1, row: 0 },
+            { id: "zap", label: "SUPER ZAPPER", side: "right", col: 0, row: 0 },
+            { id: "fire", label: "FIRE", side: "right", col: 1, row: 0 }
+            ] }
         ]
     ]

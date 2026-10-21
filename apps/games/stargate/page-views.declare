@@ -141,11 +141,13 @@ class PageWords [ width = 100%, height = 100%,
         { "id": 3, "says": "CREDITS: ##", "font": "large", "px": 124, "py": 224 } ] } },
 
     notices: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "title" && classroot.pages.noticed },
-        Lettering [ font = "large", ink = 1, px = 84, py = 120, opaque = false, text = "PRESS RETURN TO START" ],
-        View [ width = 100%, height = 100%, datapath = { classroot.keyRows.value },
+        Lettering [ font = "large", ink = 1, px = { app.touchDevice ? 117 : 84 }, py = 120, opaque = false,
+            text = { app.touchDevice ? "PRESS START" : "PRESS RETURN TO START" } ],
+        View [ width = 100%, height = 100%, datapath = { classroot.keyRows.value }, visible = { !app.touchDevice },
             KeyRow [ datapath = :rows[] ]
             ],
-        Lettering [ ink = 8, px = 112, py = 184, opaque = false, text = "GAME SECRETS: PRESS Z" ],
+        Lettering [ ink = 8, px = { app.touchDevice ? 108 : 112 }, py = 184, opaque = false,
+            text = { app.touchDevice ? "GAME SECRETS: PRESS REV" : "GAME SECRETS: PRESS Z" } ],
         Lettering [ font = "large", ink = 10, px = 27, py = 228, opaque = false, text = "COPYRIGHT © 1981 WILLIAMS ELECTRONICS INC." ]
         ],
     secrets: View [ width = 100%, height = 100%, visible = { classroot.pages.shown == "secrets" && classroot.pages.told },

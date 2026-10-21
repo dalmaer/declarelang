@@ -111,13 +111,13 @@ class TitleScreen [ x = center, y = center,
     title: Text [ fontSize = 72, fontWeight = bold, letterSpacing = 18,
         textColor = { provided("theme").title },
         textShadow = { shadow(0, 0, 18, provided("theme").title) }, text = "VORTEX" ],
-    keys: View [ padding = [18, 0, 18, 0], datapath = { app.help.value },
+    keys: View [ padding = [18, 0, 18, 0], datapath = { app.help.value }, visible = { !app.touchDevice },
         layout: SimpleLayout [ axis = y, spacing = 8 ],
         KeyRow [ datapath = :keys[] ]
         ],
     start: Text [ fontSize = 20, letterSpacing = 6, textColor = { provided("theme").claw },
         opacity = { Math.floor(classroot.blink.now / 500) % 2 == 0 ? 1 : 0.25 },
-        text = "PRESS RETURN TO START" ]
+        text = { app.touchDevice ? "PRESS START" : "PRESS RETURN TO START" } ]
     ]
 
 

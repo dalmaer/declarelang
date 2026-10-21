@@ -34,7 +34,7 @@ here, please open an issue on this repository on GitHub, or message me there, an
 it.*
 */
 
-include [ "machine.declare", "well.declare", "game.declare", "enemies.declare", "camera.declare", "scene.declare", "figures.declare", "beam.declare", "screen.declare", "sound.declare" ]
+include [ "machine.declare", "well.declare", "game.declare", "enemies.declare", "camera.declare", "scene.declare", "figures.declare", "beam.declare", "screen.declare", "sound.declare", "../touch-pad.declare" ]
 
 defaultFlags [ render = canvas, accessibility = false ]
 
@@ -95,17 +95,19 @@ App [ appName = "Tempest", fill = black,
             }
         ],
 
-    // the controls for one of the game's frames, taking the taps that frame has used
+    // the controls for one of the game's frames, taking the taps that frame has used; a
+    // touch button (the pad, below) counts as its keys do
 
     takeControls() -> Controls {
         const tapped = app.tapped
         app.tapped = []
-        const down = (...keys: string[]) => keys.some((k) => Keys.isDown(k) || tapped.includes(k))
+        const down = (button: string, ...keys: string[]) =>
+            app.pad.isDown(button) || tapped.includes(button) || keys.some((k) => Keys.isDown(k) || tapped.includes(k))
         const pressed = (...keys: string[]) => keys.some((k) => tapped.includes(k))
-        let turn = (down("ArrowRight", "KeyS") ? 6 : 0) - (down("ArrowLeft", "KeyA") ? 6 : 0)
-        if (app.game.phase == "choosing") turn = this.chooseTurn(Math.sign(turn), pressed("ArrowRight", "KeyS", "ArrowLeft", "KeyA"))
+        let turn = (down("right", "ArrowRight", "KeyS") ? 6 : 0) - (down("left", "ArrowLeft", "KeyA") ? 6 : 0)
+        if (app.game.phase == "choosing") turn = this.chooseTurn(Math.sign(turn), pressed("ArrowRight", "KeyS", "ArrowLeft", "KeyA", "right", "left"))
         else wantChoice = -1
-        return { turn, fire: down("Space", "Enter"), zap: down("ArrowDown", "KeyZ", "Slash"), start: down("Enter", "Digit1") }
+        return { turn, fire: down("fire", "Space", "Enter"), zap: down("zap", "ArrowDown", "KeyZ", "Slash"), start: down("start", "Enter", "Digit1") }
         },
 
     // On the "rate yourself" screen the keys step the choice a column at a time — once for a
@@ -149,5 +151,22 @@ App [ appName = "Tempest", fill = black,
                 app.game.step(app.takeControls())
                 }
             }
+        ],
+
+    // On a touch screen, the arcade's controls as its panel has them: the spinner, as two
+    // buttons that turn it, under the left hand; superzapper and fire under the right
+    // (../touch-pad.declare). A press shorter than a frame still counts, as a key's does.
+    // Over the screen, start sits low on the left, clear of the credits across its foot.
+
+    pad: TouchPad [ startShown = { !app.game.playing }, ink = yellow, startOverLeft = true,
+        fieldX = { app.screen.x }, fieldY = { app.screen.y },
+        fieldW = { app.screen.width * app.screen.zoom }, fieldH = { app.screen.height * app.screen.zoom },
+        buttonDown(id: string) { app.tapped = [...app.tapped, id] },
+        keys = { [
+            { id: "left", label: "SPIN LEFT", icon: "ccw", side: "left", col: 0, row: 0 },
+            { id: "right", label: "SPIN RIGHT", icon: "cw", side: "left", col: 1, row: 0 },
+            { id: "zap", label: "SUPER ZAPPER", side: "right", col: 0, row: 0 },
+            { id: "fire", label: "FIRE", side: "right", col: 1, row: 0 }
+            ] }
         ]
     ]

@@ -343,8 +343,8 @@ class LogoScreen [ width = 100%, height = 100%,
     // the keys, once the word has come to rest
 
     keys: View [ width = 100%, height = 100%, visible = { app.scene.logoShown[2] == 1 && app.scene.logoShown[0] == app.scene.logoShown[1] },
-        Message [ says = "pressReturn" ],
-        rows: View [ width = 100%, y = { 285 - 2 * 4 * SMALL }, datapath = { classroot.keyLines.value },
+        Message [ says = { app.touchDevice ? "pressStart" : "pressReturn" } ],
+        rows: View [ width = 100%, y = { 285 - 2 * 4 * SMALL }, datapath = { classroot.keyLines.value }, visible = { !app.touchDevice },
             layout: SimpleLayout [ axis = y ],
             KeyRow [ datapath = :lines[] ]
             ]
@@ -394,7 +394,8 @@ class Monitor [ clip = true,
         avoidSpikes: { text: "AVOID SPIKES", x: -72, y: 0, color: "white", large: true },
         levelUp: { text: "LEVEL", x: -32, y: 90, color: "level" },
         recharge: { text: "SUPERZAPPER RECHARGE", x: -60, y: -96, color: "level" },
-        pressReturn: { text: "PRESS RETURN TO START", x: -63, y: 4, color: "flipper" } } },
+        pressReturn: { text: "PRESS RETURN TO START", x: -63, y: 4, color: "flipper" },
+        pressStart: { text: "PRESS START", x: -33, y: 4, color: "flipper" } } },
 
     arcade: View [ y = -60, width = 580, height = 570,
         play: PlayScreen [ visible = { app.scene.shows == "play" } ],

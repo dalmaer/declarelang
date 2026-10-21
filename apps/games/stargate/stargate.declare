@@ -45,7 +45,7 @@ script {
     function wallClock(): number { return performance.now() }
     }
 
-include [ "game.declare", "screen.declare", "panel.declare", "page-views.declare" ]
+include [ "game.declare", "screen.declare", "panel.declare", "page-views.declare", "../touch-pad.declare" ]
 
 defaultFlags [ render = canvas, accessibility = false ]
 
@@ -82,12 +82,13 @@ App [ appName = "Stargate", fill = black,
 
     monitor: Monitor [ game = { app.game } ],
 
-    // the arcade's controls, on the keyboard
+    // the arcade's controls, on the keyboard or the touch screen
 
     controls() -> Controls {
-        const down = (key: string) => Keys.isDown(key) && key != app.heldBack
-        return { up: down("KeyQ"), down: down("KeyA"), thrust: down("Quote"), reverse: down("KeyZ"), fire: down("Enter"),
-            smartBomb: down("Slash"), hyperspace: down("Space"), inviso: down("Semicolon") }
+        const down = (key: string, button: string) => (Keys.isDown(key) && key != app.heldBack) || app.pad.isDown(button)
+        return { up: down("KeyQ", "up"), down: down("KeyA", "down"), thrust: down("Quote", "thrust"), reverse: down("KeyZ", "reverse"),
+            fire: down("Enter", "fire"), smartBomb: down("Slash", "smartBomb"), hyperspace: down("Space", "hyperspace"),
+            inviso: down("Semicolon", "inviso") }
         },
 
     // Return or Space starts a game when none is being played. Escape pauses a game, and any
@@ -225,5 +226,26 @@ App [ appName = "Stargate", fill = black,
             frames = []; rules = []
             }
         ],
-    readout: Text [ visible = { app.timing }, x = 8, y = 8, fontSize = 12, textColor = white, text = { app.meter.shown } ]
+    readout: Text [ visible = { app.timing }, x = 8, y = 8, fontSize = 12, textColor = white, text = { app.meter.shown } ],
+
+    // On a touch screen, the arcade's controls as its panel has them: the stick's up and down
+    // and reverse under the left hand; thrust and fire under the right, with smart bomb and
+    // hyperspace above them; inviso between (../touch-pad.declare). Start begins a game; over
+    // the screen, it sits low on the left, off the pages' words.
+
+    pad: TouchPad [ startShown = { app.game.gameOver }, ink = #8C8C8C, startInk = white, startOverLeft = true,
+        fieldX = { app.screen.x }, fieldY = { app.screen.y },
+        fieldW = { app.screen.width * app.screen.scale }, fieldH = { app.screen.height * app.screen.scale },
+        buttonDown(id: string) { if (id == "start" && app.game.gameOver) app.game.start() },
+        keys = { [
+            { id: "up", label: "▲", side: "left", col: 0, row: 0 },
+            { id: "down", label: "▼", side: "left", col: 0, row: 1 },
+            { id: "reverse", label: "REVERSE", side: "left", col: 1, row: 1 },
+            { id: "inviso", label: "INVISO", side: "center", col: 0, row: 0 },
+            { id: "smartBomb", label: "SMART BOMB", side: "right", col: 0, row: 0 },
+            { id: "hyperspace", label: "HYPER SPACE", side: "right", col: 1, row: 0 },
+            { id: "thrust", label: "THRUST", side: "right", col: 0, row: 1 },
+            { id: "fire", label: "FIRE", side: "right", col: 1, row: 1 }
+            ] }
+        ]
     ]

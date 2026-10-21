@@ -1,0 +1,224 @@
+/*
+# Touch buttons for the games
+
+On a touch screen the arcade's buttons are drawn on the screen and pressed with the
+fingers. A game names its buttons — what each says, which hand has it, and where it sits in
+that hand's group, as on the arcade's panel — and reads which are held, as it reads its
+keys. Where touch is not the device's main input none of this is shown, and the game is
+played from the keyboard.
+
+Between games only the start button shows; in a game, only the game's own buttons.
+
+The buttons keep clear of the game's screen where the window leaves room: below it on a
+phone held upright, beside it on one held sideways. On a screen the game fills, they sit
+over its bottom corners, all of them faint until pressed (the start button, shown only
+between games, never is). The groups make one row across the bottom, the buttons a little
+smaller where that is what it takes; the middle group goes above the gap between the
+hands' groups only where a row will not fit at all. The start button is centered on the
+line the game centers its own words on, under the screen or over its foot; a game whose
+words fill its foot has it low on the left instead.
+
+A button says what it does in full, a word to a line, or shows the way it turns as an
+arrow. Every finger is followed on its own, so a turn, thrust and fire can be held
+together, and a finger slid from one button onto the next lets go of the first and presses
+the second. A finger counts on a button a little past its edge.
+*/
+
+schema PadKey [ id: string, label: string, side: "left" | "right" | "center", col: number, row: number, icon?: "cw" | "ccw" ]
+
+schema PlacedKey [ id: string, label: string, icon: string, x: number, y: number, w: number, h: number, faint: boolean ]
+
+class TouchPad [ width = 100%, height = 100%, visible = { app.touchDevice },
+    keys: PadKey[] = [],
+    ink: Color = white,
+    startInk: Color = { ink },          // the start button's, where it differs
+    startShown: boolean = false,        // between games: the start button, and nothing else
+
+    // the game's screen, in the App's coordinates
+
+    fieldX: number = 0,
+    fieldY: number = 0,
+    fieldW: number = 0,
+    fieldH: number = 0,
+    middle: number = { fieldX + fieldW / 2 },     // the line the game centers its words on
+    startOverLeft: boolean = false,               // over the screen, start goes low on the left
+
+    // the buttons held now, and the one a finger has just come onto, for the game to answer
+
+    held: string[] = [],
+    isDown(id: string) -> boolean { return held.includes(id) },
+    buttonDown(id: string) { },
+
+    // A button's width and height, the gap between two, and the margin from the edges. The
+    // size is a share of the window's shorter side, no larger than lets the groups make one
+    // row across it (with a margin at each end, and a finger's width either side of the
+    // middle group), and never under 44.
+
+    size: number = { Math.round(Math.max(44, Math.min(84, Math.min(app.width, app.height) * 0.15,
+        (app.width - app.safeLeft - app.safeRight) / this.rowUnits()))) },
+    gap: number = { Math.round(size * 0.22) },
+    margin: number = { Math.round(size * 0.35) },
+
+    // how many buttons' widths the row across the bottom takes
+
+    rowUnits() -> number {
+        const across = (side: string) => {
+            const ks = keys.filter((k) => k.side == side)
+            return ks.length == 0 ? 0 : (Math.max(...ks.map((k) => k.col)) + 1) * 1.22 - 0.22
+            }
+        return across("left") + across("right") + across("center") + 0.7 + (across("center") > 0 ? 1 : 0.22)
+        },
+
+    // Where the buttons go: under the screen when the hands' groups clear it at the bottom
+    // corners, else beside it when each side has room for a hand's group, else over it.
+
+    fit: "below" | "beside" | "over" = {
+        app.height - app.safeBottom - margin - Math.max(this.extent("left", "row"), this.extent("right", "row")) >= fieldY + fieldH
+            && this.extent("left", "col") + this.extent("right", "col") + 2 * margin + gap <= app.width - app.safeLeft - app.safeRight ? "below"
+        : Math.min(fieldX - app.safeLeft, app.width - app.safeRight - (fieldX + fieldW)) >= Math.max(this.extent("left", "col"), this.extent("right", "col"), this.extent("center", "col")) + margin ? "beside"
+        : "over" },
+    centerRaised: boolean = { this.extent("left", "col") + this.extent("right", "col") + this.extent("center", "col") + 2 * margin + size > app.width - app.safeLeft - app.safeRight },
+
+    // how far a hand's group runs across (col) or down (row)
+
+    extent(side: string, axis: "col" | "row") -> number {
+        const ks = keys.filter((k) => k.side == side)
+        return ks.length == 0 ? 0 : (Math.max(...ks.map((k) => k[axis])) + 1) * (size + gap) - gap
+        },
+
+    placed: Dataset [ schema = [ keys[]: PlacedKey ], contents = { { keys: classroot.place() } } ],
+
+    place() -> PlacedKey[] {
+        const s = size, g = gap, m = margin
+        const left = app.safeLeft, right = app.width - app.safeRight, bottom = app.height - app.safeBottom
+        const out: PlacedKey[] = []
+        // over the screen, every one of the game's buttons is faint alike; start never is
+        const one = (id: string, label: string, icon: string, x: number, y: number, w: number, h: number) =>
+            out.push({ id, label, icon, x: Math.round(x), y: Math.round(y), w, h, faint: fit == "over" && id != "start" })
+
+        // between games, the start button alone: under the screen, or low on its left
+        if (startShown) {
+            const sw = Math.round(2.4 * s), sh = Math.round(0.75 * s)
+            if (fit == "beside") one("start", "START", "", (left + fieldX - sw) / 2, bottom - m - sh, sw, sh)
+            else if (fieldY + fieldH + m + sh + m <= bottom) one("start", "START", "", middle - sw / 2, fieldY + fieldH + m, sw, sh)
+            else if (startOverLeft) {
+                // in the margin left of the screen, as wide as it allows, down to one and a half buttons
+                const nw = Math.round(Math.max(1.5 * s, Math.min(sw, fieldX - left - 2 * m)))
+                one("start", "START", "", Math.max(left + m / 2, (left + fieldX - nw) / 2), bottom - m - sh, nw, sh)
+                }
+            else one("start", "START", "", middle - sw / 2, bottom - m - sh, sw, sh)
+            return out
+            }
+
+        const lw = this.extent("left", "col"), lh = this.extent("left", "row")
+        const rw = this.extent("right", "col"), rh = this.extent("right", "row")
+        const cw = this.extent("center", "col"), ch = this.extent("center", "row")
+        const put = (side: string, x0: number, y0: number) => {
+            for (const k of keys.filter((k) => k.side == side))
+                one(k.id, k.label, k.icon ?? "", x0 + k.col * (s + g), y0 + k.row * (s + g), s, s)
+            }
+        if (fit == "beside") {
+            const lmid = (left + fieldX) / 2, rmid = (fieldX + fieldW + right) / 2
+            put("left", lmid - lw / 2, bottom - m - lh)
+            put("right", rmid - rw / 2, bottom - m - rh)
+            put("center", rmid - cw / 2, bottom - m - rh - g - ch)
+            }
+        else {
+            put("left", left + m, bottom - m - lh)
+            put("right", right - m - rw, bottom - m - rh)
+            put("center", (left + right - cw) / 2, bottom - m - ch - (centerRaised ? Math.max(lh, rh) + g : 0))
+            }
+        return out
+        },
+
+    // the button a finger at this point is on: the nearest, within a quarter of a button of its edge
+
+    keyAt(x: number, y: number) -> string {
+        let found = "", nearest = (size * 0.25) * (size * 0.25)
+        for (const k of placed.value.keys) {
+            const dx = Math.max(k.x - x, 0, x - (k.x + k.w)), dy = Math.max(k.y - y, 0, y - (k.y + k.h))
+            if (dx * dx + dy * dy <= nearest) { nearest = dx * dx + dy * dy; found = k.id }
+            }
+        return found
+        },
+
+    follow(e: TouchEvent) {
+        const now: string[] = []
+        for (const t of e.touches) {
+            const id = this.keyAt(t.x, t.y)
+            if (id != "" && !now.includes(id)) now.push(id)
+            }
+        const before = held
+        held = now
+        for (const id of now) if (!before.includes(id)) this.buttonDown(id)
+        },
+
+    onTouchStart(e: TouchEvent) { this.follow(e) },
+    onTouchMove(e: TouchEvent) { this.follow(e) },
+    onTouchEnd(e: TouchEvent) { this.follow(e) },
+    onTouchCancel(e: TouchEvent) { held = [] },
+
+    View [ width = 100%, height = 100%, datapath = { classroot.placed.value },
+        PadButton [ datapath = :keys[], ink = { :id == "start" ? classroot.startInk : classroot.ink }, lit = { classroot.held.includes(:id) },
+            faint = :faint, bright = { :id == "start" }, icon = :icon, lines = { String(:label).split(" ") } ]
+        ]
+    ]
+
+
+// One button: round, or a pill for start; its words a line each, or an arrow for the way
+// it turns.
+
+class PadButton [ x = :x, y = :y, width = :w, height = :h,
+    ink: Color = white,
+    lit: boolean = false,
+    faint: boolean = false,
+    bright: boolean = false,            // shown at full strength (the start button)
+    icon: string = "",
+    lines: string[] = [],
+    cornerRadius = { Math.min(width, height) / 2 },
+    opacity = { lit || bright ? (faint ? 0.8 : 1) : (faint ? 0.42 : 0.6) },
+    stroke = { stroke(2, ink) },
+
+    // A text size that fits the longest word inside a round button, or a mark (▲) large; a
+    // pill's follows its height. Each line ends in the selector that asks for text, not
+    // emoji (iOS draws ▲ and ▼ as emoji unless told).
+
+    longest: number = { Math.max(...lines.map((w) => w.length)) },
+    fontSize = { Math.round(width > height ? height * 0.4 : longest <= 1 ? width * 0.36
+        : Math.min(width * 0.19, width * 0.78 / (0.72 * longest))) },
+    plain: string = { String.fromCharCode(0xFE0E) },
+
+    glow: View [ width = 100%, height = 100%, cornerRadius = { parent.cornerRadius }, fill = { classroot.ink },
+        opacity = { classroot.lit ? 0.35 : 0 } ],
+    words: View [ x = center, y = center, visible = { classroot.icon == "" },
+        layout: SimpleLayout [ axis = y, align = center ],
+        Text [ textColor = { classroot.ink }, fontWeight = bold, letterSpacing = 0.5, text = { (classroot.lines[0] ?? "") + classroot.plain } ],
+        Text [ textColor = { classroot.ink }, fontWeight = bold, letterSpacing = 0.5, visible = { classroot.lines.length > 1 },
+            text = { (classroot.lines[1] ?? "") + classroot.plain } ]
+        ],
+
+    // An arrow three quarters of the way round, open at the top, its head on the end it
+    // turns toward.
+
+    draw(d: Draw) {
+        if (icon == "") return
+        const cw = icon == "cw", r = width * 0.22, cx = width / 2, cy = height / 2 + width * 0.02
+        const deg = Math.PI / 180, from = cw ? -50 * deg : 230 * deg, to = cw ? 230 * deg : -50 * deg
+        d.strokeStyle = ink
+        d.fillStyle = ink
+        d.lineWidth = Math.max(2, width * 0.06)
+        d.lineCap = "round"
+        d.beginPath()
+        d.arc(cx, cy, r, from, to, !cw)
+        d.stroke()
+        const px = cx + r * Math.cos(to), py = cy + r * Math.sin(to)
+        const tx = cw ? -Math.sin(to) : Math.sin(to), ty = cw ? Math.cos(to) : -Math.cos(to)
+        const nx = Math.cos(to), ny = Math.sin(to), head = r * 0.95, half = r * 0.6
+        d.beginPath()
+        d.moveTo(px + tx * head, py + ty * head)
+        d.lineTo(px + nx * half, py + ny * half)
+        d.lineTo(px - nx * half, py - ny * half)
+        d.closePath()
+        d.fill()
+        }
+    ]

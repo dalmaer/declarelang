@@ -41,7 +41,7 @@ rights in this material and object to its being posted here, please open an issu
 repository on GitHub, or message me there, and I will remove it.*
 */
 
-include [ "game.declare", "art.declare", "sounds.declare" ]
+include [ "game.declare", "art.declare", "sounds.declare", "../touch-pad.declare" ]
 
 defaultFlags [ render = canvas, accessibility = false ]
 
@@ -54,16 +54,16 @@ App [ appName = "Asteroids", fill = black,
             "landing": "safe", "blast": 0, "struck": false } } },
     sounds: SoundBoard [ game = { app.game }, paused = { app.paused } ],
 
-    // the arcade's buttons, on the keyboard
+    // the arcade's buttons, on the keyboard or the touch screen
 
     controls() -> Controls {
         return {
-            left: Keys.isDown("ArrowLeft") || Keys.isDown("KeyA"),
-            right: Keys.isDown("ArrowRight") || Keys.isDown("KeyS"),
-            thrust: Keys.isDown("ArrowUp") || Keys.isDown("Quote"),
-            fire: Keys.isDown("Space") || Keys.isDown("Enter"),
-            hyperspace: Keys.isDown("ArrowDown") || Keys.isDown("Slash"),
-            start: Keys.isDown("Enter") || Keys.isDown("Space")
+            left: Keys.isDown("ArrowLeft") || Keys.isDown("KeyA") || app.pad.isDown("left"),
+            right: Keys.isDown("ArrowRight") || Keys.isDown("KeyS") || app.pad.isDown("right"),
+            thrust: Keys.isDown("ArrowUp") || Keys.isDown("Quote") || app.pad.isDown("thrust"),
+            fire: Keys.isDown("Space") || Keys.isDown("Enter") || app.pad.isDown("fire"),
+            hyperspace: Keys.isDown("ArrowDown") || Keys.isDown("Slash") || app.pad.isDown("hyperspace"),
+            start: Keys.isDown("Enter") || Keys.isDown("Space") || app.pad.isDown("start")
             }
         },
 
@@ -174,12 +174,15 @@ App [ appName = "Asteroids", fill = black,
         ArcadeText [ cx = 338, cy = 792, magnify = 2, text = "1 COIN 1 PLAY", visible = { !app.game.playing } ],
 
         View [ width = 100%, height = 100%, visible = { app.game.mode == "attract" },
-            ArcadeText [ cx = 242, cy = 372, magnify = 2, text = "PRESS RETURN TO START" ],
-            KeyLine [ cy = 324, action = "ROTATE LEFT", keys = "← OR A" ],
-            KeyLine [ cy = 300, action = "ROTATE RIGHT", keys = "→ OR S" ],
-            KeyLine [ cy = 276, action = "THRUST", keys = "↑ OR '" ],
-            KeyLine [ cy = 252, action = "FIRE", keys = "RETURN OR SPACE" ],
-            KeyLine [ cy = 228, action = "HYPERSPACE", keys = "↓ OR /" ]
+            ArcadeText [ cx = { app.touchDevice ? 358 : 242 }, cy = 372, magnify = 2,
+                text = { app.touchDevice ? "PRESS START" : "PRESS RETURN TO START" } ],
+            keyLines: View [ width = 100%, height = 100%, visible = { !app.touchDevice },
+                KeyLine [ cy = 324, action = "ROTATE LEFT", keys = "← OR A" ],
+                KeyLine [ cy = 300, action = "ROTATE RIGHT", keys = "→ OR S" ],
+                KeyLine [ cy = 276, action = "THRUST", keys = "↑ OR '" ],
+                KeyLine [ cy = 252, action = "FIRE", keys = "RETURN OR SPACE" ],
+                KeyLine [ cy = 228, action = "HYPERSPACE", keys = "↓ OR /" ]
+                ]
             ],
         ArcadeText [ cx = 400, cy = 728, magnify = 2, text = "PLAYER 1", visible = { app.game.mode == "starting" } ],
         ArcadeText [ cx = 400, cy = 628, magnify = 2, text = "GAME OVER", visible = { app.game.mode == "over" } ],
@@ -190,5 +193,21 @@ App [ appName = "Asteroids", fill = black,
 
         View [ width = 100%, height = 100%, fill = black, opacity = 0.6, visible = { app.paused } ],
         ArcadeText [ cx = 436, cy = 628, magnify = 2, intensity = 15, text = "PAUSED", visible = { app.paused } ]
-        ]
+        ],
+
+    // On a touch screen, the arcade's buttons where its panel has them: the two that turn
+    // under the left hand, thrust and fire under the right, hyperspace between them
+    // (../touch-pad.declare).
+
+    pad: TouchPad [ startShown = { !app.game.playing }, ink = #8C8C8C, startInk = white,
+        fieldX = { app.screen.x }, fieldY = { app.screen.y },
+        fieldW = { app.screen.width * app.screen.scale }, fieldH = { app.screen.height * app.screen.scale },
+        middle = { app.screen.x + 499 * app.screen.scale },        // the copyright's middle: 180 across from 409
+        keys = { [
+            { id: "left", label: "ROTATE LEFT", icon: "ccw", side: "left", col: 0, row: 0 },
+            { id: "right", label: "ROTATE RIGHT", icon: "cw", side: "left", col: 1, row: 0 },
+            { id: "hyperspace", label: "HYPER SPACE", side: "center", col: 0, row: 0 },
+            { id: "thrust", label: "THRUST", side: "right", col: 0, row: 0 },
+            { id: "fire", label: "FIRE", side: "right", col: 1, row: 0 }
+            ] } ]
     ]
