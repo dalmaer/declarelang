@@ -9,7 +9,7 @@ One round, no fix pass. Two variables moved against run 6: the model (Opus 5 →
 
 ## Headline
 
-**Clean through R4** from the main tree (246 nodes, settled in 73 ms) · **no R5 assert written** — it drove its own puppeteer flows at 360, 390, 820 and 1440 px · **1,302 lines** in one file · **16.0 min** · **76 turns** · **$6.29**.
+**Clean through R4** from the main tree (246 nodes, settled in 73 ms) · **no R5 assert written** — it drove its own puppeteer flows at 360, 390, 820 and 1440 px · **1,302 lines** in one file · **16.0 min** · **76 turns**.
 
 | usage | tokens |
 |---|---|
@@ -21,7 +21,7 @@ One round, no fix pass. Two variables moved against run 6: the model (Opus 5 →
 
 | | run 6 (Opus 5, `63b240f`) | run 7 (Opus 5.5, `52bfadcd`) |
 |---|---|---|
-| build round | 58.6 min, $43.27 | 16.0 min, $6.29 |
+| build round | 58.6 min | 16.0 min |
 | tool calls before the first write | 44 | 33 |
 | files read before writing | 19, + 12 `declare-help` | 13, + 13 `declare-help` |
 | `verify` runs | 53 (15 at R5) | 12 (none at R5) |
@@ -47,7 +47,7 @@ Small things: the "Last session" row aligns "yesterday" to the bottom of "Lift" 
 
 Only the live session is a `DataSource` (polled by a five-second tick in its URL). The first load is `Promise.all` over two raw `fetch` calls with a hand-set `loaded` flag; add, correct and delete are `fetch` in handlers with a hand-kept `busy` and `saveError`. The truth itself is idiomatic — a typed `Dataset`, every edit one write (`insert`, `set`, `removeAt`), everything derived — but the request lifecycle `DataSource` provides (`loaded`, `loading`, `failed`, `error`, `statusCode`, `errorBody`) is rebuilt by hand, and a failed first load leaves a blank screen with no `failed` to derive from.
 
-Asked why (read-only resume, `question-why-no-datasource.txt` → `reply-why-no-datasource.md`, ~$10 of the session reloaded):
+Asked why (read-only resume, `question-why-no-datasource.txt` → `reply-why-no-datasource.md`):
 
 - `declare.md` permits it: handler code is "ordinary TypeScript: … the host's `fetch`/`URL`/timers".
 - No example in `apps/` writes through a `DataSource`; the data chapter's only POST is a GraphQL query — a read.
@@ -61,7 +61,7 @@ Asked why (read-only resume, `question-why-no-datasource.txt` → `reply-why-no-
 The same session, resumed with the same six tools, given `fixpass-prompt.txt`: move every
 exchange with the service to `DataSource` — first load, live refresh, add, correct, delete —
 keeping behavior and appearance, and say what it had to look up and what the docs didn't
-answer. **3.2 min · 13 turns · $11.24** (most of it the session reload). Result
+answer. **3.2 min · 13 turns**. Result
 `app-after-fixpass.declare`, 1,320 lines, clean through R4 from the main tree; no raw `fetch`
 or `.then` remains; five sources (`todaySrc`, `db`, `liveSrc`, `saveSrc`, `delSrc`).
 

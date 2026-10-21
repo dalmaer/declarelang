@@ -1,0 +1,785 @@
+/*
+# Cadence — the views
+
+Two families carry the type: the sans for figures and sentences, set heavy and
+tight where it is a number; the monospace for the small labels that say what a
+figure is. Weight, size and spacing do the work boxes usually do, so almost
+nothing here has a border.
+*/
+
+
+// ── type ────────────────────────────────────────────────────────────────────
+
+// the small label over a figure: what it is, in the monospace
+
+class Caption extends Text [ fontSize = 11, letterSpacing = 1.4, textTransform = uppercase, wrap = false,
+    fontFamily = ["ui-monospace", "SF Mono", "Menlo", "Consolas", "monospace"],
+    textColor = { provided("theme").textMuted }
+    ]
+
+
+// a figure: the number the answer is
+
+class Figure extends Text [ fontWeight = black, wrap = false, numerals = lining,
+    letterSpacing = { -0.045 * fontSize }
+    ]
+
+
+// the words beside a figure
+
+class Unit extends Text [ fontWeight = medium, wrap = false, textColor = { provided("theme").textMuted } ]
+
+/*
+## Tally
+
+"4 sessions · 3h 40m" — the copy as written, with the figures set large and the
+words small. The line breaks between its two halves when the room runs out.
+*/
+
+class Tally [
+    sessions: number = 0,
+    minutes: number = 0,
+    big: number = 120,
+    small: number = 22,
+    n: number = { Math.round(classroot.sessions) },
+    m: number = { Math.round(classroot.minutes) },
+    accessibilityLabel = { classroot.n + " " + plural(classroot.n, "session", "sessions") + " · " + duration(classroot.m) },
+    layout: WrappingLayout [ spacing = { classroot.small * 0.6 }, rowSpacing = { -classroot.big * 0.12 } ],
+
+    count: View [
+        layout: SimpleLayout [ axis = x, spacing = { classroot.small * 0.4 }, align = baseline ],
+        Figure [ fontSize = { classroot.big }, text = { "" + classroot.n } ],
+        Unit [ fontSize = { classroot.small }, text = { plural(classroot.n, "session", "sessions") + " ·" } ]
+        ],
+    time: View [
+        layout: SimpleLayout [ axis = x, spacing = { classroot.small * 0.15 }, align = baseline ],
+        Figure [ visible = { classroot.m >= 60 }, fontSize = { classroot.big }, text = { "" + Math.floor(classroot.m / 60) } ],
+        Unit [ visible = { classroot.m >= 60 }, padding = { [0, classroot.small * 0.45, 0, 0] }, fontSize = { classroot.small }, text = "h" ],
+        Figure [ visible = { classroot.m < 60 || classroot.m % 60 != 0 }, fontSize = { classroot.big }, text = { "" + classroot.m % 60 } ],
+        Unit [ visible = { classroot.m < 60 || classroot.m % 60 != 0 }, fontSize = { classroot.small }, text = "m" ]
+        ]
+    ]
+
+
+// ── controls ────────────────────────────────────────────────────────────────
+
+// one of a few: a sport, a day, a duration. Ink when chosen, a well of paper when not.
+
+class Choice extends Control [ height = 48, cornerRadius = 6,
+    label: string = "",
+    chosen: boolean = false,
+    accessibilityLabel = { classroot.label },
+    width = { this.t.width + 28 },
+    fill = { chosen ? provided("theme").ink : pressed ? provided("theme").wellPressed : provided("theme").well },
+    t: TextLabel [ x = center, fontSize = 15, fontWeight = semibold, wrap = false,
+        textColor = { classroot.chosen ? provided("theme").paper : provided("theme").ink }, text = { classroot.label } ]
+    ]
+
+
+// a step down or up, sized for a thumb
+
+class Nudge extends Control [ width = 60, height = 60, cornerRadius = 30,
+    glyph: string = "+",
+    fill = { pressed ? provided("theme").wellPressed : provided("theme").well },
+    t: TextLabel [ x = center, fontSize = 30, fontWeight = medium, text = { classroot.glyph } ]
+    ]
+
+
+// the way in: ink, under the thumb
+
+class LogButton extends Control [ height = 60, cornerRadius = 30,
+    accessibilityLabel = "Log a session",
+    width = { this.t.width + 56 },
+    fill = { pressed ? provided("theme").textMuted : provided("theme").ink },
+    shadow = shadow(0, 8, 24, #14141240),
+    t: TextLabel [ x = center, fontSize = 17, fontWeight = bold, textColor = { provided("theme").paper }, text = "+  Log session" ],
+    press() { app.newSession() }
+    ]
+
+
+// a quiet command: Correct, Delete, a zoom
+
+class Pill extends Control [ height = 40, cornerRadius = 20,
+    label: string = "",
+    chosen: boolean = false,
+    accessibilityLabel = { classroot.label },
+    width = { this.t.width + 30 },
+    fill = { chosen ? provided("theme").ink : pressed ? provided("theme").wellPressed : hovered ? provided("theme").well : 0x00000000 },
+    stroke = { chosen ? null : stroke(1, provided("theme").rule) },
+    t: TextLabel [ x = center, fontSize = 12, letterSpacing = 1.2, textTransform = uppercase, wrap = false,
+        fontFamily = ["ui-monospace", "SF Mono", "Menlo", "Consolas", "monospace"],
+        textColor = { classroot.chosen ? provided("theme").paper : provided("theme").ink }, text = { classroot.label } ]
+    ]
+
+
+/*
+## Top bar
+
+The name, the day the service says it is, and — at a desk — the way in.
+*/
+
+class TopBar [ height = 44,
+    layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
+    Text [ fontSize = 13, fontWeight = black, letterSpacing = 4, text = "CADENCE" ],
+    Caption [ visible = { app.ready }, text = { longDate(app.todayN) } ],
+    Spacer [ ],
+    LogButton [ visible = { !app.phone && app.ready }, height = 44 ]
+    ]
+
+
+/*
+## Today
+
+Where am I, from across the room: the week, the streak, the week's shape, and the
+last session — or the one running now.
+*/
+
+class TodayPanel [
+    layout: SimpleLayout [ axis = y, spacing = { app.phone ? 36 : 32 } ],
+
+    weekBlock: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 2 ],
+        Caption [ text = { "This week · " + shortDate(app.weekFrom) + " – " + shortDate(app.todayN) } ],
+        Tally [ width = 100%, big = { app.heroSize }, small = { app.unitSize },
+            sessions = { app.weekCountShown }, minutes = { app.weekMinutesShown } ]
+        ],
+
+    glance: View [ width = 100%,
+        layout: SimpleLayout [ axis = { app.phone ? "y" : "x" }, spacing = { app.phone ? 36 : 20 } ],
+        streakBlock: View [ width = { app.phone ? parent.width : 150 },
+            layout: SimpleLayout [ axis = y, spacing = 2 ],
+            Caption [ text = "Streak" ],
+            line: View [ visible = { app.streak > 0 },
+                layout: SimpleLayout [ axis = x, spacing = { app.unitSize * 0.4 }, align = baseline ],
+                Figure [ fontSize = { app.heroSize * 0.62 }, text = { "" + Math.round(app.streakShown) } ],
+                Unit [ fontSize = { app.unitSize }, text = { plural(Math.round(app.streakShown), "day", "days") } ]
+                ],
+            Text [ visible = { app.streak == 0 }, fontSize = { app.heroSize * 0.3 }, fontWeight = bold,
+                letterSpacing = { -0.03 * fontSize }, textColor = { provided("theme").textMuted }, text = "no streak" ]
+            ],
+        shape: WeekShape [ width = { app.phone ? parent.width : parent.width - 170 } ]
+        ],
+    live: LiveCard [ width = 100% ],
+    last: LastSession [ width = 100% ]
+    ]
+
+
+/*
+## The week's shape
+
+Seven days ending today, each a bar as tall as the day was long and as hot as it
+was hard, on a fixed scale — so a light week looks light.
+*/
+
+class WeekShape [ height = { app.phone ? 168 : 150 },
+    accessibilityRole = group, accessibilityLabel = "The last seven days",
+    scaleMax: number = { Math.max(150, ...(app.week.value?.days ?? []).map((d) => d.minutes)) },
+    datapath = { app.week.value },
+    layout: SimpleLayout [ axis = x, spacing = 6 ],
+    DayBar [ datapath = :days[], key = :n, flexes = true, height = 100% ]
+    ]
+
+
+class DayBar extends Control [
+    accessibilityLabel = { dayName(:n) + ", " + (:minutes == 0 ? "rest" : duration(:minutes) + ", effort " + :effort) },
+    disabled = { :top == "" },
+    room: number = { this.height - 46 },
+    h: number = 0,
+    grow: Spring [ attribute = h, to = { :minutes / provided("scaleMax") * classroot.room }, stiffness = 140, damping = 22 ],
+    onInit() { this.grow.arrive() },
+
+    amount: Caption [ x = center, y = { classroot.room - classroot.h + 4 }, fontSize = 10, letterSpacing = 0.4,
+        textTransform = none, textColor = { provided("theme").ink }, visible = { :minutes > 0 }, text = { duration(:minutes) } ],
+    bar: View [ y = { classroot.room + 22 - Math.max(classroot.h, 2) }, width = 100%, height = { Math.max(classroot.h, 2) },
+        fill = { :minutes > 0 ? app.effortInk(:effort) : provided("theme").rule },
+        opacity = { classroot.pressed ? 0.7 : 1 } ],
+    letter: Text [ x = center, y = { classroot.height - 18 }, fontSize = 13,
+        fontWeight = { :today ? "black" : "medium" },
+        textColor = { :today ? provided("theme").ink : provided("theme").textMuted }, text = { :today && classroot.width > 56 ? "Today" : :letter } ],
+
+    press() { app.openSession(:top) }
+    ]
+
+
+/*
+## Running now
+
+The session in progress, set in reverse — ink ground, paper type — so it can't be
+taken for a finished one. Its clock runs; its dot beats once for every reading
+the service sends.
+*/
+
+class LiveCard extends Control [ visible = { app.running != null },
+    accessibilityLabel = { "Running now: " + sportName(app.running?.sport ?? "") + ", " + elapsed(app.running?.startedSecondsAgo ?? 0) },
+    cornerRadius = 8, padding = [18, 20, 20, 20],
+    fill = { provided("theme").ink },
+    layout: SimpleLayout [ axis = y, spacing = 4 ],
+
+    head: View [
+        layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
+        dot: View [ width = 10, height = 10, cornerRadius = 5,
+            fill = { app.effortInk(app.running?.effort ?? 5) }, scale = { 1 + 0.7 * app.beat } ],
+        Caption [ textColor = { provided("theme").liveInk },
+            text = { "Running now · " + sportName(app.running?.sport ?? "") } ]
+        ],
+    clock: Figure [ fontSize = { app.heroSize * 0.72 }, numeralWidth = tabular, textColor = { provided("theme").liveInk },
+        text = { elapsed(app.running?.startedSecondsAgo ?? 0) } ],
+    facts: Text [ fontSize = 16, fontWeight = medium, textColor = { provided("theme").liveMuted },
+        text = { [ (app.running?.distanceKm ?? 0) > 0 ? km(app.running?.distanceKm ?? 0) : "",
+                   bpm(app.running?.heartNow ?? 0),
+                   "effort " + (app.running?.effort ?? 0) ].filter((s) => s != "").join("  ·  ") } ]
+    ]
+
+
+/*
+## The last session
+
+What it was, when, and how it went — a press away from the whole of it.
+*/
+
+class LastSession extends Control [ visible = { app.last != null },
+    accessibilityLabel = { "Last session: " + sportName(app.last?.sport ?? "") + ", " + whenLabel(dayNum(app.last?.date ?? "2000-01-01"), app.todayN) },
+    layout: SimpleLayout [ axis = y, spacing = 6 ],
+    opacity = { pressed ? 0.6 : 1 },
+
+    Caption [ text = { "Last session · " + whenLabel(dayNum(app.last?.date ?? "2000-01-01"), app.todayN) } ],
+    what: View [
+        layout: SimpleLayout [ axis = x, spacing = 14, align = baseline ],
+        Text [ fontSize = { app.phone ? 34 : 40 }, fontWeight = black, letterSpacing = { -0.03 * fontSize },
+            text = { sportName(app.last?.sport ?? "") } ],
+        Figure [ fontSize = { app.phone ? 34 : 40 }, fontWeight = bold, textColor = { app.effortInk(app.last?.effort ?? 1) },
+            text = { "" + (app.last?.effort ?? "") } ],
+        Unit [ fontSize = 15, text = "effort" ]
+        ],
+    facts: Text [ fontSize = 16, textColor = { provided("theme").textMuted },
+        text = { [ duration(app.last?.minutes ?? 0),
+                   app.last?.distanceKm != null ? km(app.last?.distanceKm ?? 0) : "",
+                   app.last?.heartAvg != null ? bpm(app.last?.heartAvg ?? 0) : "" ].filter((s) => s != "").join("  ·  ") } ],
+    note: Text [ width = 100%, wrap = true, italic = true, fontSize = 15, visible = { (app.last?.note ?? "") != "" },
+        text = { "“" + (app.last?.note ?? "") + "”" } ],
+
+    press() { if (app.last != null) app.openSession(app.last.id) }
+    ]
+
+
+/*
+## The year
+
+All fourteen months as one surface the person handles: a drag pushes it through
+the months, a pinch (or a trackpad pinch, or the wheel) pulls it open or
+squeezes it shut about the point under the hand. Above it, what is in view and
+what happened in it; below it, the sessions themselves.
+*/
+
+class YearPanel [
+    layout: SimpleLayout [ axis = y, spacing = 14 ],
+
+    head: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 2 ],
+        Caption [ text = { "In view · " + app.viewLabel } ],
+        Tally [ width = 100%, big = { app.phone || app.width < 1120 ? 56 : 72 }, small = { app.phone ? 15 : 17 },
+            sessions = { app.viewCountShown }, minutes = { app.viewMinutesShown } ],
+        Text [ width = 100%, wrap = true, fontSize = 15, textColor = { provided("theme").textMuted },
+            text = { app.viewCount == 0 ? "Nothing logged in these days."
+                : km(app.viewKm) + " covered" + (app.viewHardest == null ? ""
+                : "  ·  hardest: " + sportName(app.viewHardest.sport) + " on " + rowDate(dayNum(app.viewHardest.date)) + ", effort " + app.viewHardest.effort) } ]
+        ],
+
+    zooms: View [ width = 100%,
+        layout: SimpleLayout [ axis = x, spacing = 6, align = center ],
+        ZoomPill [ label = "2 wks", days = 14 ],
+        ZoomPill [ label = "3 mo", days = 91 ],
+        ZoomPill [ label = "6 mo", days = 182 ],
+        ZoomPill [ label = "All", days = 10000 ],
+        Spacer [ ],
+        Pill [ label = "Today →", visible = { app.backTo > 0.5 },
+            press() { app.glideView(0, app.spanTo) }
+            ]
+        ],
+
+    chart: YearChart [ width = 100% ],
+
+    list: View [ width = 100%,
+        desk: State [ applied = { !app.phone }, flexes = true, scrolls = y ],
+        rows: View [ width = 100%, datapath = { app.inView.value },
+            layout: SimpleLayout [ axis = y ],
+            SessionRow [ datapath = :rows[], key = :id, virtualize = true ]
+            ]
+        ]
+    ]
+
+
+class ZoomPill extends Pill [
+    days: number = 91,
+    chosen = { Math.abs(app.spanTo - app.fitSpan(classroot.days)) < 1 },
+    press() { app.showSpan(classroot.days) }
+    ]
+
+
+class YearChart [ height = { app.phone ? 230 : Math.min(300, Math.max(200, app.height * 0.36)) }, clip = true,
+    accessibilityRole = image,
+    accessibilityLabel = { "Training from " + app.viewLabel + ": " + app.viewCount + " " + plural(app.viewCount, "session", "sessions") + ", " + duration(app.viewMinutes) },
+
+    // a sideways drag is the surface's; a finger going down still scrolls the page
+
+    claim = x,
+    cursor = "grab",
+
+    axisH: number = 40,
+    start: number = { app.viewEnd - app.span },
+    dayAt(px: number) -> number { return this.start + px / this.width * app.span },
+
+    // the hand's grip: where the view was when the finger landed, and whether two are down
+
+    grabBack: number = 0,
+    grabSpan: number = 0,
+    lastDx: number = 0,
+    pinching: boolean = false,
+    pinchDay: number = 0,
+    pinchFrac: number = 0,
+
+    onPointerDown(e: PointerEvent) { grabBack = app.back; grabSpan = app.span; lastDx = 0 },
+    onPointerMove(e: PointerEvent) {
+        lastDx = e.deltaX
+        if (!pinching) app.handView(grabBack + e.deltaX / this.width * grabSpan, grabSpan)
+        },
+    onPinchStart(e: PinchEvent) { pinching = true; grabSpan = app.span; pinchFrac = e.x / this.width; pinchDay = this.dayAt(e.x) },
+    onPinch(e: PinchEvent) { app.zoomAbout(pinchDay, pinchFrac, grabSpan / e.scale) },
+
+    // the finger left on the glass carries on from where the pinch left the view
+
+    onPinchEnd(e: PinchEvent) { pinching = false; grabSpan = app.span; grabBack = app.back - lastDx / this.width * app.span },
+
+    // trackpad pinch, or the wheel's vertical, rescales; a sideways swipe pushes
+
+    onWheel(e: WheelEvent) {
+        if (e.pinch || Math.abs(e.deltaY) > Math.abs(e.deltaX))
+            app.zoomAbout(this.dayAt(e.x), e.x / this.width, app.span * Math.exp(e.deltaY * (e.pinch ? 0.02 : 0.004)))
+        else app.handView(app.back - e.deltaX / this.width * app.span, app.span)
+        },
+
+    // a tap opens the session nearest the finger, within a fingertip
+
+    onClick(e: PointerEvent) {
+        const at = this.dayAt(e.x), reach = Math.max(0.5, 14 / this.width * app.span)
+        let best = -1, dist = 1e9
+        for (let i = Math.max(0, Math.floor(at - reach - app.firstDay)); i <= Math.min(app.days.length - 1, Math.ceil(at + reach - app.firstDay)); i++) {
+            const d = Math.abs(app.firstDay + i + 0.5 - at)
+            if (app.days[i].minutes > 0 && d <= reach + 0.5 && d < dist) { best = i; dist = d }
+            }
+        if (best >= 0) app.openSession(app.days[best].top)
+        },
+
+    draw(d: Draw) {
+        const t = provided("theme")
+        const w = d.w, base = d.h - this.axisH, top = 26
+        const span = app.span, start = app.viewEnd - app.span, dw = w / span
+        const first = app.firstDay, days = app.days
+        const mono = ["ui-monospace", "SF Mono", "Menlo", "Consolas", "monospace"]
+        const small: TextStyle = { fontSize: 10, letterSpacing: 1, fontFamily: mono, textColor: t.textMuted }
+        const strong: TextStyle = { fontSize: 10, letterSpacing: 1, fontFamily: mono, textColor: t.ink, fontWeight: "bold" }
+        const i0 = Math.max(0, Math.floor(start - first) - 1), i1 = Math.min(days.length - 1, Math.ceil(start + span - first))
+        const xOf = (n: number) => (n - start) * dw
+
+        // the season: the trailing week's minutes, as a silhouette behind the days
+        const season = clamp((span - 30) / 90, 0, 1)
+        if (season > 0 && i1 > i0) {
+            d.fillStyle = mix(t.paper, t.well, season)
+            d.beginPath()
+            d.moveTo(xOf(first + i0 + 0.5), base)
+            for (let i = i0; i <= i1; i++) d.lineTo(xOf(first + i + 0.5), base - days[i].week / app.weekMax * (base - top))
+            d.lineTo(xOf(first + i1 + 0.5), base)
+            d.closePath()
+            d.fill()
+            }
+
+        // months: a rule where each begins, its name, and — while the view is wide enough to
+        // compare months — how much was done in it
+        for (let m = monthStart(Math.floor(start)); m < start + span; m = nextMonth(m)) {
+            const x = Math.round(xOf(m))
+            d.fillStyle = t.rule
+            d.fillRect(x, 0, 1, d.h)
+            const room = (Math.min(nextMonth(m), start + span) - Math.max(m, start)) * dw
+            if (room > 36) {
+                const name = monthName(m).toUpperCase() + ((monthName(m) == "Jan" || m <= first) && room > 76 ? " " + yearOf(m) : "")
+                d.fillText(name, Math.max(x, 0) + 6, 12, strong)
+                let total = 0
+                for (let i = Math.max(0, m - first); i < Math.min(days.length, nextMonth(m) - first); i++) total = total + days[i].minutes
+                d.fillText(room > 80 ? duration(total) : Math.round(total / 60) + "h", Math.max(x, 0) + 6, 24, small)
+                }
+            }
+
+        // the days: as tall as they were long, as hot as they were hard
+        const bw = Math.max(1, dw * (dw > 6 ? 0.66 : 0.8))
+        for (let i = i0; i <= i1; i++) {
+            const day = days[i]
+            if (day.minutes == 0) continue
+            const bh = Math.max(2, day.minutes / app.dayMax * (base - top - 14))
+            d.fillStyle = app.effortInk(day.effort)
+            d.fillRect(xOf(first + i) + (dw - bw) / 2, base - bh, bw, bh)
+            }
+
+        // the ground, today, and the session that is open
+        d.fillStyle = t.ink
+        d.fillRect(0, base, w, 1)
+        const tx = xOf(app.todayN + 1)
+        if (tx <= w + 1) d.fillRect(tx - 1, top - 8, 2, base - top + 8)
+        if (app.detailOpen) {
+            const open = app.history.byId(app.detailId)
+            if (open != null) {
+                const ox = xOf(dayNum(open.date) + 0.5)
+                d.beginPath()
+                d.moveTo(ox, base + 3); d.lineTo(ox - 6, base + 11); d.lineTo(ox + 6, base + 11)
+                d.closePath()
+                d.fill()
+                }
+            }
+
+        // the days' own names once there is room to read them
+        if (dw >= 16) {
+            for (let i = i0; i <= i1; i++) {
+                const n = first + i
+                if (dw < 30 && weekday(n) != 0) continue
+                const x = xOf(n) + Math.max(2, (dw - 14) / 2)
+                if (dw >= 30) d.fillText("MTWTFSS".charAt(weekday(n)), x, base + 16, small)
+                d.fillText("" + dayOfMonth(n), x, base + 31, weekday(n) == 0 ? strong : small)
+                }
+            }
+        else if (dw >= 3) {
+            for (let i = i0; i <= i1; i++) {
+                const n = first + i
+                if (weekday(n) == 0) d.fillRect(xOf(n), base, 1, 5)
+                }
+            }
+        }
+    ]
+
+
+/*
+## A session in the list
+
+A row of the period in view: when, what, how long, how far, how hard.
+*/
+
+class SessionRow extends Control [ width = 100%, height = 56,
+    accessibilityLabel = { sportName(:sport) + ", " + longDate(dayNum(:date)) + ", " + duration(:minutes) + ", effort " + :effort },
+    fill = { pressed || (app.detailOpen && app.detailId == :id) ? provided("theme").well : hovered ? provided("theme").surface : 0x00000000 },
+    stroke = { [null, null, stroke(1, provided("theme").rule), null] },
+    padding = { [0, app.phone ? 4 : 18, 0, 4] },
+    layout: SimpleLayout [ axis = x, spacing = 12, align = center ],
+
+    Caption [ width = { app.phone ? 82 : 104 }, textColor = { provided("theme").ink }, text = { rowDate(dayNum(:date)) } ],
+    Text [ width = 52, fontSize = 16, fontWeight = bold, text = { sportName(:sport) } ],
+    Text [ width = 74, fontSize = 16, fontWeight = medium, text = { duration(:minutes) } ],
+    Text [ fontSize = 15, textColor = { provided("theme").textMuted }, text = { :distanceKm != null ? km(:distanceKm ?? 0) : "" } ],
+    Spacer [ ],
+    mark: View [ width = 30, height = 30, cornerRadius = 15, fill = { app.effortInk(:effort) },
+        n: TextLabel [ x = center, fontSize = 13, fontWeight = black,
+            textColor = { :effort >= 6 ? provided("theme").paper : provided("theme").ink }, text = { "" + :effort } ]
+        ],
+
+    press() { app.openSession(:id) }
+    ]
+
+
+/*
+## A session, whole
+
+What it was, set large, and where it sits against every other session of its
+sport. A hard one is drawn in the accent from its effort figure down.
+*/
+
+class SessionDetail [
+    layout: SimpleLayout [ axis = y, spacing = 22 ],
+    hard: number = { clamp(((:effort ?? 1) - 1) / 9, 0, 1) },
+
+    head: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 4 ],
+        Caption [ text = { sportName(:sport ?? "") + " · " + (app.ready && :date != null ? whenLabel(dayNum(:date ?? "2000-01-01"), app.todayN) : "") } ],
+        Text [ fontSize = 22, fontWeight = bold, text = { :date != null ? longDate(dayNum(:date ?? "2000-01-01")) : "" } ]
+        ],
+
+    figures: View [ width = 100%,
+        layout: WrappingLayout [ spacing = 28, rowSpacing = 6, align = baseline ],
+        Figure [ fontSize = 88, text = { duration(:minutes ?? 0) } ],
+        effort: View [
+            baseline: number = { this.f.y + this.f.baseline },
+            layout: SimpleLayout [ axis = x, spacing = 4, align = baseline ],
+            f: Figure [ fontSize = 88, textColor = { app.effortInk(:effort ?? 1) }, text = { "" + (:effort ?? "") } ],
+            Unit [ fontSize = 18, text = "/10 effort" ]
+            ]
+        ],
+
+    stats: View [ width = 100%,
+        layout: WrappingLayout [ spacing = 28, rowSpacing = 14 ],
+        Stat [ label = "Distance", value = { km(:distanceKm ?? 0) }, visible = { :distanceKm != null } ],
+        Stat [ label = "Heart rate", value = { bpm(:heartAvg ?? 0) }, visible = { :heartAvg != null } ],
+        Stat [ label = "Pace", value = { app.paceOf(:sport ?? "", :minutes ?? 0, :distanceKm ?? 0) }, visible = { :distanceKm != null && (:sport == "run" || :sport == "swim") } ]
+        ],
+
+    note: Text [ width = 100%, wrap = true, italic = true, fontSize = 19, visible = { (:note ?? "") != "" },
+        text = { "“" + (:note ?? "") + "”" } ],
+
+    against: View [ width = 100%, visible = { :id != null },
+        layout: SimpleLayout [ axis = y, spacing = 8 ],
+        Caption [ text = { "Against your " + app.history.ofSport(:sport ?? "").length + " " + sportPlural(:sport ?? "") } ],
+        Scatter [ width = 100%, height = 150, sport = { :sport ?? "" }, minutes = { :minutes ?? 0 }, effort = { :effort ?? 0 } ],
+        Text [ width = 100%, wrap = true, fontSize = 15, textColor = { provided("theme").textMuted },
+            text = { :id == null ? "" : app.standing(:sport ?? "", :minutes ?? 0, :effort ?? 0) } ]
+        ],
+
+    actions: View [ width = 100%,
+        layout: SimpleLayout [ axis = x, spacing = 10 ],
+        Pill [ label = "Correct",
+            press() { app.editSession(:id ?? "") }
+            ],
+        Pill [ label = { app.remove.loading ? "Deleting…" : "Delete" },
+            press() { app.askDelete(:id ?? "") }
+            ],
+        Spacer [ ],
+        Pill [ label = "Close",
+            press() { app.detailOpen = false }
+            ]
+        ]
+    ]
+
+
+class Stat [
+    label: string = "",
+    value: string = "",
+    layout: SimpleLayout [ axis = y, spacing = 2 ],
+    Caption [ text = { classroot.label } ],
+    Text [ fontSize = 30, fontWeight = bold, letterSpacing = -0.6, text = { classroot.value } ]
+    ]
+
+
+// every session of one sport by how long (across) and how hard (up); this one set large
+
+class Scatter [
+    sport: string = "",
+    minutes: number = 0,
+    effort: number = 0,
+    accessibilityRole = image,
+    accessibilityLabel = "Where this session sits among the others",
+    draw(d: Draw) {
+        const t = provided("theme")
+        const all = app.history.ofSport(this.sport)
+        const pad = 10, foot = 18
+        const most = Math.max(30, ...all.map((s) => s.minutes))
+        const px = (m: number) => pad + m / most * (d.w - 2 * pad)
+        const py = (e: number) => pad + (10 - e) / 9 * (d.h - pad - foot - pad)
+        const mono = ["ui-monospace", "SF Mono", "Menlo", "Consolas", "monospace"]
+        const small: TextStyle = { fontSize: 10, letterSpacing: 1, fontFamily: mono, textColor: t.textMuted }
+        d.fillStyle = t.rule
+        d.fillRect(pad, d.h - foot, d.w - 2 * pad, 1)
+        for (const s of all) {
+            d.fillStyle = t.effortLow
+            d.beginPath()
+            d.arc(px(s.minutes), py(s.effort + ((s.minutes * 7) % 5 - 2) * 0.06), 3, 0, Math.PI * 2)
+            d.fill()
+            }
+        if (this.effort > 0) {
+            d.fillStyle = app.effortInk(this.effort)
+            d.strokeStyle = t.ink
+            d.lineWidth = 2
+            d.beginPath()
+            d.arc(px(this.minutes), py(this.effort), 9, 0, Math.PI * 2)
+            d.fill()
+            d.stroke()
+            }
+        d.fillText("SHORTER", pad, d.h - 4, small)
+        d.fillText("LONGER →", d.w - pad - 64, d.h - 4, small)
+        d.fillText("HARDER ↑", pad, 12, small)
+        }
+    ]
+
+
+/*
+## Logging a session
+
+Built when the sheet opens and gone when it closes, so every opening starts from
+what this person most likely means: today, the sport they usually do on this
+day of the week, and their usual duration, distance and effort for it. Each of
+those is a computed default — it follows its inputs (a new sport suggests its own
+duration) until the person sets it, and then it is theirs. Everything is a
+choice or a nudge; the keyboard is only for a note.
+*/
+
+class SessionForm [ width = 100%,
+    editing: Session? = null,
+
+    sport: string = { classroot.editing?.sport ?? app.likelySport },
+    day: number = { classroot.editing != null ? dayNum(classroot.editing.date) : app.todayN },
+    minutes: number = { classroot.editing?.minutes ?? app.history.usualMinutes(classroot.sport) },
+    dist: number = { classroot.editing?.distanceKm ?? app.history.usualKm(classroot.sport, classroot.minutes) },
+    effort: number = { classroot.editing?.effort ?? app.history.usualEffort(classroot.sport) },
+    note: string = { classroot.editing?.note ?? "" },
+
+    hasDistance: boolean = { classroot.sport != "lift" },
+    distStep: number = { classroot.sport == "swim" ? 0.1 : classroot.sport == "run" ? 0.5 : 1 },
+
+    keys: Shortcuts [ title = "Log a session",
+        items = { [ ({ id: "save", key: "⌘↩", label: "Save" }) ] },
+        picked(id: string) { if (id == "save" && !app.saving) app.submit(classroot) }
+        ],
+
+    layout: SimpleLayout [ axis = y, spacing = 22 ],
+
+    head: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 4 ],
+        Caption [ text = { classroot.editing == null ? "Log a session" : "Correct a session" } ],
+        Text [ fontSize = 24, fontWeight = black, letterSpacing = -0.5,
+            text = { sportName(classroot.sport) + " " + app.dayPhrase(classroot.day) } ]
+        ],
+
+    sports: View [ width = 100%,
+        layout: SimpleLayout [ axis = x, spacing = 6 ],
+        Choice [ height = 56, width = { (parent.width - 18) / 4 }, label = "Run", chosen = { classroot.sport == "run" },
+            press() { classroot.sport = "run" }
+            ],
+        Choice [ height = 56, width = { (parent.width - 18) / 4 }, label = "Ride", chosen = { classroot.sport == "ride" },
+            press() { classroot.sport = "ride" }
+            ],
+        Choice [ height = 56, width = { (parent.width - 18) / 4 }, label = "Lift", chosen = { classroot.sport == "lift" },
+            press() { classroot.sport = "lift" }
+            ],
+        Choice [ height = 56, width = { (parent.width - 18) / 4 }, label = "Swim", chosen = { classroot.sport == "swim" },
+            press() { classroot.sport = "swim" }
+            ]
+        ],
+
+    when: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 8 ],
+        Caption [ text = "When" ],
+        strip: View [ width = 100%, height = 58, scrolls = x,
+            row: View [ datapath = { app.recentDays.value },
+                layout: SimpleLayout [ axis = x, spacing = 6 ],
+                Choice [ datapath = :days[], key = :n, label = { chipLabel(:n, app.todayN) },
+                    chosen = { classroot.day == :n },
+                    press() { classroot.day = :n }
+                    ],
+                DatePicker [ height = 48, value = { isoOf(classroot.day) }, max = { isoOf(app.todayN) },
+                    accessibilityLabel = "Another day",
+                    input(v: string) { if (v != "") classroot.day = dayNum(v) }
+                    ]
+                ]
+            ]
+        ],
+
+    howLong: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 8 ],
+        Caption [ text = "How long" ],
+        row: View [ width = 100%,
+            layout: SimpleLayout [ axis = x, spacing = 8, align = center ],
+            Nudge [ glyph = "−", accessibilityLabel = "Five minutes less",
+                press() { classroot.minutes = Math.max(5, classroot.minutes - 5) }
+                ],
+            Figure [ flexes = true, textAlign = center, fontSize = { app.phone ? 60 : 72 }, text = { duration(classroot.minutes) } ],
+            Nudge [ glyph = "+", accessibilityLabel = "Five minutes more",
+                press() { classroot.minutes = Math.min(600, classroot.minutes + 5) }
+                ]
+            ],
+        presets: View [ width = 100%,
+            layout: SimpleLayout [ axis = x, spacing = 6 ],
+            Choice [ height = 44, label = "30m", chosen = { classroot.minutes == 30 },
+                press() { classroot.minutes = 30 }
+                ],
+            Choice [ height = 44, label = "45m", chosen = { classroot.minutes == 45 },
+                press() { classroot.minutes = 45 }
+                ],
+            Choice [ height = 44, label = "1h", chosen = { classroot.minutes == 60 },
+                press() { classroot.minutes = 60 }
+                ],
+            Choice [ height = 44, label = "1h 30m", chosen = { classroot.minutes == 90 },
+                press() { classroot.minutes = 90 }
+                ],
+            Choice [ height = 44, label = "2h", chosen = { classroot.minutes == 120 },
+                press() { classroot.minutes = 120 }
+                ]
+            ]
+        ],
+
+    howFar: View [ width = 100%, visible = { classroot.hasDistance },
+        layout: SimpleLayout [ axis = y, spacing = 8 ],
+        Caption [ text = "How far" ],
+        row: View [ width = 100%,
+            layout: SimpleLayout [ axis = x, spacing = 8, align = center ],
+            Nudge [ glyph = "−", accessibilityLabel = "Shorter",
+                press() { classroot.dist = Math.max(0, Math.round((classroot.dist - classroot.distStep) * 10) / 10) }
+                ],
+            Figure [ flexes = true, textAlign = center, fontSize = { app.phone ? 48 : 56 }, text = { km(classroot.dist) } ],
+            Nudge [ glyph = "+", accessibilityLabel = "Further",
+                press() { classroot.dist = Math.round((classroot.dist + classroot.distStep) * 10) / 10 }
+                ]
+            ]
+        ],
+
+    howHard: View [ width = 100%,
+        layout: SimpleLayout [ axis = y, spacing = 8 ],
+        Caption [ text = { "How it felt · " + app.effortWord(classroot.effort) } ],
+        meter: EffortScale [ width = 100%, effort = { classroot.effort },
+            input(v: number) { classroot.effort = v }
+            ]
+        ],
+
+    noteField: TextInput [ width = 100%, height = 48, fontSize = 16, padding = [0, 14, 0, 14], cornerRadius = 6,
+        fill = { provided("theme").well }, stroke = null, placeholder = "Add a note (optional)",
+        text = { classroot.note },
+        onInput(v: string) { classroot.note = v }
+        ],
+
+    error: Text [ width = 100%, wrap = true, fontSize = 15, fontWeight = medium, textColor = { provided("theme").error },
+        visible = { app.saveError != "" }, text = { app.saveError } ],
+
+    save: Control [ width = 100%, height = 60, cornerRadius = 30,
+        accessibilityRole = button,
+        accessibilityLabel = { classroot.editing == null ? "Save " + sportName(classroot.sport).toLowerCase() : "Save changes" },
+        disabled = { app.saving },
+        fill = { pressed ? provided("theme").textMuted : provided("theme").ink },
+        t: TextLabel [ x = center, fontSize = 17, fontWeight = bold, textColor = { provided("theme").paper },
+            text = { app.saving ? "Saving…" : classroot.editing == null
+                ? "Save " + sportName(classroot.sport).toLowerCase() + " · " + duration(classroot.minutes)
+                : "Save changes" } ],
+        press() { app.submit(classroot) }
+        ]
+    ]
+
+
+/*
+## Effort
+
+Ten steps, each as hot as it is hard. A tap picks one; a finger drawn across the
+row picks wherever it stops. The arrows step it from the keyboard.
+*/
+
+class EffortScale extends Control [ height = 56,
+    effort: number = 5,
+    input(v: number) { effort = v },
+    accessibilityRole = slider,
+    accessibilityLabel = "Effort",
+    accessibilityValue = { classroot.effort },
+    accessibilityMin = 1,
+    accessibilityMax = 10,
+    accessibilityIncrement() { this.input(Math.min(10, effort + 1)) },
+    accessibilityDecrement() { this.input(Math.max(1, effort - 1)) },
+    claim = x,
+    pick(px: number) { this.input(clamp(Math.floor(px / this.width * 10) + 1, 1, 10)) },
+    onPointerDown(e: PointerEvent) { this.pick(e.x) },
+    onPointerMove(e: PointerEvent) { this.pick(e.x) },
+    onKeyDown(e: KeyEvent) {
+        if (e.key == "ArrowLeft" || e.key == "ArrowDown") this.input(Math.max(1, effort - 1))
+        else if (e.key == "ArrowRight" || e.key == "ArrowUp") this.input(Math.min(10, effort + 1))
+        },
+    draw(d: Draw) {
+        const t = provided("theme"), gap = 4, w = (d.w - gap * 9) / 10
+        const style = (on: boolean, n: number): TextStyle => ({ fontSize: 15, fontWeight: "bold", textColor: on && n >= 6 ? t.paper : t.ink })
+        for (let n = 1; n <= 10; n++) {
+            const on = n <= this.effort
+            const x = (n - 1) * (w + gap)
+            d.fillStyle = on ? app.effortInk(n) : t.well
+            d.fillRect(x, n == this.effort ? 0 : 8, w, n == this.effort ? d.h : d.h - 16)
+            const m = measureText("" + n, style(on, n))
+            d.fillText("" + n, x + (w - m.width) / 2, d.h / 2 + m.height / 2 - (m.height - m.baseline), style(on, n))
+            }
+        }
+    ]

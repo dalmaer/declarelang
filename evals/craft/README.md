@@ -83,7 +83,7 @@ A Declare run's report has, in order:
    line.
 4. **The agent's account, verbatim.** Asked after the build by resuming the finished session
    with read-only tools, with the standard questions (the prompt is kept beside the logs as
-   `impressions.txt`). Its cost is the session's total minus the build's.
+   `impressions.txt`). Its tokens are counted separately from the build's.
 
 A run with a second phase (a follow-up prompt resuming the same session) gets sections 1, 2
 and 4 again for that phase, appended to the first part's report. The idiom review (3) is

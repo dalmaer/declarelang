@@ -43,11 +43,11 @@ Before any tokens: the setup script verifies the subject's own ladder works, and
 `eval-references` gate (in `npm test`, R5 tier in `npm run test:ladder`) should be green —
 a red reference means the task, not the solver, needs attention first.
 
-**Reading the numbers:** the `usage` field decomposes spend — `fresh` (context actually
-read), `output`, `turns`, `costUsd`. The summed-token figure is dominated by cache reads
+**Reading the numbers:** the `usage` field decomposes what a cell used — `fresh` (context
+actually read), `output`, `turns`. The summed-token figure is dominated by cache reads
 (≈ turns × context length); *that* product is the navigation diagnostic that should
-shrink as onboarding and docs routing improve. `costUsd` is API-equivalent accounting —
-runs on a subscription-authenticated CLI draw plan usage, not billed dollars.
+shrink as onboarding and docs routing improve. Rounds are reported in tokens, never in
+dollars: prices change, and a subscription-authenticated CLI draws plan usage, not billed dollars.
 
 ## Merging back — what crosses into this tree, and what never does
 
@@ -68,6 +68,6 @@ directory).
 | round | date | subject | arm · model | cells | headline | evidence |
 |---|---|---|---|---|---|---|
 | 001 | 2026-08-23 | `949200bb` v0.3.1 | distro · opus | 12 (4 tasks × 3) | 12/12 green after shelf-assert fix; drift check caught the pointer-corridor regression pre-spend | `~/Code/Declare-eval-001/results/` · [report](reports/2026-08-23-round-001.md) |
-| 001b | 2026-08-24 | `949200bb` v0.3.1 | distro · opus | 1 (shelf) | green first pass · 53 turns · 135k fresh / 55k out · $5.24-equiv · 14.8 min · format-distance 0 · agent self-authored assert/states/baselines | `~/Code/Declare-eval-001/results/round-001b/` |
+| 001b | 2026-08-24 | `949200bb` v0.3.1 | distro · opus | 1 (shelf) | green first pass · 53 turns · 135k fresh / 55k out · 14.8 min · format-distance 0 · agent self-authored assert/states/baselines | `~/Code/Declare-eval-001/results/round-001b/` |
 
 Round 001's oversize matrix predates the small-runs rule; it is why the rule exists.

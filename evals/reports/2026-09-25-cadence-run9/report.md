@@ -8,7 +8,6 @@
 |---|---|---|---|
 | time | 29.9 min | 12.4 min | 15.4 min |
 | turns | 145 | 71 | 63 |
-| cost | $12.47 | $5.55 | $3.51 |
 | output tokens | 149k | 65k | 89k |
 | code | 1,606 lines, 6 files | 1,128 lines, 3 files | 2,943 lines (src) |
 | DOM elements at rest | — | 317 | 337 |

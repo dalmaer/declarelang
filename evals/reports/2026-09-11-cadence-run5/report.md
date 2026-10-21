@@ -8,7 +8,7 @@
 
 ## Headline
 
-**Clean through R5** (18 driven steps, real input) · **1,789 lines** in one file + a 74-line assert · **50.1 min** · **149 turns** · **$26.41** list.
+**Clean through R5** (18 driven steps, real input) · **1,789 lines** in one file + a 74-line assert · **50.1 min** · **149 turns**.
 
 | usage | tokens |
 |---|---|

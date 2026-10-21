@@ -22,6 +22,6 @@ for ln in open(p, errors="replace"):
             elif b.get("type") == "text" and b["text"].strip():
                 rows.append("TEXT  " + b["text"].strip().replace("\n", " ")[:200])
     elif t == "result":
-        rows.append(f"RESULT turns={j.get('num_turns')} cost=${j.get('total_cost_usd')} dur={j.get('duration_ms')}ms")
+        rows.append(f"RESULT turns={j.get('num_turns')} dur={j.get('duration_ms')}ms")
 print(f"{len(rows)} events")
 for r in (rows[-n:] if n else rows): print(r)

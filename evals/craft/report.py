@@ -55,7 +55,7 @@ quiet = (time.time() - os.path.getmtime(STREAM)) / 60
 
 print(f"elapsed {mins:.1f} min · {turns} turns · output {usage['output_tokens']:,} tok · cache reads {usage['cache_read_input_tokens']:,} · stream quiet {quiet:.1f} min")
 if result:
-    print(f"FINISHED: {'error' if result.get('is_error') else 'done'} · {result.get('num_turns')} turns · ${result.get('total_cost_usd')} · {(result.get('duration_ms') or 0)/60000:.1f} min")
+    print(f"FINISHED: {'error' if result.get('is_error') else 'done'} · {result.get('num_turns')} turns · {(result.get('duration_ms') or 0)/60000:.1f} min")
 print(f"READ ({len(reads)}):");  [print("  " + r) for r in reads]
 print(f"WROTE/EDITED ({len(writes)}):"); [print("  " + w) for w in writes]
 print(f"RAN ({len(runs)}):"); [print("  " + r) for r in runs]

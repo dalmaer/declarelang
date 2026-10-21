@@ -140,8 +140,8 @@ Declare comes to about a third of React's code.
 ## The agent's account, verbatim
 
 This was asked after the build, as a separate step that could only read files, with the same prompt as Cadence run 10
-("Now that you've built Murmur…"). The step took 1.3 minutes, used no tools, wrote 7.0k output tokens, and cost about
-$0.24 (the session was still cached).
+("Now that you've built Murmur…"). The step took 1.3 minutes, used no tools, and wrote 7.0k output tokens
+(the session was still cached).
 
 # Building Murmur in Declare: an account for the Declare team
 

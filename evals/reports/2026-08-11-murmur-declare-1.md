@@ -39,7 +39,7 @@ breadth, which is the one axis this task must not measure.
 | model | Opus |
 | exit | 0, replied `DONE` |
 
-Build cost is captured because the tracker round could not capture it — that arm
+Build usage is captured because the tracker round could not capture it — that arm
 was driven by hand. `evals/apps/murmur/run-arm.mjs` now records tokens, wall,
 and the produced-file inventory identically for every arm that follows.
 

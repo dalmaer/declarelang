@@ -29,7 +29,6 @@ so it appears only where its source can answer.
 | tool calls | 84 | 85 | — | **93** | — |
 | code, raw lines | 1,272 (3 files) | 1,089 (1 file) | 1,135 (3 files) | **1,242 (3 files)** | 2,943 |
 | code, excluding comments and blanks | 922 | 823 | 841 | **921** | 2,537 |
-| cost (build) | $5.79 | $6.23 | — | **$6.84** | — |
 | **Tokens** | | | | | |
 | output (incl. thinking) | 85k (39k) | 69k (26k) | — | **87k (38k)** | 89k |
 | fresh input (cache writes) | 227k | 242k | — | **252k** | 129k |
@@ -47,7 +46,7 @@ On the same build, run 14's app is 4 KB over run 13's. The 22 KB rise from run 1
 the library overlays and the focus and keyboard work arrived since. Separately, **run 12's app no longer compiles**. It
 declared its own `class Sheet`, which now collides with the library's (`DECLARE5000`). See finding 8.
 
-The account cost $0.22 and took 1.4 min (session total $7.06 minus the build's $6.84).
+The account took 1.4 min, in a separate resume; its tokens are not counted in the build's.
 
 Where the time went (`measure.mjs`):
 
@@ -222,7 +221,7 @@ I read all three files (1,242 lines) against the SKILL drift check, `declare.md`
 
 ## The agent's account, verbatim
 
-Asked by resuming the finished session with read-only tools (`impressions.txt`). Cost $0.22, 1.4 min.
+Asked by resuming the finished session with read-only tools (`impressions.txt`). 1.4 min.
 
 # Building Cadence in Declare: an account for the people who make it
 

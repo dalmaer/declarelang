@@ -16,7 +16,6 @@ main. Runs 6 and 7 are from their reports.
 | Declare commit | `75d710da` | `609f04f0` | **`611b696f`** | — |
 | time | 42.0 min | 37.7 min | **23.4 min** | 17.6 min |
 | turns · tool calls | 226 · 225 | 170 | **124 · 123** | — |
-| cost (build) | $15.62 | $15.27 | **$9.33** | — |
 | code, raw · excluding comments and blanks | — | — · 1,132 | **1,368 · 955** (5 files) | — |
 | output tokens (thinking) | — | — | **102k (44k)** | — |
 | cached input re-read | — | — | **23.8M** | — |
@@ -26,7 +25,7 @@ main. Runs 6 and 7 are from their reports.
 
 ¹ `declarec` production build from the main tree at `611b696f`. The platform grew about 22 KB since run 7 (see Cadence 14).
 
-The account cost $0.22 and took 1.1 min.
+The account took 1.1 min, in a separate resume; its tokens are not counted in the build's.
 
 Where the time went (`measure.mjs`):
 
@@ -39,7 +38,7 @@ Where the time went (`measure.mjs`):
 
 Also: 46 `declare-help` lookups across 45 topics, and 7 checks that reported failure.
 
-**The headline:** about 40% less time and cost than runs 6 and 7. The list problem those runs had is gone: one conversation
+**The headline:** about 40% less time than runs 6 and 7, and about 45% fewer turns. The list problem those runs had is gone: one conversation
 of 30,500 messages is about 900 DOM nodes, not 6,000.
 
 ## Against React and Svelte, at run time
@@ -52,7 +51,6 @@ Build figures for React and Svelte are from their 2026-10-08 measurements.
 | metric | React-2 | Svelte-1 | **Declare 9** |
 |---|---|---|---|
 | build time | 17.6 min | 20.5 min | **23.4 min** |
-| build cost | $4.21 | $4.65 | **$9.33** |
 | code lines | 2,815 | 2,922 | **955** |
 | download (gzip; JS, CSS, HTML; no fonts) | 185.3 KB | 66.8 KB | **147.6 KB** |
 | DOM at rest | 116 | 121 | **289** |
@@ -177,7 +175,7 @@ idiomatic Murmur yet.
 
 ## The agent's account, verbatim
 
-Asked by resuming the finished session with read-only tools (`impressions.txt`). Cost $0.22, 1.1 min.
+Asked by resuming the finished session with read-only tools (`impressions.txt`). 1.1 min.
 
 # Building Murmur in Declare: an account for the Declare team
 

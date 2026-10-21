@@ -120,8 +120,8 @@ a third of React's code.
 ## The agent's account, verbatim
 
 This was asked after the build, as a separate step that could only read files, with the same prompt as
-Cadence run 9 and Murmur run 3. The step took 1.3 minutes, used no tools, wrote 6.6k output tokens, and
-cost about $0.19 (the session was still cached).
+Cadence run 9 and Murmur run 3. The step took 1.3 minutes, used no tools, and wrote 6.6k output tokens
+(the session was still cached).
 
 # Building Cadence in Declare: an account for the Declare team
 

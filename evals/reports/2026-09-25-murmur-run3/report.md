@@ -8,7 +8,6 @@ minutes earlier was stopped before it built anything; it is not reported separat
 |---|---|---|---|
 | time | 80 min | 23.3 min | 18.1 min |
 | turns | — | 122 | 76 |
-| cost | $57 | $9.61 | $4.03 |
 | code | 1,892 lines | 1,217 lines, 7 files | 3,612 lines (src) |
 
 ## What cost it time (from its own account, `impressions.md`)

@@ -7,7 +7,7 @@
 
 ## Headline
 
-**1,892 lines across seven files** plus a design note · **80.3 min** · **274 turns** · **$57.16** list · clean through R4.
+**1,892 lines across seven files** plus a design note · **80.3 min** · **274 turns** · clean through R4.
 
 | usage | tokens |
 |---|---|

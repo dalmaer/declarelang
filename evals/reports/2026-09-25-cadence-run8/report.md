@@ -13,7 +13,6 @@ sharing the data service on port 8320).
 |---|---|---|---|
 | time | 16.0 min | 29.9 min | 15.4 min |
 | turns | 76 | 145 | 63 |
-| cost | $6.29 | $12.47 | $3.51 |
 | output tokens | 90k | 149k | 89k |
 | code | 1,302 lines, 1 file | 1,606 lines, 6 files | 3,008 lines, 23 files plus config |
 | data layer | raw `fetch` | `DataSource` for reads and writes | TanStack Query |
@@ -38,7 +37,7 @@ code-quality sentence in the brief. The model was the same.
   it also read parts of the runtime's source (`animator.ts`, `spring.ts`). The app was written
   and its add loop working by about 20 minutes. Roughly the last third of the run, from about
   21 to 29 minutes, went to one bug — below. That, not reading, is where the extra 14 minutes
-  and $6 went.
+  went.
 - **No web searches were used**, though the tools were available.
 
 ## The bug it hit

@@ -594,7 +594,7 @@ next docs touch). Language change CLOSED at this evidence level (cross-vendor co
 reopen). Affinity asterisk on file (Opus-authored materials); judged marginal.
 
 **The model matrix, one packaging (skill-v2) × one loop (iterated ≤8):**
-| model | green | cost | signature |
+| model | green | tokens | signature |
 | Haiku 4.5 | 5/9 | 2.1M | literal kernel-following; first-shot strength; regression-under-repair at size |
 | Sonnet 5 | 7/9 | ~16M | deep repair; R5 behavior walls |
 | Opus 4.8 | 9/9 | 4.7M | converges always; finds legal idioms first-shot |

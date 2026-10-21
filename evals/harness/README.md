@@ -52,9 +52,9 @@ baselines/
 runs/               per-run artifacts (gitignored)
 ```
 
-## What a run COST — the measurement model
+## What a run USED — the measurement model
 
-Scoring says whether the program is good. This says what producing it cost, and it is
+Scoring says whether the program is good. This says what producing it used, and it is
 collected the same way every time so two runs can be compared at all. One command, against
 any run directory holding a `logs/agent.stream.jsonl`:
 
@@ -62,20 +62,14 @@ any run directory holding a `logs/agent.stream.jsonl`:
 node evals/harness/measure.mjs <run-dir> [--json] [--calls]
 ```
 
-Three metrics matter, in this order.
+Two metrics matter, in this order. There is no dollar figure: prices change, and a
+subscription does not pay by the token, so a run is reported in tokens, never in money.
 
-**Tokens, by class, per model.** Input has three prices, not one — uncached input, input
+**Tokens, by class, per model.** Input has three classes, not one — uncached input, input
 written to the cache, and input read back from it — and the third runs two orders of
 magnitude above the others in an agent run, so a single "input" figure hides where the
-money went. Thinking is reported separately from the rest of output because it is invisible
-in the transcript and easy to forget it was paid for.
-
-**Cost**, computed from those classes and the per-model rates in
-[`pricing.json`](pricing.json), which is dated and hand-maintained. The CLI
-reports its own figure too; both are printed, and a disagreement over 2% is called out as a
-probably-stale rate table rather than silently resolved. A model with no rates on file is
-costed from the CLI's figure alone, and the report says so — an invented rate would read as
-a finding about the model instead of about our bookkeeping.
+context went. Thinking is reported separately from the rest of output because it is invisible
+in the transcript and easy to forget.
 
 **Time, by activity.** Wall clock splits first into model time and everything else, then the
 remainder is attributed to the tool that spent it: `render` (driving a browser), `check`
@@ -95,7 +89,6 @@ Two measured runs, for the shape of the thing:
 | editing files | 2.3 min · 5% | 3.5 min · 4% |
 | reading (98–128 calls) | 2.3 min · 4% | 0.4 min · 1% |
 | everything else | 1.9 min · 4% | 2.4 min · 3% |
-| cost | $26.41 | $57.16 |
 | turns | 149 | 274 |
 
 The model is three quarters to six sevenths of the clock in both, so tokens are the right
@@ -105,7 +98,7 @@ feels expensive because the files are large — cost under a minute across a hun
 
 Turns, tool calls, and checks that reported failure are collected under a heading that says
 what they are: **shape, not judgment**. They describe how a run moved, they are easy to
-optimise for dishonestly, and cost and time already price whatever they would have told us.
+optimise for dishonestly, and tokens and time already measure whatever they would have told us.
 
 ### The friction tier — diagnostics, not scores
 

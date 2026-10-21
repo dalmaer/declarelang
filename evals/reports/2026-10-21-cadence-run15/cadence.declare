@@ -1,0 +1,536 @@
+/*
+# Cadence
+
+A training log for someone who runs, rides, lifts and swims: the thing they open
+in the morning to see where they are, and again after a session to put it in.
+
+How it is put together:
+
+- **One truth.** `history` holds every session the service sent, and every
+  write the service confirms lands in it. Everything on screen — this week, the
+  streak, the week's shape, the year — is derived from it, so a new session is
+  true everywhere in the same settle.
+- **Where the person is** lives on the App: the stretch of the year in view
+  (`back` and `span`, each carried by a spring), which session is open, and
+  whether the form is up.
+- **The year is a surface under the hand.** A drag writes the view and its
+  spring's target together, so it never lags the finger; a pinch, a trackpad
+  pinch or the wheel rescales it about the point under the hand; the presets
+  only move the targets, and the springs carry it there.
+- **Figures travel.** Every headline number reads a sprung copy of its truth,
+  so a total moves to its new value rather than cutting to it.
+- **Ink and paper, one accent.** The accent means effort and nothing else: a
+  hard session is drawn in it, an easy one in the paper's own grey.
+
+The views are in `cadence-parts.declare`; this file holds the data, the
+person's place in it, and the screen's arrangement.
+*/
+
+include [ "cadence-parts.declare" ]
+
+// dates as day numbers, and the house formats: functions of their arguments
+
+script {
+    const DAY_MS = 86400000
+    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    const MONTHS_LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    function lerp(a: number, b: number, t: number): number { return a + (b - a) * t }
+    function clamp(v: number, a: number, b: number): number { return Math.max(a, Math.min(b, v)) }
+
+    // blend two 0xRRGGBB colors channel-wise
+    function mix(a: number, b: number, t: number): number {
+        const c = (x: number, y: number) => Math.round(x + (y - x) * t)
+        return (c((a >> 16) & 255, (b >> 16) & 255) << 16) | (c((a >> 8) & 255, (b >> 8) & 255) << 8) | c(a & 255, b & 255)
+    }
+
+    // a date is a day number — days since 1970-01-01 — for every comparison and position;
+    // the dates are the person's own, so the arithmetic is plain calendar arithmetic in UTC
+    function dayNum(iso: string): number {
+        const p = iso.split("-").map(Number)
+        return Math.round(Date.UTC(p[0], p[1] - 1, p[2]) / DAY_MS)
+    }
+    function isoOf(n: number): string { return new Date(n * DAY_MS).toISOString().slice(0, 10) }
+    function weekday(n: number): number { return (new Date(n * DAY_MS).getUTCDay() + 6) % 7 }     // 0 is Monday
+    function dayOfMonth(n: number): number { return new Date(n * DAY_MS).getUTCDate() }
+    function yearOf(n: number): number { return new Date(n * DAY_MS).getUTCFullYear() }
+    function monthStart(n: number): number { const d = new Date(n * DAY_MS); return Math.round(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / DAY_MS) }
+    function nextMonth(n: number): number { const d = new Date(n * DAY_MS); return Math.round(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / DAY_MS) }
+    function monthName(n: number): string { return MONTHS[new Date(n * DAY_MS).getUTCMonth()] }
+
+    function dayName(n: number): string { return WEEKDAYS[weekday(n)] }
+    function shortDate(n: number): string { return dayOfMonth(n) + " " + monthName(n) }
+    function longDate(n: number): string {
+        const d = new Date(n * DAY_MS)
+        return WEEKDAYS[weekday(n)] + " " + d.getUTCDate() + " " + MONTHS_LONG[d.getUTCMonth()] + " " + d.getUTCFullYear()
+    }
+    function rowDate(n: number): string { return WEEKDAYS[weekday(n)].slice(0, 3) + " " + shortDate(n) }
+
+    // how far back a day is, the way a person says it
+    function whenLabel(n: number, today: number): string {
+        const ago = today - n
+        if (ago == 0) return "Today"
+        if (ago == 1) return "Yesterday"
+        if (ago > 1 && ago < 7) return dayName(n)
+        return shortDate(n) + (yearOf(n) == yearOf(today) ? "" : " " + yearOf(n))
+    }
+    function chipLabel(n: number, today: number): string {
+        const ago = today - n
+        return ago == 0 ? "Today" : ago == 1 ? "Yesterday" : WEEKDAYS[weekday(n)].slice(0, 3) + " " + dayOfMonth(n)
+    }
+
+    // an inclusive run of days: "12 May – 25 May 2026", "28 Dec 2025 – 10 Jan 2026"
+    function rangeLabel(a: number, b: number): string {
+        if (a == b) return shortDate(a) + " " + yearOf(a)
+        if (yearOf(a) == yearOf(b)) return shortDate(a) + " – " + shortDate(b) + " " + yearOf(b)
+        return shortDate(a) + " " + yearOf(a) + " – " + shortDate(b) + " " + yearOf(b)
+    }
+
+    // durations read 3h 40m and 45m; distances 12.4 km; heart rate 148 bpm
+    function duration(min: number): string {
+        const m = Math.round(min), h = Math.floor(m / 60), r = m % 60
+        return h == 0 ? r + "m" : r == 0 ? h + "h" : h + "h " + r + "m"
+    }
+    function km(v: number): string { return v.toFixed(1) + " km" }
+    function bpm(v: number): string { return Math.round(v) + " bpm" }
+    function plural(n: number, one: string, many: string): string { return n == 1 ? one : many }
+
+    // a running clock: 6:52, 1:02:10
+    function elapsed(sec: number): string {
+        const s = Math.max(0, Math.floor(sec)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60
+        const two = (v: number) => (v < 10 ? "0" : "") + v
+        return h > 0 ? h + ":" + two(m) + ":" + two(r) : m + ":" + two(r)
+    }
+
+    function median(xs: number[]): number {
+        if (xs.length == 0) return 0
+        const s = xs.slice().sort((a, b) => a - b), mid = Math.floor(s.length / 2)
+        return s.length % 2 == 1 ? s[mid] : (s[mid - 1] + s[mid]) / 2
+    }
+
+    const SPORTS = ["run", "ride", "lift", "swim"]
+    function sportName(s: string): string { return s == "run" ? "Run" : s == "ride" ? "Ride" : s == "lift" ? "Lift" : s == "swim" ? "Swim" : "Session" }
+    function sportPlural(s: string): string { return s == "run" ? "runs" : s == "ride" ? "rides" : s == "lift" ? "lifting sessions" : s == "swim" ? "swims" : "sessions" }
+    }
+
+
+schema Session [ id: string, date: string, sport: string, minutes: number, distanceKm?: number,
+    effort: number, heartAvg?: number, note?: string ]
+schema LiveSession [ id: string, date: string, sport: string, startedSecondsAgo: number, minutes: number,
+    distanceKm?: number, heartNow: number, effort: number ]
+
+// one day of the week's shape, and one day of the year surface
+
+schema WeekDay [ n: number, letter: string, minutes: number, effort: number, today: boolean, top: string ]
+schema YearDay [ minutes: number, effort: number, top: string, week: number ]
+
+
+/*
+## The history
+
+Every session, newest first as the service sends them, and what is true of
+them whoever is looking: what happened between two days, the streak, what this
+person usually does. The writes are the service's confirmations — a session
+joins, changes or leaves only once the service has said so.
+*/
+
+class History extends DataSource [ schema = [ sessions[]: Session ],
+    all() -> Session[] { return this.value?.sessions ?? [] },
+    byId(id: string) -> Session? { return this.all().find((s) => s.id == id) ?? null },
+    between(a: number, b: number) -> Session[] {
+        return this.all().filter((s) => { const n = dayNum(s.date); return n >= a && n <= b })
+        },
+    firstDay() -> number { return this.all().reduce((m, s) => Math.min(m, dayNum(s.date)), 1e9) },
+
+    // consecutive days with a session, ending today — or yesterday, while today is still open
+
+    streak(today: number) -> number {
+        const days = new Set(this.all().map((s) => dayNum(s.date)))
+        let n = days.has(today) ? today : today - 1, k = 0
+        while (days.has(n)) { k = k + 1; n = n - 1 }
+        return k
+        },
+
+    // each day from `from` to `to`: minutes, the hardest effort, the longest session, and
+    // the trailing seven days' minutes — the season's line
+
+    daily(from: number, to: number) -> YearDay[] {
+        const out: YearDay[] = []
+        for (let n = from; n <= to; n++) out.push({ minutes: 0, effort: 0, top: "", week: 0 })
+        const longest: number[] = out.map(() => 0)
+        for (const s of this.all()) {
+            const i = dayNum(s.date) - from
+            if (i < 0 || i >= out.length) continue
+            out[i].minutes = out[i].minutes + s.minutes
+            out[i].effort = Math.max(out[i].effort, s.effort)
+            if (s.minutes > longest[i]) { longest[i] = s.minutes; out[i].top = s.id }
+            }
+        let run = 0
+        for (let i = 0; i < out.length; i++) {
+            run = run + out[i].minutes - (i >= 7 ? out[i - 7].minutes : 0)
+            out[i].week = run
+            }
+        return out
+        },
+
+    // what this person usually does: the sport they do on this weekday, and for a sport
+    // the duration, pace and effort of their recent sessions
+
+    ofSport(sport: string) -> Session[] { return this.all().filter((s) => s.sport == sport) },
+    usualSport(wd: number) -> string {
+        const counts = SPORTS.map((sp) => this.all().slice(0, 60).filter((s) => s.sport == sp && weekday(dayNum(s.date)) == wd).length)
+        const best = Math.max(...counts)
+        return best == 0 ? (this.all()[0]?.sport ?? "run") : SPORTS[counts.indexOf(best)]
+        },
+    usualMinutes(sport: string) -> number {
+        const m = median(this.ofSport(sport).slice(0, 12).map((s) => s.minutes))
+        return m == 0 ? 45 : Math.max(5, Math.round(m / 5) * 5)
+        },
+    usualKm(sport: string, minutes: number) -> number {
+        const paced = this.ofSport(sport).slice(0, 12).filter((s) => (s.distanceKm ?? 0) > 0)
+        const perMin = median(paced.map((s) => (s.distanceKm ?? 0) / s.minutes))
+        return Math.round(perMin * minutes * 10) / 10
+        },
+    usualEffort(sport: string) -> number {
+        const e = median(this.ofSport(sport).slice(0, 12).map((s) => s.effort))
+        return e == 0 ? 5 : Math.round(e)
+        },
+
+    // a session's place among its own sport: the share of them it out-lasted and out-worked
+
+    longerThan(sport: string, minutes: number) -> number {
+        const all = this.ofSport(sport)
+        return all.length <= 1 ? 0 : all.filter((o) => o.minutes < minutes).length / (all.length - 1)
+        },
+    harderThan(sport: string, effort: number) -> number {
+        const all = this.ofSport(sport)
+        return all.length <= 1 ? 0 : all.filter((o) => o.effort < effort).length / (all.length - 1)
+        },
+
+    // the service's confirmations, kept newest first
+
+    keep(s: Session) {
+        const list = this.all()
+        const i = list.findIndex((o) => o.date <= s.date)
+        this.insert(["sessions"], i < 0 ? list.length : i, s)
+        },
+    amend(s: Session) { this.forget(s.id); this.keep(s) },
+    forget(id: string) {
+        const i = this.all().findIndex((o) => o.id == id)
+        if (i >= 0) this.removeAt(["sessions"], i)
+        }
+    ]
+
+
+/*
+## Ink and paper
+
+The San Francisco preset carries every token the library's sheet, dialog and
+date picker read; this record lays the paper, the ink and the one accent over
+it. `effortLow` is where effort starts — the paper's own grey — and `accent` is
+where it ends.
+*/
+
+theme Cadence [
+    background = #F1EEE7, surface = #FAF8F4, line = #DDD7CB,
+    text = #141412, textMuted = #77726A, textFaint = #ACA69B,
+    ink = #141412, paper = #F1EEE7, rule = #D9D3C6, well = #E6E1D7, wellPressed = #D8D2C6,
+    accent = #FF4416, accentTextColor = #FFFFFF, accentHovered = #F03A0E, accentPressed = #DB320A,
+    effortLow = #B8B1A4, liveInk = #F1EEE7, liveMuted = #9A958C,
+    control = #E6E1D7, controlHovered = #DDD7CB, controlPressed = #D2CBBE, controlSelected = #141412,
+    linkColor = #141412, error = #C42B12, scrimFill = #141412, scrimOpacity = 0.28,
+    segmentedSelectedFill = #FAF8F4
+    ]
+
+
+App [ minWidth = 340, appName = "Cadence",
+    theme = { { ...SanFrancisco, ...Cadence } },
+    fill = { provided("theme").paper }, textColor = { provided("theme").ink },
+    fontFamily = ["Inter", "-apple-system", "BlinkMacSystemFont", "Helvetica Neue", "Arial", "sans-serif"],
+
+    // the room it is in: a phone stacks everything on the page's own scroll; a desk sets
+    // today beside the year in a window that holds still
+
+    phone: boolean = { app.width < 760 },
+    pad: number = { app.phone ? 20 : 40 },
+    todayW: number = { Math.min(520, Math.max(400, app.width * 0.38)) },
+    heroSize: number = { app.phone ? 88 : app.width < 1120 ? 92 : 108 },
+    unitSize: number = { app.phone ? 18 : 22 },
+
+    /* ## The service
+       Read once and kept current by the app: every write is confirmed by the service
+       and then written into `history`, so nothing ever needs fetching again. */
+
+    api: string = "http://127.0.0.1:8320",
+    today: DataSource [ url = { app.api + "/api/today" }, auto = true, schema = [ today: string ] ],
+    history: History [ url = { app.api + "/api/sessions" }, auto = true,
+        onLoad() { app.weekCountSpring.arrive(); app.weekMinutesSpring.arrive(); app.streakSpring.arrive() }
+        ],
+    live: DataSource [ url = { app.api + "/api/live" }, auto = true, schema = [ session?: LiveSession ],
+        onLoad() { app.pulse.start() }
+        ],
+
+    // the session in progress keeps reporting; read it again every second while the page is open
+
+    livePoll: Time [ tick = 1000,
+        onTick() { app.live.fetch() }
+        ],
+
+    ready: boolean = { app.history.loaded && app.today.loaded },
+    todayN: number = { dayNum(app.today.value?.today ?? "2000-01-01") },
+    running: LiveSession? = { app.live.value?.session ?? null },
+
+    /* ## Today
+       The last seven days, ending today: what has been done, the streak, the shape. */
+
+    weekFrom: number = { app.todayN - 6 },
+    weekSessions: Session[] = { app.history.between(app.weekFrom, app.todayN) },
+    weekCount: number = { app.weekSessions.length },
+    weekMinutes: number = { app.weekSessions.reduce((t, s) => t + s.minutes, 0) },
+    streak: number = { app.history.streak(app.todayN) },
+    last: Session? = { app.history.all().find((s) => dayNum(s.date) <= app.todayN) ?? null },
+
+    week: Dataset [ schema = [ days[]: WeekDay ], contents = { { days: app.weekDays() } } ],
+    weekDays() -> WeekDay[] {
+        const out: WeekDay[] = []
+        for (let n = this.weekFrom; n <= this.todayN; n++) {
+            const on = this.weekSessions.filter((s) => dayNum(s.date) == n)
+            const top = on.reduce((b: Session | null, s) => b == null || s.minutes > b.minutes ? s : b, null)
+            out.push({ n: n, letter: dayName(n).slice(0, 1), minutes: on.reduce((t, s) => t + s.minutes, 0),
+                       effort: on.reduce((e, s) => Math.max(e, s.effort), 0), today: n == this.todayN, top: top?.id ?? "" })
+            }
+        return out
+        },
+
+    // the figures, carried: each reads its truth through a spring
+
+    weekCountShown: number = 0,
+    weekMinutesShown: number = 0,
+    streakShown: number = 0,
+    weekCountSpring: Spring [ attribute = weekCountShown, to = { app.weekCount }, stiffness = 120, damping = 22 ],
+    weekMinutesSpring: Spring [ attribute = weekMinutesShown, to = { app.weekMinutes }, stiffness = 120, damping = 22 ],
+    streakSpring: Spring [ attribute = streakShown, to = { app.streak }, stiffness = 120, damping = 22 ],
+
+    // each reading of the live session lands as one beat of its dot
+
+    beat: number = 0,
+    pulse: Animator [ attribute = beat, from = 1, to = 0, duration = 600 ],
+
+    /* ## The year
+       The surface runs from the first month with a session to today. Where it looks is
+       two numbers: `back`, days between its right edge and the end of today, and `span`,
+       how many days it shows. Each has a spring and a target; under the hand both are
+       written together, so the surface never trails the finger. */
+
+    firstDay: number = { monthStart(app.history.firstDay()) },
+    totalDays: number = { Math.max(14, app.todayN + 1 - app.firstDay) },
+    days: YearDay[] = { app.history.daily(app.firstDay, app.todayN) },
+    dayMax: number = { Math.max(120, ...app.days.map((d) => d.minutes)) },
+    weekMax: number = { Math.max(300, ...app.days.map((d) => d.week)) },
+
+    back: number = 0,
+    backTo: number = 0,
+    span: number = 91,
+    spanTo: number = 91,
+    Spring [ attribute = back, to = { app.backTo }, stiffness = 140, damping = 24, epsilon = 0.01 ],
+    Spring [ attribute = span, to = { app.spanTo }, stiffness = 140, damping = 24, epsilon = 0.01 ],
+
+    minSpan: number = 10,
+    fitSpan(s: number) -> number { return clamp(s, this.minSpan, this.totalDays) },
+    fitBack(b: number, s: number) -> number { return clamp(b, 0, this.totalDays - s) },
+
+    // the hand: the view and its target together
+
+    handView(b: number, s: number) {
+        const span = this.fitSpan(s), back = this.fitBack(b, span)
+        this.span = span; this.spanTo = span; this.back = back; this.backTo = back
+        },
+
+    // a destination: the springs carry it there
+
+    glideView(b: number, s: number) {
+        const span = this.fitSpan(s)
+        this.spanTo = span; this.backTo = this.fitBack(b, span)
+        },
+
+    // rescale about a day, keeping that day under the same point of the surface
+
+    zoomAbout(day: number, frac: number, s: number) {
+        const span = this.fitSpan(s)
+        this.handView(this.todayN + 1 - (day + (1 - frac) * span), span)
+        },
+
+    // a preset keeps the right edge where it is: what was latest in view stays latest
+
+    showSpan(s: number) { this.glideView(this.backTo, s) },
+
+    viewEnd: number = { app.todayN + 1 - app.back },
+    viewFrom: number = { Math.round(app.viewEnd - app.span) },
+    viewTo: number = { Math.round(app.viewEnd) - 1 },
+    viewLabel: string = { rangeLabel(app.viewFrom, app.viewTo) },
+    viewSessions: Session[] = { app.history.between(app.viewFrom, app.viewTo) },
+    viewCount: number = { app.viewSessions.length },
+    viewMinutes: number = { app.viewSessions.reduce((t, s) => t + s.minutes, 0) },
+    viewKm: number = { app.viewSessions.reduce((t, s) => t + (s.distanceKm ?? 0), 0) },
+    viewHardest: Session? = { app.viewSessions.reduce((b: Session | null, s) => b == null || s.effort > b.effort || (s.effort == b.effort && s.minutes > b.minutes) ? s : b, null) },
+    inView: Dataset [ schema = [ rows[]: Session ], contents = { { rows: app.viewSessions } } ],
+
+    viewCountShown: number = 0,
+    viewMinutesShown: number = 0,
+    Spring [ attribute = viewCountShown, to = { app.viewCount }, stiffness = 160, damping = 24 ],
+    Spring [ attribute = viewMinutesShown, to = { app.viewMinutes }, stiffness = 160, damping = 24 ],
+
+    // effort is the one colour: the paper's grey at 1, the accent at 10
+
+    effortInk(e: number) -> number {
+        const t = provided("theme")
+        return mix(t.effortLow, t.accent, Math.pow(clamp((e - 3) / 6, 0, 1), 1.4))
+        },
+
+    /* ## Opening, adding, correcting
+       `detailId` is the session the detail sheet shows; it outlives the sheet's
+       closing, so the sheet keeps its content while it slides away. `formId` is the
+       session being corrected, or "" for a new one. */
+
+    detailId: string = "",
+    detailOpen: boolean = false,
+    formId: string = "",
+    formOpen: boolean = false,
+    likelySport: string = { app.history.usualSport(weekday(app.todayN)) },
+    recentDays: Dataset [ schema = [ days[]: [ n: number ] ],
+        contents = { { days: [0, 1, 2, 3, 4, 5, 6].map((i) => ({ n: app.todayN - i })) } } ],
+
+    // "today", "yesterday", "on Sunday", "on 3 Jul"
+
+    dayPhrase(n: number) -> string {
+        const w = whenLabel(n, this.todayN)
+        return n >= this.todayN - 1 ? w.toLowerCase() : "on " + w
+        },
+    effortWord(e: number) -> string {
+        return e + " — " + (e <= 2 ? "easy" : e <= 4 ? "light" : e <= 6 ? "steady" : e <= 8 ? "hard" : "all out")
+        },
+    paceOf(sport: string, minutes: number, dist: number) -> string {
+        if (dist <= 0) return ""
+        const per = sport == "swim" ? minutes / (dist * 10) : minutes / dist      // a swim is paced per 100 m
+        return elapsed(per * 60) + (sport == "swim" ? " /100m" : " /km")
+        },
+    standing(sport: string, minutes: number, effort: number) -> string {
+        const longer = Math.round(this.history.longerThan(sport, minutes) * 100), harder = Math.round(this.history.harderThan(sport, effort) * 100)
+        return "Longer than " + longer + "% of your " + sportPlural(sport) + ", and harder than " + harder + "%."
+        },
+
+    openSession(id: string) { this.detailId = id; this.detailOpen = true },
+    newSession() { this.formId = ""; this.formOpen = true },
+    editSession(id: string) { this.detailOpen = false; this.formId = id; this.formOpen = true },
+
+    // the writes: one request each, aimed by `targetId` and carrying `pending`
+
+    targetId: string = "",
+    pending: object = { {} },
+    submit(f: SessionForm) {
+        this.pending = ({ sport: f.sport, date: isoOf(f.day), minutes: f.minutes,
+                          distanceKm: f.sport == "lift" ? null : f.dist, effort: f.effort,
+                          note: f.note.trim() == "" ? null : f.note.trim() })
+        if (f.editing != null) { this.targetId = f.editing.id; this.update.fetch() }
+        else this.create.fetch()
+        },
+    create: DataSource [ url = { app.api + "/api/sessions" }, method = "POST", body = { app.pending }, schema = Session,
+        onLoad() { if (this.value != null) app.history.keep(this.value); app.formOpen = false }
+        ],
+    update: DataSource [ url = { app.api + "/api/sessions/" + app.targetId }, method = "PUT", body = { app.pending }, schema = Session,
+        onLoad() { if (this.value != null) app.history.amend(this.value); app.formOpen = false }
+        ],
+    remove: DataSource [ url = { app.api + "/api/sessions/" + app.targetId }, method = "DELETE",
+        onLoad() { app.history.forget(app.targetId); app.detailOpen = false }
+        ],
+    saving: boolean = { app.create.loading || app.update.loading },
+    saveError: string = { app.create.failed ? app.failure(app.create.errorBody, app.create.error)
+                        : app.update.failed ? app.failure(app.update.errorBody, app.update.error) : "" },
+    failure(body: object, fallback: string) -> string {
+        const m = (body as { message?: string } | null)?.message
+        return m != null && m != "" ? m : "Not saved — the service did not answer (" + fallback + ")."
+        },
+    askDelete(id: string) {
+        const s = this.history.byId(id)
+        if (s == null) return
+        this.confirm.open("Delete this " + sportName(s.sport).toLowerCase() + "?",
+            sportName(s.sport) + " on " + longDate(dayNum(s.date)) + ", " + duration(s.minutes) + ". This cannot be undone.",
+            [ ({ id: "cancel", label: "Keep it", cancel: true }), ({ id: "delete", label: "Delete", default: true }) ],
+            "", (choice: string) => { if (choice == "delete") { app.targetId = id; app.remove.fetch() } })
+        },
+
+    keys: Shortcuts [ title = "Cadence",
+        items = { [ ({ id: "new", key: "n", label: "Log a session" }),
+                    ({ id: "now", key: "t", label: "Back to today" }),
+                    ({ id: "in", key: "=", label: "Zoom in" }),
+                    ({ id: "out", key: "-", label: "Zoom out" }),
+                    ({ id: "earlier", key: "[", label: "Earlier" }),
+                    ({ id: "later", key: "]", label: "Later" }) ] },
+        picked(id: string) {
+            if (id == "new") app.newSession()
+            else if (id == "now") app.glideView(0, app.spanTo)
+            else if (id == "in") app.showSpan(app.spanTo / 1.6)
+            else if (id == "out") app.showSpan(app.spanTo * 1.6)
+            else if (id == "earlier") app.glideView(app.backTo + app.spanTo / 2, app.spanTo)
+            else if (id == "later") app.glideView(app.backTo - app.spanTo / 2, app.spanTo)
+            }
+        ],
+
+    /* ## The screen
+       One column on a phone, on the page's own scroll; two on a desk, today beside
+       the year, each holding still in its own frame. */
+
+    page: View [ x = center, width = { Math.min(app.width, 1480) },
+        padding = { [app.phone ? 16 : 28, app.pad, app.phone ? 120 : 0, app.pad] },
+        layout: SimpleLayout [ axis = y, spacing = { app.phone ? 20 : 28 } ],
+
+        bar: TopBar [ width = 100% ],
+
+        status: Text [ visible = { !app.ready }, width = 100%, wrap = true, fontSize = 18, fontWeight = medium,
+            textColor = { provided("theme").textMuted },
+            text = { app.history.failed || app.today.failed
+                ? "Can't reach the training log at " + app.api + ". It will show up here as soon as it answers."
+                : "Reading your training…" } ],
+
+        main: View [ width = 100%, visible = { app.ready },
+            layout: SimpleLayout [ axis = { app.phone ? "y" : "x" }, spacing = { app.phone ? 48 : 56 } ],
+            desk: State [ applied = { !app.phone }, height = { app.height - 110 } ],
+
+            today: TodayPanel [ width = { app.phone ? parent.width : app.todayW },
+                desk: State [ applied = { !app.phone }, height = { parent.height }, scrolls = y, padding = [0, 16, 24, 0] ]
+                ],
+            year: YearPanel [ width = { app.phone ? parent.width : parent.width - app.todayW - 56 },
+                desk: State [ applied = { !app.phone }, height = { parent.height } ]
+                ]
+            ]
+        ],
+
+    // on a phone the way in is under the thumb, and stays there while the page scrolls
+
+    fab: LogButton [ visible = { app.phone && app.ready }, ignoreScroll = true,
+        x = { app.width - this.width - 18 },
+        y = { (app.hostHeight > 0 ? app.hostHeight : app.height) - this.height - 22 - app.safeBottom } ],
+
+    detail: Sheet [ edge = "end", accessibilityLabel = "Session",
+        shown = { app.detailOpen },
+        input(open: boolean) { app.detailOpen = open },
+        SessionDetail [ width = 100%, datapath = { app.history.byId(app.detailId) } ]
+        ],
+
+    entry: Sheet [ edge = "end", accessibilityLabel = { app.formId == "" ? "Log a session" : "Correct a session" },
+        shown = { app.formOpen },
+        input(open: boolean) { app.formOpen = open },
+
+        // a fresh form for every opening, so each starts from what is most likely meant
+
+        View [ width = 100%,
+            SessionForm [ exists = { app.formOpen }, editing = { app.formId == "" ? null : app.history.byId(app.formId) } ]
+            ]
+        ],
+
+    // the accent means effort, so a confirming button is set in ink
+
+    confirm: Dialog [ theme = { { ...provided("theme"), accent: provided("theme").ink, accentHovered: provided("theme").ink,
+                                  accentPressed: provided("theme").textMuted } } ]
+    ]

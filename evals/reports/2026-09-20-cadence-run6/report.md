@@ -10,9 +10,9 @@ This report was filed after run 7, from the run's own logs, as the baseline run 
 
 ## Headline
 
-**Clean through R5 on its own 25-step assert** · **1,788 lines** in one file + a 130-line assert · build round **58.6 min** across two invocations (the first stopped on the account's usage limit at 11.1 min and was resumed) · **$43.27** for the build round.
+**Clean through R5 on its own 25-step assert** · **1,788 lines** in one file + a 130-line assert · build round **58.6 min** across two invocations (the first stopped on the account's usage limit at 11.1 min and was resumed).
 
-Two further steps followed, both labelled separately below: a fix pass on eight defects the reviewer found (**24.7 min**, to $68.39 cumulative) and a written appendix on the experience (**1.8 min**, to $74.46).
+Two further steps followed, both labelled separately below: a fix pass on eight defects the reviewer found (**24.7 min**) and a written appendix on the experience (**1.8 min**).
 
 ## Where the time went (build round, from the event stream)
 

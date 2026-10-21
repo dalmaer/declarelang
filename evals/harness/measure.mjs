@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// measure — what a run COST, from its own event stream.
+// measure — what a run USED, from its own event stream: tokens and time.
 //
 //   node evals/harness/measure.mjs <run-dir> [--json] [--calls]
 //
@@ -7,24 +7,22 @@
 // --output-format stream-json --verbose` transcript). Everything below is read
 // from that file; nothing is estimated and nothing is asked of the operator.
 //
-// THE THREE METRICS THAT MATTER, in this order:
+// THE TWO METRICS THAT MATTER, in this order:
 //
 //   1. TOKENS, split by class, per model. Input divides into three prices, not
 //      one — uncached input, input written to the cache, and input read back
 //      from it — and the third dominates an agent run by two orders of
-//      magnitude, so a single "input" number hides where the money went.
+//      magnitude, so a single "input" number hides where the context went.
 //      Thinking tokens are a subset of output, reported separately because they
 //      are invisible in the transcript and easy to forget.
-//   2. COST. Derived from the token classes and a per-model rate table
-//      (pricing.json, dated and hand-maintained). The CLI also reports its own
-//      figure; both are printed, and a disagreement over 2% is called out
-//      rather than silently preferred — a stale rate table is exactly the kind
-//      of error that reads as a finding about the model.
-//   3. TIME, split by ACTIVITY. Wall clock divides first into model time (the
+//   2. TIME, split by ACTIVITY. Wall clock divides first into model time (the
 //      API) and everything else, and "everything else" is then attributed to
 //      the tool that spent it. This is the one place tokens and time come
 //      apart: a browser render and an eight-minute suite cost real minutes and
 //      almost no tokens.
+//
+// There is no dollar figure. Prices change, and a subscription does not pay by
+// the token, so a run is reported in tokens, never in money.
 //
 // Turns, tool invocations and failed checks are counted too, at the bottom,
 // under the heading they deserve: they describe the SHAPE of a run and are not
@@ -125,6 +123,11 @@ const codes = new Map();       // message signature → { code, count, occasions
 const helpFor = new Map();     // help topic → times asked
 const searched = [];           // { pattern, found }
 const readCount = new Map();   // file → times read
+// Reads of the platform's own source: the runtime should never be needed to
+// write a program, and the library only by someone writing a component of
+// their own. Each call that opens, prints or searches under one counts once.
+const SOURCE_AREAS = [["runtime", /(?:^|[\s"'=/])runtime\/(?:src|dist)(?:\/([\w.\-/]*)|(?=[\s"'|;)]|$))/g], ["library", /(?:^|[\s"'=/])library(?:\/([\w.\-/]*)|(?=[\s"'|;)]|$))/g]];
+const sourceReads = { runtime: { calls: 0, files: new Map() }, library: { calls: 0, files: new Map() } };
 let truncated = 0, eyesCycles = 0, lastWasRender = false;
 
 for (const e of events) {
@@ -152,6 +155,15 @@ for (const e of events) {
         readCount.set(f, (readCount.get(f) ?? 0) + 1);
       }
       if (file) { const f = file.split("/").pop(); readCount.set(f, (readCount.get(f) ?? 0) + 1); }
+      if (b.name !== "Write" && b.name !== "Edit") {
+        const said = [cmd, file, String((b.input ?? {}).path ?? "")].join(" ");
+        for (const [area, rx] of SOURCE_AREAS) {
+          const hits = [...said.matchAll(rx)].map((m) => m[1] || "(the directory)");
+          if (hits.length === 0) continue;
+          sourceReads[area].calls++;
+          for (const h of hits) sourceReads[area].files.set(h, (sourceReads[area].files.get(h) ?? 0) + 1);
+        }
+      }
       // A correction that needed EYES: a render, then an edit, with no check in
       // between. The expensive class — it costs a round trip AND the tokens to
       // read what came back.
@@ -224,30 +236,7 @@ const models = Object.entries(usage).map(([model, u]) => ({
   cacheRead: u.cacheReadInputTokens ?? 0,
   output: u.outputTokens ?? 0,
   thinking: u.thinkingTokens ?? 0,
-  reportedUSD: u.costUSD ?? null,
-  basis: u.costBasis ?? null,
 })).sort((a, b) => (b.output + b.cacheWrite) - (a.output + a.cacheWrite));
-
-// ── cost ────────────────────────────────────────────────────────────────────
-// Rates are per MILLION tokens and live in pricing.json beside this file. A
-// model with no entry, or an entry with null rates, is costed from the CLI's
-// own figure instead, and the report says so — an invented rate is worse than
-// an absent one.
-const pricingPath = path.join(HERE, "pricing.json");
-const pricing = existsSync(pricingPath) ? JSON.parse(readFileSync(pricingPath, "utf8")) : { asOf: null, rates: {} };
-const rateFor = (model) => pricing.rates?.[model] ?? pricing.rates?.[model.replace(/-\d{8}$/, "")] ?? null;
-const priced = models.map((m) => {
-  const r = rateFor(m.model);
-  const ok = r !== null && ["input", "cacheWrite", "cacheRead", "output"].every((k) => typeof r[k] === "number");
-  const computed = ok
-    ? (m.input * r.input + m.cacheWrite * r.cacheWrite + m.cacheRead * r.cacheRead + m.output * r.output) / 1e6
-    : null;
-  return { ...m, computedUSD: computed };
-});
-const reportedTotal = result.total_cost_usd ?? null;
-const computedTotal = priced.every((m) => m.computedUSD !== null)
-  ? priced.reduce((a, m) => a + m.computedUSD, 0) : null;
-const drift = computedTotal !== null && reportedTotal ? Math.abs(computedTotal - reportedTotal) / reportedTotal : null;
 
 // ── time ────────────────────────────────────────────────────────────────────
 const totalMs = result.duration_ms ?? 0;
@@ -274,8 +263,6 @@ const report = {
   },
   tokens: Object.fromEntries(models.map((m) => [m.model,
     { input: m.input, cacheWrite: m.cacheWrite, cacheRead: m.cacheRead, output: m.output, thinking: m.thinking }])),
-  cost: { reportedUSD: reportedTotal, computedUSD: computedTotal, pricingAsOf: pricing.asOf ?? null,
-          agrees: drift === null ? null : drift <= 0.02 },
   // `turns` is the CLI's own count (a turn is a request/response round); the
   // assistant-message count is larger and is not the same unit, so it is not
   // reported as one.
@@ -286,6 +273,7 @@ const report = {
     helpAsked: Object.fromEntries([...helpFor.entries()].sort((a, b) => b[1] - a[1])),
     searchesThatFoundNothing: searched.filter((s) => s.found === false).map((s) => s.pattern),
     reReadFiles: Object.fromEntries([...readCount.entries()].filter(([, n]) => n > 1).sort((a, b) => b[1] - a[1]).slice(0, 12)),
+    sourceReads: Object.fromEntries(Object.entries(sourceReads).map(([k, v]) => [k, { calls: v.calls, files: Object.fromEntries([...v.files.entries()].sort((a, b) => b[1] - a[1])) }])),
     truncatedOutputs: truncated,
     permissionDenials: (result.permission_denials ?? []).length,
     correctionsNeedingEyes: eyesCycles,
@@ -298,7 +286,7 @@ const pad = (s, n) => String(s).padEnd(n);
 console.log(`\n${path.basename(path.resolve(runDir))} — ${report.model ?? "unknown model"}\n`);
 
 console.log("TOKENS");
-for (const m of priced) {
+for (const m of models) {
   console.log(`  ${m.model}`);
   console.log(`    ${pad("uncached input", 22)} ${fmtN(m.input).padStart(12)}`);
   console.log(`    ${pad("input → cache", 22)} ${fmtN(m.cacheWrite).padStart(12)}`);
@@ -306,17 +294,6 @@ for (const m of priced) {
   console.log(`    ${pad("output", 22)} ${fmtN(m.output).padStart(12)}${m.thinking ? `   (thinking ${fmtN(m.thinking)})` : ""}`);
 }
 
-console.log("\nCOST");
-if (computedTotal !== null) {
-  console.log(`  from the rate table (${pricing.asOf ?? "undated"})   $${computedTotal.toFixed(2)}`);
-  console.log(`  as the CLI reported it                  $${(reportedTotal ?? 0).toFixed(2)}`);
-  if (drift !== null && drift > 0.02) {
-    console.log(`  ⚠ they differ by ${(drift * 100).toFixed(1)}% — the rate table in evals/harness/pricing.json is probably stale`);
-  }
-} else {
-  console.log(`  $${(reportedTotal ?? 0).toFixed(2)}  (as the CLI reported it — no rates for this model in evals/harness/pricing.json,`);
-  console.log(`      so the per-class split is unpriced; fill the table in to compute it here)`);
-}
 
 console.log("\nTIME");
 console.log(`  ${pad("model (the API)", 22)} ${min(apiMs).toFixed(1).padStart(6)} min   ${pct(apiMs).toFixed(0).padStart(3)}%`);
@@ -353,6 +330,10 @@ const rr = Object.entries(fr.reReadFiles);
 if (rr.length) {
   console.log("  read more than once");
   console.log(`    ${rr.slice(0, 8).map(([f, n]) => `${f}×${n}`).join(", ")}`);
+}
+for (const [area, v] of Object.entries(fr.sourceReads)) {
+  const files = Object.entries(v.files);
+  console.log(`  ${area} source read: ${v.calls} call(s)${files.length ? ` — ${files.slice(0, 8).map(([f, n]) => (n > 1 ? `${f}×${n}` : f)).join(", ")}` : ""}`);
 }
 console.log(`  corrections that needed eyes (render → edit) ${fr.correctionsNeedingEyes} · truncated outputs ${fr.truncatedOutputs} · permission denials ${fr.permissionDenials}`);
 

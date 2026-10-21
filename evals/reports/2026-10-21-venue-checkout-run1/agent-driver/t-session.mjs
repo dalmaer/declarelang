@@ -1,0 +1,21 @@
+import { helpers } from "./lib.mjs";
+export default async (ctx) => {
+  const { page, sleep, role, text } = ctx;
+  const h = helpers(ctx);
+  await role("button", "Sign in").click(); await sleep(800);
+  await h.fill("Email", "ada@example.com"); await h.fill("Password", "correct horse battery");
+  const pw = await page.$('::-p-aria([name="Password"][role="textbox"])');
+  console.log("pw type:", await pw.evaluate((e) => e.type + " " + e.autocomplete), "email ac:", await (await page.$('::-p-aria([name="Email"][role="textbox"])')).evaluate((e) => e.autocomplete));
+  await page.locator('::-p-aria([name="Show password"])').click(); await sleep(200);
+  console.log("pw type after show:", await pw.evaluate((e) => e.type));
+  await page.keyboard.press("Enter").catch(()=>{});
+  await role("button", "Sign in").click().catch(()=>{});
+  await sleep(1500);
+  console.log("header:", (await text()).slice(0, 120).replace(/\n/g, " | "));
+  await page.reload({ waitUntil: "networkidle2" }); await sleep(1200);
+  console.log("after reload:", (await text()).slice(0, 120).replace(/\n/g, " | "));
+  await role("button", "Sign out").click(); await sleep(1200);
+  console.log("after sign out:", (await text()).slice(0, 120).replace(/\n/g, " | "));
+  await page.reload({ waitUntil: "networkidle2" }); await sleep(1200);
+  console.log("after reload:", (await text()).slice(0, 80).replace(/\n/g, " | "));
+};

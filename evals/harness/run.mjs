@@ -98,14 +98,14 @@ const purgeSandboxes = argv.includes("--purge-sandboxes");
 
 /** The token sum hides its own shape: cache reads dominate an agentic cell and
  *  grow with TURNS, not with reading. Keep the parts so a round can say what it
- *  actually spent — fresh context read, output written, turns taken, dollars. */
+ *  actually spent — fresh context read, output written, turns taken. */
 function breakdown(gen) {
   const u = gen?.usage?.usage ?? null;
   if (!u) return null;
   const input = u.input_tokens ?? 0, create = u.cache_creation_input_tokens ?? 0;
   return {
     fresh: input + create, cacheRead: u.cache_read_input_tokens ?? 0,
-    output: u.output_tokens ?? 0, turns: gen?.turns ?? null, costUsd: gen?.costUsd ?? null,
+    output: u.output_tokens ?? 0, turns: gen?.turns ?? null,
   };
 }
 
@@ -144,7 +144,7 @@ function persistCell({ cellName, appFile, sc, gen, line, dir }) {
   if (sc?.raw) writeFileSync(join(out, "verify.json"), JSON.stringify(sc.raw, null, 1));
   writeFileSync(join(out, "transcript.json"), JSON.stringify(
     { task: line.task, track: line.track, model: line.model, solver: line.solver,
-      usage: gen?.usage ?? null, turns: gen?.turns ?? null, costUsd: gen?.costUsd ?? null,
+      usage: gen?.usage ?? null, turns: gen?.turns ?? null,
       report: sc?.report ?? null, reply: gen?.raw ?? null }, null, 1));
   if (dir) {
     if (purgeSandboxes) rmSync(join(dir, ".."), { recursive: true, force: true });
@@ -264,7 +264,7 @@ for (const task of tasks) {
         // report what was actually spent: fresh context + output + turns, not the
         // cache-read-inflated sum (see breakdown())
         const u = m.usage;
-        const tok = u ? ` · ${Math.round(u.fresh / 1000)}k in/${Math.round(u.output / 1000)}k out${u.turns ? `/${u.turns}t` : ""}${u.costUsd ? ` · $${u.costUsd.toFixed(2)}` : ""}`
+        const tok = u ? ` · ${Math.round(u.fresh / 1000)}k in/${Math.round(u.output / 1000)}k out${u.turns ? `/${u.turns}t` : ""}`
           : m.tokens ? ` · ${m.tokens} tok` : "";
         console.log(`${green}${iters}${tok} · ${(m.wallMs / 1000).toFixed(0)}s`);
         metrics.push(m);

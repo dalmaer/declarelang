@@ -1,0 +1,10 @@
+import { chromium } from '/Users/temkin/Code/eval-venue-checkout-react-1/work/app/node_modules/playwright/index.mjs'
+const browser = await chromium.launch({ channel: 'chrome' })
+const page = await browser.newPage()
+await page.goto('http://127.0.0.1:5173/performances/p04'); await page.waitForSelector('[data-seat]')
+const seat = page.getByRole('button', { name: 'Orchestra, row C, seat 14', exact: true })
+console.log('seat count', await seat.count())
+const snap = await page.locator('[data-seat="ORCH-C-14"]').evaluate(e => [e.getAttribute('aria-label'), document.getElementById(e.getAttribute('aria-describedby'))?.textContent])
+console.log(snap)
+console.log(await page.getByRole('group', { name: 'Orchestra, row C' }).count())
+await browser.close()

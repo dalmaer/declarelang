@@ -1,0 +1,158 @@
+/*
+# The Venue — the records
+
+Everything the service holds, as the shapes it sends them, and the two sources
+whose records the program reads: the production with its twenty performances,
+and one performance's hall. The hall is fetched when a performance is picked and
+then kept current by the stream of other people's purchases (the App's `sales`),
+so the room never shows a seat as free that someone else has bought.
+*/
+
+schema Performance [ id: string, startsAt: string, doorsAt: string, priceFromCents: number, seatsLeft: number, seats: number ]
+schema SeatRec [ id: string, number: number, status: "available" | "sold" ]
+schema RowRec [ name: string, seats[]: SeatRec ]
+schema SectionRec [ key: string, name: string, priceCents: number, feeCents: number, rows[]: RowRec ]
+
+schema SavedCard [ id: string, brand: string, last4: string, expMonth: number, expYear: number ]
+schema Billing [ line1: string, line2?: string, city: string, postalCode: string, country: string ]
+
+schema TicketRec [ seatId: string, section: string, row: string, number: number, barcode: string ]
+
+// a seat placed in the room: its own record wrapped with where it sits, so a
+// write to the record (a sale) is seen by the seat that shows it
+
+schema Placed [ id: string, seat: SeatRec, x: number, y: number, sec: number, secName: string, row: string,
+    num: number, price: number, fee: number, label: string ]
+schema RowMark [ id: string, name: string, x: number, y: number, sec: number ]
+schema SectionMark [ id: string, name: string, price: number, x: number, y: number, r0: number, r1: number, a0: number, a1: number, sec: number ]
+schema Band [ id: string, x: number, y: number, w: number, h: number, r: number, a: number, sec: number ]
+schema Plan [ w: number, h: number, stageY: number, stageW: number, stageFront: number, cx: number, cy: number,
+    seats[]: Placed, rows[]: RowMark, sections[]: SectionMark, bands[]: Band ]
+
+
+class Production extends DataSource [ url = "http://127.0.0.1:8350/api/production", auto = true,
+    schema = [ title: string, hall: string, runningTime: string, performances[]: Performance ],
+
+    performances() -> Performance[] { return this.value?.performances ?? [] },
+    byId(id: string) -> Performance? { return this.performances().find((p) => p.id == id) ?? null }
+    ]
+
+
+/*
+## The hall
+
+One performance's seats, front to back. `plan` is the room drawn from them: each row
+an arc facing the stage, the four sections stepping back and up with a gap between
+them, every seat placed by its section, row and position in the row. Seat 1 is the
+first seat on the stage's left, which is the right-hand side of the drawing, since the
+drawing looks at the stage from the audience.
+*/
+
+class SeatMap extends DataSource [ credentials = omit,
+    schema = [ performanceId: string, sections[]: SectionRec ],
+
+    // the room's dimensions, in plan units: a seat is `pitch` from the next
+
+    pitch: number = 11.5,
+    rowGap: number = 12.5,
+    sectionGap: number = 22,
+    frontRadius: number = 150,
+
+    sections() -> SectionRec[] { return this.value?.sections ?? [] },
+
+    plan: Dataset [ schema = Plan, contents = { classroot.layOut() } ],
+
+    layOut() -> Plan {
+        const seats: Placed[] = [], rows: RowMark[] = [], marks: SectionMark[] = [], bands: Band[] = []
+        let ring = 0
+        this.sections().forEach((s, si) => {
+            const r0 = this.frontRadius + ring * this.rowGap + si * this.sectionGap
+            let a0 = 0, a1 = 0
+            s.rows.forEach((r, ri) => {
+                const R = this.frontRadius + ring * this.rowGap + si * this.sectionGap
+                const n = r.seats.length
+                const step = this.pitch / R
+                const reach = ((n - 1) / 2 + 2.1) * step
+                if (ri == 0) a0 = reach
+                a1 = reach
+                // the floor under the row: an arc band, boxed so it can be drawn on its own
+                const out = R + this.rowGap / 2 + (ri == s.rows.length - 1 ? 4 : 0.5), inn = R - this.rowGap / 2 - (ri == 0 ? 4 : 0)
+                bands.push({ id: s.key + "-" + r.name, x: -out * Math.sin(reach), y: inn * Math.cos(reach), w: 2 * out * Math.sin(reach),
+                             h: out - inn * Math.cos(reach), r: R, a: reach, sec: si })
+                r.seats.forEach((st, k) => {
+                    const a = ((n - 1) / 2 - k) * step
+                    seats.push({ id: st.id, seat: st, x: R * Math.sin(a), y: R * Math.cos(a), sec: si, secName: s.name,
+                                 row: r.name, num: st.number, price: s.priceCents, fee: s.feeCents,
+                                 label: s.name + ", row " + r.name + ", seat " + st.number })
+                    })
+                const end = ((n - 1) / 2 + 1.25) * step
+                rows.push({ id: s.key + "-" + r.name + "-L", name: r.name, x: -R * Math.sin(end), y: R * Math.cos(end), sec: si })
+                rows.push({ id: s.key + "-" + r.name + "-R", name: r.name, x: R * Math.sin(end), y: R * Math.cos(end), sec: si })
+                ring = ring + 1
+                })
+            const r1 = this.frontRadius + (ring - 1) * this.rowGap + si * this.sectionGap
+            marks.push({ id: s.key, name: s.name, price: s.priceCents, x: 0, y: r0 - this.rowGap * 0.5 - 9,
+                         r0: r0 - this.rowGap * 0.5, r1: r1 + this.rowGap * 0.5, a0: a0, a1: a1, sec: si })
+            })
+        if (seats.length == 0) return { w: 1, h: 1, stageY: 0, stageW: 0, stageFront: 0, cx: 0, cy: 0, seats: [], rows: [], sections: [], bands: [] }
+
+        // translate the room so its top-left is the origin, with the stage above the front row
+        const pad = 14
+        const xs = seats.map((p) => p.x).concat(rows.map((r) => r.x))
+        const ys = seats.map((p) => p.y).concat(rows.map((r) => r.y))
+        const stageY = Math.min(...ys) - 70
+        const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad
+        const minY = stageY - pad, maxY = Math.max(...ys) + pad
+        const sx = (v: number) => v - minX, sy = (v: number) => v - minY
+        return {
+            w: maxX - minX, h: maxY - minY, stageY: sy(stageY), cx: sx(0), cy: sy(0),
+            stageW: 2 * Math.sin(0.62) * (this.frontRadius - 26), stageFront: this.frontRadius - 26,
+            bands: bands.map((b) => ({ ...b, x: sx(b.x), y: sy(b.y) })),
+            seats: seats.map((p) => ({ ...p, x: sx(p.x), y: sy(p.y) })),
+            rows: rows.map((r) => ({ ...r, x: sx(r.x), y: sy(r.y) })),
+            sections: marks.map((m) => ({ ...m, x: sx(m.x), y: sy(m.y) }))
+            }
+        },
+
+    // ── reading one seat ──
+
+    sectionOf(id: string) -> SectionRec? {
+        const key = (id ?? "").split("-")[0]
+        return this.sections().find((s) => s.key == key) ?? null
+        },
+    seat(id: string) -> SeatRec? {
+        const s = this.sectionOf(id)
+        if (s == null) return null
+        for (const r of s.rows) { const f = r.seats.find((t) => t.id == id); if (f != null) return f }
+        return null
+        },
+    free(id: string) -> boolean { return this.seat(id)?.status == "available" },
+    price(id: string) -> number { return this.sectionOf(id)?.priceCents ?? 0 },
+    fee(id: string) -> number { return this.sectionOf(id)?.feeCents ?? 0 },
+
+    // "Orchestra, row C, seat 14": what a seat is called, to the eye and to a screen reader
+
+    label(id: string) -> string {
+        const p = (id ?? "").split("-")
+        return p.length < 3 ? "" : (this.sectionOf(id)?.name ?? p[0]) + ", row " + p[1] + ", seat " + p[2]
+        },
+
+    counts() -> object {
+        let free = 0, all = 0
+        for (const s of this.sections()) for (const r of s.rows) for (const t of r.seats) { all = all + 1; if (t.status == "available") free = free + 1 }
+        return { free: free, all: all }
+        },
+
+    // someone else bought it: the one write the stream makes
+
+    markSold(id: string) {
+        const secs = this.sections()
+        for (let i = 0; i < secs.length; i++) {
+            const rows = secs[i].rows
+            for (let j = 0; j < rows.length; j++) {
+                const k = rows[j].seats.findIndex((t) => t.id == id)
+                if (k >= 0) { if (rows[j].seats[k].status != "sold") this.set(["sections", i, "rows", j, "seats", k, "status"], "sold"); return }
+                }
+            }
+        }
+    ]
