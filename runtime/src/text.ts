@@ -39,6 +39,12 @@ import { faceGenerationNow } from "./face-table.js";
  *  gives. A function, not a member: nothing is added to every Text's names. */
 function runOf(t: { text: string }): string { return t.text ?? ""; }
 
+/** Each run's own auto-size width rule. A class's own width constraint is yielding
+ *  too (a default a layout may take over), and still a width given the run. */
+const autoWidths = new WeakSet<Constraint>();
+/** Runs whose auto-size rule is taking its first value, before it is in `autoWidths`. */
+const installing = new WeakSet<object>();
+
 /** A Text's padding as the style's four fields (TextStyle.padTop…padLeft). */
 function padFields(p: Inset): { padTop: number; padRight: number; padBottom: number; padLeft: number } {
   const [padTop, padRight, padBottom, padLeft] = insetSides(p);
@@ -144,10 +150,10 @@ export class Text extends View {
   }
 
   /** True when the run sizes its own width: nothing set it, and what owns it, if
-   *  anything, is the run's own auto-size (a yielding rule, which a write replaces). */
+   *  anything, is the run's own auto-size. */
   get $ownWidth(): boolean {
     const o = ownerOf(this, "width");
-    return !isSet(this, "width") && (o === null || o.yielding);
+    return !isSet(this, "width") && (o === null || autoWidths.has(o) || installing.has(this));
   }
 
   override $attach(backend: RenderBackend, parentSurface: Surface | null): void {
@@ -163,10 +169,12 @@ export class Text extends View {
       // a line as wrapped there. Wrapping greedily at the widest line breaks where
       // wrapping at `wrapWidth` did, so every renderer, wrapping at this box,
       // draws the same lines.
-      bindDerived(this, "width", () => {
+      installing.add(this);
+      autoWidths.add(bindDerived(this, "width", () => {
         const [, right, , left] = insetSides(this.padding);
         return this.$widestLine() + left + right;
-      });
+      }));
+      installing.delete(this);
     }
     if (!isSet(this, "height") && ownerOf(this, "height") === null) {
       bindDerived(this, "height", () => {

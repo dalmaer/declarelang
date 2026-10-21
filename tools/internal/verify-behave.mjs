@@ -433,7 +433,8 @@ export async function runBehavior({ compiled, appDir, assertPath, fixturesDir = 
 
 // ── rung 6: named visual states vs blessed baselines ───────────────────────
 
-/** Screenshot the APP's box (the tree's own extent, not the viewport).
+/** Screenshot the APP's box (the tree's own extent, not the viewport), at the
+ *  page's scroll: a route that scrolls the page captures what it scrolled to.
  *
  *  PRESENTED, not just settled. The model can be at rest while the COMPOSITOR
  *  still owes a frame: a `backdrop` (frost) samples what lies beneath and is
@@ -447,10 +448,10 @@ async function shootApp(page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
   const app = await page.evaluate(() => {
     const a = window.__declare.inspect();
-    return { width: a.width, height: a.height };
+    return { width: a.width, height: a.height, top: window.scrollY };
   });
   return page.screenshot({
-    clip: { x: 0, y: 0, width: Math.max(1, Math.ceil(app.width)), height: Math.max(1, Math.ceil(app.height)) },
+    clip: { x: 0, y: app.top, width: Math.max(1, Math.ceil(app.width)), height: Math.max(1, Math.ceil(app.height)) },
     encoding: "base64",
   });
 }

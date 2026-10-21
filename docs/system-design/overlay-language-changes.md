@@ -471,3 +471,9 @@ Also built: `Accessibility.announce`, `accessibilityExpanded` (ruled), `App.lang
   type-checked. The words are now bracketed, `("flipper" | "pulsar" | "fuseball")[]`;
   nothing else changes. A program that wrote a word where the list belongs now gets a
   DECLARE6001. The casts Tempest and Vortex needed for their tanker cargo are gone.
+- `text.ts` (`$ownWidth`): a Text took any yielding rule on its width for its own
+  auto-size, and a width constraint in a class body is yielding (a class's default place,
+  which a layout may take over). So a Text whose class constrained its width never
+  wrapped: the homepage's `BannerHead` and `BannerLead` ran off a phone's edge. The run
+  now knows its own auto-size rule, and any other rule on its width is a width given it.
+  Regression test in text.test.

@@ -63,7 +63,7 @@ export declare class Text extends View {
     /** Whether the run wraps at its box: a width given it, or one taken from a `wrapWidth`. */
     $bounded(): boolean;
     /** True when the run sizes its own width: nothing set it, and what owns it, if
-     *  anything, is the run's own auto-size (a yielding rule, which a write replaces). */
+     *  anything, is the run's own auto-size. */
     get $ownWidth(): boolean;
     $attach(backend: RenderBackend, parentSurface: Surface | null): void;
     /** A Text's own content folds into `contentWidth`/`contentHeight` as its

@@ -146,7 +146,7 @@ level is the classic mistake; they belong inside `viewport`):
 | `clock` | ISO date `string` | pin the WALL clock (`Date`) so a rendered time reads the same every run — the driven animation clock is separate and untouched |
 | `scheme` | `"light"` \| `"dark"` | the color scheme the capture renders under (default light) |
 | `dpr` | `number` | device pixel ratio of the capture (default 1) |
-| `route` | `async ({ drive, expect, page })` | drive the app INTO this state before capturing — clicks, settles, anything an assert script can do |
+| `route` | `async ({ drive, expect, page })` | drive the app INTO this state before capturing — clicks, settles, anything an assert script can do; a route that scrolls the page is captured where it scrolled to |
 | `mask` | `[{ x, y, w, h }, …]` | rectangles **excluded from comparison** |
 
 `mask` is what makes rung 6 usable over **live data** at all: mask the clock, the

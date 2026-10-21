@@ -69,6 +69,23 @@ await test("padding insets a Text's run: auto size grows by it, wrapping and the
   assert.deepEqual([st.padTop, st.padRight, st.padBottom, st.padLeft], [6, 10, 4, 12], "the renderers are told the insets");
 });
 
+await test("a width a class constrains wraps the run, as one the instance constrains does", async () => {
+  const b = await compileProgram(`class Banner extends Text [ width = { Math.min(880, parent.width) }, textAlign = center ]
+    App [ width = 1400, height = 800,
+      col: View [ width = 100,
+        byClass: Banner [ text = "ab ab ab ab ab ab" ],
+        byUse: Text [ y = 60, width = { Math.min(880, parent.width) }, text = "ab ab ab ab ab ab" ] ] ]`,
+    { originDir: process.cwd() + "/library", stripPos: false });
+  assert.equal(b.errors.length, 0, b.errors.map((e) => e.message).join("; "));
+  const app = instantiate(b.program);
+  app.$attach(new HeadlessBackend(), null);
+  settle();
+  // 100 wide holds "ab ab ab ab" (88) but not all six (136): two lines of 16
+  assert.equal(app.col.byUse.height, 2 * 16, "the use site's width wraps");
+  assert.equal(app.col.byClass.height, 2 * 16, "the class's width wraps");
+  assert.equal(app.col.byClass.$surface.textStyle.wrap, true, "the renderers are told to wrap");
+});
+
 await test("a { } that yields null before its data arrives draws the empty run — never a crash under a text transform", async () => {
   const app = await boot(`d: Dataset { { "rows": [ { "a": null }, { "a": "ok" } ] } },
     col: View [ datapath = { app.d.value }, Text [ datapath = :rows[], text = { :a }, textTransform = uppercase ] ]`);

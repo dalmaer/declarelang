@@ -1,7 +1,7 @@
 {
  "meta": {
   "version": 1,
-  "buildId": "480d046840bb",
+  "buildId": "bb0658225caf",
   "note": "THE single documentation model — one walkable data structure for every documented element. Read by the docs app, the desktop's embedded docs, the link registry, the eval harness, and any agent. extract.mjs writes the doc tree (reference/roots/tree/guide/tenets) here; this tool augments the SAME file in place with spine/links/meta. One file, no intermediate.",
   "pipeline": {
    "assembledFrom": [
@@ -23134,7 +23134,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 305
+    "line": 313
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23158,7 +23158,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 310
+    "line": 318
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23182,7 +23182,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 311
+    "line": 319
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23206,7 +23206,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 312
+    "line": 320
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23230,7 +23230,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 313
+    "line": 321
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23254,7 +23254,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 314
+    "line": 322
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23278,7 +23278,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 315
+    "line": 323
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23302,7 +23302,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 316
+    "line": 324
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23326,7 +23326,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 317
+    "line": 325
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23350,7 +23350,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 318
+    "line": 326
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23385,7 +23385,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 321
+    "line": 329
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23409,7 +23409,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 322
+    "line": 330
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23433,7 +23433,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 323
+    "line": 331
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23457,7 +23457,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 326
+    "line": 334
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23481,7 +23481,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 327
+    "line": 335
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23505,7 +23505,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 328
+    "line": 336
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23529,7 +23529,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 329
+    "line": 337
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23553,7 +23553,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 330
+    "line": 338
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23577,7 +23577,7 @@
    "internal": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 331
+    "line": 339
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23715,7 +23715,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 110
+    "line": 116
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23733,7 +23733,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 113
+    "line": 119
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23751,7 +23751,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 116
+    "line": 122
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23769,7 +23769,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 118
+    "line": 124
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23787,7 +23787,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 125
+    "line": 131
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23805,7 +23805,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 132
+    "line": 138
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23821,7 +23821,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 142
+    "line": 148
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23837,7 +23837,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 148
+    "line": 154
    },
    "parent": "Text",
    "seeAlso": [],
@@ -23855,7 +23855,7 @@
    "api": false,
    "source": {
     "file": "runtime/src/text.ts",
-    "line": 153
+    "line": 159
    },
    "parent": "Text",
    "seeAlso": [],
@@ -68392,7 +68392,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 305
+      "line": 313
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68416,7 +68416,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 310
+      "line": 318
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68440,7 +68440,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 311
+      "line": 319
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68464,7 +68464,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 312
+      "line": 320
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68488,7 +68488,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 313
+      "line": 321
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68512,7 +68512,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 314
+      "line": 322
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68536,7 +68536,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 315
+      "line": 323
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68560,7 +68560,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 316
+      "line": 324
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68584,7 +68584,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 317
+      "line": 325
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68608,7 +68608,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 318
+      "line": 326
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68643,7 +68643,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 321
+      "line": 329
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68667,7 +68667,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 322
+      "line": 330
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68691,7 +68691,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 323
+      "line": 331
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68715,7 +68715,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 326
+      "line": 334
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68739,7 +68739,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 327
+      "line": 335
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68763,7 +68763,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 328
+      "line": 336
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68787,7 +68787,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 329
+      "line": 337
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68811,7 +68811,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 330
+      "line": 338
      },
      "parent": "Text",
      "seeAlso": [],
@@ -68835,7 +68835,7 @@
      "internal": false,
      "source": {
       "file": "runtime/src/text.ts",
-      "line": 331
+      "line": 339
      },
      "parent": "Text",
      "seeAlso": [],
