@@ -23,6 +23,12 @@ place in the keyboard focus order?**
 - **`extends Control`** — a control: it takes focus, answers Space and Enter, and has
   interaction states that respect `disabled`.
 
+A member that is the class's own machinery rather than something a user of it sets or
+reads — where a drag started, a counter, a marker another class checks — is named with a
+leading underscore: `_x0`, `_gen`. The library names its machinery this way, which keeps
+it off a class's page in `declare-help` and out of the way of any name of yours; in your
+own classes the underscore tells the next reader what to leave alone.
+
 ## What `extends Control` gives you
 
 Hover and press states that behave on touch, a disabled state that suppresses both,

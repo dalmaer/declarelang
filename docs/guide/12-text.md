@@ -26,6 +26,13 @@ to everything below.
 Words that must not part at a line's end, such as "3h 40m", are joined by a no-break
 space (`"3h\u00A040m"` in a `{ }` string): it looks like a space and is never a break.
 
+**Numbers, money and dates** are formatted by the host's `Intl`, which a `{ }` and a
+script function call like any other global: `new Intl.NumberFormat("en-US", { style:
+"currency", currency: "USD" }).format(1234.5)` is "$1,234.50", `(1234.5).toLocaleString("en-US")`
+is "1,234.5", and `Intl.DateTimeFormat` writes weekdays and months in the language it is
+given. Name the locale, and a `timeZone` for a date, so the same value reads the same for
+every reader.
+
 A `Text` cannot bold one word; that is what rich text is for (below).
 
 **Labels in controls: [`TextLabel`](declare-docs:TextLabel).** `y = center` centers a view's box, and for a `Text`

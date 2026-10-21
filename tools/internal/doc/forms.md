@@ -456,7 +456,9 @@ A handler is a method named `on` + an event this node fires — `onClick`, `onPo
 `onInit`, `onKeyDown` — and it is a method in every respect: a subclass's `onInit` replaces
 its base's, and reaches it with `super.onInit()` when it wants the base's to run. The payload, when there is one, is typed by the event, and the
 compiler names the type when you write the wrong one. Handlers only assign attributes; every
-constraint that reads those attributes follows, which is the whole update model.
+constraint that reads those attributes follows, which is the whole update model. The `on`
+prefix is a convention: a method so named that answers no event of its node is an ordinary
+method, and the compiler warns, naming the handler when the name is one slip from it.
 
 Nothing bubbles. A handler runs on the node that declares it, for events that node fires;
 a parent that wants a child's click declares the handler on the child (or the child calls
@@ -465,9 +467,9 @@ declare — a `Keys [ onKeyUp(e: KeyEvent) { … } ]` gives a node app-wide keyb
 
 ### rules
 
-- The event must be one this node fires; the message lists its handlers.
-  > says: App has no 'onFrobnicate' event — its handlers: onInit
-  > probe: App [ onFrobnicate() { } ]
+- The pointer's handlers are `onPointer…`, one for a mouse and a fingertip alike.
+  > says: 'onMouseDown' is 'onPointerDown' here
+  > probe: App [ onMouseDown(e: PointerEvent) { } ]
 - The payload's type is the event's.
   > says: 'onClick' receives a PointerEvent — write 'onClick(e: PointerEvent)', not 'string'
   > probe: App [ onClick(e: string) { } ]

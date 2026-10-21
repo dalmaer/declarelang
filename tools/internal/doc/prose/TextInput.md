@@ -89,6 +89,12 @@ The purpose says what the field is for, not what may be typed: a `cardNumber` fi
 takes whatever the person types, and checking it is the field's `validate` or your own
 rule. A screen reader is told the field's name by its label as ever.
 
+On a web page the field carries the standard autofill name for its purpose, as both its
+`autocomplete` and its `name` (`cc-number` for `cardNumber`, `postal-code` for `postalCode`),
+and the keyboard hint as its `inputmode`. That is all a browser or a password manager
+matches on: fields need no form around them, and a page of them fills as one. A browser
+offers saved payment cards only to a page served over HTTPS.
+
 ## concealed
 **What is typed is hidden**, as a password is. It follows `purpose` — `password` and
 `newPassword` are concealed, every other purpose is not — until it is set, which is how a

@@ -34,7 +34,7 @@ Whether the toast is held open: the pointer is over it, or its action has the fo
 toast whose time runs out while held stays, and goes a moment after it is let go, so a
 person reaching for "Undo" is never cut off.
 
-## expired
+## _expired
 **Internal.** Its time ran out while it was held.
 
 ## trackChanges
@@ -52,7 +52,7 @@ Receives the action's id when its button is pressed. Override it at the use site
 takes no focus, so a press on it leaves focus where it was; a program that offers the same
 action from the keyboard gives it a shortcut of its own.
 
-## round
+## _round
 **Internal.** Which showing is current, so an earlier one's timer does not close a later.
 
 ## hostW
@@ -102,7 +102,7 @@ class Toast extends Floating [
     accessibilityLabel = { message },
     action: object = null,
     duration: number = 4000,
-    round: number = 0,
+    _round: number = 0,
 
     hostW: number = { this.host != null ? this.host.width : app.hostWidth > 0 ? app.hostWidth : app.width },     // a window's, else the browser window's
     hostH: number = { this.host != null ? this.host.height : app.hostHeight > 0 ? app.hostHeight : app.height },
@@ -118,26 +118,26 @@ class Toast extends Floating [
     say(m: string, a: object) {
         message = m
         action = a
-        round = round + 1
-        const mine = round
+        _round = _round + 1
+        const mine = _round
         this.show()
         // a status line that appears with its words in it is not reliably
         // heard as it arrives, so the notice is also said, without the focus moving
         Accessibility.announce(m)
-        expired = false
-        afterDelay(duration, () => { if (this.round == mine) { if (held) expired = true; else this.close() } })
+        _expired = false
+        afterDelay(duration, () => { if (this._round == mine) { if (held) _expired = true; else this.close() } })
         },
 
     // held open while the pointer is over it or its action has the focus
 
     held: boolean = { hovered || this.row.act.focused },
-    expired: boolean = false,
+    _expired: boolean = false,
     trackChanges = ["shown", "held"],
     onChange() {
         super.onChange()
-        if (held || !expired) return
-        const mine = round
-        afterDelay(1500, () => { if (this.round == mine && !held) this.close() })
+        if (held || !_expired) return
+        const mine = _round
+        afterDelay(1500, () => { if (this._round == mine && !held) this.close() })
         },
 
     picked(id: string) { },

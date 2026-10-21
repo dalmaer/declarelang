@@ -647,6 +647,14 @@ const headerProse = (src, cls) => {
   }
   return { class: parts[0].trim() || null, members, methods, internal, blockIndex };
 };
+// The library's one naming rule for what is not its interface: a member marked
+// `**Internal.**` is named `_name`, and a `_name` is marked internal — so a
+// program's own names never meet the library's machinery, and the two never drift.
+const namingProblems = [];
+const checkNaming = (tag, name, internal) => {
+  if (internal && !name.startsWith("_")) namingProblems.push(`${tag}.${name} is marked **Internal.** — an internal member is named '_${name}'`);
+  else if (!internal && name.startsWith("_")) namingProblems.push(`${tag}.${name} is named as internal ('_') but its section does not open with **Internal.**`);
+};
 const LIBRARY = JSON.parse(readFileSync(path.join(ROOT, "library/autoincludes.json"), "utf8"));
 for (const [tag, file] of Object.entries(LIBRARY)) {
   if (tag.startsWith("$") || typeof file !== "string") continue;  // $provide etc.
@@ -670,6 +678,7 @@ for (const [tag, file] of Object.entries(LIBRARY)) {
   for (const d of cls.body.decls) {
     const id = `${tag}.${d.name}`;
     const pd = prose.members[d.name] ?? null;
+    checkNaming(tag, d.name, prose.internal.has(d.name));
     nodes[id] = { id, name: d.name, kind: "attribute", doc: pd, docSegs: await segmentize(pd, id),
       api: !prose.internal.has(d.name), internal: prose.internal.has(d.name),
       source: { file: rel, line: 0 }, parent: tag, seeAlso: [],
@@ -690,6 +699,7 @@ for (const [tag, file] of Object.entries(LIBRARY)) {
     const evName = isEvent ? m.name[2].toLowerCase() + m.name.slice(3) : m.name;
     const id = `${tag}.${isEvent ? "event" : "method"}.${evName}`;
     const pm = prose.methods[m.name] ?? prose.members[m.name] ?? null;
+    checkNaming(tag, m.name, prose.internal.has(m.name));
     nodes[id] = { id, name: evName, kind: isEvent ? "event" : "method", doc: pm, docSegs: await segmentize(pm, id),
       api: !prose.internal.has(m.name), internal: prose.internal.has(m.name),
       source: { file: rel, line: 0 }, parent: tag, seeAlso: [],
@@ -1221,6 +1231,11 @@ if (coverage.length > 0) {
 if (groupProblems.length > 0) {
   console.log(`  CLASS GROUPS: ${groupProblems.length} problem(s)`);
   for (const u of groupProblems) console.log(`    ${u}`);
+  if (CHECK) process.exitCode = 1;
+}
+if (namingProblems.length > 0) {
+  console.log(`  LIBRARY NAMING: ${namingProblems.length} problem(s)`);
+  for (const u of namingProblems) console.log(`    ${u}`);
   if (CHECK) process.exitCode = 1;
 }
 if (formsProblems.length > 0) {

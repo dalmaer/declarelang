@@ -115,11 +115,12 @@ a re-sort**.
 ## same()
 Whether two items are the same one, by `idOf`.
 
-## anchorIndex
+## _anchorIndex
 **Internal.** Where a shift-range extends from.
 
 ## activeIndex
-**Internal.** The keyboard position as a logical index.
+The keyboard position as a logical index. A program that moves the keyboard itself sets
+it together with `active`, the record at that position.
 
 ## activeView
 The row view at the keyboard position, reported by the row itself (in a `DataGrid`, the
@@ -142,7 +143,7 @@ active row; a row's own controls are not stops in the walk past it. Enter opens 
 active row (`activateRequested`); a program that opens a row into controls focuses the
 first of them, and Tab then walks that row's controls; Esc returns focus to the table.
 
-## isTable
+## _isTable
 **Internal.** The marker rows guard on, so a bare `TableRow` under a plain parent boots
 rather than crashing into a missing protocol — not API.
 */
@@ -153,7 +154,7 @@ class Table extends Control [
     // the marker rows guard on: a bare TableRow under a plain parent must
     // boot, not crash into a missing protocol
 
-    isTable: boolean = true,
+    _isTable: boolean = true,
 
     // one Tab stop that keeps focus and moves an active row (planes.md §13.6)
 
@@ -179,7 +180,7 @@ class Table extends Control [
 
     // ── internals: the anchor and the active index (logical, data order) ──
 
-    anchorIndex: number = -1,
+    _anchorIndex: number = -1,
     activeIndex: number = -1,
 
     // the row (in a grid, the cell) the keyboard is on, as a view: the row
@@ -221,9 +222,9 @@ class Table extends Control [
     itemArray() -> array {
         // the probe must be a row (a subclass may hold other cursor-bearing
         // children — DataGrid's header island rides a different dataset)
-        const probe = this.children.find(c => (c as TableRow).isTableRow === true && c.datapath != null && (c.datapath as Cursor).data != null) as any
+        const probe = this.children.find(c => (c as TableRow)._isTableRow === true && c.datapath != null && (c.datapath as Cursor).data != null) as any
         if (probe != null) return probe.datapath.data.read(probe.datapath.path.slice(0, -1))
-        return this.children.filter(c => (c as TableRow).isTableRow === true)
+        return this.children.filter(c => (c as TableRow)._isTableRow === true)
         },
     itemCount() -> number {
         const arr = this.itemArray()
@@ -236,13 +237,13 @@ class Table extends Control [
         if (selects == "none" || disabled) return
         activeIndex = i
         active = m
-        if (selects == "multi" && range && anchorIndex >= 0) {
+        if (selects == "multi" && range && _anchorIndex >= 0) {
             const arr = this.itemArray() ?? []
-            const lo = Math.min(anchorIndex, i), hi = Math.max(anchorIndex, i)
+            const lo = Math.min(_anchorIndex, i), hi = Math.max(_anchorIndex, i)
             input(arr.slice(lo, hi + 1))
             return
             }
-        anchorIndex = i
+        _anchorIndex = i
         if (selects == "multi" && toggle) {
             const cur = selection ?? []
             input(this.isSelected(m) ? cur.filter(s => !this.same(s, m)) : cur.concat([m]))
@@ -265,13 +266,13 @@ class Table extends Control [
         this.showRow(i)
         if (e.meta || e.ctrl) return                       // the ⌘-walk: position only
         if (selects == "none") return
-        if (selects == "multi" && e.shift && anchorIndex >= 0) {
+        if (selects == "multi" && e.shift && _anchorIndex >= 0) {
             const arr = this.itemArray() ?? []
-            const lo = Math.min(anchorIndex, i), hi = Math.max(anchorIndex, i)
+            const lo = Math.min(_anchorIndex, i), hi = Math.max(_anchorIndex, i)
             input(arr.slice(lo, hi + 1))
             return
             }
-        anchorIndex = i
+        _anchorIndex = i
         input([this.active])
         },
 
@@ -280,9 +281,9 @@ class Table extends Control [
     // uniform in height) and materializes on arrival.
 
     showRow(i: number) {
-        const inst = this.children.find(c => (c as TableRow).isTableRow === true && (c as TableRow).tableIndex() == i)
+        const inst = this.children.find(c => (c as TableRow)._isTableRow === true && (c as TableRow).tableIndex() == i)
         if (inst != null) { inst.scrollIntoView("nearest"); return }
-        const some = this.children.find(c => (c as TableRow).isTableRow === true)
+        const some = this.children.find(c => (c as TableRow)._isTableRow === true)
         const unit = some != null && some.height > 0 ? some.height : 24
         const top = i * unit
         if (top < this.scrollY) this.scrollTo(top)
@@ -299,7 +300,7 @@ class Table extends Control [
             // toggle at the position — the ⌘-walk's other half
             const m = this.itemAt(activeIndex)
             const cur = selection ?? []
-            anchorIndex = activeIndex
+            _anchorIndex = activeIndex
             input(this.isSelected(m) ? cur.filter(s => !this.same(s, m)) : cur.concat([m]))
             }
         else if ((e.key == "Delete" || e.key == "Backspace") && (selection ?? []).length > 0)
@@ -387,7 +388,7 @@ land on the container.
 Delivers the click to the table's `rowClick` with the modifier state. Override
 `rowClick` on the table rather than this, unless a particular row needs to opt out.
 
-## isTableRow
+## _isTableRow
 **Internal.** The marker the table's walks key on — not API.
 
 ## width
@@ -406,7 +407,7 @@ Follows `selected`.
 class TableRow extends Control [
     // the marker Table's walks key on (a plain fact, minifier-safe)
 
-    isTableRow: boolean = true,
+    _isTableRow: boolean = true,
 
     // The item this row presents: its record when replicated (the whole
     // region at its cursor), the row view itself when written.
@@ -422,17 +423,17 @@ class TableRow extends Control [
     tableIndex() -> number {
         if (rowIndex >= 0) return rowIndex
         if (this.datapath != null) return -1   // replicated, presenting no record (a parked row)
-        if ((parent as Table).isTable !== true) return -1
-        return (parent as Table).children.filter(c => (c as TableRow).isTableRow === true).indexOf(this as any)
+        if ((parent as Table)._isTable !== true) return -1
+        return (parent as Table).children.filter(c => (c as TableRow)._isTableRow === true).indexOf(this as any)
         },
 
     // the selection facts, derived from the table's value — a row presents
     // membership, it never stores it
 
-    selected: boolean = { (parent as Table).isTable === true && (parent as Table).isSelected(this.item()) },
+    selected: boolean = { (parent as Table)._isTable === true && (parent as Table).isSelected(this.item()) },
     accessibilityRole = option,
     accessibilitySelected = { selected },
-    active:   boolean = { (parent as Table).isTable === true && (parent as Table).isActive(this.item()) },
+    active:   boolean = { (parent as Table)._isTable === true && (parent as Table).isActive(this.item()) },
 
     // a row that becomes the active one says so to its table, and one that stops
     // being it (a recycled row handed another record) takes itself back
@@ -440,7 +441,7 @@ class TableRow extends Control [
     trackChanges = ["active"],
     onChange(e: ChangeEvent) {
         const t = parent as Table
-        if (t.isTable !== true) return
+        if (t._isTable !== true) return
         if (active) t.activeView = this
         else if (t.activeView == this) t.activeView = null
         },
@@ -453,11 +454,11 @@ class TableRow extends Control [
     focusable = false,
 
     onPointerDown() {
-        if (!disabled && (parent as Table).isTable === true) Focus.focus(parent as any)
+        if (!disabled && (parent as Table)._isTable === true) Focus.focus(parent as any)
         },
 
     onClick() {
-        if (disabled || (parent as Table).isTable !== true) return
+        if (disabled || (parent as Table)._isTable !== true) return
         (parent as Table).rowClick(this.tableIndex(), this.item(),
             Keys.isDown("MetaLeft") || Keys.isDown("MetaRight") || Keys.isDown("ControlLeft") || Keys.isDown("ControlRight"),
             Keys.isDown("ShiftLeft") || Keys.isDown("ShiftRight"))

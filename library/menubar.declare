@@ -76,11 +76,11 @@ Left and Right move among the titles; Enter, Space or Down opens the focused tit
 Moves to the adjacent title's menu — Left/Right while a menu is open, yielding to the
 open menu when a submenu is up or the rover sits on one.
 
-## hasSub()
+## _hasSub()
 **Internal.** Whether a roved row cascades, so ArrowRight enters it rather than walking
 the bar.
 
-## rowsOf()
+## _rowsOf()
 **Internal.** The bar's title views.
 
 ## width
@@ -154,9 +154,9 @@ class MenuBar [
     // is up (Left backs out of it) or when the rover sits on a submenu row
     // (Right enters it) — the guards below yield exactly those cases.
 
-    rowsOf() { return this.row.children },
+    _rowsOf() { return this.row.children },
 
-    hasSub(r: object) -> boolean { return r != null && r.sub == true },
+    _hasSub(r: object) -> boolean { return r != null && r.sub == true },
 
     // the bar is one Tab stop; its titles are its members (planes.md §13.6):
     // Left/Right walk them, Enter, Space or Down open the focused one's menu
@@ -168,16 +168,16 @@ class MenuBar [
         const i = ms.findIndex((m) => "" + m.id == this.openId)
         if (i < 0 || ms.length < 2) return
         const nid = "" + ms[(i + d + ms.length) % ms.length].id
-        const t = this.rowsOf().find((r) => "" + r.mid == nid)
+        const t = this._rowsOf().find((r) => "" + r.mid == nid)
         if (t != null) this.openMenu(t)
         },
 
     keys: Keys [
         onKeyDown(e: KeyEvent) {
             if (!classroot.menu.shown) return
-            if (classroot.menu.subShown(classroot.menu.child)) return
+            if (classroot.menu._subShown(classroot.menu.child)) return
             if (e.key == "ArrowLeft") classroot.stepMenu(-1)
-            else if (e.key == "ArrowRight") { if (!classroot.hasSub(classroot.menu.activeRow)) classroot.stepMenu(1) }
+            else if (e.key == "ArrowRight") { if (!classroot._hasSub(classroot.menu.activeRow)) classroot.stepMenu(1) }
             }
         ],
 

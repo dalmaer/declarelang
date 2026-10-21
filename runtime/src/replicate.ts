@@ -632,13 +632,18 @@ export class Replicator {
           // the siblings' cursors, finishes, and bookkeeping below (field
           // report 2026-09-01: one bad row wedged the whole block, and a
           // frame-fed draw re-threw forever).
+          // an instance painting in another layer (`paintsIn`: a window parked
+          // in the dock) keeps its surface there — re-placed among its siblings
+          // it would paint in the list's layer at the other layer's offsets — and
+          // is no anchor for the siblings around it
+          const away = v.$surface !== null && (v.$surface as { isTraveling?(): boolean }).isTraveling?.() === true;
           try {
             if (v.$surface === null) v.$attach(this.parent.$backend, ps, before);
-            else if (!isDeferred(v.$surface)) ps.insertChild(v.$surface, before);
+            else if (!isDeferred(v.$surface) && !away) ps.insertChild(v.$surface, before);
           } catch (e) {
             reportInstanceThrow(v, "attaching", e);
           }
-          before = v.$surface !== null && !isDeferred(v.$surface) ? v.$surface : before;
+          before = v.$surface !== null && !isDeferred(v.$surface) && !away ? v.$surface : before;
         }
       }
     }

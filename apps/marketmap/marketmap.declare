@@ -27,9 +27,8 @@ The architecture is the example's real subject:
   dataset), and answers scalar queries as analyzed methods.
 - `MarketLayout extends Layout` — the partition as a **live layout**: its
   `place()` reads `app.day` under tracking, so one evaluation per frame
-  distributes every position. Sizes stay compiler-wired constraints on the
-  classes — at 600 children, per-child size claims through `place()` are the
-  seam's scaling cliff.
+  distributes every position. Sizes stay on the classes, computed from the
+  same partition — at 600 children, claiming sizes through `place()` is too slow.
 - `stageRoster` — a **derived Dataset** holding only the records the stage
   needs right now. Stage instances exist exactly while a stage key names
   them: nothing at boot, a dozen on open, reconciled by id on drill. Structure
@@ -46,13 +45,12 @@ The architecture is the example's real subject:
 
 Pure functions — the treemap partition, the stage layouts, color and text
 formatting. Two of them keep a one-entry memo, and that memo is *deliberately*
-script state: within a settle every reader asks for the same partition
-(computed defaults inline per reader), so something must materialize it — and
-a cache consulted during constraint evaluation must be invisible to dependency
-tracking. Held in node attributes its reads would subscribe every consumer and
-its writes would invalidate them: a self-defeating broadcast, divergent the
-moment two keys are alive in one settle. Transparent caches (same inputs, same
-output, always) are exactly the state the script rule permits.
+script state: hundreds of tiles and bands ask for the same partition each
+frame, so it is computed once and shared. A cache read during constraint
+evaluation must be invisible to dependency tracking — held in an attribute,
+every read would subscribe its reader and every write would invalidate them
+all. Transparent caches (same inputs, same output, always) are exactly the
+state the script rule permits.
 */
 
 script {
@@ -95,8 +93,8 @@ script {
     // in integer cents, every later entry the change from the day before.
     // Daily moves are small integers, so the file is ~40% smaller raw and a
     // third smaller compressed than absolute prices — losslessly. One running
-    // sum here turns it back into ordinary dollar floats; everything past
-    // onLoad sees absolute prices and knows nothing of the encoding.
+    // sum here turns it back into ordinary dollar floats; everything that reads
+    // Market's decoded tables sees absolute prices and knows nothing of the encoding.
     function decodeCloses(deltas: number[]): number[] {
         let cents = 0
         return deltas.map(d => (cents += d) / 100)
@@ -149,9 +147,9 @@ script {
     }
 
     // ── the grouping tree ──
-    // Built once per dataset from Market.onLoad. Orderings sort by
-    // end-of-window cap, so the frame order never changes as the day scrubs —
-    // only areas move.
+    // Built once per dataset, when Market's `decoded` table derives. Orderings
+    // sort by end-of-window cap, so the frame order never changes as the day
+    // scrubs — only areas move.
 
     function buildTree(stocks: Stock[]): SecNode[] {
         const last = stocks[0].closes.length - 1
@@ -543,11 +541,11 @@ A base `Layout`'s place-pass is a live tracked constraint, so a `place()` that
 reads `app.day` re-places continuously — the whole map morphs against the
 scrub with one evaluation distributing every position.
 
-The boxes carry `x`/`y` only, deliberately: a box that also carried `w`/`h`
-would install a separate runtime constraint per child per dimension, each
-re-evaluating `place()` — measured at 600 children, that alone drops a
-five-year flight from 45 fps to 1.4. Sizes stay compiler-wired constraints on
-the classes instead: positions through the pass, sizes through static edges.
+The boxes carry `x`/`y` only, deliberately: a box names the attributes the
+layout owns, and a size claimed through `place()` costs a constraint per child
+per dimension, which is too slow at 600 tiles. Each class sizes itself instead
+from the same partition, which the script's memo computes once per frame:
+positions come from the layout, sizes from the classes.
 */
 
 class MarketLayout extends Layout [
@@ -833,7 +831,7 @@ class StageTile [ cursor = "pointer", clip = true,
 
 An industry's label strip inside a staged sector — the drill target. Same
 yellow treatment as the map bands, driven by the same `hotStaged` key the
-staged tiles write, gated on the popup being under the pointer.
+staged tiles write, gated on the stage being under the pointer.
 */
 
 class StageBand [ cursor = "pointer", clip = true,
@@ -901,8 +899,8 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
     fontFamily = ["Helvetica Neue", "Helvetica", "Arial", "sans-serif"],
 
     // when the data lands, open on its last day outright — writing both the
-    // sprung attribute and its target parks the flight spring on the present day, whatever
-    // span the file carries
+    // sprung attribute and its target parks the spring there, so the map does
+    // not fly in from day zero
 
     market: Market [
         onLoad() {
@@ -917,10 +915,7 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
     // ── time: one sprung scalar. The slider retargets it stiffly, a chip
     // softly — same spring, different constants, so a chip click flies the
     // map through every intervening day and stays interruptible.
-    // The defaults only cover the beat before the data arrives; the market's
-    // `onLoad` (above) then opens the app on the data's last day outright —
-    // an arrival is a fact, not a change the map lived through, so it must
-    // not fly there.
+    // The defaults only cover the beat before the data arrives.
 
     day: number = { app.nDays - 1 },
     targetDay: number = { app.nDays - 1 },
@@ -960,8 +955,7 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
     closeGroup() { this.stageOpen = false
         this.hotStaged = "" },
 
-    // Escape dismisses the stage, same as its close box. A Keys member —
-    // lifetime-managed, no listener to clean up.
+    // Escape dismisses the stage, same as its close box
 
     keys: Keys [
         onKeyUp(e: KeyEvent) { if (e.key == "Escape" && app.stageOpen) app.closeGroup() }
@@ -974,7 +968,7 @@ App [ theme = { { ...SanFrancisco, ...MarketMap } }, fill = { provided("theme").
 
     // ── hover state: one key for the map's hot group, one for the stage's
     // hot sub-industry. Highlights gate on the derived hover facts, so
-    // leaving the grid or the popup drops them with no pointer-out handling.
+    // leaving the grid or the stage drops them with no pointer-out handling.
 
     hotGroup: string = "",
     hotStaged: string = "",

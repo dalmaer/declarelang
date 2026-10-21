@@ -31,7 +31,7 @@ async function makeApp(extra = "", n = 6, tableAttrs = "") {
   return app;
 }
 
-const rowsOf = (t) => t.children.filter((c) => c.isTableRow === true);
+const rowsOf = (t) => t.children.filter((c) => c._isTableRow === true);
 
 await test("click selects; the selection holds RECORDS; row visuals derive from the value", async () => {
   const app = await makeApp();

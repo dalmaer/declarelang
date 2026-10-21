@@ -388,6 +388,11 @@ export function checkDecl(
   if (structural !== null) {
     return err(diag`'${d.name}' is ${structural} — it cannot be declared; choose another name`, d.pos);
   }
+  if (d.name === "key") {
+    // `key = …` where an element is used is always replication metadata
+    // (language §9), so an attribute of this name could never be set
+    return err(diag`'key' is replication metadata — 'key = …' where an element is used names a replicated record's identity, so an attribute called 'key' could never be set; choose another name ('field', 'code', 'name')`, d.pos);
+  }
   if (attrType(schema, d.name) !== null) {
     // A read-only intrinsic must not advise "write name = …" — setting it is
     // ALSO an error (skill-arm finding: `contentWidth: number = …` got the

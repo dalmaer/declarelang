@@ -313,6 +313,13 @@ export const Diag = {
   // keyboard's path only and the click lands in the untouched onClick.
   buttonPressOverride: (owner: string, pos: Pos): DeclareError =>
     err(code4(4013), `press() on ${owner} replaces Button's activation path — every other control routes the pointer through press(), and Button inverts that: its own press() delivers to onClick, which is the use site's action slot. An override here answers Space and Enter, and a click still runs the untouched onClick — so the action never fires from the pointer. Put the action in onClick()`, pos),
+  // A WARNING: a method named like a handler that answers no event of its
+  // class. The prefix is a convention, so the method works; a misspelt
+  // handler (onPointerdown) never fires, which is what this catches.
+  unknownHandler: (owner: string, name: string, known: readonly string[], pos: Pos, near = known.find((h) => h.toLowerCase() === name.toLowerCase() || editDistance(h, name) <= 2) ?? null): DeclareError =>
+    err(code4(4019), near !== null
+      ? `${owner} has no '${name}' event — '${near}' is the handler, so '${name}' never fires; as written it is an ordinary method`
+      : `${owner} has no '${name}' event, so '${name}' is an ordinary method; a method that answers no event reads best without the 'on' prefix`, pos),
   // Accessibility (docs/system-design/accessibility.md §3.7). A role is a
   // contract: the class that declares it must set what the role reads and have
   // the methods its actions call — an error, since a slider with no value is a
@@ -445,6 +452,7 @@ export const DIAGNOSTIC_CATALOG: ReadonlyArray<{ code: string; phase: DiagPhase;
   { code: code4(4011), phase: "name", summary: "a constraint centers a box by hand — x = center says it (hint)" },
   { code: code4(4012), phase: "name", summary: "an Animator nothing ever starts — no 'started', no start() call (warning)" },
   { code: code4(4013), phase: "name", summary: "a press() override on a Button — the click runs onClick, not this (warning)" },
+  { code: code4(4019), phase: "name", summary: "a method named on… that answers no event of its class — an ordinary method (warning)" },
   { code: code4(4016), phase: "name", summary: "a Control with no accessibilityRole (warning)" },
   { code: code4(4017), phase: "name", summary: "a view whose role needs a name has none (warning)" },
   { code: code4(4018), phase: "name", summary: "a drawn, focusable view with no accessibilityRole (warning)" },

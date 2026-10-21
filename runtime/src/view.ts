@@ -791,7 +791,7 @@ export class View extends Node {
     if (detached) { DETACHED.add(this); DETACHED_SURFACES.add(s); STATS.detached++; }
     this.$flush(s);
     if ((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__)
-      && annotator !== null && (this.accessibilityRole !== "none" || this.accessibilityLabel !== "" || this.link !== "" || this.scrolls !== "none")) annotator(this);
+      && annotator !== null && (this.accessibilityRole !== "none" || this.$leafRole?.() === "textField" || this.accessibilityLabel !== "" || this.link !== "" || this.scrolls !== "none")) annotator(this);
     if (!defer && !detached) parentSurface?.insertChild(s, before !== null && !isPlaced(before) ? realSurfaceAfter(this) : before);
     // Each child joins the surface this view has NOW: the flush, or a child
     // that needs a real surface while hidden, may have brought this view in.
@@ -2107,7 +2107,11 @@ defineAttributes(View, {
   // class's, then its use site's), never after (accessibility.md §3.2).
   ...((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) ? {
     accessibilityRole: { def: "none", push: ROLE_LOCK },
-    accessibilityLabel: { def: "" },
+    // a name that arrives after the view attached (one that starts empty) is said
+    // from then on: the annotator takes the view now, as it would have at attach
+    accessibilityLabel: { def: "", push: (v) => {
+      if ((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) && annotator !== null && v.accessibilityLabel !== "" && v.$surface !== null) annotator(v);
+    } },
     accessibilityHint: { def: "" },
     accessibilityLive: { def: "off" },
     accessibilityValue: { def: null },

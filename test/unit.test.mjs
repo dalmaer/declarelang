@@ -1433,12 +1433,20 @@ await test("check() accepts handlers for View's declared events, incl. inherited
   assert.deepEqual(check(parse(src)), []);
 });
 
-await test("check() rejects a typo'd handler, naming the handlers it knows", () => {
-  const [err] = check(parse("View [ onClik() { } ]"));
-  // names the typo and lists the handlers it knows (the set grows with the
-  // schema — pin the stable leading pointer handlers, not the whole tail)
-  assert.match(err.message, /View has no 'onClik' event — its handlers: onInit, onChange, onClick, onDblClick, onHold, onPointerDown, onPointerUp, onPointerMove/);
-  assert.equal(err.pos.col, 8);
+await test("check(): a method named on… that answers no event is an ordinary method", () => {
+  // the prefix is a convention (language §8); the compiler warns (DECLARE4019)
+  assert.deepEqual(check(parse("View [ onClik() { } ]")), []);
+  assert.deepEqual(check(parse("App [ onDay(n: number) -> number { return n } ]")), []);
+  const [err] = check(parse("View [ onMouseDown(e: PointerEvent) { } ]"));
+  assert.match(err.message, /'onMouseDown' is 'onPointerDown' here/);
+});
+
+await test("compile: an on… method that answers no event warns, naming the handler one slip away", async () => {
+  const r = await compile(`App [ width = 100, height = 100, onPointerdown(e: PointerEvent) { }, onDay(n: number) -> number { return n } ]`, {});
+  assert.notEqual(r.source, null, r.errors.map((e) => e.message).join("; "));
+  const w = r.warnings.map((e) => e.message);
+  assert.ok(w.some((m) => /'onPointerDown' is the handler, so 'onPointerdown' never fires/.test(m)), w.join("\n"));
+  assert.ok(w.some((m) => /'onDay' is an ordinary method/.test(m)), w.join("\n"));
 });
 
 await test("check(): plain methods take any free name; attribute names are taken", () => {
@@ -1465,17 +1473,16 @@ await test("check(): a parameter may not shadow the 'parent' scope noun", () => 
   assert.match(err.message, /a parameter may not be named 'parent'/);
 });
 
-await test("check() on a schema with no events says so", () => {
-  const bad = checkMethod(BaseSchema, parse("X [ onZap() { } ]").methods[0]);
-  assert.match(bad.error.message, /Base declares no events, so 'onZap' can answer nothing/);
+await test("check() on a schema with no events: on… and plain methods are both ordinary methods", () => {
+  assert.equal(checkMethod(BaseSchema, parse("X [ onZap() { } ]").methods[0]).ok, true);
   const ok = checkMethod(BaseSchema, parse("X [ zap() { } ]").methods[0]);
   assert.equal(ok.ok, true, "a plain method needs no event declaration");
 });
 
 await test("check() errors come out in source order across member kinds", () => {
-  const errors = check(parse("View [ onClik() { }, zap=1 ]"));
+  const errors = check(parse("View [ width() { }, zap=1 ]"));
   assert.equal(errors.length, 2);
-  assert.match(errors[0].message, /onClik/);
+  assert.match(errors[0].message, /View\.width is an attribute/);
   assert.match(errors[1].message, /zap/);
 });
 
@@ -2684,9 +2691,8 @@ await test("check() validates class declarations, every error positioned", () =>
 
 await test("check(): a class body checks as an instance of the class itself", () => {
   const errs = check(parseProgram(`class A extends View [ zap = 1, onClik() { } ]\nApp [ width=1 ]`));
-  assert.equal(errs.length, 2);
+  assert.equal(errs.length, 1, "onClik is an ordinary method (a warning, at compile)");
   assert.match(errs[0].message, /A has no attribute 'zap'/);
-  assert.match(errs[1].message, /A has no 'onClik' event — its handlers: onInit, onChange, onClick/);
 });
 
 await test("check() flags a class that contains itself, directly or transitively", () => {
@@ -3574,8 +3580,7 @@ await test("check: data nodes — named, attribute-only, JSON-validated", () => 
     ["a data node holds no views — its structure is its data; a non-visual member (a derived Dataset over its records, a Time) is welcome"]
   );
   assert.deepEqual(check(parse(`App [ s: DataSource [ url = "/d.json", top: Dataset [ contents = { 1 } ] ] ]`)), []);
-  const badHandler = check(parse(`App [ s: DataSource [ url = "/d.json", onWiggle() { 1 } ] ]`));
-  assert.match(badHandler[0].message, /DataSource has no 'onWiggle' event/);
+  assert.deepEqual(check(parse(`App [ s: DataSource [ url = "/d.json", onWiggle() { 1 } ] ]`)), [], "an on… method that answers no event is an ordinary method");
   const unknown = check(parse(`App [ d: Dataset { [1] }, e: Dataset [ url = "x" ] ]`));
   assert.ok(unknown.some((e) => /Dataset has no attribute 'url'/.test(e.message)));
   const rawElsewhere = check(parse(`App [ v: View { [1] } ]`));
@@ -5499,7 +5504,7 @@ await test("Animator: handlers are allowed (declared events); decls, children, t
     Animator [ attribute=x, to=1, foo: number = 1, onWiggle() { }, View [ ] ] ] ]`));
   const msgs = errs.map((e) => e.message).join("\n");
   assert.doesNotMatch(msgs, /foo/, "a declaration on an animator is a member like any node's");
-  assert.match(msgs, /Animator has no 'onWiggle' event — its handlers: onInit, onChange, onStart, onStop, onRepeat/);
+  assert.doesNotMatch(msgs, /onWiggle/, "an on… method that answers no event is an ordinary method");
   assert.match(msgs, /an animator drives an attribute — it has no children/);
 });
 
@@ -7738,10 +7743,10 @@ await test("sources: the `<-` operator is GONE, and the error names the rewrite"
   assert.match(bad.errors[0].message, /Keys \[ onKeyUp\(e\) \{ … \} \]/, "names the exact replacement");
 });
 
-await test("sources: a handler the source does not call is the ordinary typo error", async () => {
-  const bad = await compile(`App [ width = 100, height = 100, k: Keys [ onWheel(e: WheelEvent) { } ] ]`, {});
-  assert.equal(bad.source, null);
-  assert.match(bad.errors[0].message, /Keys has no 'onWheel' event — its handlers: onInit, onChange, onKeyDown, onKeyUp/);
+await test("sources: a handler the source does not call is warned of — it never fires", async () => {
+  const r = await compile(`App [ width = 100, height = 100, k: Keys [ onWheel(e: WheelEvent) { } ] ]`, {});
+  assert.notEqual(r.source, null, r.errors.map((e) => e.message).join("; "));
+  assert.ok(r.warnings.some((e) => /Keys has no 'onWheel' event/.test(e.message)), r.warnings.map((e) => e.message).join("\n"));
 });
 
 await test("sources: `Keys` is both a component and a callable service, under one name", async () => {

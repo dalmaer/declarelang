@@ -61,7 +61,9 @@ export class Draw {
     ops = [];
     /** parallel to `ops` — see DisplayList.extents */
     extents = [];
-    push(op) { this.ops.push(op); this.extents.push(null); }
+    /** parallel to `ops` — see DisplayList.probes */
+    probes = [];
+    push(op) { this.ops.push(op); this.extents.push(null); this.probes.push(null); }
     /** THE VIEW'S OWN SIZE, for a drawing that sizes itself — `d.w` / `d.h`.
      *
      *  The scaffold has typed these since draw() was typed at all, so arithmetic
@@ -91,6 +93,9 @@ export class Draw {
     /** Extent of the current path; reset by beginPath, kept by fill/stroke
      *  (mirroring Canvas2D, where filling does not clear the path). */
     path = null;
+    /** Where the current path's pen last stood, in authoring coordinates: a
+     *  point a stroke inks, and on a fill's edge — the paint op's probe. */
+    pen = null;
     /** Mirror of the recorded lineWidth, for stroke expansion. */
     strokeHalf = 0.5;
     /** Cleared once an op paints an extent the recorder can't bound locally. */
@@ -191,14 +196,17 @@ export class Draw {
         this.mark(x, y, x + w, y + h);
     }
     // ── path building ──
-    beginPath() { this.push({ op: "beginPath" }); this.path = null; }
-    moveTo(x, y) { this.push({ op: "moveTo", x, y }); this.extend(x, y, x, y); }
-    lineTo(x, y) { this.push({ op: "lineTo", x, y }); this.extend(x, y, x, y); }
+    beginPath() { this.push({ op: "beginPath" }); this.path = null; this.pen = null; }
+    moveTo(x, y) { this.push({ op: "moveTo", x, y }); this.extend(x, y, x, y); this.pen = { x, y }; }
+    lineTo(x, y) { this.push({ op: "lineTo", x, y }); this.extend(x, y, x, y); this.pen = { x, y }; }
     /** Bounds take the full circle's box — conservative for partial arcs,
-     *  exact for full ones, and no trigonometry in the recorder. */
+     *  exact for full ones. (The sweep's own box is tighter, but a raster is
+     *  placed by its box's rounded origin, so a tighter box moves an arc's
+     *  antialiased edge by a fraction of a pixel in every drawing that has one.) */
     arc(x, y, r, a0, a1, ccw = false) {
         this.push({ op: "arc", x, y, r, a0, a1, ccw });
         this.extend(x - r, y - r, x + r, y + r);
+        this.pen = { x: x + r * Math.cos(a1), y: y + r * Math.sin(a1) };
     }
     /** The tangent arc's box is bounded by its two guide points (conservative:
      *  the curve stays within their span plus the corner it rounds). */
@@ -212,32 +220,48 @@ export class Draw {
         // conservative: the rotated ellipse fits in a circle of its larger radius
         const r = Math.max(Math.abs(rx), Math.abs(ry));
         this.extend(x - r, y - r, x + r, y + r);
+        const ex = rx * Math.cos(a1), ey = ry * Math.sin(a1);
+        this.pen = { x: x + ex * Math.cos(rot) - ey * Math.sin(rot), y: y + ex * Math.sin(rot) + ey * Math.cos(rot) };
     }
     rect(x, y, w, h) {
         this.push({ op: "rect", x, y, w, h });
         this.extend(x, y, x + w, y + h);
+        this.pen = { x, y };
     }
     roundRect(x, y, w, h, radii = 0) {
         this.push({ op: "roundRect", x, y, w, h, radii: Array.isArray(radii) ? radii.slice() : radii });
         this.extend(x, y, x + w, y + h);
+        this.pen = { x: x + w / 2, y }; // a rounded corner is not inked; the middle of its top edge is
     }
     quadraticCurveTo(cpx, cpy, x, y) {
         this.push({ op: "quadraticCurveTo", cpx, cpy, x, y });
         this.extend(cpx, cpy, cpx, cpy);
         this.extend(x, y, x, y);
+        this.pen = { x, y };
     }
     bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y) {
         this.push({ op: "bezierCurveTo", cp1x, cp1y, cp2x, cp2y, x, y });
         this.extend(cp1x, cp1y, cp1x, cp1y);
         this.extend(cp2x, cp2y, cp2x, cp2y);
         this.extend(x, y, x, y);
+        this.pen = { x, y };
     }
     closePath() { this.push({ op: "closePath" }); }
+    /** The paint op just pushed inks where the pen stands: its probe, mapped
+     *  through the live transform as its extent is. */
+    probe() {
+        if (this.pen === null)
+            return;
+        const [a, b, c, d, e, f] = this.ctm;
+        this.probes[this.probes.length - 1] = { x: a * this.pen.x + c * this.pen.y + e, y: b * this.pen.x + d * this.pen.y + f };
+    }
     // ── paint ──
     fill(rule) {
         this.push({ op: "fill", rule });
-        if (this.path)
+        if (this.path) {
             this.mark(this.path.x, this.path.y, this.path.x + this.path.w, this.path.y + this.path.h);
+            this.probe();
+        }
     }
     /** Stroke ink extends half the line width beyond the path box. (A sharp
      *  miter join can poke further; bounds stay advisory until dirty-region
@@ -247,6 +271,7 @@ export class Draw {
         if (this.path) {
             const e = this.strokeHalf;
             this.mark(this.path.x - e, this.path.y - e, this.path.x + this.path.w + e, this.path.y + this.path.h + e);
+            this.probe();
         }
     }
     /** Clip narrows subsequent painting to the current path — no ink of its own,
@@ -390,7 +415,7 @@ export class Draw {
     resetTransform() { this.ctm = [1, 0, 0, 1, 0, 0]; this.push({ op: "resetTransform" }); }
     /** The finished recording. Called by record(); a Draw is single-use. */
     list() {
-        return { ops: this.ops, bounds: this.ink, exact: this.exactBounds, extents: this.extents };
+        return { ops: this.ops, bounds: this.ink, exact: this.exactBounds, extents: this.extents, probes: this.probes };
     }
     readOnly(what) {
         throw new DeclareError(`the draw context is write-only — ${what} cannot be read back; inputs come in through attributes (rendering model)`);
@@ -669,6 +694,7 @@ export function rasterLooksBlank(cv, list, sx, sy, bx, by) {
     }
     const g = cv.getContext("2d");
     const ext = list.extents ?? [];
+    const probes = list.probes ?? [];
     if (g === null)
         return false;
     let sampled = 0;
@@ -676,11 +702,14 @@ export function rasterLooksBlank(cv, list, sx, sy, bx, by) {
         const e = ext[i];
         if (!e || e.w <= 0 || e.h <= 0)
             continue;
-        // a 3×3 PATCH about the centre, not one pixel: a hairline's centre rounds
-        // one device pixel off the line at low density (measured — a 1 px lattice
-        // at density 1 read "blank" at every sample and the DOM backend halved a
-        // raster that had painted), and a false blank is a raster thrown away
-        const cx = Math.round((e.x + e.w / 2 - bx) * sx), cy = Math.round((e.y + e.h / 2 - by) * sy);
+        // a 3×3 PATCH about a point the op inks, not one pixel: a hairline's centre
+        // rounds one device pixel off the line at low density (measured — a 1 px
+        // lattice at density 1 read "blank" at every sample and the DOM backend
+        // halved a raster that had painted), and a false blank is a raster thrown
+        // away. A path's point is where its pen stood (an arc's box has no ink at
+        // its centre); anything else's is its box's centre.
+        const p = probes[i] ?? { x: e.x + e.w / 2, y: e.y + e.h / 2 };
+        const cx = Math.round((p.x - bx) * sx), cy = Math.round((p.y - by) * sy);
         // an op centred off the raster says nothing about it — a panned drawing's
         // early marks often are — and a patch clamped to the edge would read the
         // transparent margin as a refusal

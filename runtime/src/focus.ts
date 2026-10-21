@@ -904,9 +904,9 @@ export function deliverKeys(keys: KeysService, focus: FocusService): () => void 
       // left open
       const c = keys.claimant();
       if (c instanceof View && (!focus.holds(c) || (focus.getFocus() === c && c.focusScope !== "modal"))) {
-        const held = c as unknown as { escape?: () => void; savedFocus?: View | null };
-        const back = focus.getFocus() === c ? held.savedFocus ?? null : null;
-        if (back !== null) held.savedFocus = null;   // it goes back now, not after the close
+        const held = c as unknown as { escape?: () => void; _savedFocus?: View | null };
+        const back = focus.getFocus() === c ? held._savedFocus ?? null : null;
+        if (back !== null) held._savedFocus = null;   // it goes back now, not after the close
         if (typeof held.escape === "function") held.escape.call(c);
         if (back !== null) focus.focus(back);
       }

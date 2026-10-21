@@ -1277,7 +1277,8 @@ function construct(el, outer, ctx, parentEl) {
             appendChildren(from, view, fromCroot, ctx, el, slot);
             return;
         }
-        const isView = (c) => c.classSlot !== undefined || familyOf(c.tag, ctx) === "view";
+        // a child with `exists` is a State standing for it, and is placed as the child would be
+        const isView = (c) => c.classSlot !== undefined || familyOf(c.tag, ctx) === "view" || (c.existsOf === true && c.children.length === 1 && isView(c.children[0]));
         const members = from.children.filter((c) => !isView(c));
         if (members.length > 0)
             appendChildren({ ...from, children: members }, view, fromCroot, ctx, el, slot);
@@ -1338,6 +1339,14 @@ function hoistPlacedNames(from, view, target) {
     if (target === view)
         return;
     for (const c of from.children) {
+        // a child with `exists` comes and goes: its name reads the target's, live
+        if (c.existsOf === true) {
+            const name = c.children[0]?.name ?? null;
+            if (name !== null && !(name in view)) {
+                Object.defineProperty(view, name, { configurable: true, enumerable: false, get: () => target[name] });
+            }
+            continue;
+        }
         if (c.name === null || c.classSlot !== undefined)
             continue;
         const child = target[c.name];

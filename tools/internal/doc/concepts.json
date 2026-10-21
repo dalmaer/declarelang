@@ -30,7 +30,7 @@
     "shadow": "View.shadow",
     "drop shadow": "View.filter",
     "border": "View.stroke",
-    "outline": "View.stroke",
+    "outline": "Tree",
     "rounded corners": "View.cornerRadius",
     "rounding": "View.cornerRadius",
     "corner radius": "View.cornerRadius",
@@ -138,7 +138,6 @@
     "show more": "Disclosure",
     "collapsible section": "Disclosure",
     "tree view": "Tree",
-    "outline": "Tree",
     "toolbar": "Toolbar",
     "tool button": "ToolButton",
     "breadcrumb": "Breadcrumb",
@@ -308,6 +307,25 @@
         "busy wait"
       ],
       "answer": "No polling — nothing waits. A program never checks whether something has happened yet: readiness is a value to constrain on, completion an event to take — a loop or timer that checks whether something has happened yet is a constraint or an event written by hand, and almost always the wrong path. Ask what it is waiting for: a fetch landing → `visible = { data.loaded }` or `onLoad`; a view existing or having a size → `onInit`, `onReady`, `afterSettle`, `onArrive`; a value changing → a constraint on it (the constraint IS the notification); geometry after your own write → `afterSettle(step)`, same frame. Time is only ever an input: `Animator` over a duration, `Spring` toward a target, a `Time` fact (`clock.minute`, `clock.now`) to derive from, `Time [ tick = frame, onTick(dt) ]` to integrate (a per-frame handler that ignores `dt` is polling), `afterDelay(ms, fn)` for a genuine timing rule — a debounce, a request timeout — never to let things settle. See the guide's Time and change events chapter."
+    },
+    {
+      "terms": [
+        "Intl",
+        "toLocaleString",
+        "NumberFormat",
+        "DateTimeFormat",
+        "format number",
+        "format a number",
+        "number format",
+        "format currency",
+        "currency",
+        "money",
+        "format date",
+        "date format",
+        "formatting",
+        "thousands separator"
+      ],
+      "answer": "No formatting functions of Declare's own: numbers, money and dates are formatted by the host's `Intl`, called from a `{ }` or a script function like any other global — `new Intl.NumberFormat(\"en-US\", { style: \"currency\", currency: \"USD\" }).format(1234.5)` is \"$1,234.50\", `(1234.5).toLocaleString(\"en-US\")` is \"1,234.5\", and `Intl.DateTimeFormat` writes weekdays and months in the language it is given. Name the locale, and a `timeZone` for a date. Guide: docs/guide/12-text.md § Text."
     }
   ]
 }

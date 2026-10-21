@@ -42,22 +42,22 @@ centred under the target, flipping above at the edge), `"above"` (the Fluent def
 flipping below), or `"pointer"` (the Cupertino help tag, offset below-right of the resting
 cursor). Always clamped inside the app.
 
-## ex
+## _ex
 **Internal.** The target's root-space x, for placement.
 
-## ey
+## _ey
 **Internal.** The target's root-space y.
 
-## ew
+## _ew
 **Internal.** The target's width.
 
-## eh
+## _eh
 **Internal.** The target's height.
 
-## px
+## _px
 **Internal.** The pointer's x where it came to rest, for `"pointer"` placement.
 
-## py
+## _py
 **Internal.** The pointer's y where it came to rest.
 
 ## visible
@@ -101,18 +101,18 @@ class Tooltip extends Floating [
     visible = { shown && label != "" },
 
     label: string = "",
-    ex: number = 0,                              // the target's root-space box
-    ey: number = 0,
-    ew: number = 0,
-    eh: number = 0,
-    px: number = 0,                              // the pointer at show (the "pointer" placement)
-    py: number = 0,
+    _ex: number = 0,                              // the target's root-space box
+    _ey: number = 0,
+    _ew: number = 0,
+    _eh: number = 0,
+    _px: number = 0,                              // the pointer at show (the "pointer" placement)
+    _py: number = 0,
 
     tips: Tooltips [
         onTooltip(e: TooltipEvent) {
             if (e == null || e.root != app) { classroot.close(); return }
-            classroot.ex = e.x; classroot.ey = e.y; classroot.ew = e.w; classroot.eh = e.h
-            classroot.px = app.pointerX; classroot.py = app.pointerY   // the pointer as it rests at show
+            classroot._ex = e.x; classroot._ey = e.y; classroot._ew = e.w; classroot._eh = e.h
+            classroot._px = app.pointerX; classroot._py = app.pointerY   // the pointer as it rests at show
             classroot.label = e.text
             classroot.show()
             }
@@ -127,12 +127,12 @@ class Tooltip extends Floating [
     width  = { this.t.width + 16 },
     height = { this.t.height + 10 },
     x = { Math.max(4, Math.min(app.width - this.width - 4,
-            placement == "pointer" ? px + 10 : ex + (ew - this.width) / 2)) },
+            placement == "pointer" ? _px + 10 : _ex + (_ew - this.width) / 2)) },
     y = { placement == "pointer"
-            ? (py + 18 + this.height > app.height ? py - this.height - 8 : py + 18)
+            ? (_py + 18 + this.height > app.height ? _py - this.height - 8 : _py + 18)
             : placement == "above"
-                ? (ey - this.height - 7 < 0 ? ey + eh + 7 : ey - this.height - 7)
-                : (ey + eh + 7 + this.height > app.height ? ey - this.height - 7 : ey + eh + 7) },
+                ? (_ey - this.height - 7 < 0 ? _ey + _eh + 7 : _ey - this.height - 7)
+                : (_ey + _eh + 7 + this.height > app.height ? _ey - this.height - 7 : _ey + _eh + 7) },
 
     cornerRadius = { provided("theme").tooltipCornerRadius },
     fill   = { provided("theme").tooltipFill },

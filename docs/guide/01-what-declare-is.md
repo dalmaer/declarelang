@@ -285,7 +285,7 @@ where that is taught.
 - **Where it runs** covers renderers, hosts, and embedding.
 - **Shipping and working** covers packaging, working with an LLM, and a full reading
   of the calendar app — <!--stat:calendar.code-->529<!--/stat--> lines of code, about
-  <!--stat:calendar.total-->935<!--/stat--> with its comments — which you will be able to read end to end.
+  <!--stat:calendar.total-->919<!--/stat--> with its comments — which you will be able to read end to end.
 - **The appendix** holds the formatting rules, a glossary, and
   [a phrasebook for readers coming from React, CSS, SwiftUI and others](declare-docs:guide:coming-from).
 

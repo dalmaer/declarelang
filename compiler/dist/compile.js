@@ -47,7 +47,7 @@ import { parseProgram, applyLineMap } from "../../runtime/dist/parser.js";
 import { DeclareError, DeclareErrors } from "../../runtime/dist/errors.js";
 import { check } from "../../runtime/dist/check.js";
 import { programSchemas } from "../../runtime/dist/program-schema.js";
-import { SCHEMAS, descendsFrom, attrType } from "../../runtime/dist/schema.js";
+import { SCHEMAS, descendsFrom, attrType, eventsOf, eventOfHandler, handlerName } from "../../runtime/dist/schema.js";
 import { SUPPORTED_TAGS } from "../../runtime/dist/html.js";
 import { THEME_PRESET_NAMES } from "../../runtime/dist/themes.js";
 import { resolveShapes } from "../../runtime/dist/shape-resolve.js";
@@ -538,6 +538,18 @@ function idiomDiagnostics(program, schemas) {
                 continue;
             if (centersByHand(a.value.src, a.name, classRoot !== null && parent === classRoot)) {
                 hints.push(Diag.centersByHand(a.name, a.value.pos));
+            }
+        }
+        // 4019 — a method named like a handler that answers no event of the
+        // element's class: an ordinary method, or a misspelt handler that never fires.
+        const answering = decl !== undefined ? schemas[decl.name] ?? schemas[decl.base] : schemas[el.tag];
+        if (answering !== undefined) {
+            const events = eventsOf(answering);
+            for (const m of el.methods) {
+                const ev = eventOfHandler(m.name);
+                if (ev !== null && !events.includes(ev) && !/^onMouse(Down|Up|Move|Over|Out)$/.test(m.name)) {
+                    warnings.push(Diag.unknownHandler(decl !== undefined ? decl.name : el.tag, m.name, events.map(handlerName), m.pos));
+                }
             }
         }
         // 4013 — a press() override where the receiver descends from Button. A

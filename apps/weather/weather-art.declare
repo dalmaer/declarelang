@@ -8,11 +8,7 @@
 // drawn gradients. Every condition icon is one function over one vocabulary.
 
 script {
-    // ── the icon vocabulary ────────────────────────────────────────────────
-    // Each glyph is authored in a 100×100 box and scaled by the caller.
-    // Kinds: sun, moon, cloud, partly, cloudmoon, storm, rain, sunset,
-    // sunrise. A `script { }` block is plain TypeScript; these helpers are
-    // callable from any draw() in the file.
+    // Drawing helpers, callable from any draw() in the file.
 
     // ── the two drawn skies ────────────────────────────────────────────────
     // Functions rather than classes, because a sky is drawn at two sizes: the
@@ -28,9 +24,8 @@ script {
         d.fillStyle = g
         d.fillRect(0, 0, w, h)
         // the sun: a layered radial glow, high right. The radius is clamped
-        // because a negative radial radius throws — and a drawn view
-        // that throws takes the whole boot with it, which is too sharp an
-        // edge for the zero-width moment before a box has been measured.
+        // because a negative radial radius throws, and a box is zero-wide
+        // until it has been measured.
         const sx = w * 0.82, sy = h * 0.10
         const glow = d.createRadialGradient(sx, sy, 0, sx, sy, Math.max(0, w * 0.55))
         glow.addColorStop(0, "rgba(255,244,214,0.95)")
@@ -106,6 +101,8 @@ script {
         d.restore()
     }
 
+    // a condition's glyph, authored in a 100×100 box and scaled by the caller:
+    // sun, moon, cloud, partly, cloudmoon, storm, rain, sunset, sunrise
     function artIcon(d: any, kind: string, w: number, h: number) {
         const s = Math.min(w, h) / 100
         d.save()
@@ -194,19 +191,13 @@ class SkyPhoto [ clip = true,
     driftAcc: number = 0,
 
     // The drift is a per-frame handler, so it runs only where it can be seen:
-    // a sky that is hidden, or small enough that a 3% pan is invisible, has
-    // nothing to animate. Twenty-five list rows each carrying two of these
-    // would be fifty handlers ticking forever for no visible motion.
+    // a sky that is hidden, or too small for a 3% pan to show, has nothing to
+    // animate. (A hidden page pauses a Time by itself.)
     //
-    // And it writes at ~10Hz, not per frame: the pan crosses ~3% of the width
-    // over minutes — 0.005px per frame at 60Hz — so a per-frame write would
-    // wake style/layout/paint sixty times a second to move the sky by less
-    // than a hair. Banking dt and landing it in steps a tenth of a second
-    // wide is visually identical at this speed. (`driftAcc` has no dependents,
-    // so its per-frame write wakes nothing — only the `driftT` write below
-    // reaches the pipeline.) A hidden page pauses a Time by itself — a page
-    // nobody can see banks nothing — so only the view-level gate is written
-    // here; the constraint re-running is what stops and restarts it.
+    // It banks frame time in `driftAcc` and moves `driftT` only every tenth
+    // of a second: the pan crosses ~3% of the width over minutes, so moving
+    // it every frame would redraw sixty times a second for less than a pixel.
+    // Nothing reads `driftAcc`, so writing it every frame costs nothing.
 
     beat: Time [ tick = frame, running = { classroot.visible && classroot.height > 200 },
         onTick(dt: number) {
@@ -236,12 +227,11 @@ its glow, the star field) or photographed, so this holds one of each rather
 than one per condition: the drawing is a branch inside a single `draw()`, and
 the single photograph changes its source.
 
-That shape matters more than it looks. A hidden `draw()` still allocates its
-canvas at full size and rasterizes into it, so a child per condition would
-pay for every sky a city might have had — at a full page that is tens of
-megabytes of backing store nobody can see. Here a photographic condition
-records nothing, and an empty recording has no bounds, so no canvas exists at
-all. One canvas or one image, never both, never four.
+That shape matters more than it looks. A hidden view that draws still pays
+for a full-size canvas, so a child per condition would pay for every sky a
+city might have had. Here a photographic condition draws nothing, and a
+`draw()` that draws nothing costs no canvas. One canvas or one image, never
+both, never four.
 */
 
 class WSky [ clip = true,
@@ -608,8 +598,7 @@ class MapPin [
 // way a row flow does.
 //
 // A layout in Declare is one pure `place()`: read the children, return one
-// box per child (by index), and the kernel wires the standing constraints
-// that apply them. This one reads two attributes the cards declare about
+// box per child (by index), and the runtime keeps them applied. This one reads two attributes the cards declare about
 // themselves — `span` (columns occupied) and `baseH` (natural height) — and
 // makes one promise in return: it never reads a height it writes. Packing
 // from declared heights is what keeps the layout a straight computation
@@ -718,8 +707,8 @@ class MasonryLayout extends Layout [
         for (let k = 0; k < n; k++) deepest = Math.max(deepest, bottom[k])
         closeBand(deepest)
 
-        // size the baseH cards — every one gets its box `h`, stretched or
-        // natural, so the set of managed attributes never changes shape
+        // size the baseH cards: every one gets an `h`, stretched or natural, so
+        // the layout always owns their height rather than sometimes letting go
         for (let i = 0; i < kids.length; i++) {
             const c = kids[i]
             if (!c.visible) continue

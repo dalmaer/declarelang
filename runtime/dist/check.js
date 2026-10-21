@@ -671,7 +671,10 @@ classRoot = false) {
             if (!r.ok)
                 errors.push(r.error);
         }
-        for (const child of el.children) {
+        for (const written of el.children) {
+            // a child with `exists` is lowered to a State standing for it: its name
+            // is still a member of this element, and obeys the same namespace
+            const child = written.existsOf === true && written.children.length === 1 ? written.children[0] : written;
             const many = manyPathOf(child, schemas);
             if (many !== null && child.name !== null) {
                 errors.push(new DeclareError(`a replicated child cannot be named — ':${many.value.path}[]' makes one instance per record, and '${child.name}' can only name one; reach the instances through their data`, child.pos));
@@ -1823,21 +1826,18 @@ export function checkMethod(schema, m) {
     if (structural !== null) {
         return err(`'${m.name}' is ${structural} — a method cannot take its name; choose another`, m.pos);
     }
+    // The `on` prefix is a naming convention, not syntax (language §8): a method
+    // so named that answers no event of its class is an ordinary method, and the
+    // compiler's warning (DECLARE4019) says so, in case it was a misspelt handler.
+    // The one spelling refused outright is the pointer stream other toolkits
+    // call `onMouse*`: one handler serves mouse and finger alike, immediately,
+    // with no compatibility delay.
     const event = eventOfHandler(m.name);
     if (event !== null && !eventsOf(schema).includes(event)) {
-        const known = eventsOf(schema).map(handlerName);
-        // The 2026-07-28 rename: the single-point raw stream is `onPointer*`, not
-        // `onMouse*`. Worth its own message rather than the generic list — the old
-        // spelling is what every other toolkit taught, and the reason it is wrong
-        // here is a FACT about the event, not a naming preference: one handler
-        // serves mouse and finger alike, immediately, with no compatibility delay.
         const renamed = /^onMouse(Down|Up|Move|Over|Out)$/.exec(m.name);
         if (renamed !== null) {
-            return err(`'${m.name}' is now 'onPointer${renamed[1]}' — one handler serves a mouse and a fingertip alike (the touch-specific stream is 'onTouch…')`, m.pos);
+            return err(`'${m.name}' is 'onPointer${renamed[1]}' here — one handler serves a mouse and a fingertip alike (the touch-specific stream is 'onTouch…')`, m.pos);
         }
-        return err(known.length > 0
-            ? `${schema.name} has no '${m.name}' event — its handlers: ${known.join(", ")}`
-            : `${schema.name} declares no events, so '${m.name}' can answer nothing`, m.pos);
     }
     const noun = m.params.map((p) => p.name).find((p) => p === "parent" || p === "classroot" || p === "app");
     if (noun !== undefined) {

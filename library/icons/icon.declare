@@ -102,7 +102,7 @@ constant weight at every size and matches the 1px rules and text it sits among.
 The 16-box-to-host-size scale factor. **Multiply the path by it; divide the stroke by
 it.** Every icon is one path at one size, scaled — there are no per-size variants.
 
-## isIcon
+## _isIcon
 **Internal.** The marker a layout keys on to place an icon without knowing which shape
 it is — not API.
 
@@ -202,7 +202,7 @@ class Icon [
     // The marker a layout keys on, so a control can place its icon without
     // caring which shape it is.
 
-    isIcon: boolean = true,
+    _isIcon: boolean = true,
 
     // Size and ink come from the context via provided values: `iconSize` defaults
     // to the nearest provided value (a menu states 16 once and every icon answers),

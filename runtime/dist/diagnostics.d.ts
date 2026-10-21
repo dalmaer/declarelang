@@ -77,6 +77,7 @@ export declare const Diag: {
     centersByHand: (axis: "x" | "y", pos: Pos) => DeclareError;
     animatorNeverStarts: (tag: string, name: string | null, pos: Pos) => DeclareError;
     buttonPressOverride: (owner: string, pos: Pos) => DeclareError;
+    unknownHandler: (owner: string, name: string, known: readonly string[], pos: Pos, near?: string | null) => DeclareError;
     accessibilityContract: (message: string, pos: Pos) => DeclareError;
     accessibilityRoleComputed: (pos: Pos) => DeclareError;
     accessibilityNoName: (owner: string, role: string, pos: Pos) => DeclareError;

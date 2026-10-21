@@ -947,9 +947,9 @@ export function deliverKeys(keys, focus) {
             const c = keys.claimant();
             if (c instanceof View && (!focus.holds(c) || (focus.getFocus() === c && c.focusScope !== "modal"))) {
                 const held = c;
-                const back = focus.getFocus() === c ? held.savedFocus ?? null : null;
+                const back = focus.getFocus() === c ? held._savedFocus ?? null : null;
                 if (back !== null)
-                    held.savedFocus = null; // it goes back now, not after the close
+                    held._savedFocus = null; // it goes back now, not after the close
                 if (typeof held.escape === "function")
                     held.escape.call(c);
                 if (back !== null)

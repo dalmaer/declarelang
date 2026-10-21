@@ -191,7 +191,9 @@ shows the Declare form.
   script is for; `11-paint-and-themes.md` § Themes; `21-motion.md`)
 - **Rebuilding what Declare does** — row heights measured by hand, a scroll position
   saved and restored, a window of rows computed from the scroll offset, a list's records
-  copied into a second list to interleave headings. Each is already done for you.
+  copied into a second list only to put a heading over each section (the heading belongs
+  to the row that starts one; a group row the reader collapses is a kind of record of its
+  own). Each is already done for you.
   (`16-collections.md`; `07-scrolling.md` § Keeping the reader's place)
 - **`as any` on your own data** — a cast to quiet the checker. Give that dataset a `schema`
   instead, and its values arrive typed. (`15-schemas.md`)

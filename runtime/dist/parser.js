@@ -1687,7 +1687,7 @@ function lowerExists(el) {
             continue;
         const ex = c.attrs[k];
         const inner = { ...c, attrs: c.attrs.filter((_, j) => j !== k) };
-        el.children[i] = { tag: "State", name: null, attrs: [{ name: "applied", value: ex.value, pos: ex.pos }], decls: [], methods: [], children: [inner], pos: c.pos };
+        el.children[i] = { tag: "State", name: null, attrs: [{ name: "applied", value: ex.value, pos: ex.pos }], decls: [], methods: [], children: [inner], pos: c.pos, existsOf: true };
     }
 }
 /** Parse an INCLUDED file (composition.md §1): the same top-level

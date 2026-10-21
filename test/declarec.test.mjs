@@ -536,8 +536,14 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // measured 135.1 KB. The role table and semantics-dom are where to trim. A program that leaves the layer out
   // (`accessibility = false`, the games) carries none of it. A build that a
   // screen reader could not read was never a smaller build; it was a mute one.
+  //
+  // 136 → 137 KB (2026-10-21, the eval fixes): each path's paint marking a point it
+  // inks, so the blank-raster check samples ink rather than a box's empty centre (it
+  // had been throwing good rasters away at half resolution); a field whose name
+  // arrives after it is built is named; a child with `exists` placed where its class
+  // places children — measured 136.3 KB, from 135.9 the build before.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 136 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 137 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 

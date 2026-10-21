@@ -148,6 +148,13 @@ The last request, or its schema check, refused. Read `error` for the one-line re
 a failed refresh leaves the source `loaded && failed` — the last good data still
 showing, with a reason beside it. The next `fetch()` clears it.
 
+`onLoad` answers success, and `failed` answers the rest. Show a failure with a constraint
+on it (`visible = { app.save.failed }`, `text = { app.save.error }`); to act once when a
+request is refused — move focus to the field the server named, put back what it turned
+down — declare `trackChanges = ["failed"]` and an `onChange` on the source, and act when
+`failed` is true. Each refusal is a change, a second one included, since every `fetch()`
+clears it first.
+
 ## error
 Why the last fetch failed, as one line — an HTTP status, a transport message, or the
 schema mismatch with its pointed path. `null` when nothing has gone wrong. It is the

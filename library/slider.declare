@@ -52,10 +52,10 @@ True from pointer-down until the captured release. **The `pressed` intrinsic
 deliberately will not do here** — it is hit-chain-based, so it goes false the moment the
 pointer leaves the thumb, while a drag must survive exactly that.
 
-## x0
+## _x0
 **Internal.** The root-space pointer anchor captured at drag start.
 
-## v0
+## _v0
 **Internal.** The value at drag start, that the pointer delta is applied to.
 
 ## focusShape()
@@ -139,8 +139,8 @@ class Slider extends Control [
     // the fraction the visuals share; drag bookkeeping (root-space anchor)
 
     frac: number = { (value - min) / ((max - min) || 1) },
-    x0: number = 0,
-    v0: number = 0,
+    _x0: number = 0,
+    _v0: number = 0,
 
     // The drag latch: the pointer is captured for the gesture, so the drag must
     // survive leaving the thumb's hit chain — the intrinsic `pressed` (chain-based)
@@ -158,12 +158,12 @@ class Slider extends Control [
         dragging = true
         focusVisible = false                     // a press clears the :focus-visible channel (Control's rule)
         Focus.focus(this)                        // a click claims focus (Control's rule — this override must keep it)
-        v0 = quant(min + (max - min) * ((e.x - 9) / (width - 18)))
-        input(v0)
-        x0 = app.pointerX
+        _v0 = quant(min + (max - min) * ((e.x - 9) / (width - 18)))
+        input(_v0)
+        _x0 = app.pointerX
         },
     onPointerUp()   { dragging = false },
-    onPointerMove() { if (dragging) input(quant(v0 + (app.pointerX - x0) / (width - 18) * (max - min))) },
+    onPointerMove() { if (dragging) input(quant(_v0 + (app.pointerX - _x0) / (width - 18) * (max - min))) },
     accessibilityIncrement() { if (!disabled) input(quant(value + step)) },
     accessibilityDecrement() { if (!disabled) input(quant(value - step)) },
 

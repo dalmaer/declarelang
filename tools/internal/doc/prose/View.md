@@ -593,7 +593,9 @@ numeric tabindex; override `tabOrder()` to reorder within a container.
 What Tab does at this view's edge. `none` (the default): the view's stops are its
 parent's, Tab walks straight through. `stop`: the view is **one** Tab stop and the arrows
 move among its members (Right and Down forward, Left and Up back, wrapping; Home and End to
-the ends) — a radio group, a segmented control, a row of chips; Tab lands on the
+the ends) — a radio group, a segmented control, a row of chips. The arrows follow the
+members' order, not where they sit, so in a grid where Up means the row above, the view
+answers the arrows itself (`onKeyDown`) and moves focus with `Focus.focus`. Tab lands on the
 member the view names with a `focusEntry()` method, else the one that last had focus, else
 the view itself when it takes focus, else its first stop. `capture`: Tab walks into the view
 and through its stops (an entry form). `region`: one stop from outside, entered with Enter,
@@ -610,6 +612,15 @@ class that declares it must set them — `slider` needs `accessibilityValue`, `a
 class meets a role the same way the library's do; there is no list of special classes. `none`
 is transparent: the view contributes nothing, and its children are read as its parent's. The
 library's controls already declare theirs, so a `Button` or a `Slider` needs nothing more.
+
+On a web page a role is the ARIA role of the same name, with these exceptions: `toggle` is a
+`button` with `aria-pressed`, `progress` is `progressbar`, `image` is `img`, `cell` is
+`gridcell`, and `textField` is the field's own editable (`textbox`). The facts become their
+ARIA states — `accessibilityLabel` the name (`aria-label`), `accessibilityHint` the
+description, `accessibilityChecked`, `Pressed`, `Selected` and `Expanded` the matching
+`aria-` states, `accessibilityValue`, `Min`, `Max` and `ValueText` the `aria-value…` ones —
+and a `disabled` control is `aria-disabled`. A test that finds views by role and name finds
+them by these.
 
 ## accessibilityLabel
 The **accessible name** — what a screen reader calls the view. Not the visible `label` a
@@ -859,7 +870,9 @@ ancestor's `scrollOffset`). A no-op if nothing above it scrolls.
 Ask **this scroller** to go to offset `y` — a **request, not an assignment**: the platform
 clamps it to the real scroll range, and a pane that cannot take it yet (hidden, or not yet
 laid out) holds the request and applies it the moment it can — so `scrollTo(0)` before
-showing a pane simply works. **`scrollTo(Infinity)` means the far end** — "scroll to the
+showing a pane simply works. The range is the content's as it stands: content still to get
+its size is a short range, and a request past its end lands at the end — scroll once
+`contentHeight` has its value. **`scrollTo(Infinity)` means the far end** — "scroll to the
 bottom" with no magic number; the clamp resolves it against the range the pane has when it
 can finally take it. The `scrollY` fact follows the platform's answer. Call it on the
 `scrolls` view itself; to reveal a particular *view*, `scrollIntoView()` on the target

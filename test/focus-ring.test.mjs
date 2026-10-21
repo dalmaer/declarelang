@@ -90,13 +90,13 @@ await test("the ring over scrolled content stacks beneath the page's pinned bar,
     bar: View [ ignoreScroll = true, width = 400, height = 50, fill = white,
         hb: Button [ x = 300, y = 6, label = "Bar" ] ] ]`);
   stopAt(app.page.a);
-  const ring = app.childViews.find((c) => "trad" in c);
+  const ring = app.childViews.find((c) => "_trad" in c);
   assert.ok(ring, "the ring arrived with the controls");
   const kids = () => app.childViews;
   assert.ok(kids().indexOf(ring) < kids().indexOf(app.bar), "ring for a page control paints beneath the pinned bar");
   Focus.next(); settle();
   assert.ok(Focus.getFocus() === app.page.b);
-  assert.ok(Math.abs(ring.tx - ring.x) > 50, `the ring is headed for B, not landed on it (x ${ring.x}, tx ${ring.tx})`);
+  assert.ok(Math.abs(ring._tx - ring.x) > 50, `the ring is headed for B, not landed on it (x ${ring.x}, tx ${ring._tx})`);
   stopAt(app.bar.hb);
   assert.ok(kids().indexOf(ring) > kids().indexOf(app.bar), "ring for the bar's own control paints above it");
 });
@@ -110,13 +110,13 @@ await test("focus moved by an arrow's handler is keyboard focus: the ring stays 
   const segs = app.seg.segs();
   stopAt(segs[0]);
   assert.ok(Focus.byKeyboard(), "Tab landed by keyboard");
-  const ring = app.childViews.find((c) => "trad" in c);
+  const ring = app.childViews.find((c) => "_trad" in c);
   const key = (k) => ({ code: k, key: k, shift: false, ctrl: false, alt: false, meta: false, repeat: false });
   Keys.keyDown(key("ArrowRight")); settle(); Keys.keyUp(key("ArrowRight"));
   assert.equal(Focus.getFocus(), segs[1], "the arrow roved to the next segment");
   assert.ok(Focus.byKeyboard(), "and the move kept keyboard modality");
   assert.ok(ring.shown, "so the ring stays shown");
-  assert.ok(Math.abs(ring.tx - ring.x) > 10, `and flies there (x ${ring.x}, tx ${ring.tx})`);
+  assert.ok(Math.abs(ring._tx - ring.x) > 10, `and flies there (x ${ring.x}, tx ${ring._tx})`);
   Keys.keyDown(key("ArrowRight")); settle(); Keys.keyUp(key("ArrowRight"));
   Keys.keyDown(key("ArrowRight")); settle(); Keys.keyUp(key("ArrowRight"));
   assert.equal(Focus.getFocus(), segs[0], "past the last segment the arrow wraps to the first");

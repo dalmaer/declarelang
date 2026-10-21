@@ -74,12 +74,12 @@ True while an overlay owns the keyboard (an open `Menu`). **The ring stands down
 the menu's own rover is the focus story, and a page ring poking around a panel reads as
 chrome fighting chrome.
 
-## focusInOverlay
+## _focusInOverlay
 **Internal.** Whether focus is inside the overlay that holds the keyboard — a dialog's own
 field or button. Then the ring shows: it stands down only for what lies behind the overlay.
 
-## noteOverlayFocus()
-**Internal.** Recomputes `focusInOverlay` when focus moves or a claim comes or goes.
+## _noteOverlayFocus()
+**Internal.** Recomputes `_focusInOverlay` when focus moves or a claim comes or goes.
 
 ## idle
 True once a travel-role ring has sat still long enough to fade out. A resting ring
@@ -91,32 +91,32 @@ distance from the target, so the physics does the choreography. Override to repl
 rendition entirely. `provided("theme").focusSights = true` restores the open-bracket "target
 sights" reading; `provided("theme").focusRingInnerWidth` adds the Fluent two-tone band.
 
-## tx
+## _tx
 **Internal.** The target x the springs chase.
 
-## ty
+## _ty
 **Internal.** The target y.
 
-## tw
+## _tw
 **Internal.** The target width.
 
-## th
+## _th
 **Internal.** The target height.
 
-## trad
+## _trad
 **Internal.** The target corner radius — the silhouette reshapes as the ring travels.
 
-## trot
+## _trot
 **Internal.** The target turn, in degrees — a control in a tilted window is ringed turned.
 
-## restack()
+## _restack()
 **Internal.** Puts the ring in the paint order: beneath the page's pinned chrome over a
 control in the scrolled content, on top for a control in the chrome or an overlay.
 
-## rad
-**Internal.** The ring's current corner radius, sprung toward `trad`.
+## _rad
+**Internal.** The ring's current corner radius, sprung toward `_trad`.
 
-## gen
+## _gen
 **Internal.** The idle-fade generation counter, so a retarget cancels the pending fade.
 
 ## visible
@@ -136,26 +136,26 @@ class FocusRing [
     // a page ring poking around a panel reads as chrome fighting chrome
 
     overlayUp: boolean = false,
-    focusInOverlay: boolean = false,
-    claims: Keys [ onNavClaim(on: boolean) { classroot.overlayUp = on; classroot.noteOverlayFocus() }
+    _focusInOverlay: boolean = false,
+    claims: Keys [ onNavClaim(on: boolean) { classroot.overlayUp = on; classroot._noteOverlayFocus() }
         ],
 
     // where the ring is headed — written by the subscription; the springs chase
 
-    tx: number = 0,
-    ty: number = 0,
-    tw: number = 0,
-    th: number = 0,
-    trad: number = 8,
-    trot: number = 0,
-    rad: number = 8,
+    _tx: number = 0,
+    _ty: number = 0,
+    _tw: number = 0,
+    _th: number = 0,
+    _trad: number = 8,
+    _trot: number = 0,
+    _rad: number = 8,
     shown: boolean = false,
     placed: boolean = false,                     // has the ring ever had a target to park on?
 
     // the idle fade — travel role only; a resting ring does not fade
 
     idle: boolean = false,
-    gen:  number = 0,
+    _gen:  number = 0,
 
     // role helpers over the theme election
 
@@ -163,7 +163,7 @@ class FocusRing [
     restRole()  { const r = this.ringRole(); return r == "both" || r == "rest" },
     travelRole() { const r = this.ringRole(); return r == "both" || r == "travel" },
 
-    snapTo() { this.x = tx; this.y = ty; this.width = tw; this.height = th; rad = trad; this.rotation = trot },
+    snapTo() { this.x = _tx; this.y = _ty; this.width = _tw; this.height = _th; _rad = _trad; this.rotation = _trot },
 
     // Over a page's scrolled content the ring paints beneath the page's pinned
     // chrome (a bar that ignores the scroll), as the content does: a control
@@ -171,7 +171,7 @@ class FocusRing [
     // chrome or in an overlay, the ring goes on top. Riding a pane, the pane's
     // own pinned chrome already paints over it.
 
-    restack(v: View) {
+    _restack(v: View) {
         if (classroot.paintsIn != null) return
         let top: View | null = null
         let pinned = false
@@ -251,11 +251,11 @@ class FocusRing [
             // ring's origin steps back along them (it turns about that origin)
             const ca = Math.cos(g.homeRot * Math.PI / 180), sa = Math.sin(g.homeRot * Math.PI / 180)
             const nx = gx - off * ca + off * sa, ny = gy - off * sa - off * ca
-            const moved = Math.abs(nx - classroot.tx) + Math.abs(ny - classroot.ty) + Math.abs(gw + 2 * off - classroot.tw) + Math.abs(gh + 2 * off - classroot.th) > 0.5
-            classroot.tx = nx; classroot.ty = ny
-            classroot.tw = gw + 2 * off; classroot.th = gh + 2 * off
-            classroot.trad = g.homeRad + off
-            classroot.trot = g.homeRot
+            const moved = Math.abs(nx - classroot._tx) + Math.abs(ny - classroot._ty) + Math.abs(gw + 2 * off - classroot._tw) + Math.abs(gh + 2 * off - classroot._th) > 0.5
+            classroot._tx = nx; classroot._ty = ny
+            classroot._tw = gw + 2 * off; classroot._th = gh + 2 * off
+            classroot._trad = g.homeRad + off
+            classroot._trot = g.homeRot
             // Only a focus change flies. The same control moving under a resting
             // ring — a dragged slider thumb, a reflow — takes the ring with it
             // rigidly: the springs' targets just moved, so land them now. The
@@ -266,12 +266,12 @@ class FocusRing [
             ;(this as any)._lastTarget = g.view
             ;(this as any)._lastHome = g.scroller
             ;(this as any)._hasHome = true
-            if (classroot.shown) classroot.restack(g.view)
+            if (classroot.shown) classroot._restack(g.view)
             if (prev == g.view && moved) classroot.snapTo()
             },
 
         onFocusChange(v: View) {
-            classroot.noteOverlayFocus()
+            classroot._noteOverlayFocus()
             if (v == null) { classroot.shown = false; return }
             let n = v
             for (; n != null && n.parent != null; n = n.parent) { }
@@ -287,13 +287,13 @@ class FocusRing [
             if (!classroot.placed || provided("theme").focusAnimate == false || !classroot.travelRole()) classroot.snapTo()
             classroot.placed = true
             classroot.shown = true
-            classroot.restack(v)  // chrome stays chrome: above whatever raised last (a Dialog, a Menu), under the page's pinned bars
+            classroot._restack(v)  // chrome stays chrome: above whatever raised last (a Dialog, a Menu), under the page's pinned bars
             // idle fade only for the travel-only role — a resting ring persists
             if (classroot.restRole()) { classroot.idle = false; return }
-            classroot.gen = classroot.gen + 1
-            const g2 = classroot.gen
+            classroot._gen = classroot._gen + 1
+            const g2 = classroot._gen
             classroot.idle = false
-            afterDelay(1000, () => { if (classroot.gen == g2) classroot.idle = true })
+            afterDelay(1000, () => { if (classroot._gen == g2) classroot.idle = true })
             }
         ],
 
@@ -301,27 +301,27 @@ class FocusRing [
     // arrival overshoot, by physics. The radius travels too: the terminus
     // reshapes to the control it surrounds.
 
-    Spring [ attribute = x,      to = { tx }, stiffness = 220, damping = 16 ],
-    Spring [ attribute = y,      to = { ty }, stiffness = 220, damping = 16 ],
-    Spring [ attribute = width,  to = { tw }, stiffness = 220, damping = 18 ],
-    Spring [ attribute = height, to = { th }, stiffness = 220, damping = 18 ],
-    Spring [ attribute = rad,    to = { trad }, stiffness = 220, damping = 20 ],
-    Spring [ attribute = rotation, to = { trot }, stiffness = 220, damping = 20 ],
+    Spring [ attribute = x,      to = { _tx }, stiffness = 220, damping = 16 ],
+    Spring [ attribute = y,      to = { _ty }, stiffness = 220, damping = 16 ],
+    Spring [ attribute = width,  to = { _tw }, stiffness = 220, damping = 18 ],
+    Spring [ attribute = height, to = { _th }, stiffness = 220, damping = 18 ],
+    Spring [ attribute = _rad,    to = { _trad }, stiffness = 220, damping = 20 ],
+    Spring [ attribute = rotation, to = { _trot }, stiffness = 220, damping = 20 ],
 
     Spring [ attribute = opacity, to = { shown && !idle ? 0.9 : 0 }, stiffness = 90, damping = 20 ],
 
-    visible = { opacity > 0.02 && (!overlayUp || focusInOverlay) },
+    visible = { opacity > 0.02 && (!overlayUp || _focusInOverlay) },
 
     // focus inside the overlay that holds the keys — a dialog's own button —
     // is shown: the ring stands down only for what lies behind it
 
-    noteOverlayFocus() {
+    _noteOverlayFocus() {
         const c = Keys.claimant() as View | null
         const f = Focus.getFocus() as View | null
         let n = f
         while (n != null && n != c) n = n.parent as View | null
         // focus held by the overlay itself (a menu, which marks its own row) is not ringed
-        focusInOverlay = c != null && n == c && f != c
+        _focusInOverlay = c != null && n == c && f != c
         },
 
     // pure chrome: never a pointer target — and never on the hover chain
@@ -347,7 +347,7 @@ class FocusRing [
 
     draw(d: Draw) {
         const Q = Math.PI / 2
-        const dist = Math.abs(this.x - tx) + Math.abs(this.y - ty) + Math.abs(this.width - tw) + Math.abs(this.height - th)
+        const dist = Math.abs(this.x - _tx) + Math.abs(this.y - _ty) + Math.abs(this.width - _tw) + Math.abs(this.height - _th)
         const lw = provided("theme").focusRingWidth
         // The arrival overshoot stays inside the scroller the ring rides: the
         // outline is held to the scroller's visible frame (or the target, where
@@ -357,10 +357,10 @@ class FocusRing [
         if (Math.abs(this.rotation) < 0.01) {
             const sc = (classroot.paintsIn != null ? classroot.paintsIn : app) as View
             const m = lw / 2
-            L = Math.max(0, Math.min(sc.scrollX + m, tx) - this.x)
-            T = Math.max(0, Math.min(sc.scrollY + m, ty) - this.y)
-            R = Math.min(this.width, Math.max(sc.scrollX + sc.width - m, tx + tw) - this.x)
-            B = Math.min(this.height, Math.max(sc.scrollY + sc.height - m, ty + th) - this.y)
+            L = Math.max(0, Math.min(sc.scrollX + m, _tx) - this.x)
+            T = Math.max(0, Math.min(sc.scrollY + m, _ty) - this.y)
+            R = Math.min(this.width, Math.max(sc.scrollX + sc.width - m, _tx + _tw) - this.x)
+            B = Math.min(this.height, Math.max(sc.scrollY + sc.height - m, _ty + _th) - this.y)
             if (R - L < 1 || B - T < 1) return
             }
         const w = R - L, h = B - T
@@ -378,7 +378,7 @@ class FocusRing [
         // the silhouette machinery are shared, not forked.
         const iw = provided("theme").focusRingInnerWidth
         const pass = (ins, lwp, color) => {
-            const r = Math.max(1, Math.min(rad - ins, Math.min(w, h) / 2 - ins))
+            const r = Math.max(1, Math.min(_rad - ins, Math.min(w, h) / 2 - ins))
             const ax = Math.max(0, ((w - 2 * ins) / 2 - r) * cov)      // horizontal arm length
             const ay = Math.max(0, ((h - 2 * ins) / 2 - r) * cov)      // vertical arm length
             d.strokeStyle = color

@@ -1339,7 +1339,9 @@ function construct(el: Element, outer: View | null, ctx: Ctx, parentEl: Element 
   let place: { target: View; slot: ChildSlot } | null = null;
   const into = (from: Element, fromCroot: View): void => {
     if (place === null) { appendChildren(from, view, fromCroot, ctx, el, slot); return; }
-    const isView = (c: Element): boolean => c.classSlot !== undefined || familyOf(c.tag, ctx) === "view";
+    // a child with `exists` is a State standing for it, and is placed as the child would be
+    const isView = (c: Element): boolean =>
+      c.classSlot !== undefined || familyOf(c.tag, ctx) === "view" || (c.existsOf === true && c.children.length === 1 && isView(c.children[0]));
     const members = from.children.filter((c) => !isView(c));
     if (members.length > 0) appendChildren({ ...from, children: members }, view, fromCroot, ctx, el, slot);
     const views = members.length > 0 ? { ...from, children: from.children.filter(isView) } : from;
@@ -1395,6 +1397,14 @@ function findNamedChild(root: View, name: string): View | null {
 function hoistPlacedNames(from: Element, view: View, target: View): void {
   if (target === view) return;
   for (const c of from.children) {
+    // a child with `exists` comes and goes: its name reads the target's, live
+    if (c.existsOf === true) {
+      const name = c.children[0]?.name ?? null;
+      if (name !== null && !(name in view)) {
+        Object.defineProperty(view, name, { configurable: true, enumerable: false, get: () => (target as unknown as Record<string, unknown>)[name] });
+      }
+      continue;
+    }
     if (c.name === null || c.classSlot !== undefined) continue;
     const child = (target as unknown as Record<string, unknown>)[c.name];
     if (child !== undefined && !(c.name in view)) (view as unknown as Record<string, unknown>)[c.name] = child;

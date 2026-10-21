@@ -185,6 +185,10 @@ export interface Element {
      *  name. The parser shapes it; the checker refuses it (no declaration admits
      *  a class-keyed entry) — like every other meaning, the checker's question. */
     entry?: true;
+    /** The `State` an `exists = { … }` child was lowered to (lowerExists). It
+     *  stands for that one child: it is placed where the child would be, and the
+     *  child's name belongs to the element it is written in. */
+    existsOf?: true;
     /** The navigable target of this element's activation handler, when the
      *  compiler's link extraction (compiler/src/links.ts) found a `navigate(to)`
      *  call in it. Rides the serialized program / a walk-order side-list. */

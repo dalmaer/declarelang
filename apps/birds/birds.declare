@@ -20,13 +20,8 @@ to a stranger?*):
             Back, though, and the old round is still on the entry behind you.
   ordinary  everything else — hovers, the loaded flag, and the flights (the
             plate's zoom from shelf tile to page, and its return home).
-            The flights are the third row made vivid: nobody
-            shares a zoom, so their rects are plain attributes and history
-            never hears of them. Arrivals animate only from gestures — a
-            pasted URL simply is its page — but the journey home plays for
-            the Back button too, armed inside `onFollow`: the hook is the one
-            door a link click and a traversal both pass through, which is
-            exactly what lets a motion answer Back without any handler running.
+            Nobody shares a zoom, so their rects are plain attributes and
+            history never hears of them.
 
 Around those three: every tile and cross-reference is a `link` (a real <a> —
 hover preview, ⌘-click, the crawler's edge), so the crawl walks the shelf to
@@ -162,10 +157,10 @@ App [ width = { app.hostWidth > 0 ? app.hostWidth : 1200 }, theme = { { ...SanFr
     waypoint = "",
     appName = { app.bird != null ? app.bird.name + " · 50 Birds" : app.dest == "quiz" ? "The Quiz · 50 Birds" : "50 Birds" },
 
-    /* Environment-aware, the calendar's idiom: standalone the fixture sits
-       beside the app; hosted, the embedder passes env.base (its own
-       transport's path to this app's home) and the same relative address
-       resolves through it — `auto` refetches when base lands after init. */
+    /* Standalone, the fixture sits beside the app; hosted, the host provides
+       `base` (its path to this app's home) and the same relative address
+       resolves through it. The url is a constraint, so a base that arrives
+       late refetches. */
 
     data: DataSource [ auto = true, url = { hostProvided("base", "") + "birds.json" }, schema = [ groups[]: Group ] ],
     birds: Bird[] = { (data.value?.groups ?? []).flatMap((g) => g.birds) },
@@ -185,15 +180,10 @@ App [ width = { app.hostWidth > 0 ? app.hostWidth : 1200 }, theme = { { ...SanFr
         const old = ({ "carolina-parrot": "carolina-parakeet", "great-footed-hawk": "peregrine-falcon",
             "mocking-bird": "northern-mockingbird", "white-headed-eagle": "bald-eagle" }) as any
         const renamed = ref.slice(0, 3) == "#b/" ? old[ref.slice(3)] : undefined
-        // The return flight is armed here, in the hook, and not in any click
-        // handler — because the hook is the one door every arrival passes
-        // through, the Back button included, and Back runs no handler. One
-        // condition covers both ways home: the "← the whole shelf" link and a
-        // history traversal each announce themselves as an arrival at "#",
-        // and if we are leaving a bird when that arrives, its plate flies
-        // back to its tile (the inverse of beginFlight, derived from data
-        // rather than a captured rect, so it lands on the right tile even if
-        // prev/next walked us far from the bird we originally opened).
+        // The return flight is armed here, not in a click handler: every
+        // arrival passes through onFollow, Back included, and Back runs no
+        // handler. The shelf links and a traversal home all arrive as "#", so
+        // leaving a bird on "#" sends its plate back to its tile.
         if (ref == "#" && app.bird != null) app.armReturn()
         return renamed != undefined ? "#b/" + renamed : ref
         },
@@ -287,11 +277,6 @@ App [ width = { app.hostWidth > 0 ? app.hostWidth : 1200 }, theme = { { ...SanFr
     retT:    number = 1,
     ret:     Animator [ attribute = retT, from = 0, to = 1, duration = 340, motion = cubicOut ],
 
-    // One plate, one place. While a bird is flying home its shelf slot is bare
-    // paper — the plate is not in two places, it is in the air — so the eye
-    // follows a single object into the gap it left. The tile asks this of every
-    // plate it draws; at rest it is always false.
-
     inFlight(slug: string) -> boolean { return app.retT < 1 && app.retSlug == slug },
     tileRectOf(slug: string) -> object {
         // a tile's resting rect on the shelf, re-derived from the same
@@ -353,14 +338,14 @@ App [ width = { app.hostWidth > 0 ? app.hostWidth : 1200 }, theme = { { ...SanFr
 
         // the arrival scalar: 0 = just left the shelf, 1 = at rest. A clicked
         // tile flies the plate here (geometry below); a page turn dissolves;
-        // a deep link or a traversal never starts it, so flyT rests at 1 and
-        // the page is simply present — the entrance belongs to the gesture
-        // that caused it, never to the URL or the Back button.
+        // a deep link or a traversal never starts it, so the page is simply
+        // present.
 
         flyT: number = 1,
         fly: Animator [ attribute = flyT, from = 0, to = 1, duration = 340, motion = cubicOut ],
 
-        // the close box reads first, where it sits: top right, before the details
+        // the close box is declared last so it paints on top, but it sits top
+        // right, so Tab reaches it before the details
 
         tabOrder() { return [this.closeBox as View, ...this.tabDefault().filter((v) => v != this.closeBox)] },
         wide: boolean = { app.colW >= 760 },
@@ -484,9 +469,9 @@ App [ width = { app.hostWidth > 0 ? app.hostWidth : 1200 }, theme = { { ...SanFr
         ],
 
     // the return flyer — the same plate, traveling home (declared last, so it
-    // paints above the shelf it lands on). An overlay rather than the page's
-    // frame, because the page has already yielded to the shelf by the time the
-    // return runs; at rest (retT = 1) it does not exist.
+    // paints above the shelf it lands on). It is its own view rather than the
+    // page's frame, because the page is already hidden by the time the return
+    // runs; at rest (retT = 1) it is hidden.
 
     flyer: Plate [ visible = { app.retT < 1 },
         slug = { app.retSlug },

@@ -76,7 +76,9 @@ npx declare-look app.declare --size 390x844 --touch --dark \
     --wheel app.list 600 --read app.list.scrollY --shot phone.png
 ```
 
-The actions — `--click PATH`, `--drag PATH DX,DY`, `--wheel PATH DY`, `--type TEXT`,
+The actions — `--click PATH`, `--click-at PATH X,Y` (a point inside it, from its top-left: a
+step of a drawn scale), `--drag PATH DX,DY`, `--wheel PATH DY`, `--pinch PATH SCALE` (two
+fingers spread to SCALE, or drawn together below 1), `--type TEXT`,
 `--key NAME`, `--wait MS`, `--read PATH.ATTR` (printed as `path.attr = value`; any property
 past the view reads too, `app.col.childViews.length`), `--call 'PATH.METHOD(ARGS)'`
 (arguments as JSON) and `--set PATH.ATTR=VALUE` to set up a state, and `--shot FILE` — run
@@ -85,8 +87,9 @@ for; `--console` prints what the
 page writes to its console, and `--help` says it all with examples. It runs as rung 5 — the
 same browser and reporting. Motion is run to rest once the page opens and after each action,
 so a read or a picture shows where things land rather than a spring mid-flight;
-`--no-settle` takes them as they are. Anything more (a pinch, polling a live feed, a check
-to keep) is an assert script, below — and it stays behind as a test.
+`--no-settle` takes them as they are. A picture shows no scrollbars, as on a Mac or a phone;
+`--scrollbars` draws the classic ones. Anything more (polling a live feed, a check to keep)
+is an assert script, below — and it stays behind as a test.
 
 ## Writing an assert script
 
@@ -120,6 +123,7 @@ hold; `page.mouse.down()`, `drive.wait(800)`, `page.mouse.up()` does.
 | call | what it does |
 |---|---|
 | `drive.click(path)`, `drive.drag(path, dx, dy)`, `drive.wheel(path, dy, dx?)` | a press, a drag, a wheel turn on the view, as a person makes them |
+| `drive.clickAt(path, x, y)`, `drive.pinch(path, scale)` | a press at a point inside the view (from its top-left); two fingers spread to `scale` about its centre |
 | `drive.key(name)`, `drive.type(text)`, `drive.tab(n?)` | keys, to whatever has the focus |
 | `drive.set(path, attr, value)` | an assignment, as a handler's write |
 | `drive.wait(ms)` | `ms` of real time, and exactly `ms` of the program's virtual time |

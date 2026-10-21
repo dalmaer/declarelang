@@ -143,10 +143,10 @@ The row view showing an id, or null when that row is not visible. A handler-only
 Moves focus to a row, and scrolls it into view when the tree scrolls. The keyboard's
 moves land here.
 
-## clickId
+## _clickId
 **Internal.** The row last clicked, which the next click pairs with.
 
-## clickAt
+## _clickAt
 **Internal.** When it was clicked, in milliseconds.
 
 ## focusScope
@@ -232,10 +232,10 @@ class Tree [
     // the row walks — handlers only; a constraint may not aggregate the tree
 
     rowAt(i: number) -> View? {
-        return (this.children.find((c) => (c as TreeRow).isTreeRow === true && c.rowIndex == i) ?? null) as View | null
+        return (this.children.find((c) => (c as TreeRow)._isTreeRow === true && c.rowIndex == i) ?? null) as View | null
         },
     rowFor(id: string) -> View? {
-        return (this.children.find((c) => (c as TreeRow).isTreeRow === true && (c as TreeRow).rowId == id) ?? null) as View | null
+        return (this.children.find((c) => (c as TreeRow)._isTreeRow === true && (c as TreeRow).rowId == id) ?? null) as View | null
         },
     focusRow(v: View?) {
         if (v == null) return
@@ -247,8 +247,8 @@ class Tree [
     // makes every single click wait out the double window, and a click on a
     // row must select at once.
 
-    clickId: string = "",
-    clickAt: number = 0,
+    _clickId: string = "",
+    _clickAt: number = 0,
 
     // one Tab stop, landing on the selected row; focus moves among the rows
 
@@ -285,7 +285,7 @@ App [ width = 280, height = 140,
     ]
 ```
 
-## isTreeRow
+## _isTreeRow
 **Internal.** The marker the tree's walks key on — not API.
 
 ## rowId
@@ -358,7 +358,7 @@ Follows `selected`.
 */
 
 class TreeRow extends Control [
-    isTreeRow: boolean = true,
+    _isTreeRow: boolean = true,
 
     width = 100%,
     height = { provided("theme").menuRowHeight },
@@ -385,9 +385,9 @@ class TreeRow extends Control [
         if (disabled) return
         const t = parent as Tree
         const now = Date.now()
-        const second = t.clickId == rowId && now - t.clickAt < 400
-        t.clickId = second ? "" : rowId
-        t.clickAt = now
+        const second = t._clickId == rowId && now - t._clickAt < 400
+        t._clickId = second ? "" : rowId
+        t._clickAt = now
         if (second && hasChildren) t.toggle(rowId)
         else press()
         },

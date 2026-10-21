@@ -439,12 +439,12 @@ await test("typing letters in an open menu moves its highlight: a prefix, then t
   const at = () => app.m.activeRow?.label;
   press("e");
   assert.equal(at(), "Export", "e lands on Export");
-  app.m.typedAt = 0;
+  app.m._typedAt = 0;
   press("s");
   assert.equal(at(), "Save", "after a pause, s starts over and lands on Save");
   press("s");
   assert.equal(at(), "Save As…", "s again goes on to the next row starting with s — not the disabled Share");
-  app.m.typedAt = 0;
+  app.m._typedAt = 0;
   press("p"); press("r");
   assert.equal(at(), "Print", "a typed prefix");
   same(Focus.getFocus(), app.m, "the menu holds the focus; its highlight moved");

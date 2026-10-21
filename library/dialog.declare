@@ -129,13 +129,13 @@ Its program's turn where it opens in a host's layer; none in the full-screen pre
 Puts keyboard focus on the default button when the dialog opens — or the last button
 when no record is marked default.
 
-## cb
+## _cb
 **Internal.** The callback handed to the opening verb.
 
-## callCb()
+## _callCb()
 **Internal.** Invokes the stored callback.
 
-## kidsOf()
+## _kidsOf()
 **Internal.** The rendered button views of an arrangement, for `focusDefault`.
 
 ## presentation
@@ -219,7 +219,7 @@ class Dialog extends Floating [
     accessibilityHint = { message },
     tone: string = "",
     buttons: DialogButton[]? = null,
-    cb: (id: string) -> void? = null,
+    _cb: (id: string) -> void? = null,
 
     hostW: number = { this.host != null ? this.host.width : app.hostWidth > 0 ? app.hostWidth : app.width },     // a window's, else the browser window's
     hostH: number = { this.host != null ? this.host.height : app.hostHeight > 0 ? app.hostHeight : app.height },
@@ -233,8 +233,8 @@ class Dialog extends Floating [
     // motion: it fades in and settles from slightly small; full-screen, it fades
 
     opacity = { this.openT },
-    scale = { this.full ? 1 : this.baseScale * (0.96 + 0.04 * this.openT) },
-    rotation = { this.full ? 0 : this.baseRotation },
+    scale = { this.full ? 1 : this._baseScale * (0.96 + 0.04 * this.openT) },
+    rotation = { this.full ? 0 : this._baseRotation },
     pivotX = { this.width / 2 },
     pivotY = { this.height / 2 },
 
@@ -247,7 +247,7 @@ class Dialog extends Floating [
         message = "" + (m || "")
         tone = "" + (tone_ || "")
         buttons = btns
-        this.cb = cb_ || null
+        this._cb = cb_ || null
         this.show()
         },
 
@@ -271,14 +271,14 @@ class Dialog extends Floating [
 
     pick(id: string) {
         if (!shown) return                       // the double-activation guard
-        const f = this.cb
+        const f = this._cb
         this.close()
-        afterDelay(0, () => { this.picked(id); if (f != null) this.callCb(f, id) })
+        afterDelay(0, () => { this.picked(id); if (f != null) this._callCb(f, id) })
         },
 
-    callCb(f: (id: string) -> void, id: string) { f(id) },
+    _callCb(f: (id: string) -> void, id: string) { f(id) },
 
-    kidsOf(b: View) -> array { return b.children },
+    _kidsOf(b: View) -> array { return b.children },
 
     // the buttons are records until the opening settle closes; the default one
     // is real, placed and focusable on the far side of it (Floating calls this
@@ -290,10 +290,10 @@ class Dialog extends Floating [
         if (!shown) return
         if (Focus.focusIn(this.col.content)) return   // your content's first control, when it has one
         const b = this.col.btns
-        const kids = this.kidsOf(this.arrangement == "stack" ? b.stackInner : b.rowInner)
+        const kids = this._kidsOf(this.arrangement == "stack" ? b.stackInner : b.rowInner)
         const d = kids.find((k) => k.primary)
         if (d != null || kids.length > 0) Focus.focus(d != null ? d : kids[kids.length - 1])
-        else if (!Focus.focusIn(this)) this.holdFocusItself()
+        else if (!Focus.focusIn(this)) this._holdFocusItself()
         },
 
     pickDefault() {

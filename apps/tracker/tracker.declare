@@ -287,13 +287,11 @@ class Chip extends Control [ height = 28, cornerRadius = 8, padding = [6, 12, 0,
     value: string = "",
     count: number = -1,         // -1 hides the count
     on: boolean = false,
-    accessibilityRole = toggle,         // a filter that stays on, read by its name and count
+    accessibilityRole = toggle,
     accessibilityPressed = { on },
     fill = { on ? provided("theme").controlSelected : hovered ? provided("theme").control : null },
 
-    // the tally is a sprung number — `Spring [ attribute = … ]` animates any
-    // slot, data included, so a bulk move rolls the counts over instead of
-    // snapping them. One declaration; no other wiring anywhere.
+    // the count springs, so a bulk move rolls it over instead of snapping
 
     anim: number = 0,
     Spring [ attribute = anim, to = { count < 0 ? 0 : count }, stiffness = 170, damping = 26 ],
@@ -377,8 +375,7 @@ class GroupRow extends ListRow [
 
 // the issue row — one calm line: icons carry status and priority, the
 // title is the row's single strong element, everything else recedes to
-// the right (labels, the avatar, the date). The row never mentions how
-// many of it exist.
+// the right (labels, the avatar, the date).
 
 class IssueRow extends ListRow [
     exp = { :id == app.expandedId },
@@ -460,9 +457,8 @@ class IssueRow extends ListRow [
     ]
 
 
-// a person's avatar as a menu icon — created into the standard icon
-// column (`iconKind`), so person rows keep the settled anatomy: check
-// column, icon column, labels on one text edge
+// a person's avatar as a menu icon: an item names it with `icon` and
+// hands it `props`, and it sits in the menu's icon column like any icon
 
 class PersonIcon extends Avatar [ width = 16, height = 16, cornerRadius = 8, capSize = 6.5,
     name = { :name ?? "" }
@@ -630,10 +626,9 @@ class EditorCard [
             text <-> :it.description,
             placeholder = "Add a description…" ],
 
-        // One row, one baseline. Every control here is the same height and
-        // centers its label's caps, so the same-sized labels (the buttons' and
-        // Delete's) share a baseline by construction; the smaller meta line
-        // sits its own baseline on Save's declared one.
+        // One row, one baseline: the buttons share a height and center their
+        // labels, so their text lines up, and the smaller meta line sits on the
+        // same baseline.
 
         foot: View [ width = 100%, height = { app.footRowH },
             layout: SimpleLayout [ axis = x, spacing = 10, align = baseline ],
@@ -675,7 +670,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
 
     // ── the responsive facts ───────────────────────────────────────────────
 
-    compact: boolean = { app.width < 640 },      // the bar: brand compacts, omnibox shrinks
+    compact: boolean = { app.width < 640 },      // narrow windows drop the extras: the brand word, the scale control, chip counts and row labels
 
     barH: number = 56,
     footRowH: number = 32,        // the editor footer's one row height
@@ -814,9 +809,9 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     // ── the projection: the one derived dataset the list renders ──────────
     //
     // filter → search → sort → (group). Group headers are lines too, with
-    // `kind = "hdr"`. The arguments are the view facts, passed because that
-    // reads well: the data is not among them, and the compiler follows the
-    // call to `issues.all()`.
+    // `kind = "hdr"`. The arguments are the view facts; the records are read
+    // inside, through `issues.all()`, and that read counts too, so an edit
+    // re-projects just as a filter change does.
 
     shown: Dataset [ schema = [ rows[]: Line, total: number ],
         contents = { app.project(app.fStatus, app.fAssignee, app.fLabel, app.query, app.sortOn, app.sortDir, app.groupBy) } ],
@@ -919,11 +914,9 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     editing: boolean = false,
     creating: boolean = false,
 
-    // Seed the working copy from the current record — a copy, so edits never
-    // reach the truth until Save. Every path that changes which issue is open
-    // goes through here, which is the whole point: the draft must follow the
-    // expanded row or the editor shows one issue's fields inside another
-    // issue's row.
+    // Seed the working copy from the selected record — a copy, so edits never
+    // reach the truth until Save. Every way of opening an existing issue comes
+    // through here, so the draft always matches the open row.
 
     seedDraft() {
         if (selected == null) return
@@ -1107,8 +1100,6 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
         picked(id: string) { app.fLabel = id }
         ],
 
-    // ⌘K claims the omnibox from anywhere; Escape backs out by layers
-
     // ⌘K or "/" reach the search field from anywhere — "/" is a plain key,
     // so it stands down while a field is taking text. A shortcut takes its
     // key on the way down and the field it focuses never sees it.
@@ -1141,8 +1132,8 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
         ],
 
     // ── the frame: the bar, the toolbar, the body that takes the rest, the
-    //    footer. The overlays below (the empty state, the bulk bar, the
-    //    toast, the entry screen) opt out with `ignoreLayout`. ──────────────
+    //    footer, stacked. The entry screen floats over them with
+    //    `ignoreLayout`, as the empty state and bulk bar do inside the body. ──
 
     layout: SimpleLayout [ axis = y ],
 
@@ -1162,9 +1153,10 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                 visible = { !app.compact }, text = "Tracker" ]
             ],
 
-        // the omnibox: search-as-you-type over the data; Enter jumps to the
-        // first hit, arrows cycle, the count keeps score. Its slot takes the
-        // room the bar has left; the field fills it up to 380.
+        // the omnibox: search-as-you-type over the data; the arrows step through
+        // the hits, Enter opens the selected one (the first if none), and the
+        // count keeps score. Its slot takes the room the bar has left; the field
+        // fills it up to 380.
 
         search: View [ height = 32, flexes = true,
             omni: TextInput [ height = 32, width = { Math.min(380, Math.max(110, parent.width)) },

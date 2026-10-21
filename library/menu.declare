@@ -203,10 +203,10 @@ Whether typing a letter moves the keyboard highlight to a row — `true` by defa
 every desktop menu: type "ex" to land on Export. The highlight only moves; Return picks.
 A `Combobox` turns it off on its list, whose letters belong to its text field.
 
-## typed
+## _typed
 **Internal.** The letters typed so far, while typing continues.
 
-## typedAt
+## _typedAt
 **Internal.** When the last letter was typed; after a second's pause the next letter starts
 over.
 
@@ -227,28 +227,28 @@ this one, as every desktop menu bar does.
 ## enterSub()
 Enters the roved row's submenu and puts the rover on its first row — ArrowRight's action.
 
-## driveSub()
+## _driveSub()
 **Internal.** Pushes items, placement and delivery into the shared child menu.
 
-## closeIt()
+## _closeIt()
 **Internal.** Null-safe close, the untyped seam across files.
 
-## subShown()
+## _subShown()
 **Internal.** Whether a cascade child is currently up, so the deeper menu takes the keys.
 
-## rowsOf()
+## _rowsOf()
 **Internal.** The row views of a panel body, for the rover's walk.
 
-## revealRow()
+## _revealRow()
 **Internal.** Scrolls a roved row into view in a menu long enough to scroll.
 
-## pickRow()
+## _pickRow()
 **Internal.** Picks or enters a specific row view.
 
-## enterRow()
+## _enterRow()
 **Internal.** Enters a specific row's submenu.
 
-## stepIn()
+## _stepIn()
 **Internal.** Puts the rover on a freshly opened cascade's first row.
 
 ## visible
@@ -290,7 +290,7 @@ class Menu extends Floating [
     // listbox role: its rows are options
 
     asList: boolean = false,
-    focusFirst() { this.holdFocusItself() },        // the menu itself, never a view inside it
+    focusFirst() { this._holdFocusItself() },        // the menu itself, never a view inside it
 
     // its keys are its rover's (the keys member below): a menu holding the focus
     // inside a group, as a menu bar's does, is not walked as one of its members
@@ -388,8 +388,8 @@ class Menu extends Floating [
     // next row with it. It moves the highlight only; Return still picks.
 
     typeahead: boolean = true,
-    typed: string = "",
-    typedAt: number = 0,
+    _typed: string = "",
+    _typedAt: number = 0,
 
     // the delivery seam — the app overrides; the id is the whole message
 
@@ -418,10 +418,10 @@ class Menu extends Floating [
         opener = v
         this.show()
         const h = this.expectedHeight()
-        const k = (host != null ? host.transformTo(this.screen()).scale : 1) * baseScale
+        const k = (host != null ? host.transformTo(this.screen()).scale : 1) * _baseScale
         const up = this.toScreen(v, 0, v.height + 4).y + h * k > this.screen().height - 4 && this.toScreen(v, 0, -4).y - h * k >= 4
         const p = up ? this.toLayer(v, 0, -4) : this.toLayer(v, 0, v.height + 4)
-        this.place(p.x, up ? p.y - h * baseScale : p.y)
+        this.place(p.x, up ? p.y - h * _baseScale : p.y)
         },
 
     // place() takes a point in the layer's frame (openAt/openFor map the
@@ -430,7 +430,7 @@ class Menu extends Floating [
     // taken at open: menu chrome doesn't move while a menu is up.
 
     place(x: number, y: number) {
-        const p = this.keepOnApp(x, y, this.width * baseScale, this.expectedHeight() * baseScale)   // the rows are built as it opens: estimated until then; at its shown scale
+        const p = this.keepOnApp(x, y, this.width * _baseScale, this.expectedHeight() * _baseScale)   // the rows are built as it opens: estimated until then; at its shown scale
         this.x = p.x
         this.y = p.y
         },
@@ -476,46 +476,46 @@ class Menu extends Floating [
     openSub(row: object, subItems: array) {
         const o = this.toLayer(row as View, this.width - 6, -5)
         if (child == null) child = (this.parent as View).createView("Menu", ({ isRoot: false, rootMenu: this.rootMenu != null ? this.rootMenu : this }))
-        this.driveSub(child, subItems, o.x, o.y)
+        this._driveSub(child, subItems, o.x, o.y)
         },
 
-    driveSub(c: Menu, subItems: array, x: number, y: number) {
+    _driveSub(c: Menu, subItems: array, x: number, y: number) {
         c.items = subItems
         c.picked = (id) => this.pick(id)         // delivery + close route through the chain to the root
         c.show()
         c.place(x, y)
         },
 
-    closeSub() { if (child != null) this.closeIt(child) },
-    closeIt(c: Menu?) { if (c != null) c.close() },
-    subShown(c: Menu?) -> boolean { return c != null && c.shown },
-    rootClose() { this.closeIt(this.rootMenu != null ? this.rootMenu : this) },
+    closeSub() { if (child != null) this._closeIt(child) },
+    _closeIt(c: Menu?) { if (c != null) c.close() },
+    _subShown(c: Menu?) -> boolean { return c != null && c.shown },
+    rootClose() { this._closeIt(this.rootMenu != null ? this.rootMenu : this) },
 
     // ── keyboard roving (the deepest shown menu handles the keys) ──────────
 
-    rowsOf(b: View) -> array { return b.children },
+    _rowsOf(b: View) -> array { return b.children },
 
     step(d: number) {
-        const rows = this.rowsOf(this.panel.body).filter((r) => !r.divider && r.enabled && r.custom == "")
+        const rows = this._rowsOf(this.panel.body).filter((r) => !r.divider && r.enabled && r.custom == "")
         // opened in this same moment (a submenu entered by ArrowRight): its rows
         // are built as this settle closes, so the step waits for them
         if (rows.length == 0) {
-            if (shown && this.rowsOf(this.panel.body).length == 0 && (this.items ?? []).length > 0) afterSettle(() => this.step(d))
+            if (shown && this._rowsOf(this.panel.body).length == 0 && (this.items ?? []).length > 0) afterSettle(() => this.step(d))
             return
             }
         const i = rows.indexOf(this.activeRow)
         activeRow = rows[i < 0 ? (d > 0 ? 0 : rows.length - 1) : (i + d + rows.length) % rows.length]
-        this.revealRow(this.activeRow)
+        this._revealRow(this.activeRow)
         },
 
-    revealRow(r: View?) { if (r != null) r.scrollIntoView("nearest") },
+    _revealRow(r: View?) { if (r != null) r.scrollIntoView("nearest") },
 
     typeTo(ch: string) {
         const now = Date.now()
-        const t = (now - typedAt < 1000 ? typed : "") + ch.toLowerCase()
-        typed = t
-        typedAt = now
-        const rows = this.rowsOf(this.panel.body).filter((r) => !r.divider && r.enabled && r.custom == "")
+        const t = (now - _typedAt < 1000 ? _typed : "") + ch.toLowerCase()
+        _typed = t
+        _typedAt = now
+        const rows = this._rowsOf(this.panel.body).filter((r) => !r.divider && r.enabled && r.custom == "")
         if (rows.length == 0) return
         // the same letter again cycles through the rows it starts; a longer
         // prefix keeps the current row while it still matches
@@ -527,29 +527,29 @@ class Menu extends Floating [
             const r = rows[(from + k) % rows.length]
             if (("" + r.label).toLowerCase().startsWith(query)) {
                 activeRow = r
-                this.revealRow(r)
+                this._revealRow(r)
                 return
                 }
             }
         },
 
-    pickActive() { this.pickRow(this.activeRow) },
+    pickActive() { this._pickRow(this.activeRow) },
 
-    pickRow(r: object) {
+    _pickRow(r: object) {
         if (r == null) return
         if (r.sub) { this.enterSub(); return }
         r.pickSelf()
         },
 
-    enterSub() { this.enterRow(this.activeRow) },
+    enterSub() { this._enterRow(this.activeRow) },
 
-    enterRow(r: object) {
+    _enterRow(r: object) {
         if (r == null || !r.sub) return
         r.openSelf()
-        if (child != null) this.stepIn(child)
+        if (child != null) this._stepIn(child)
         },
 
-    stepIn(c: Menu?) { if (c != null) c.step(1) },
+    _stepIn(c: Menu?) { if (c != null) c.step(1) },
 
     // Right past the last level, or Left at the top: the menu beside this one, in
     // a menu bar; nothing for a menu that stands alone
@@ -559,7 +559,7 @@ class Menu extends Floating [
     keys: Keys [
         onKeyDown(e: KeyEvent) {
             if (!classroot.shown) return
-            if (classroot.subShown(classroot.child)) return   // the deeper menu handles
+            if (classroot._subShown(classroot.child)) return   // the deeper menu handles
             if (e.key == "ArrowDown") classroot.step(1)
             else if (e.key == "ArrowUp") classroot.step(-1)
             else if (e.key == "Enter") classroot.pickActive()

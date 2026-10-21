@@ -123,29 +123,29 @@ A column's id: its `field`, falling back to its `title`.
 ## colWidthOf()
 The present width of a column by id.
 
-## dragCol
+## _dragCol
 **Internal.** The column id currently being dragged.
 
-## dropAt
+## _dropAt
 **Internal.** The index the insertion bar marks, or −1.
 
-## dropIndexFor()
+## _dropIndexFor()
 **Internal.** Which slot a dragged header's centre would land in.
 
-## dropBarX()
+## _dropBarX()
 **Internal.** The insertion bar's x for a drop index.
 
-## commitDrop()
+## _commitDrop()
 **Internal.** Commits a reorder at release — drop-commit, since swapping under the
 pointer re-derives the spans mid-drag and flickers.
 
-## prevColId()
+## _prevColId()
 **Internal.** The column left of a given one, for the resize grip.
 
-## selMenu
+## _selMenu
 **Internal.** The lazily-created menu shared by every `"select"` cell.
 
-## isDataGrid
+## _isDataGrid
 **Internal.** The marker rows and headers guard on — not API.
 
 ## inHeader
@@ -217,13 +217,13 @@ column's cells are built as that class alone.
 The choices a `"select"` cell offers — records or strings. **Read at gesture time, not
 baked into the column model**, so it may be a constraint that changes with app state.
 
-## isColumn
+## _isColumn
 **Internal.** The marker the column walk keys on — not API.
 
 */
 
 class Column [
-    isColumn: boolean = true,
+    _isColumn: boolean = true,
 
     visible = false,
     title: string = "",
@@ -239,7 +239,7 @@ class DataGrid extends Table [
 
     // the marker rows and headers guard on
 
-    isDataGrid: boolean = true,
+    _isDataGrid: boolean = true,
 
     headerH: number = { provided("theme").gridHeaderHeight },
 
@@ -270,7 +270,7 @@ class DataGrid extends Table [
 
     columnRecords(kids: View[], ord: array, w: object) -> array {
         const cols = []
-        for (const c of kids) { if ((c as Column).isColumn === true) cols.push(c) }
+        for (const c of kids) { if ((c as Column)._isColumn === true) cols.push(c) }
         if (ord != null) {
             const rank = (c) => {
                 const i = ord.indexOf(this.colId(c))
@@ -304,13 +304,13 @@ class DataGrid extends Table [
 
     // reorder-by-drag commits on release, never live: swapping under the
     // pointer would re-derive the spans mid-drag and flicker. While a header
-    // drags, `dragCol`/`dropAt` drive the insertion bar (the vertical divider
+    // drags, `_dragCol`/`_dropAt` drive the insertion bar (the vertical divider
     // at the would-be slot), and the order commits at the drop.
 
-    dragCol: string = "",
-    dropAt: number = -1,
+    _dragCol: string = "",
+    _dropAt: number = -1,
 
-    dropIndexFor(cx: number) -> number {
+    _dropIndexFor(cx: number) -> number {
         const cols = this.colData.value.cols
         for (let i = 0; i < cols.length; i = i + 1) {
             if (cx < cols[i].x + cols[i].width / 2) return i
@@ -321,7 +321,7 @@ class DataGrid extends Table [
     // `at` rides in as an argument so the insertion bar's constraint tracks
     // it, as `columnRecords` takes its state
 
-    dropBarX(at: number) -> number {
+    _dropBarX(at: number) -> number {
         const cols = this.colData.value.cols
         if (at < 0) return -10
         if (at >= cols.length) {
@@ -331,12 +331,12 @@ class DataGrid extends Table [
         return cols[at].x
         },
 
-    commitDrop(id: string) {
+    _commitDrop(id: string) {
         const cols = this.colData.value.cols
         const from = cols.findIndex((r) => r.id == id)
-        const at = dropAt
-        dragCol = ""
-        dropAt = -1
+        const at = _dropAt
+        _dragCol = ""
+        _dropAt = -1
         if (from < 0 || at < 0) return
         const to = at > from ? at - 1 : at
         if (to == from) return
@@ -360,25 +360,25 @@ class DataGrid extends Table [
     inHeader: boolean = false,
 
     activeCell() -> GridCell? {
-        const inst = this.children.find((c) => (c as TableRow).isTableRow === true && (c as TableRow).tableIndex() == activeIndex)
+        const inst = this.children.find((c) => (c as TableRow)._isTableRow === true && (c as TableRow).tableIndex() == activeIndex)
         if (inst == null) return null
-        return ((inst as GridRow).cells.children.find((c) => (c as GridCell).ci == activeCol) ?? null) as GridCell | null
+        return ((inst as GridRow).cells.children.find((c) => (c as GridCell)._ci == activeCol) ?? null) as GridCell | null
         },
 
     enterCell(cell: GridCell, typed: string) {
-        if (cell.k == "edit") {
+        if (cell._k == "edit") {
             const ed = (cell as EditCell).ed
             if (typed == "") { Focus.focus(ed); return }
             // a typed character starts the edit with it: after this keypress,
             // so the key is not typed a second time into the field it moved to
             afterDelay(0, () => {
                 Focus.focus(ed)                     // first: the edit records the value it began from
-                if (cell.row != null) cell.row.setText(cell.fld, typed)
+                if (cell.row != null) cell.row.setText(cell._fld, typed)
                 afterSettle(() => { ed.select("end") })
                 })
             }
-        else if (cell.k == "check") Focus.focus((cell as CheckCell).ck)
-        else if (cell.k == "select") (cell as SelectCell).sel.press()
+        else if (cell._k == "check") Focus.focus((cell as CheckCell).ck)
+        else if (cell._k == "select") (cell as SelectCell).sel.press()
         },
 
     onKeyDown(e: KeyEvent) {
@@ -398,13 +398,13 @@ class DataGrid extends Table [
         if (e.key == "ArrowUp" && plain && activeIndex <= 0) { inHeader = true; return }
         const cell = this.activeCell()
         if (cell != null && plain && !e.repeat) {
-            if ((e.key == "Enter" || e.key == "F2") && cell.k != "text") { this.enterCell(cell, ""); return }
-            if (e.key == " " && cell.k == "check") {
-                if (cell.row != null) cell.row.setFlag(cell.fld, cell.value != true)
+            if ((e.key == "Enter" || e.key == "F2") && cell._k != "text") { this.enterCell(cell, ""); return }
+            if (e.key == " " && cell._k == "check") {
+                if (cell.row != null) cell.row.setFlag(cell._fld, cell.value != true)
                 return
                 }
-            if (e.key == " " && cell.k == "select") { this.enterCell(cell, ""); return }
-            if (cell.k == "edit" && e.key.length == 1 && e.key != " ") { this.enterCell(cell, e.key); return }
+            if (e.key == " " && cell._k == "select") { this.enterCell(cell, ""); return }
+            if (cell._k == "edit" && e.key.length == 1 && e.key != " ") { this.enterCell(cell, e.key); return }
             }
         super.onKeyDown(e)
         },
@@ -424,14 +424,14 @@ class DataGrid extends Table [
         if (i < 0 || i >= this.itemCount()) return
         this.showRow(i)
         afterDelay(0, () => {
-            const inst = this.children.find((c) => (c as TableRow).isTableRow === true && (c as TableRow).tableIndex() == i)
+            const inst = this.children.find((c) => (c as TableRow)._isTableRow === true && (c as TableRow).tableIndex() == i)
             if (inst == null) return
-            const cell = (inst as GridRow).cells.children.find((c) => "" + (c as any).fld == field) as any
+            const cell = (inst as GridRow).cells.children.find((c) => "" + (c as any)._fld == field) as any
             if (cell != null && cell.ed != null) Focus.focus(cell.ed)
             })
         },
 
-    prevColId(id: string) -> string {
+    _prevColId(id: string) -> string {
         const cols = this.colData.value.cols
         const i = cols.findIndex((r) => r.id == id)
         return i > 0 ? cols[i - 1].id : ""
@@ -449,7 +449,7 @@ class DataGrid extends Table [
     //    through the row's cursor, and the cell re-derives like any other
     //    read ────────────────────────────────────────────────────────────────
 
-    selMenu: View? = null,
+    _selMenu: View? = null,
 
     openSelect(row: View, cell: View, field: string, current: object) {
         // the column's options are read here, at gesture time — a Column's
@@ -457,10 +457,10 @@ class DataGrid extends Table [
         // column record deliberately does not carry it)
         let opts = null
         for (const c of this.children) {
-            if ((c as Column).isColumn === true && this.colId(c) == field) opts = (c as Column).options
+            if ((c as Column)._isColumn === true && this.colId(c) == field) opts = (c as Column).options
             }
-        if (selMenu == null) selMenu = (this.parent as View).createView("Menu", ({ }))   // beside the grid, in its context's layer
-        const m = this.selMenu as any
+        if (_selMenu == null) _selMenu = (this.parent as View).createView("Menu", ({ }))   // beside the grid, in its context's layer
+        const m = this._selMenu as any
         m.minWidth = 170
         m.items = (opts ?? []).map((o) => ({ id: "" + o, label: "" + o, checked: "" + (current ?? "") == "" + o }))
         m.picked = (id) => { (row as GridRow).setText(field, "" + id) }
@@ -500,8 +500,8 @@ class DataGrid extends Table [
 
             accessibilityRole = columnHeader,
             accessibilitySort = { (classroot as DataGrid).sortOn != colid ? "none" : (classroot as DataGrid).sortDir == "desc" ? "descending" : "ascending" },
-            ci: number = { 0 + (:i ?? 0) },
-            activeHere: boolean = { (classroot as DataGrid).focused && (classroot as DataGrid).inHeader && (classroot as DataGrid).activeCol == ci },
+            _ci: number = { 0 + (:i ?? 0) },
+            activeHere: boolean = { (classroot as DataGrid).focused && (classroot as DataGrid).inHeader && (classroot as DataGrid).activeCol == _ci },
             trackChanges = ["activeHere"],
             onChange(e: ChangeEvent) {
                 const g = classroot as DataGrid
@@ -533,7 +533,7 @@ class DataGrid extends Table [
             opacity = { dragging && moved ? 0.95 : 1 },
 
             onPointerDown(e: PointerEvent) {
-                if ((classroot as DataGrid).isDataGrid !== true) return
+                if ((classroot as DataGrid)._isDataGrid !== true) return
                 dragging = true
                 moved = false
                 x0 = this.x
@@ -546,14 +546,14 @@ class DataGrid extends Table [
                 if (!moved && Math.abs(dx) > 3) { moved = true; this.raise() }
                 dragX = x0 + dx
                 if (moved) {
-                    (classroot as DataGrid).dragCol = colid
-                    ;(classroot as DataGrid).dropAt = (classroot as DataGrid).dropIndexFor(dragX + :width / 2)
+                    (classroot as DataGrid)._dragCol = colid
+                    ;(classroot as DataGrid)._dropAt = (classroot as DataGrid)._dropIndexFor(dragX + :width / 2)
                     }
                 },
             onPointerUp() {
                 if (!dragging) return
                 dragging = false
-                if (moved) (classroot as DataGrid).commitDrop(colid)
+                if (moved) (classroot as DataGrid)._commitDrop(colid)
                 // an unmoved press is the click — the sort delivery
                 else (classroot as DataGrid).headerClick(colid)
                 },
@@ -587,8 +587,8 @@ class DataGrid extends Table [
                 w0: number = 0,
                 g0: number = 0,
                 onPointerDown(e: PointerEvent) {
-                    if ((classroot as DataGrid).isDataGrid !== true) return
-                    pid = (classroot as DataGrid).prevColId(this.parent.colid)
+                    if ((classroot as DataGrid)._isDataGrid !== true) return
+                    pid = (classroot as DataGrid)._prevColId(this.parent.colid)
                     if (pid == "") return
                     w0 = (classroot as DataGrid).colWidthOf(pid)
                     g0 = app.pointerX
@@ -608,8 +608,8 @@ class DataGrid extends Table [
         // the insertion bar — where the dragged column would land
 
         drop: View [ width = 2, y = 2, height = { parent.height - 4 },
-            visible = { (classroot as DataGrid).dragCol != "" },
-            x = { (classroot as DataGrid).dropBarX((classroot as DataGrid).dropAt) - 1 },
+            visible = { (classroot as DataGrid)._dragCol != "" },
+            x = { (classroot as DataGrid)._dropBarX((classroot as DataGrid)._dropAt) - 1 },
             fill = { provided("theme").accent } ],
 
         // the hairline under the header. It stays a child view rather than
@@ -660,7 +660,7 @@ The same for a boolean field — what a `"check"` cell calls.
 ## trackChanges
 Empty: in a grid the keyboard is on a cell, and the cell reports itself, not the row.
 
-## isGridRow
+## _isGridRow
 **Internal.** The marker identifying a generated grid row — not API.
 
 ## height
@@ -669,7 +669,7 @@ From the theme's `gridRowHeight` (28 by default); the header row is `gridHeaderH
 
 class GridRow extends TableRow [
     accessibilityRole = row,
-    isGridRow: boolean = true,
+    _isGridRow: boolean = true,
     trackChanges = [],               // in a grid the keyboard is on a cell, which reports itself
 
     height = { provided("theme").gridRowHeight },
@@ -689,7 +689,7 @@ class GridRow extends TableRow [
     cells: View [ x = 0, y = 0,
         width = 100%,
         height = 100%,
-        datapath = { (classroot.parent as DataGrid).isDataGrid === true ? (classroot.parent as DataGrid).colData.value : null },
+        datapath = { (classroot.parent as DataGrid)._isDataGrid === true ? (classroot.parent as DataGrid).colData.value : null },
 
         // One cell per column record, built as the class its column's `kind`
         // names — each kind builds only its own presentation. The row wires
@@ -720,13 +720,13 @@ The `GridRow` this cell belongs to, set by the row. A cell reads `row.rec` and w
 The record's value in this cell's field, read through the row — `null` when the row has no
 record.
 
-## k
+## _k
 **Internal.** The column's `kind`, as a string.
 
-## fld
+## _fld
 **Internal.** The field this cell shows — its column's `field`.
 
-## ci
+## _ci
 **Internal.** Its column's place in the column model — what the grid's `activeCol` names.
 
 ## dataGrid
@@ -758,16 +758,16 @@ From the theme's `gridCellCornerRadius` (3 by default): the active cell's outlin
 class GridCell [ x = { :x }, width = { :width }, height = 100%, clip = true,
     accessibilityRole = cell,
     row: GridRow? = null,
-    k: string = { "" + (:kind ?? "text") },
-    fld: string = { "" + :field },
-    ci: number = { 0 + (:i ?? 0) },
+    _k: string = { "" + (:kind ?? "text") },
+    _fld: string = { "" + :field },
+    _ci: number = { 0 + (:i ?? 0) },
     value: object = { this.row != null && this.row.rec != null ? (this.row.rec as any)["" + :field] : null },
 
     // the active cell — the grid's keyboard position — is outlined while the
     // grid has focus
 
-    dataGrid: DataGrid? = { this.row != null && (this.row.parent as DataGrid).isDataGrid === true ? this.row.parent as DataGrid : null },
-    activeHere: boolean = { this.dataGrid != null && this.dataGrid.focused && !this.dataGrid.inHeader && this.row != null && this.row.active && this.dataGrid.activeCol == this.ci },
+    dataGrid: DataGrid? = { this.row != null && (this.row.parent as DataGrid)._isDataGrid === true ? this.row.parent as DataGrid : null },
+    activeHere: boolean = { this.dataGrid != null && this.dataGrid.focused && !this.dataGrid.inHeader && this.row != null && this.row.active && this.dataGrid.activeCol == this._ci },
     stroke = { this.activeHere ? stroke(2, provided("theme").accent) : null },
     cornerRadius = { provided("theme").gridCellCornerRadius },
 
@@ -788,7 +788,7 @@ class GridCell [ x = { :x }, width = { :width }, height = 100%, clip = true,
         const g = this.dataGrid
         const r = this.row
         if (g == null || r == null) return
-        g.activeCol = this.ci
+        g.activeCol = this._ci
         const i = r.tableIndex()
         g.activeIndex = i
         g.active = g.itemAt(i)
@@ -814,26 +814,26 @@ A `DataGrid` cell that edits its value in a `TextInput`, committing every keystr
 record — `kind = "edit"`. Up and Down move the edit to the same column in the row above or
 below (`DataGrid.editStep`).
 
-## before
+## _before
 **Internal.** The value when the edit began, which Esc puts back.
 */
 
 class EditCell extends GridCell [
-    before: string = "",      // the value when the edit began, for Esc to restore
+    _before: string = "",      // the value when the edit began, for Esc to restore
 
     ed: TextInput [ x = 4, y = 3, fontSize = { provided("theme").gridFontSize },
         accessibilityLabel = { "" + (:title ?? "") },                // named by its column
         width = { parent.width - 8 },
         height = { parent.height - 6 },
         initial = { "" + (classroot.value ?? "") },
-        onFocus() { classroot.before = "" + (classroot.value ?? ""); classroot.takeActive() },
-        onInput(v: string) { if (classroot.row != null) classroot.row.setText(classroot.fld, v) },
+        onFocus() { classroot._before = "" + (classroot.value ?? ""); classroot.takeActive() },
+        onInput(v: string) { if (classroot.row != null) classroot.row.setText(classroot._fld, v) },
         onKeyDown(e: KeyEvent) {
             const r = classroot.row
-            if (r == null || (r.parent as DataGrid).isDataGrid !== true) return
-            if (e.key == "ArrowDown" || e.key == "Enter") (r.parent as DataGrid).editStep(r, classroot.fld, 1)
-            else if (e.key == "ArrowUp") (r.parent as DataGrid).editStep(r, classroot.fld, -1)
-            else if (e.key == "Escape") r.setText(classroot.fld, classroot.before)
+            if (r == null || (r.parent as DataGrid)._isDataGrid !== true) return
+            if (e.key == "ArrowDown" || e.key == "Enter") (r.parent as DataGrid).editStep(r, classroot._fld, 1)
+            else if (e.key == "ArrowUp") (r.parent as DataGrid).editStep(r, classroot._fld, -1)
+            else if (e.key == "Escape") r.setText(classroot._fld, classroot._before)
             }
         ]
     ]
@@ -851,7 +851,7 @@ class CheckCell extends GridCell [
         accessibilityLabel = { "" + (:title ?? "") },                // named by its column
         onFocus() { super.onFocus(); classroot.takeActive() },
         checked = { classroot.value == true },
-        input(v: boolean) { if (classroot.row != null) classroot.row.setFlag(classroot.fld, v) }
+        input(v: boolean) { if (classroot.row != null) classroot.row.setFlag(classroot._fld, v) }
         ]
     ]
 
@@ -876,8 +876,8 @@ class SelectCell extends GridCell [
         onFocus() { super.onFocus(); classroot.takeActive() },
         press() {
             const r = classroot.row
-            if (r == null || (r.parent as DataGrid).isDataGrid !== true) return
-            (r.parent as DataGrid).openSelect(r, this, classroot.fld, classroot.value)
+            if (r == null || (r.parent as DataGrid)._isDataGrid !== true) return
+            (r.parent as DataGrid).openSelect(r, this, classroot._fld, classroot.value)
             },
         onClick() { if (!this.disabled) this.press() },
         v: TextLabel [ x = 6, fontSize = { provided("theme").gridFontSize }, wrap = false, text = { "" + (classroot.value ?? "") } ],

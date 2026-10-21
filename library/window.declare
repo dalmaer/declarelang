@@ -156,36 +156,36 @@ The theme's dialog rounding; none without a frame.
 ## shadow
 The theme's dialog shadow; none without a frame.
 
-## dragX
+## _dragX
 **Internal.** Its `x` when a move began.
 
-## dragY
+## _dragY
 **Internal.** Its `y` when a move began.
 
-## sizeW
+## _sizeW
 **Internal.** Its `width` when a resize began.
 
-## sizeH
+## _sizeH
 **Internal.** Its `height` when a resize began.
 
-## moveStart()
+## _moveStart()
 **Internal.** The title bar's press: brings it to the front and notes where it started.
 
-## moveBy()
+## _moveBy()
 **Internal.** Moves it by the pointer's travel since the press, keeping its title bar within
 its parent.
 
-## moveEnd()
+## _moveEnd()
 **Internal.** The release: an interrupted move puts it back where it started.
 
-## sizeStart()
+## _sizeStart()
 **Internal.** A resize edge's press.
 
-## sizeBy()
+## _sizeBy()
 **Internal.** Resizes it by the pointer's travel since the press, along the edges the grabbed
 one moves (`"r"`, `"b"` or `"rb"`), no smaller than the minimum.
 
-## sizeEnd()
+## _sizeEnd()
 **Internal.** The release: an interrupted resize puts the size back.
 */
 
@@ -273,35 +273,35 @@ class Window [ width = 360, height = 240,
     // moving and resizing: where the gesture began; the pointer's travel since
     // the press is the event's root-space delta
 
-    dragX: number = 0,
-    dragY: number = 0,
-    sizeW: number = 0,
-    sizeH: number = 0,
+    _dragX: number = 0,
+    _dragY: number = 0,
+    _sizeW: number = 0,
+    _sizeH: number = 0,
 
-    moveStart() {
+    _moveStart() {
         this.bringForward()
         this.enter()
-        dragX = x
-        dragY = y
+        _dragX = x
+        _dragY = y
         },
-    moveBy(dx: number, dy: number) {
+    _moveBy(dx: number, dy: number) {
         const p = this.parent as View
-        x = Math.max(60 - width, Math.min(p.width - 60, dragX + dx))
-        y = Math.max(0, Math.min(p.height - titleBarHeight, dragY + dy))
+        x = Math.max(60 - width, Math.min(p.width - 60, _dragX + dx))
+        y = Math.max(0, Math.min(p.height - titleBarHeight, _dragY + dy))
         },
-    moveEnd(canceled: boolean) { if (canceled) { x = dragX; y = dragY } },
+    _moveEnd(canceled: boolean) { if (canceled) { x = _dragX; y = _dragY } },
 
-    sizeStart() {
+    _sizeStart() {
         this.bringForward()
         this.enter()
-        sizeW = width
-        sizeH = height
+        _sizeW = width
+        _sizeH = height
         },
-    sizeBy(edges: string, dx: number, dy: number) {
-        if (edges.indexOf("r") >= 0) width = Math.max(minWidth, sizeW + dx)
-        if (edges.indexOf("b") >= 0) height = Math.max(minHeight, sizeH + dy)
+    _sizeBy(edges: string, dx: number, dy: number) {
+        if (edges.indexOf("r") >= 0) width = Math.max(minWidth, _sizeW + dx)
+        if (edges.indexOf("b") >= 0) height = Math.max(minHeight, _sizeH + dy)
         },
-    sizeEnd(canceled: boolean) { if (canceled) { width = sizeW; height = sizeH } },
+    _sizeEnd(canceled: boolean) { if (canceled) { width = _sizeW; height = _sizeH } },
 
     // the window's own pane: the body, which clips to the window's rounding
     // (its children's ignoreClip escapes it, as a band past the edge must), then
@@ -315,9 +315,9 @@ class Window [ width = 360, height = 240,
             cornerRadius = { classroot.frame ? [0, 0, classroot.cornerRadius as number, classroot.cornerRadius as number] : classroot.cornerRadius } ],
 
         titleBar: View [ width = 100%, height = { classroot.titleBarHeight }, visible = { classroot.frame },
-            onPointerDown(e: PointerEvent) { classroot.moveStart() },
-            onPointerMove(e: PointerEvent) { classroot.moveBy(e.deltaX, e.deltaY) },
-            onPointerUp(e: PointerUpEvent) { classroot.moveEnd(e.canceled) },
+            onPointerDown(e: PointerEvent) { classroot._moveStart() },
+            onPointerMove(e: PointerEvent) { classroot._moveBy(e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot._moveEnd(e.canceled) },
 
             // leading, or centred where the theme centres a dialog's title
 
@@ -341,21 +341,21 @@ class Window [ width = 360, height = 240,
 
         sizeRight: View [ visible = { classroot.frame && classroot.resizable }, ignoreClip = true, cursor = "ew-resize",
             x = { parent.width - 4 }, y = { classroot.titleBarHeight }, width = 8, height = { parent.height - classroot.titleBarHeight - 12 },
-            onPointerDown(e: PointerEvent) { classroot.sizeStart() },
-            onPointerMove(e: PointerEvent) { classroot.sizeBy("r", e.deltaX, e.deltaY) },
-            onPointerUp(e: PointerUpEvent) { classroot.sizeEnd(e.canceled) }
+            onPointerDown(e: PointerEvent) { classroot._sizeStart() },
+            onPointerMove(e: PointerEvent) { classroot._sizeBy("r", e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot._sizeEnd(e.canceled) }
             ],
         sizeBottom: View [ visible = { classroot.frame && classroot.resizable }, ignoreClip = true, cursor = "ns-resize",
             x = 0, y = { parent.height - 4 }, width = { parent.width - 12 }, height = 8,
-            onPointerDown(e: PointerEvent) { classroot.sizeStart() },
-            onPointerMove(e: PointerEvent) { classroot.sizeBy("b", e.deltaX, e.deltaY) },
-            onPointerUp(e: PointerUpEvent) { classroot.sizeEnd(e.canceled) }
+            onPointerDown(e: PointerEvent) { classroot._sizeStart() },
+            onPointerMove(e: PointerEvent) { classroot._sizeBy("b", e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot._sizeEnd(e.canceled) }
             ],
         sizeGrip: View [ visible = { classroot.frame && classroot.resizable }, ignoreClip = true, cursor = "nwse-resize",
             x = { parent.width - 16 }, y = { parent.height - 16 }, width = 20, height = 20,
-            onPointerDown(e: PointerEvent) { classroot.sizeStart() },
-            onPointerMove(e: PointerEvent) { classroot.sizeBy("rb", e.deltaX, e.deltaY) },
-            onPointerUp(e: PointerUpEvent) { classroot.sizeEnd(e.canceled) },
+            onPointerDown(e: PointerEvent) { classroot._sizeStart() },
+            onPointerMove(e: PointerEvent) { classroot._sizeBy("rb", e.deltaX, e.deltaY) },
+            onPointerUp(e: PointerUpEvent) { classroot._sizeEnd(e.canceled) },
             draw(d: Draw) {
                 d.strokeStyle = provided("theme").textFaint
                 d.lineWidth = 1

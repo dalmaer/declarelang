@@ -28,11 +28,17 @@ options
   --dark              the system's dark appearance
   --console           print what the page writes to its console
   --no-settle         take each read and picture as it is, mid-motion
+  --scrollbars        draw classic scrollbars (by default none are drawn, as on a
+                      Mac or a phone, so a picture shows what a person there sees)
 
 actions, run in the order written (each may repeat)
   --click PATH                 press the view at PATH
+  --click-at PATH X,Y          press at (X, Y) inside it, from its top-left — a part of a
+                               drawn control that is not a view of its own
   --drag PATH DX,DY            press it, move by (DX, DY) pixels, release
   --wheel PATH DY              turn the wheel over it by DY pixels (negative: up)
+  --pinch PATH SCALE           two fingers on it, spread to SCALE (2: twice as far apart,
+                               0.5: drawn together) — the program's onPinch runs
   --type TEXT                  type TEXT into whatever has the focus (--click a field first)
   --key NAME                   press a key: Enter, Escape, Tab, ArrowDown, Backspace, …
   --wait MS                    let MS milliseconds pass
@@ -64,7 +70,7 @@ const file = argv.find((a) => a.endsWith(".declare"));
 if (file === undefined) { console.error(HELP); process.exit(2); }
 
 const fail = (msg) => { console.error(`declare-look: ${msg}`); process.exit(2); };
-let size, touch = false, dark = false, consoleOut = false, settle = true;
+let size, touch = false, dark = false, consoleOut = false, settle = true, scrollbars = false;
 const actions = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
@@ -75,7 +81,13 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === "--dark") dark = true;
   else if (a === "--console") consoleOut = true;
   else if (a === "--no-settle") settle = false;
+  else if (a === "--scrollbars") scrollbars = true;
   else if (a === "--click") actions.push({ kind: "click", path: arg() });
+  else if (a === "--click-at") {
+    const path = arg(), at = arg().split(",").map(Number);
+    if (at.length !== 2 || at.some((n) => !Number.isFinite(n))) fail(`--click-at ${path} ${argv[i]}: write the point as X,Y inside the view, e.g. 40,12`);
+    actions.push({ kind: "clickAt", path, x: at[0], y: at[1] });
+  }
   else if (a === "--drag") {
     const path = arg(), by = arg().split(",").map(Number);
     if (by.length !== 2 || by.some((n) => !Number.isFinite(n))) fail(`--drag ${path} ${argv[i]}: write the movement as DX,DY, e.g. 120,0`);
@@ -84,6 +96,10 @@ for (let i = 0; i < argv.length; i++) {
     const path = arg(), dy = Number(arg());
     if (!Number.isFinite(dy)) fail(`--wheel ${path} ${argv[i]}: write the distance in pixels, e.g. 600`);
     actions.push({ kind: "wheel", path, dy });
+  } else if (a === "--pinch") {
+    const path = arg(), scale = Number(arg());
+    if (!(scale > 0)) fail(`--pinch ${path} ${argv[i]}: write the scale, e.g. 2 to spread or 0.5 to draw together`);
+    actions.push({ kind: "pinch", path, scale });
   } else if (a === "--type") actions.push({ kind: "type", text: arg() });
   else if (a === "--key") actions.push({ kind: "key", name: arg() });
   else if (a === "--wait") {
@@ -118,6 +134,8 @@ const step = (x) => {
   const p = JSON.stringify(x.path);
   switch (x.kind) {
     case "click": return `await drive.click(${p});${rest}`;
+    case "clickAt": return `await drive.clickAt(${p}, ${x.x}, ${x.y});${rest}`;
+    case "pinch": return `await drive.pinch(${p}, ${x.scale});${rest}`;
     case "drag": return `await drive.drag(${p}, ${x.dx}, ${x.dy});${rest}`;
     case "wheel": return `await drive.wheel(${p}, ${x.dy});${rest}`;
     case "type": return `await drive.type(${JSON.stringify(x.text)});${rest}`;
@@ -144,8 +162,9 @@ const step = (x) => {
 const script = `export default async ({ page, drive }) => {
   ${consoleOut ? `page.on("console", (m) => console.log("console." + m.type() + ": " + m.text()));` : ""}
   const ready = () => page.waitForFunction(() => window.__declare && typeof window.__declare.find === "function", { timeout: 15000 });
-  ${w !== null || touch ? `await page.setViewport({ width: ${w ?? 1280}, height: ${h ?? 800}, hasTouch: ${touch}, isMobile: ${touch} });
-  await page.reload(); await ready();` : ""}
+  ${scrollbars ? "" : `await (await page.target().createCDPSession()).send("Emulation.setScrollbarsHidden", { hidden: true });`}
+  ${w !== null || touch ? `await page.setViewport({ width: ${w ?? 1280}, height: ${h ?? 800}, hasTouch: ${touch}, isMobile: ${touch} });` : ""}
+  ${w !== null || touch || !scrollbars ? `await page.reload(); await ready();` : ""}
   ${dark ? `await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: "dark" }]);` : ""}
   ${settle ? "await drive.settleMotion();" : ""}
   ${actions.map(step).join("\n  ")}

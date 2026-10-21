@@ -1,6 +1,6 @@
 // Combobox / ContextMenu / DataGrid (B7 — component-briefs.md §3–§5): the
 // remaining ruled briefs as library classes. Protocol-driven, the table-test
-// discipline: gestures land on the seams (pickIndex / headerClick / commitDrop
+// discipline: gestures land on the seams (pickIndex / headerClick / _commitDrop
 // / resizeInput) — the pointer-to-seam wiring is inspection-pinned.
 
 import assert from "node:assert/strict";
@@ -236,7 +236,7 @@ const GRID = `App [ width = 700, height = 400,
 const ROWS = (n) =>
   Array.from({ length: n }, (_, i) => ({ id: i, title: "Issue " + i, state: i % 2 ? "open" : "done" }));
 
-const gridRows = (g) => g.children.filter((c) => c.isGridRow === true);
+const gridRows = (g) => g.children.filter((c) => c._isGridRow === true);
 const cellTexts = (row) => row.cells.children.filter((c) => c.t).map((c) => c.t.text);
 
 await test("DataGrid: columns are written members — cells generate from the model, offsets run", async () => {
@@ -273,15 +273,15 @@ await test("DataGrid: reorder and resize are value-pattern state — deliveries 
   settle();
   // drag "id" so its center passes "title"'s midpoint → the insertion bar
   // tracks (drop-commit: nothing re-derives mid-drag), then RELEASE commits
-  app.g.dragCol = "id";
-  app.g.dropAt = app.g.dropIndexFor(300);
+  app.g._dragCol = "id";
+  app.g._dropAt = app.g._dropIndexFor(300);
   settle();
-  assert.equal(app.g.dropAt, 2, "the bar shows the would-be slot");
-  assert.ok(app.g.dropBarX(app.g.dropAt) > 0, "…at a real boundary");
-  app.g.commitDrop("id");
+  assert.equal(app.g._dropAt, 2, "the bar shows the would-be slot");
+  assert.ok(app.g._dropBarX(app.g._dropAt) > 0, "…at a real boundary");
+  app.g._commitDrop("id");
   settle();
   assert.deepEqual(app.g.currentOrder(), ["title", "id", "state"], "the release committed the reorder");
-  assert.equal(app.g.dragCol, "", "drag state cleared");
+  assert.equal(app.g._dragCol, "", "drag state cleared");
   assert.deepEqual(cellTexts(gridRows(app.g)[0]), ["Issue 0", "0", "done"], "cells follow the order");
   app.g.resizeInput("title", 150);
   settle();
@@ -301,9 +301,9 @@ await test("DataGrid: reorder and resize are value-pattern state — deliveries 
   ]`);
   app2.d.value = { rows: [{ a: 1, b: 2 }] };
   settle();
-  app2.g.dragCol = "a";
-  app2.g.dropAt = app2.g.dropIndexFor(190);
-  app2.g.commitDrop("a");
+  app2.g._dragCol = "a";
+  app2.g._dropAt = app2.g._dropIndexFor(190);
+  app2.g._commitDrop("a");
   settle();
   assert.deepEqual(app2.got, ["b", "a"], "the reorder delivered up");
   assert.equal(app2.g.order, null, "…and the slot stayed the app's (press-never-writes)");
@@ -334,9 +334,9 @@ await test("DataGrid: cell KINDS — an editor, a checkbox, and a select all wri
       GridRow [ datapath = :rows[] ],
     ],
   ]`);
-  const row = app.g.children.find((c) => c.isGridRow === true);
-  const cells = row.cells.children.filter((c) => c.k !== undefined);
-  assert.deepEqual(cells.map((c) => c.k), ["text", "edit", "select", "check"], "one presentation per kind");
+  const row = app.g.children.find((c) => c._isGridRow === true);
+  const cells = row.cells.children.filter((c) => c._k !== undefined);
+  assert.deepEqual(cells.map((c) => c._k), ["text", "edit", "select", "check"], "one presentation per kind");
   // each cell is its kind's class, and builds only that kind's presentation
   assert.deepEqual(cells.map((c) => c.constructor.name), ["TextCell", "EditCell", "SelectCell", "CheckCell"]);
   assert.deepEqual(cells.map((c) => ["t", "ed", "sel", "ck"].filter((n) => c[n] != null)),
@@ -353,11 +353,11 @@ await test("DataGrid: cell KINDS — an editor, a checkbox, and a select all wri
   // the select opens the SHARED app-layer menu and picking writes the field
   cells[2].sel.onClick();
   settle();
-  assert.equal(app.g.selMenu.parent, app, "one shared options menu, at the app layer");
-  assert.equal(app.g.selMenu.shown, true);
-  assert.deepEqual(app.g.selMenu.items.map((i) => i.id), ["open", "triage", "done"]);
-  assert.equal(app.g.selMenu.items[0].checked, true, "the current value wears the check");
-  app.g.selMenu.pick("done");
+  assert.equal(app.g._selMenu.parent, app, "one shared options menu, at the app layer");
+  assert.equal(app.g._selMenu.shown, true);
+  assert.deepEqual(app.g._selMenu.items.map((i) => i.id), ["open", "triage", "done"]);
+  assert.equal(app.g._selMenu.items[0].checked, true, "the current value wears the check");
+  app.g._selMenu.pick("done");
   // deferred delivery: afterDelay(0) off the browser is two zero timers (the
   // frame, then the delay), so wait two of our own, queued behind each — a
   // fixed 5 ms lost the race when a loaded run stretched the gap between them
@@ -365,7 +365,7 @@ await test("DataGrid: cell KINDS — an editor, a checkbox, and a select all wri
   await new Promise((r) => setTimeout(r, 0));
   settle();
   assert.equal(app.d.value.rows[0].state, "done", "picking writes the record");
-  assert.equal(app.g.selMenu.shown, false);
+  assert.equal(app.g._selMenu.shown, false);
 });
 
 await test("DataGrid: windowing composes — the header offsets the window (the leading anchor)", async () => {
@@ -399,8 +399,8 @@ await test("DataGrid: a FOCUSED cell's row is never recycled — focus is touch 
   ]`);
   app.d.value = { rows: Array.from({ length: 1000 }, (_, i) => ({ id: i, state: i % 2 ? "open" : "done" })) };
   settle();
-  const row = app.g.children.find((c) => c.isGridRow === true && c.tableIndex() === 3);
-  const sel = row.cells.children.find((c) => c.k === "select").sel;
+  const row = app.g.children.find((c) => c._isGridRow === true && c.tableIndex() === 3);
+  const sel = row.cells.children.find((c) => c._k === "select").sel;
   Focus.setRoot(app);
   Focus.focus(sel);
   settle();

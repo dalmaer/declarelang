@@ -142,10 +142,9 @@ class Drag extends Node [
         target = app.dayAt(app.pointerX, app.pointerY)?.key ?? ""
         },
 
-    // A drag never clicks (a gesture that wandered past slop resolves to no
-    // click), so a drop just commits — but never an interrupted one: on touch
-    // the browser may take the gesture for a scroll, and that release must not
-    // move the event to wherever the finger happened to be.
+    // A drop moves the event, but never a canceled one: on touch the browser
+    // may take the gesture for a scroll, and that release must not move the
+    // event to wherever the finger happened to be.
 
     drop(px: number, py: number, canceled: boolean) {
         if (id < 0) return
@@ -390,16 +389,13 @@ class DetailSection [ clip = true, cornerRadius = 10, fill = { provided("theme")
             textColor = { classroot.isOpen ? provided("theme").text : provided("theme").textMuted }, text = { classroot.label } ],
         Spacer [ ],
 
-        // open/closed as minus/plus, drawn, in the same muted ink as the label
-
         MinusIcon [ y = center, iconSize = 15, visible = { classroot.isOpen }, ink = { provided("theme").textMuted } ],
         PlusIcon [ y = center, iconSize = 15, visible = { !classroot.isOpen }, ink = { provided("theme").textMuted } ],
         press() { app.openSection = classroot.idx }
         ],
 
-    // A TextInput derives its own chrome from the house role names (`surface`,
-    // `line`); those derives yield to an author assignment, so the field is
-    // styled here in the app's own vocabulary, focus edge included.
+    // A TextInput styles itself from the theme's `surface` and `line`; setting
+    // fill and stroke here gives it the calendar's field colors, focus edge included.
 
     content: TextInput [ x = 13, y = 50, width = { parent.width - 26 }, height = { parent.height - 60 }, multiline = true, wrap = true,
         fontSize = 16, textColor = { provided("theme").bodyText }, placeholder = { "Add " + classroot.field },
@@ -410,11 +406,10 @@ class DetailSection [ clip = true, cornerRadius = 10, fill = { provided("theme")
     ]
 
 
-// This app is a fixed window — every view and interaction lives in-frame, and
-// the browser must never scroll the app itself. The App's clip **contains**:
-// the detail panel parked beyond the right edge (x > width, sliding in via
-// panelInset) paints nowhere, adds no document scroll extent, and cannot be
-// focus-scrolled into view.
+// This app is a fixed window: every view lives in-frame, and the browser never
+// scrolls it. The App clips what lies outside it, so the detail panel, parked
+// beyond the right edge until `panelInset` slides it in, paints nowhere and
+// adds nothing to scroll to.
 
 // Below the floor the calendar degrades instead of adapting (the grid needs its
 // rows), so it declares one and the stage pans. The floor is phone-honest:
@@ -434,9 +429,6 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
     theme = { { ...(app.isDark ? SanFranciscoDark : SanFrancisco), ...(app.isDark ? CalendarDark : CalendarLight) } },
     themeMode: "auto" | "light" | "dark" = "auto",
 
-    // Auto's environment: what a host provides first (a desktop or page that
-    // embeds the calendar decides dark for it), else the system preference.
-
     isDark: boolean = { app.themeMode == "auto"
         ? hostProvided("dark", app.dark)
         : app.themeMode == "dark" },
@@ -448,7 +440,7 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
     gap: number = 8,
 
     /* Responsive chrome, all from the window width. As it narrows the
-       Light/Auto/Dark switch drops out, then the tabs shrink to single letters
+       appearance switch drops out, then the tabs shrink to single letters
        (D/W/M/Y). Thresholds are sized to the widest view so the bar never flickers
        when you switch views at a fixed width. */
 
@@ -481,17 +473,14 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
 
     mode: "day" | "week" | "month" | "year" = "month",
 
-    // Where the user has paged to — the only date cells, and all navigation
-    // writes. `0` / `""` mean "today"; a bare-literal default owns a cell, so
-    // writing one wakes every reader.
+    // Where the user has paged to: the only date state, and all navigation
+    // writes here. `0` / `""` mean "today".
 
     navYear: number = 0,
     navMonth: number = 0,      // month is 1-based
     navKey: string = "",
 
-    // The visible date, derived. A sentinel rather than a literal date keeps the
-    // declaration true at construction, where the focus rectangle's springs
-    // take their snap.
+    // The visible date, derived: the paged-to date, or today's when unset.
 
     // Today is the clock's, so it turns over at midnight.
 
@@ -505,19 +494,18 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
     selectedId: number = -1,
     openSection: number = 0,
 
-    /* The address is environment-aware: standalone, the fixture sits beside the
-       app; hosted (the desktop passes env.base — its own transport's path to
-       this app's home), the same relative address resolves through that base.
-       `auto` loads it either way: the url is the reactive thing, and when a
-       late-landing base changes it the source fetches the right address. */
+    /* The data file sits beside the app. A host that embeds the calendar
+       provides `base`, the path to the app's home, and the same relative
+       address resolves through it. `auto` fetches whenever the url changes,
+       so a base that arrives late still loads the right file. */
 
     events: Events [ auto = true, url = { hostProvided("base", "") + "data/events.json" } ],
 
     /* The model is derived, not built: `cal.contents` recomputes when the visible
        month or the events change, and keyed replication (`:key`, `:id`) makes each
        recompute cost only the days that changed. The year grid is its own
-       derivation, deferred until first visited and memoized on the year. The
-       weekday names and hour labels never change, so they are computed once. */
+       derivation, deferred until the year view is first visited. The weekday
+       names and hour labels never change, so they are computed once. */
 
     cal: Dataset [ schema = [ grid[]: Day ], contents = { app.buildModel() } ],
     yearCal: Dataset [ schema = [ months[]: Month ], contents = { app.yearSeen ? app.buildMonths() : { months: [] } } ],
@@ -542,7 +530,7 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
 
     /* The focus rectangle: (c0,r0) is where the frame starts, (nc,nr) how many
        columns/rows it spans. Month is the whole grid; week springs onto the anchor
-       row, day onto the anchor cell. Only a view switch moves the four springs. */
+       row, day onto the anchor cell. The four springs carry the frame between them. */
 
     anchorCol: number = { app.gridIndexOf(app.anchorKey) % 7 },
     anchorRow: number = { Math.floor(app.gridIndexOf(app.anchorKey) / 7) },
@@ -600,9 +588,8 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
                          - Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())) / 86400000)
         },
 
-    // -> number, not Color: these return a concrete 0xRRGGBB (theme tokens are
-    // never null at read time), and number is what mix() blends — a nullable
-    // Color return would refuse every mix(catFill(…), …) call site.
+    // these return number, not Color, because mix() blends plain 0xRRGGBB
+    // numbers, and theme tokens are always set
 
     catFill(c: string) -> number { const t = provided("theme"); return c == "holiday" ? t.holidayBg : c == "astro" ? t.astroBg : c == "milestone" ? t.milestoneBg : t.defaultBg },
     catText(c: string) -> number { const t = provided("theme"); return c == "holiday" ? t.holidayText : c == "astro" ? t.astroText : c == "milestone" ? t.milestoneText : t.defaultText },
@@ -615,8 +602,8 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
     /* ## The model
        `buildModel` builds the visible month's grid, each day holding its events —
        the data's own records, so an event row reads and writes its record.
-       `buildMonths` builds the year's twelve minis; its only tracked input is the
-       year, so it rebuilds once a year and never on a view switch. */
+       `buildMonths` builds the year's twelve minis from the year, today and the
+       events; a view switch touches none of these, so it never rebuilds on one. */
 
     buildModel() -> object {
         const first = new Date(this.year, this.month - 1, 1)
@@ -696,9 +683,8 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
         },
 
     /* ## Drag to reschedule
-       Pointer capture, plus the runtime's click rule, give click-vs-drag for
-       free: a gesture that moved is a drag and clicks nothing, so the chip's
-       `onClick` fires only on a real tap. The drag itself is `drag` (its class,
+       A gesture that moved is a drag and activates nothing, so the chip's
+       `press` fires only on a real tap. The drag itself is `drag` (its class,
        above); the App answers the two questions it asks of the surface — which
        day is under a point, and what time a height means in a time view. A drop
        is one move of the event, so it wakes the derived model exactly like a
@@ -878,9 +864,8 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
                     visible = { !app.brandCompact } ]
                 ],
 
-            // Light / System / Dark — the house control, with the house marks:
-            // drawn icons that share one disc and one stroke, rather than three
-            // typed glyphs from unrelated corners of whatever font the platform has.
+            // the library's light/dark switch: it shows the current appearance, and
+            // choosing one pins themeMode, leaving Auto
 
             themeSwitch: AppearanceSwitch [
                 visible = { app.showTheme },
@@ -897,9 +882,8 @@ App [ minWidth = 360, minHeight = 420, appName = "Declare Calendar",
                 onClick() { app.today() }
                 ],
 
-            // Day / Week / Month / Year — the library's `Segmented`, which springs
-            // its pill along a normalised lane so a resize snaps instead of
-            // skating, and brings tab stops, arrow roving, and the shared look.
+            // Day / Week / Month / Year — the library's `Segmented`, which brings
+            // tab stops, arrow-key roving, and the shared look.
             //
             // The labels shorten to single letters when the bar narrows, which the
             // data carries: `choices` is a constraint like any other.

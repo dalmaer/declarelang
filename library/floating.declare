@@ -44,9 +44,9 @@ opens and closes as the state does (SwiftUI's `isPresented`).
 ## present
 Whether it is built and drawn: open, or closing until its motion lands.
 
-## live
+## _live
 **Internal.** Whether the open work has run (its layer, its keyboard hold, focus) — what
-`sync()` compares with `shown`, so the work runs once per change, whoever made it.
+`_sync()` compares with `shown`, so the work runs once per change, whoever made it.
 
 ## openT
 The open blend, 0 closed and 1 open, sprung — what a subclass draws its motion from.
@@ -71,26 +71,26 @@ Whether, open in a host's layer (a program running in a window, say), it is show
 program's scale and turn there — as a menu or a popover is. `false` for what attaches to
 the window itself, edge to edge (a `Sheet`). `true` by default.
 
-## hostedLayer
+## _hostedLayer
 **Internal.** Whether the layer it opened in is a host's — its program runs inside another.
 
 ## scale
-Its program's scale where it opens in a host's layer (`baseScale`) — a subclass multiplies
+Its program's scale where it opens in a host's layer (`_baseScale`) — a subclass multiplies
 its own motion into it.
 
 ## rotation
-Its program's turn where it opens in a host's layer (`baseRotation`), in degrees.
+Its program's turn where it opens in a host's layer (`_baseRotation`), in degrees.
 
-## baseScale
+## _baseScale
 **Internal.** Its program's scale relative to the layer, when it opens in a host's; else 1.
 A subclass's own motion multiplies it.
 
-## baseRotation
+## _baseRotation
 **Internal.** Its program's turn relative to the layer, in degrees, when it opens in a host's;
 else 0.
 
-## takeProgramTransform()
-**Internal.** Sets `baseScale` and `baseRotation` as it opens.
+## _takeProgramTransform()
+**Internal.** Sets `_baseScale` and `_baseRotation` as it opens.
 
 ## input()
 **Where opening and closing go** — the value pattern, as a control's `value` goes through
@@ -99,15 +99,15 @@ constrain `shown` and override this to write that state, so its own closings (Es
 past it) reach it: `shown = { app.editing }, input(open: boolean) { app.editing = open }`.
 Constraining `shown` without it is a compile error.
 
-## sync()
+## _sync()
 **Internal.** Runs the open or close work when `shown` has changed — after `show()`,
 `close()`, or a change of the state `shown` follows.
 
-## opening()
+## _opening()
 **Internal.** The open work: picks its layer, builds it, holds the keyboard, and takes
 focus if it takes focus.
 
-## closing()
+## _closing()
 **Internal.** The close work: lets the keyboard go, gives focus back, calls `closed()`.
 
 ## show()
@@ -117,7 +117,7 @@ focus if it takes focus.
 ## showFor()
 Opens it for `v` — `opener` becomes `v`.
 
-## holdFocusItself()
+## _holdFocusItself()
 **Internal.** Focuses the overlay itself when it takes focus and holds nothing focusable,
 so Tab cannot reach what is behind it.
 
@@ -149,7 +149,7 @@ window. An overlay may leave its window, never the screen.
 ## toScreen()
 A point in `v`'s own frame, in the screen's frame.
 
-## through()
+## _through()
 **Internal.** A point `(px, py)` through a `transformTo` similarity.
 
 ## keepOnApp()
@@ -157,18 +157,18 @@ Where a box at `(x, y)`, `w` by `h`, in the layer's frame, must be to stay on th
 with 4 to spare: `{ x, y }`, moved as little as it can be. An overlay inside a window may
 hang past the window's edge, but not off the screen.
 
-## layerFor()
+## _layerFor()
 **Internal.** The layer it opens in: the nearest `Window`'s; else, in a program hosted in a
 window whose island provides `overlays`, that window's; else the App's — a toast always the
 App's.
 
-## strata()
+## _strata()
 **Internal.** The App's overlay layers, made the first time an overlay opens.
 
 ## onOutsidePress
 An outside press (or, with `scrollPolicy = "dismiss"`, an outside scroll) asked it to close.
 
-## savedFocus
+## _savedFocus
 **Internal.** The view that had focus when it opened, given focus back when it closes.
 
 ## visible
@@ -200,16 +200,16 @@ class Floating [
     pressPolicy: "dismiss" | "dismissAndDeliver" | "block" | "ignore" = "dismiss",
     scrollPolicy: "block" | "allow" | "dismiss" = "block",
     takesFocus: boolean = false,
-    savedFocus: View? = null,
-    hostedLayer: boolean = false,
+    _savedFocus: View? = null,
+    _hostedLayer: boolean = false,
     sharesProgram: boolean = true,
-    baseScale: number = 1,
-    baseRotation: number = 0,
+    _baseScale: number = 1,
+    _baseRotation: number = 0,
 
     visible = { present },
     paintsIn = { host },
-    scale = { baseScale },
-    rotation = { baseRotation },
+    scale = { _baseScale },
+    rotation = { _baseRotation },
     outsidePress = { shown ? pressPolicy : "none" },
     scrollBelow = { shown ? scrollPolicy : "none" },
 
@@ -221,9 +221,9 @@ class Floating [
 
     // the App's layers, made once and kept above everything the App holds
 
-    strata() -> OverlayStrata {
+    _strata() -> OverlayStrata {
         let s: OverlayStrata | null = null
-        for (const c of app.children) { if ((c as any).isOverlayStrata === true) s = c as any }
+        for (const c of app.children) { if ((c as any)._isOverlayStrata === true) s = c as any }
         if (s == null) return app.createView("OverlayStrata", ({ })) as any
         s.raise()
         return s
@@ -232,25 +232,25 @@ class Floating [
     // the nearest Window's layer, else the App's; a toast is the program's,
     // always the App's
 
-    layerFor(s: OverlayStrata) -> View {
+    _layerFor(s: OverlayStrata) -> View {
         if (kind == "notice") return s.notice
         const own = provided("overlays", null) as View | null
-        hostedLayer = false
+        _hostedLayer = false
         if (own != null) return own
         const hosts = hostProvided("overlays", null) as View | null   // the nearest layer up the chain, in a host
         if (hosts == null) return s.overlays
-        hostedLayer = true
+        _hostedLayer = true
         return hosts
         },
 
     // in a host's layer it is shown as its program is: the program's scale and
     // turn relative to the layer (the layer brings the window's own)
 
-    takeProgramTransform() {
-        if (!hostedLayer || !sharesProgram || host == null) { baseScale = 1; baseRotation = 0; return }
+    _takeProgramTransform() {
+        if (!_hostedLayer || !sharesProgram || host == null) { _baseScale = 1; _baseRotation = 0; return }
         const t = app.transformTo(host)
-        baseScale = t.scale
-        baseRotation = t.rotation * 180 / Math.PI
+        _baseScale = t.scale
+        _baseRotation = t.rotation * 180 / Math.PI
         },
 
     // `shown` is state: the verbs below deliver through `input` (the value
@@ -261,30 +261,30 @@ class Floating [
 
     input(open: boolean) { shown = open },
 
-    live: boolean = false,
+    _live: boolean = false,
     trackChanges = ["shown"],
-    onChange() { this.sync() },
-    onInit() { if (shown) afterSettle(() => this.sync()) },
+    onChange() { this._sync() },
+    onInit() { if (shown) afterSettle(() => this._sync()) },
 
-    sync() {
-        if (shown && !live) { live = true; this.opening() }
-        else if (!shown && live) { live = false; this.closing() }
+    _sync() {
+        if (shown && !_live) { _live = true; this._opening() }
+        else if (!shown && _live) { _live = false; this._closing() }
         },
 
     show() {
         if (!shown) this.input(true)
-        this.sync()
+        this._sync()
         },
 
-    opening() {
-        const s = this.strata()
-        host = this.layerFor(s)
-        this.takeProgramTransform()
+    _opening() {
+        const s = this._strata()
+        host = this._layerFor(s)
+        this._takeProgramTransform()
         present = true
         s.opened(this)
         if (pressPolicy != "ignore") Keys.navClaim(this, true)
         if (takesFocus) {
-            savedFocus = Focus.getFocus()
+            _savedFocus = Focus.getFocus()
             afterSettle(() => this.focusFirst())
             }
         },
@@ -297,23 +297,23 @@ class Floating [
     // nothing inside to focus (a full-screen picture): the overlay holds focus
     // itself, so Tab has nowhere to go behind it and Esc still closes it
 
-    focusFirst() { if (!Focus.focusIn(this)) this.holdFocusItself() },
+    focusFirst() { if (!Focus.focusIn(this)) this._holdFocusItself() },
 
-    holdFocusItself() {
+    _holdFocusItself() {
         focusable = true
         Focus.focus(this)
         },
 
     close() {
         if (shown) this.input(false)
-        this.sync()
+        this._sync()
         },
 
-    closing() {
-        this.strata().closedIt(this)
+    _closing() {
+        this._strata().closedIt(this)
         Keys.navClaim(this, false)
-        const back = savedFocus
-        savedFocus = null
+        const back = _savedFocus
+        _savedFocus = null
         // back to where it was — unless the focus has gone on somewhere since
         if (back != null) afterDelay(0, () => {
             const f = Focus.getFocus() as View | null
@@ -324,7 +324,7 @@ class Floating [
 
     closed() { },
 
-    isTop() -> boolean { return this.strata().top() == this },
+    isTop() -> boolean { return this._strata().top() == this },
 
     anchorBox(v: View?) -> object {
         if (v == null) return ({ x: 0, y: 0, w: 0, h: 0 })
@@ -338,7 +338,7 @@ class Floating [
     // layer (transformTo crosses the island)
 
     toLayer(v: View, px: number, py: number) -> object {
-        return this.through(v.transformTo(host != null ? host : this.screen()), px, py)
+        return this._through(v.transformTo(host != null ? host : this.screen()), px, py)
         },
 
     // the screen: the App the layer belongs to — the host's, for a program
@@ -352,9 +352,9 @@ class Floating [
         return n
         },
 
-    toScreen(v: View, px: number, py: number) -> object { return this.through(v.transformTo(this.screen()), px, py) },
+    toScreen(v: View, px: number, py: number) -> object { return this._through(v.transformTo(this.screen()), px, py) },
 
-    through(t: object, px: number, py: number) -> object {
+    _through(t: object, px: number, py: number) -> object {
         const a = t.rotation
         return ({ x: t.x + t.scale * (px * Math.cos(a) - py * Math.sin(a)), y: t.y + t.scale * (px * Math.sin(a) + py * Math.cos(a)) })
         },
@@ -366,7 +366,7 @@ class Floating [
         const scr = this.screen()
         if (host == null) return ({ x: Math.max(4, Math.min(scr.width - w - 4, x)), y: Math.max(4, Math.min(scr.height - h - 4, y)) })
         const out = host.transformTo(scr)
-        const cs = [this.through(out, x, y), this.through(out, x + w, y), this.through(out, x, y + h), this.through(out, x + w, y + h)]
+        const cs = [this._through(out, x, y), this._through(out, x + w, y), this._through(out, x, y + h), this._through(out, x + w, y + h)]
         const minX = Math.min(...cs.map((c) => c.x))
         const maxX = Math.max(...cs.map((c) => c.x))
         const minY = Math.min(...cs.map((c) => c.y))
@@ -377,8 +377,8 @@ class Floating [
         const sy = minY + dy < 4 ? 4 - minY : dy
         if (sx == 0 && sy == 0) return ({ x: x, y: y })
         const back = scr.transformTo(host)
-        const p0 = this.through(back, cs[0].x, cs[0].y)
-        const p1 = this.through(back, cs[0].x + sx, cs[0].y + sy)
+        const p0 = this._through(back, cs[0].x, cs[0].y)
+        const p1 = this._through(back, cs[0].x + sx, cs[0].y + sy)
         return ({ x: x + p1.x - p0.x, y: y + p1.y - p0.y })
         },
 
@@ -390,7 +390,7 @@ class Floating [
         onKeyDown(e: KeyEvent) {
             // one Esc closes one overlay: the one on top when the key arrived
             if (e.key != "Escape" || !classroot.shown) return
-            const s = classroot.strata()
+            const s = classroot._strata()
             if (s.handled === e || s.top() != classroot) return
             s.handled = e
             classroot.escape()

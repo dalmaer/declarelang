@@ -181,6 +181,19 @@ in the test, so library prose was unguarded and could have eroded straight back.
 a debt and retiring its exemption are two separate acts**; the second is the one that
 holds.
 
+**NAMED, 2026-10-21.** An internal member is also *named* as one: `_name`. The mark alone
+kept machinery out of the reader's way but not out of a program's namespace — a named
+child is a member of its parent, so a program's `form: …` inside a `Sheet` met the
+library's `form` (two eval runs hit it, one of them by copying the guide's own example).
+The `_` prefix gives the library's machinery a namespace no program reaches for, and it
+changes nothing a program uses. The compiler still carries nothing: it is a convention,
+and the extract checks it both ways (*LIBRARY NAMING*: a `**Internal.**` member without
+the `_`, or a `_` member without the mark). `declare-help` leaves `_` members off a class's
+table and still answers one asked for by name. A program's own classes are advised the
+same convention (`17-your-own-views.md`); nothing checks them. Collisions with a *public*
+inherited name are a separate rule, enforced by the checker for every way a child is
+written, `exists` included.
+
 **DONE, 2026-08-05.** The library prose pass landed: all **356** library reference
 entries carry prose — 305 API entries plus 51 marked `**Internal.**`. The named
 concentrations (`FocusRing`, `Menu`, `DataGrid`, `Tooltip`, `Dialog`, `Combobox`,

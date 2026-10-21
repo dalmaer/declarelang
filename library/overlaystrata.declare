@@ -16,7 +16,7 @@ The window's height when the layers are the App's (or the App's, where it is sho
 an App that is a whole scrolling page still opens its sheets and dialogs on screen; a
 window's own, inside one; the App's, where there is no window (headless).
 
-## isOverlayStrata
+## _isOverlayStrata
 **Internal.** The marker a `Floating` finds the layers by.
 
 ## stack
@@ -53,7 +53,7 @@ class OverlayStrata [ ignoreLayout = true,
     // the layers are transparent to the pointer: what paints in them decides
 
     pointerEvents = "none",
-    isOverlayStrata: boolean = true,
+    _isOverlayStrata: boolean = true,
     stack: array = [],
     handled: object = null,
 

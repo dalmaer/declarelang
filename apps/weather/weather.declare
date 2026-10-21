@@ -516,9 +516,6 @@ anyway, so the row is right before anything has decoded.
 class RowSky [ clip = true,
     cond: string = "sunny",
 
-    // the base tone under everything, so a row has its sky's colour before a
-    // photograph has decoded
-
     top: number = { this.cond == "night" ? 0x0A1230 : this.cond == "sunny" ? 0x2E7FD0
         : this.cond == "cumulus" ? 0x4A648A : 0x6E7F8E },
     bot: number = { this.cond == "night" ? 0x2A3A66 : this.cond == "sunny" ? 0x9CC6E8
@@ -562,11 +559,9 @@ class CityRow extends Control [ width = 100%, height = { ROW_H }, cursor = "poin
     this one fact. They are congruent at `openT = 0` — same box, same seats,
     same sizes — so there is nothing to see in the swap.
 
-    One predicate rather than two thresholds is the whole point. Two numbers
-    that look close enough are a race whose width is the frame time: a gap
-    shows the floor, an overlap draws both, and either way it appears only
-    when a frame happens to land inside it. Complements by construction cannot
-    have a gap.
+    One predicate, not two thresholds: if the row hid and the view appeared
+    on separate numbers, a frame could land between them and show the
+    floor, or show both at once.
     */
 
     handing: boolean = { app.phone && app.cityUp && app.openId == this.mine },
@@ -691,9 +686,9 @@ class CityView [
     /*
     ## The sky
 
-    The only drawn sky in the program, because this is the only place its
-    detail is big enough to read. It grows with the box and then holds still:
-    at `open = 1` its own `y` cancels the page scroll exactly.
+    The full-size sky: the same picture a row draws, now big enough for its
+    detail to read. It grows with the box and then holds still: at
+    `open = 1` its own `y` cancels the page scroll exactly.
 
     Open, it bleeds past both edges of the screen — EDGE_SLACK above the
     view's own top, the same distance past the bottom. A city's sky is the
@@ -960,8 +955,8 @@ App [ textColor = whitesmoke, appName = "Weather",
     openSpring: Spring [ attribute = openT, to = { app.openTo },
         stiffness = { slowK(320) }, damping = { slowC(31) }, epsilon = { slowEps(0.002) },
 
-        // arrival is where the trade happens — `onStop` is the animation
-        // family's own chaining hook, so nothing here guesses with a timer
+        // arrival is where the trade happens: `onStop` runs when the spring
+        // comes to rest
 
         onStop() { if (app.openTo == 1) app.land() }
         ],
@@ -969,25 +964,19 @@ App [ textColor = whitesmoke, appName = "Weather",
     // the city is up while it is opening, open, or still shrinking home —
     // one reactive fact, no teardown callback to keep in step
 
-    // The threshold is zero, not "nearly zero". View and row are congruent
-    // only at exactly 0: a thousandth of a 2289px range is still pixels, and
-    // handing back there pops. A spring drives its attribute to exactly the target
-    // on arrival, so `> 0` is a real test rather than an optimistic one.
+    // The threshold is zero, not "nearly zero": view and row are congruent
+    // only at exactly 0, and a spring lands exactly on its target, so `> 0`
+    // is a real test.
 
     cityUp: boolean = { app.openTo == 1 || app.openT > 0 },
 
-    // The whole list leaves in one flip. Hiding the container takes every row
-    // out of layout in a single operation, where asking each row to give up
-    // its own height is a claim apiece and costs in proportion to the list.
+    // Once the city lands the whole list leaves in one flip: hiding the
+    // container takes every row out at once, rather than each row on its own.
 
     listGone: boolean = false,
 
-    // Where the tapped row sat, in the list's own space — the seat the
-    // CityView grows out of. It is captured at the tap, from the row itself,
-    // so no arithmetic here has to agree with the arrangement about where a
-    // row is. Deriving it from a rank and a stride would: the stride is not a
-    // constant while the transition runs, and arithmetic that races a layout
-    // has to read that layout's live spacing, never the resting value.
+    // the opened city's place in the filtered list: rows above it ride the
+    // lift, rows below it the lift plus the growth (see CityRow)
 
     openRank: number = { app.shown.value == null ? 0
         : Math.max(0, app.shown.value.rows.findIndex((r) => r.id == app.openId)) },
@@ -1035,9 +1024,6 @@ App [ textColor = whitesmoke, appName = "Weather",
     // where a reader expects it to.
 
     land() {
-        // one settle: the list gives up its boxes, the anchor gives up its
-        // offset, and the page gives up the same offset — so the arithmetic
-        // moves by exactly the amount the pixels do not
         listGone = true
         openSeat = 0
         openAnchor = 0
@@ -1132,8 +1118,6 @@ App [ textColor = whitesmoke, appName = "Weather",
     pageTo(i: number) {
         cityIndex = i
         openId = app.cities[i].id
-        // the arriving city reads from its own top — the page is the document
-        // now, and the city's top is the document's top once open has landed
         app.scrollTo(0)
         },
 
@@ -1174,11 +1158,9 @@ App [ textColor = whitesmoke, appName = "Weather",
 
     // ── the shared clock ──────────────────────────────────────────────────
     // Every row's local time is the same instant read through its own
-    // offset: one fact, twenty-five readings of it. A Time at `minute` is the
-    // instrument: the readouts show minutes, so the minute turning is the only
-    // moment anything changes, and the alarm is aligned to it — right at the
-    // flip, and no frame loop held open to watch a wall clock (the runtime's
-    // idle-zero invariant is a property worth keeping).
+    // offset: one fact, twenty-five readings of it. The readouts show
+    // minutes, so a Time that ticks on the minute changes them exactly when
+    // they turn, and nothing runs in between.
 
     clock: Time [ tick = minute ],
 
@@ -1229,13 +1211,6 @@ App [ textColor = whitesmoke, appName = "Weather",
     edges = cover,
 
     // ── the backdrop ──────────────────────────────────────────────────────
-    // What the floor of the app shows: on the phone the list always sits on
-    // the sunny sky (each open city's view carries its own); the desktop
-    // shows the selected city's. `skyTone` is that sky's top-edge color —
-    // the App's `fill` wears it so the browser paints its own bands (status
-    // area, collapsed toolbar) to match, and the haze below fades the same
-    // tone into the clouds so flat band and textured sky never meet at a
-    // hard edge.
 
     /*
     ## What the floor shows, and when it changes
@@ -1287,12 +1262,11 @@ App [ textColor = whitesmoke, appName = "Weather",
         fill = { gradient("180deg", colorWithAlpha(app.skyTone, 255), colorWithAlpha(app.skyTone, 0)) } ],
 
     // ── the phone dialect ─────────────────────────────────────────────────
-    // The list is the app, and a city is one of its rows, expanded in place.
-    // There is no second view to hand off to and no overlay: the row you
-    // tapped grows until it is the page's head, every other row collapses to
-    // nothing, and the cards — one object, built once — take their height and
-    // land directly beneath it. The document scrolls throughout, which is why
-    // the browser's own chrome behaves.
+    // The list is the app, and a city opens in place over its row. The tapped
+    // row hands its box to the one CityView, which grows to fill the page,
+    // while the rows above ride up with its top edge and the rows below are
+    // pushed past the foot of the screen. There is no overlay: the document
+    // scrolls throughout, which is why the browser's own chrome behaves.
 
     // Esc puts an open city back into its row
 
@@ -1301,8 +1275,8 @@ App [ textColor = whitesmoke, appName = "Weather",
 
     phoneUI: View [ width = 100%, height = 100%, visible = { app.phone },
 
-        // the list's chrome recedes as a city takes over; the rows themselves
-        // do not, because one of them is becoming the city
+        // the search field fades as a city opens; the rows don't fade, they
+        // move out of its way (see CityRow)
 
         list: View [ width = 100%, height = 100%,
             find: TextInput [ x = center, y = { 14 + app.safeTop }, width = { parent.width - 32 },
@@ -1445,9 +1419,6 @@ App [ textColor = whitesmoke, appName = "Weather",
             // are all written against it, and the scroller's extent counts it
 
             padding = 16,
-
-            // The field is the pill: no wrapper view to sit over the native
-            // input and take its clicks
 
             find: TextInput [ width = 100%, height = 36,
                 cornerRadius = 18, fill = #FFFFFF1A, padding = 14,

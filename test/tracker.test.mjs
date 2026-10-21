@@ -30,7 +30,7 @@ async function boot(n = 10000) {
   return app;
 }
 
-const listRows = (app) => app.body.main.list.children.filter((c) => c.isTableRow === true);
+const listRows = (app) => app.body.main.list.children.filter((c) => c._isTableRow === true);
 // the rail's status counts, as { status: n }
 const counts = (app) => Object.fromEntries(app.issues.byStatus.value.rows.map((r) => [r.status, r.n]));
 
@@ -114,7 +114,7 @@ await test("criterion 4: a filter narrows 10k to a handful under a deep scroll â
   settle(); settle();
   const n = app.shownTotal;
   assert.ok(n > 0 && n < 1500, `the filter narrowed (${n})`);
-  const maxScroll = Math.max(0, app.body.main.list.children.filter((c) => c.isTableRow).reduce((m, r) => Math.max(m, r.y + r.height), 0) - app.body.main.list.height);
+  const maxScroll = Math.max(0, app.body.main.list.children.filter((c) => c._isTableRow).reduce((m, r) => Math.max(m, r.y + r.height), 0) - app.body.main.list.height);
   assert.ok(app.body.main.list.scrollY <= Math.max(0, 100000), "no NaN-land");
   assert.ok(Number.isFinite(app.body.main.list.scrollY) && app.body.main.list.scrollY >= 0, "scroll is a real place");
   const vis = listRows(app).filter((r) => r.visible);

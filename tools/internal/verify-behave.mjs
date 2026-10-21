@@ -242,9 +242,20 @@ bootHost(cfg);
           if (at === null) return { ok: false, path: null };
           const t = d.find(p), h = d.find(at.path);
           const inside = (a, b) => { for (let n = a; n != null; n = n.parent) if (n === b) return true; return false; };
-          return { ok: t !== null && h !== null && (inside(h, t) || inside(t, h)), path: at.path };
+          // a scroller that holds the target, hit where the target should be,
+          // is the pane it is clipped by there — not a press that reaches it
+          const clipped = t !== null && h !== null && h !== t && inside(t, h) && h.scrolls !== undefined && h.scrolls !== "none";
+          return { ok: t !== null && h !== null && !clipped && (inside(h, t) || inside(t, h)), path: at.path, clipped };
         }, path, c.x, c.y);
         let hit = await reaches();
+        // below its pane's fold, though on the screen: scrolled into its pane, as a person would
+        if (hit.clipped) {
+          await page.evaluate((p) => { window.__declare.find(p)?.scrollIntoView?.("nearest"); }, path);
+          await page.evaluate(() => window.__declare.clock?.settleMotion?.());
+          await new Promise((r) => setTimeout(r, 120));
+          c = await center(path);
+          hit = await reaches();
+        }
         if (!hit.ok) {
           // past the covering view: its bottom edge, when it covers from above
           await page.evaluate((p, cover, y) => {
@@ -267,6 +278,33 @@ bootHost(cfg);
           const c = await reach(path);
           step(`click ${path}`);
           await page.mouse.click(c.x, c.y);
+        },
+        /** Two fingers on the view, spread (scale > 1) or drawn together (< 1)
+         *  about its centre — real touch points, so the program's onPinch* run
+         *  as they would under a hand. */
+        async pinch(path, scale, steps = 12) {
+          const c = await reach(path);
+          step(`pinch ${path} by ${scale}`);
+          const s = await page.target().createCDPSession();
+          await s.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
+          const d0 = 40, d1 = d0 * scale;
+          const at = (d) => [{ x: c.x - d, y: c.y, id: 1 }, { x: c.x + d, y: c.y, id: 2 }];
+          await s.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(d0) });
+          for (let i = 1; i <= steps; i++) {
+            await s.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(d0 + (d1 - d0) * i / steps) });
+            await new Promise((r) => setTimeout(r, 16));
+          }
+          await s.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+          await s.detach();
+        },
+        /** Press at (x, y) inside the view, from its top-left in its own units —
+         *  a part of a drawn control (a step of a scale, a day of a chart) that
+         *  is not a view of its own. Reached as `click` reaches the view. */
+        async clickAt(path, x, y) {
+          await reach(path);
+          const n = await node(path);
+          step(`click ${path} at (${x}, ${y})`);
+          await page.mouse.click(n.rootX + x, n.rootY + y);
         },
         async drag(path, dx, dy = 0, steps = 10) {
           const c = await reach(path);

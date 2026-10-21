@@ -85,11 +85,12 @@ export async function spliceScriptFiles(
       errors.push(Diag.missingInclude(ref.path, ref.pos));
       continue;
     }
-    // `export function f` → `function f` (and const/let/var/class/enum): the
-    // file is written as a module; here its top-level names enter program scope
-    // the way an inline block's do. (`export { … }` lists and `export default`
-    // stay — checkScripts refuses them with the reason.)
-    let body = resolved.source.replace(/\bexport\s+(?=(async\s+)?(function|const|let|var|class|enum)\b)/g, "");
+    // `export function f` → `function f` (and const/let/var/class/enum, and the
+    // type declarations `type T =` and `interface I`): the file is written as a
+    // module; here its top-level names enter program scope the way an inline
+    // block's do. (`export { … }` and `export type { … }` lists and `export
+    // default` stay — checkScripts refuses them with the reason.)
+    let body = resolved.source.replace(/\bexport\s+(?=(async\s+)?(function|const|let|var|class|enum|interface|abstract\s+class)\b|type\s+[A-Za-z_$])/g, "");
     // The file's own RELATIVE imports resolve against the FILE's directory —
     // but the spliced text lives in the program, whose bundler resolves
     // against the program's directory. Rewrite each relative specifier onto

@@ -159,7 +159,8 @@ if (EXAMPLE) {
 
 // ── the model, read once ─────────────────────────────────────────────────────
 const model = JSON.parse(readFileSync(join(ROOT, "docs/declare-model.json"), "utf8"));
-const REF = model.reference;
+// no prototype: a name every object inherits (toLocaleString) is not an entry
+const REF = Object.assign(Object.create(null), model.reference);
 const SPINE = model.spine;
 const TYPES = model.types ?? { pages: {}, order: [] };
 /** The reference PAGE a named vocabulary has — every enum and every shared type
@@ -168,6 +169,8 @@ const TYPES = model.types ?? { pages: {}, order: [] };
 const typePage = (name) => TYPES.pages[name] ?? null;
 const TREE = new Map(model.tree.map((n) => [n.id, n]));
 const CONCEPTS = SPINE.concepts ?? { synonyms: {}, forms: [], negative: [] };
+/** The theme's vocabulary as the library reads it (the *Theme tokens* page). */
+const TOKENS = SPINE.themeTokens ?? { required: [], optional: [], presets: [] };
 
 /** Is this word a name the language actually has — a class, any class's member,
  *  or one of the shared types and functions every `{ }` body may name? What the
@@ -185,7 +188,9 @@ const isRealName = (q) => REAL_NAMES.has(q) || REAL_NAMES.has(q.toLowerCase())
 // Every class name the reference answers for (kernel + library), and every
 // attribute name any of them carries — the two unscoped candidate pools.
 const CLASS_NAMES = [...new Set([...Object.keys(SPINE.schemas), ...Object.keys(SPINE.librarySchemas)])].sort();
-const schemaOf = (cls) => SPINE.schemas[cls] ?? SPINE.librarySchemas[cls] ?? null;
+// own keys only: a name every object inherits (toLocaleString, constructor) is no class
+const ownKey = (o, k) => (o !== undefined && Object.hasOwn(o, k) ? o[k] : undefined);
+const schemaOf = (cls) => ownKey(SPINE.schemas, cls) ?? ownKey(SPINE.librarySchemas, cls) ?? null;
 
 /** The inheritance chain of a class, itself first — from the tree when it is
  *  documented there, from the schema spine's base links otherwise. */
@@ -247,6 +252,7 @@ function sayEntry(e) {
   for (const line of (e.doc ?? "").split("\n")) say(`  ${line}`);
   if (e.source?.file) say(`  source: ${e.source.file}${e.source.line ? ":" + e.source.line : ""}`);
   if (Array.isArray(e.seeAlso) && e.seeAlso.length > 0) say(`  see also: ${e.seeAlso.join(", ")}`);
+  if (e.id === "Icon") sayIcons();
 }
 
 /** Print a class's member table (§3 row 3): one line per member, elided past
@@ -260,11 +266,11 @@ function sayClass(cls) {
     if (cls === "ThemeDefaults") say(`${cls} — the library's defaults for its optional theme tokens, laid under every provided theme · not a preset: no program names it`);
     else say(`${cls} — a theme preset (${t.appearance}) · \`theme = ${cls}\` on the App provides it · pair: ${t.pair}`);
     if (t.doc) say(`  ${firstSentence(t.doc)}`);
-    say(`  the record: ${t.source}`);
+    say(`  its tokens, and which classes read each: declare-help "theme tokens" · the record: ${t.source}`);
     json = { kind: "theme", name: cls, appearance: t.appearance, pair: t.pair, doc: t.doc ?? null };
     return true;
   }
-  const lib = SPINE.library[cls];
+  const lib = ownKey(SPINE.library, cls);
   const chain = chainOf(cls);
   const head = [lib ? `library class (${lib})` : "class", s?.base ? `extends ${s.base}` : null]
     .filter(Boolean).join(" · ");
@@ -272,20 +278,39 @@ function sayClass(cls) {
   if (t?.doc) say(`  ${firstSentence(t.doc)}`);
   const rows = [];
   const own = schemaOf(cls);
+  // a `_` member is the class's own machinery, not its interface: left off the
+  // table (asked for by name, it still answers)
   if (own) {
-    for (const [a, ty] of Object.entries(own.attrs)) rows.push(`  ${a}: ${ty}`);
+    for (const [a, ty] of Object.entries(own.attrs)) if (!a.startsWith("_")) rows.push(`  ${a}: ${ty}`);
     for (const e of own.events ?? []) rows.push(`  on${e.charAt(0).toUpperCase() + e.slice(1)}() — event`);
   }
   // A method's signature inline, when the model carries one: `insert() — method`
   // told an author nothing about where the index goes (it is the second argument,
   // not part of the path), and the guide's "/rows/-" example invited folding it in.
-  for (const m of t?.methods ?? []) rows.push(`  ${m.signature ?? `${m.name}()`} — method`);
+  for (const m of t?.methods ?? []) if (!m.name.startsWith("_")) rows.push(`  ${m.signature ?? `${m.name}()`} — method`);
   const inherited = chain.slice(1);
   const cap = ALL ? Infinity : BUDGET_LINES - out.length - 3;
   say(`  members (own):`);
   for (const r of rows.slice(0, cap)) say(`  ${r}`);
   if (rows.length > cap) say(`    …and ${rows.length - cap} more — declare-help ${cls} --all`);
+  // what a library base adds is how the class is used as often as its own
+  // members are (a Sheet opens with Floating's `shown` and `input`): named, a
+  // line per base; the platform's own View and Node are the reference's to list
+  for (const base of inherited) {
+    const bs = ownKey(SPINE.library, base) !== undefined ? schemaOf(base) : null;
+    if (bs === null) continue;
+    // in the order the class documents itself — its attributes, then its methods
+    // and events — and never its `_` machinery
+    const names = [...Object.keys(bs.attrs).filter((n) => !n.startsWith("_") && !(own && Object.hasOwn(own.attrs, n))),
+      ...(TREE.get(base)?.methods ?? []).filter((m) => !m.name.startsWith("_")).map((m) => `${m.name}()`),
+      ...(bs.events ?? []).map((e) => `on${e.charAt(0).toUpperCase() + e.slice(1)}()`)];
+    if (names.length > 0) say(`  from ${base}: ${names.slice(0, ALL ? Infinity : 24).join(", ")}${names.length > 24 && !ALL ? ", …" : ""}`);
+  }
   if (inherited.length > 0) say(`  inherits the rest from ${inherited.join(" → ")} — ask for any member: declare-help ${cls}.<name>`);
+  // the theme tokens this class's file reads, from the library's own sources
+  const stem = typeof lib === "string" ? lib.replace(/^.*\//, "").replace(/\.declare$/, "") : null;
+  const reads = stem === null ? [] : [...TOKENS.required, ...TOKENS.optional].filter((tk) => tk.read.includes(stem)).map((tk) => tk.name);
+  if (reads.length > 0) say(`  theme tokens it reads: ${reads.slice(0, ALL ? Infinity : 16).join(", ")}${reads.length > 16 && !ALL ? `, …and ${reads.length - 16} more (--all)` : ""} — every token: declare-help "theme tokens"`);
   const subs = t?.subclasses ?? [];
   if (subs.length > 0) say(`  extended by: ${subs.join(", ")}`);
   const chapters = (model.guide ?? [])
@@ -325,10 +350,38 @@ function answerDotted(cls, member) {
   return true;
 }
 
+/** The icons the library ships — every class that extends `Icon`, each with
+ *  what it is for, so one can be found without knowing its name. */
+function sayIcons() {
+  const icons = TREE.get("Icon")?.subclasses ?? [];
+  say(`  the icons that ship (${icons.length}) — use one as a view, e.g. CloseIcon [ iconSize = 16 ]:`);
+  for (const n of icons) say(`    ${n} — ${firstSentence(REF[n]?.doc ?? TREE.get(n)?.doc ?? "")}`);
+}
+
+/** The theme's vocabulary — the reference page *Theme tokens*, from the same
+ *  measurement: every token the library reads, required or with a default. */
+function sayTokens() {
+  const row = (tk) => `  ${tk.name}${tk.default !== undefined ? ` = ${tk.default}` : ""} — read by ${tk.read.slice(0, 5).join(", ")}${tk.read.length > 5 ? ", …" : ""}`;
+  say(`Theme tokens — the names the library reads from provided("theme"). Start from a preset (${TOKENS.presets.join(", ")}, each with a …Dark companion) and spread to change one: theme = { { ...SanFrancisco, accent: #CC3333 } }`);
+  say(`  required (${TOKENS.required.length}, no default — every theme states them):`);
+  for (const tk of TOKENS.required) say(row(tk));
+  const cap = ALL ? Infinity : Math.max(8, BUDGET_LINES - out.length - 3);
+  say(`  optional (${TOKENS.optional.length}, each with a default a theme may change):`);
+  for (const tk of TOKENS.optional.slice(0, cap)) say(row(tk));
+  if (TOKENS.optional.length > cap) say(`    …and ${TOKENS.optional.length - cap} more — declare-help "theme tokens" --all`);
+  say(`  which tokens one class reads: declare-help <Class> · guide: docs/guide/11-paint-and-themes.md (Themes)`);
+}
+
 function answer() {
   // a bare class answers with its member table (§3 row 3) — the reference's
   // full prose is behind --all, not in the way of the lookup
   if (schemaOf(query) !== null) { sayClass(query); json = { kind: "class", name: query }; return true; }
+
+  // the icons that ship, asked for as a set
+  if (/^(the )?icons$|^icon (catalog(ue)?|list)$/i.test(query.trim())) { say(`Icons — small drawn marks; each is a class, placed like any view (declare-help Icon: writing your own)`); sayIcons(); json = { kind: "icons" }; return true; }
+
+  // the theme's vocabulary, by the guide's name for it
+  if (/^(theme )?tokens?$/i.test(query.trim())) { sayTokens(); json = { kind: "theme-tokens" }; return true; }
 
   // exact reference id — dotted, the model's own spelling
   // a theme preset has a reference entry but no schema, so the class path above

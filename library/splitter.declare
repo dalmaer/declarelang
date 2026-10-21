@@ -76,10 +76,10 @@ Hovered, dragged, or focused from the keyboard — the state the accent line sho
 True from pointer-down until the captured release. `pressed` will not do here: it goes
 false when the pointer leaves the strip, and a drag must survive exactly that.
 
-## p0
+## _p0
 **Internal.** The root-space pointer position along `axis` at the start of a drag.
 
-## v0
+## _v0
 **Internal.** The value at the start of a drag, which the pointer's movement is added to.
 
 ## onInit
@@ -191,21 +191,21 @@ class Splitter extends Control [
     // the drag, by root-space movement along the axis
 
     dragging: boolean = false,
-    p0: number = 0,
-    v0: number = 0,
+    _p0: number = 0,
+    _v0: number = 0,
 
     onPointerDown(e: PointerEvent) {
         if (disabled) return
         focusVisible = false
         Focus.focus(this)
         dragging = true
-        v0 = value
-        p0 = axis == "x" ? e.rootX : e.rootY
+        _v0 = value
+        _p0 = axis == "x" ? e.rootX : e.rootY
         },
-    onPointerMove(e: PointerEvent) { if (dragging) setTo(v0 + (axis == "x" ? e.rootX : e.rootY) - p0) },
+    onPointerMove(e: PointerEvent) { if (dragging) setTo(_v0 + (axis == "x" ? e.rootX : e.rootY) - _p0) },
     onPointerUp(e: PointerUpEvent) {
         dragging = false
-        if (e.canceled) setTo(v0)
+        if (e.canceled) setTo(_v0)
         },
     onClick() { },
     onDblClick() { if (!disabled) setTo(home) },

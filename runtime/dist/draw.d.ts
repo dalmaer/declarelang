@@ -224,6 +224,15 @@ export interface DisplayList {
      *  else. Blur/shadow bleed is NOT in these (see `rasterPad`), exactly as it
      *  is not in `bounds`. */
     readonly extents: ReadonlyArray<Bounds | null>;
+    /** PER-OP point the op is known to ink, parallel to `ops`, in the same space
+     *  as `extents`: for a path's fill or stroke, where the pen last stood — on a
+     *  stroke's line, on a fill's edge. A box's centre is not on a curve or an
+     *  outline, so a check that the raster painted samples here. Null where the
+     *  extent's centre serves (rectangles, text, images). */
+    readonly probes?: ReadonlyArray<{
+        x: number;
+        y: number;
+    } | null>;
 }
 /** The write-only, Canvas2D-shaped context a draw method records into.
  *
@@ -246,6 +255,8 @@ export declare class Draw {
     private readonly ops;
     /** parallel to `ops` — see DisplayList.extents */
     private readonly extents;
+    /** parallel to `ops` — see DisplayList.probes */
+    private readonly probes;
     private push;
     /** THE VIEW'S OWN SIZE, for a drawing that sizes itself — `d.w` / `d.h`.
      *
@@ -272,6 +283,9 @@ export declare class Draw {
     /** Extent of the current path; reset by beginPath, kept by fill/stroke
      *  (mirroring Canvas2D, where filling does not clear the path). */
     private path;
+    /** Where the current path's pen last stood, in authoring coordinates: a
+     *  point a stroke inks, and on a fill's edge — the paint op's probe. */
+    private pen;
     /** Mirror of the recorded lineWidth, for stroke expansion. */
     private strokeHalf;
     /** Cleared once an op paints an extent the recorder can't bound locally. */
@@ -350,7 +364,9 @@ export declare class Draw {
     moveTo(x: number, y: number): void;
     lineTo(x: number, y: number): void;
     /** Bounds take the full circle's box — conservative for partial arcs,
-     *  exact for full ones, and no trigonometry in the recorder. */
+     *  exact for full ones. (The sweep's own box is tighter, but a raster is
+     *  placed by its box's rounded origin, so a tighter box moves an arc's
+     *  antialiased edge by a fraction of a pixel in every drawing that has one.) */
     arc(x: number, y: number, r: number, a0: number, a1: number, ccw?: boolean): void;
     /** The tangent arc's box is bounded by its two guide points (conservative:
      *  the curve stays within their span plus the corner it rounds). */
@@ -361,6 +377,9 @@ export declare class Draw {
     quadraticCurveTo(cpx: number, cpy: number, x: number, y: number): void;
     bezierCurveTo(cp1x: number, cp1y: number, cp2x: number, cp2y: number, x: number, y: number): void;
     closePath(): void;
+    /** The paint op just pushed inks where the pen stands: its probe, mapped
+     *  through the live transform as its extent is. */
+    private probe;
     fill(rule?: CanvasFillRule): void;
     /** Stroke ink extends half the line width beyond the path box. (A sharp
      *  miter join can poke further; bounds stay advisory until dirty-region

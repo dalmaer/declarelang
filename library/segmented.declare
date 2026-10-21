@@ -61,7 +61,7 @@ destination, or leave it alone and read `value` back — a `Segmented` works
 standalone. Compared against each choice's `id` by identity, so any value type
 works.
 
-## isSegmented
+## _isSegmented
 **Internal.** The marker a `SegmentedItem` reads to recognize its parent. A
 `.declare` class cannot hold a reactive cell without declaring it, so a marker is
 necessarily surface — that does not make it API.
@@ -192,7 +192,7 @@ Space and Enter pick; the arrows move among the segments (the stop's).
 ## focusShape()
 Rings the segment's pill inset, not its whole box.
 
-## isSegment
+## _isSegment
 **Internal.** The marker a `Segmented` reads to find its own segments — not API.
 
 ## height
@@ -224,7 +224,7 @@ class Segmented [
 
     // the marker a SegmentedItem reads to recognize its parent
 
-    isSegmented: boolean = true,
+    _isSegmented: boolean = true,
 
     choices: array = [],           // a bare literal: it owns a cell, so a use-site value wires
     value: object = null,
@@ -272,7 +272,7 @@ class Segmented [
 
     segs() -> array {
         const out = []
-        for (const c of this.children) { if ((c as SegmentedItem).isSegment === true) out.push(c) }
+        for (const c of this.children) { if ((c as SegmentedItem)._isSegment === true) out.push(c) }
         return out
         },
 
@@ -329,7 +329,7 @@ class Segmented [
 // beyond what the record gives it.
 
 class SegmentedItem extends Control [
-    isSegment: boolean = true,
+    _isSegment: boolean = true,
 
     height = 100%,
     width  = { (parent as Segmented).segW },

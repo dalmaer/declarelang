@@ -292,7 +292,7 @@ function themeTokenSpine() {
   // the optional tokens' defaults, laid under every theme (library/themes/defaults.declare):
   // a token stated there is optional however it is read
   const defSrc = readFileSync(join(ROOT, "library/themes/defaults.declare"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const defaults = Object.fromEntries([...(defSrc.split("theme ThemeDefaults [")[1] ?? "").matchAll(/([a-zA-Z]\w*)\s*=\s*([^,\n]+(?:\([^)]*\))?)/g)].map((m) => [m[1], m[2].trim().replace(/,$/, "")]));
+  const defaults = Object.fromEntries([...(defSrc.split("theme ThemeDefaults [")[1] ?? "").matchAll(/([a-zA-Z]\w*)\s*=\s*((?:\([^)]*\)|[^,\n()])+)/g)].map((m) => [m[1], m[2].trim().replace(/,$/, "")]));
   for (const t of Object.keys(defaults)) { bare.delete(t); if (readers[t] !== undefined) guarded.add(t); }
   for (const t of bare) guarded.delete(t);            // read bare anywhere ⇒ required
   const presetSrc = readFileSync(join(ROOT, "library/themes/sanfrancisco.declare"), "utf8");
