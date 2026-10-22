@@ -304,4 +304,23 @@ await test("a paragraph that opens with inline code still joins its body words i
   assert.ok(runs.some((r) => r.includes("plain sentence of")), JSON.stringify(runs));
 });
 
+// A run that flexes in a row built AFTER boot: the layout takes its width over
+// from the run's own auto-size, and the run wraps at that width — its height, and
+// what it hands the renderer, follow (a row created at boot always did).
+await test("a flexing run built after boot wraps at the width its layout gives it", async () => {
+  const app = await boot(`show: boolean = false,
+    col: View [ exists = { app.show }, width = 300,
+        layout: SimpleLayout [ axis = y ],
+        row: View [ width = 100%,
+            layout: SimpleLayout [ axis = x ],
+            t: Text [ flexes = true, text = "one two three four five six seven eight nine ten eleven twelve" ],
+            Text [ text = "Open" ] ] ]`);
+  app.show = true;
+  settle();
+  const t = app.col.row.t;
+  assert.ok(t.width < 300, `the layout gave it the room left (${t.width})`);
+  assert.ok(t.height > 20, `it wraps to more than one line (height ${t.height})`);
+  assert.equal(app.col.row.height, t.height, "the row grows with it");
+});
+
 summarize("text");

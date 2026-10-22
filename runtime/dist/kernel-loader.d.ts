@@ -87,6 +87,8 @@ export interface Kernel {
     isSet(cell: number): boolean;
     own(cell: number, rule: number): number;
     release(cell: number, rule: number): void;
+    /** Set or clear a rule's percent mark (a size taken from the parent's). */
+    setPercent(rule: number, on: boolean): void;
     owner(cell: number): number;
     run(rule: number): number;
     invalidate(rule: number): void;

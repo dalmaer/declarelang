@@ -13,6 +13,7 @@ import { pressOutside, scrollOutside } from "../runtime/dist/outside.js";
 import { approximateMeasurer } from "../compiler/dist/headless.js";
 import { linkIslandTenant } from "../runtime/dist/island.js";
 import { hostValuesFor } from "../runtime/dist/boundary.js";
+import { Clock, setClock } from "../runtime/dist/animate.js";
 
 provideMeasurer(approximateMeasurer());
 
@@ -489,6 +490,48 @@ await test("a combobox is one Tab stop: its entry", async () => {
   same(Focus.getFocus(), app.c.entry, "Tab from A lands in the entry");
   Focus.next(); settle();
   same(Focus.getFocus(), app.z, "and the next Tab leaves the combobox");
+});
+
+// A sheet at the start edge is a drawer at every width: it slides in from the start
+// edge, full height, leaving some of its context showing to press; a swipe back on
+// its trailing edge follows the finger, and one past a quarter of its width puts it away.
+
+await test("a start sheet is a drawer at every width, and a swipe back past a quarter of it puts it away", async () => {
+  let cb = null, last = 0;
+  const sched = { now: () => last, request(fn) { cb = fn; return 1; }, cancel() { cb = null; } };
+  const frames = (n) => { for (let i = 0; i < n; i++) { const fn = cb; cb = null; last = last + 16; if (fn) fn(last); settle(); } };
+  setClock(new Clock(sched));
+  try {
+    const app = await boot(`App [ width = 390, height = 700, open: boolean = false,
+    nav: Sheet [ edge = "start", shown = { app.open }, input(v: boolean) { app.open = v },
+        Text [ text = "Contents" ] ],
+    card: Sheet [ Text [ text = "a sheet" ] ] ]`);
+    app.hostWidth = 390; app.hostHeight = 700; settle();
+    assert.equal(app.nav.form, "start", "a drawer on a phone, where a bottom sheet rises");
+    assert.equal(app.card.form, "bottom");
+    app.open = true; settle(); frames(120);
+    assert.equal(app.nav.grip.visible, true, "a drawer has a grip; a bottom sheet has its handle instead");
+    assert.equal(app.nav.width, 320, "its own width, with the context still showing beside it");
+    assert.equal(app.nav.height, 700, "the full height");
+    assert.equal(Math.round(app.nav.x), 0, "slid in to the start edge");
+    app.nav.grip.onPointerMove({ x: 0, y: 0, deltaX: -60, deltaY: 4 }); settle();
+    assert.equal(Math.round(app.nav.x), -60, "it follows a swipe back");
+    app.nav.grip.onPointerUp({ x: 0, y: 0, deltaX: -60, deltaY: 4, canceled: false }); settle();
+    assert.equal(app.nav.dragX, 0, "a short swipe lets it spring back");
+    assert.equal(app.open, true);
+    app.nav.grip.onPointerMove({ x: 0, y: 0, deltaX: -120, deltaY: 0 }); settle();
+    app.nav.grip.onPointerUp({ x: 0, y: 0, deltaX: -120, deltaY: 0, canceled: false }); settle();
+    assert.equal(app.open, false, "past a quarter of its width it closes, through input");
+    frames(120);
+    assert.equal(app.nav.dragX, 0, "and starts clean next time");
+    assert.ok(app.nav.x <= -app.nav.width, "off past the start edge");
+    app.hostWidth = 1200; app.hostHeight = 800; settle();
+    assert.equal(app.nav.form, "start", "still a drawer on a wide screen");
+    assert.equal(app.nav.width, 320);
+    assert.equal(app.card.form, "center", "where a bottom sheet floats as a card");
+  } finally {
+    setClock(new Clock());
+  }
 });
 
 summarize("overlays");

@@ -128,6 +128,49 @@ search: TextInput = { app.bar.tools.search },     // the one line that knows whe
 
 Everything else says `app.search`.
 
+### A member by a name known at run time
+
+A member is a property of its view, reached the way JavaScript reaches any property:
+`toolbar.share`, or by a name computed at run time, `toolbar[name]`. The two are the same
+access and chain freely: `app.prefs[section][field]`, `app.prefs[section].advanced`. Each
+bracket steps one level, and its string names one member, not a dotted path:
+`prefs["audio.volume"]` finds nothing. The result is the member by that name, or
+`undefined` when the view has none.
+
+That lets data name a view. A guided tour can keep its steps as records, each naming the
+control it points at, and anchor one [`Popover`](declare-docs:Popover) to whichever the
+current step names:
+
+```declare
+App [ width = 640, height = 220, theme = { SanFrancisco }, fill = { provided("theme").background },
+    tour: Dataset { { "steps": [ { "target": "share", "say": "Send this page to someone." },
+                                { "target": "export", "say": "Or save a copy." } ] } },
+    step: number = 0,
+    toolbar: Toolbar [ x = 20, y = 20,
+        share: ToolButton [ label = "Share" ],
+        export: ToolButton [ label = "Export" ]
+        ],
+    callout: Popover [ datapath = { app.tour.value.steps[app.step] },
+        anchorTo = { app.toolbar[:target] },
+        Text [ text = :say ],
+        Button [ label = "Next",
+            onClick() {
+                if (app.step + 1 < app.tour.value.steps.length) app.step = app.step + 1
+                else app.callout.close()
+                }
+            ]
+        ],
+    Button [ x = 20, y = 160, label = "Take the tour",
+        onClick() { app.step = 0; app.callout.show() }
+        ]
+    ]
+```
+
+`app.toolbar[:target]` reads the step's `target` and looks that name up on the toolbar, so
+the callout moves to Export when the step changes. A string literal, `toolbar["share"]`, is
+checked like a path. A name known only at run time cannot be checked, which is why a path
+stays the form for names you know as you write.
+
 ## Where things go
 
 - **The records** go in a [`Dataset`](declare-docs:Dataset), in the tree where its scope is — usually on the App.

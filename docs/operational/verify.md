@@ -14,20 +14,36 @@ npx declare-verify app.declare
 | 1 | structure | parse errors | — |
 | 2 | resolution | unresolved names, tags, datapaths | — |
 | 3 | analysis | type errors, constraint reads without a known target | — |
-| 4 | boot | fails to construct / settle headlessly, or never settles; notes a control nobody can reach | — |
+| 4 | boot | fails to construct or settle, or never settles; notes a control nobody can reach, a child spilling out of a box sized by its content, text running past its box or the window, a target too small for a finger | — |
 | 5 | behavior | drive/expect mismatch | `--assert <script.mjs>` |
 | 6 | visual | mismatch against named baselines | `--states <script.mjs>` `--baselines <dir>` |
 
-Rungs 1–4 run in a **synthetic environment** — Node, the runtime's own backend,
-approximated text metrics (the run prints `synthetic metrics`) — which is why they need
-no browser and stay sub-second. Rung 4 boots the program in a host the size of a laptop
-window (1280×800), hands each `DataSource` with a `schema` a sample of it, and stops a
-boot that has not settled within its budget, naming the line it was running. It also
-notes a control that lies outside a view which clips and does not scroll, or above a
-scroller's origin: no one can see or press it. Rungs 5 and 6 run the app in **headless Chromium**,
-drive it with real input, and assert through the
-[introspection bridge](declare-docs:operational:introspection) with motion made
+Rungs 1–3 read the program and need nothing else. Rung 4 **boots** it, in the Chrome the
+tools keep running between calls (a page of its own each time, so it costs about a second):
+first in a laptop's window (1280×800), then a phone's held upright (390×844, touch). It
+hands each `DataSource` with a `schema` a sample of it, and notes what it can see wrong in
+the layout: a control outside a view which clips and does not scroll, or above a scroller's
+origin; a child spilling out of a box sized by its content because its own size is taken
+from that box; text that runs past its box or past the window's edge; on the phone,
+controls smaller than 44 × 44. It lists the program's classes the boot never built —
+screens that appear only after data or a change of state — which it could not check.
+Rungs 5 and 6 run the app in the same Chrome, drive it with real input, and assert through
+the [introspection bridge](declare-docs:operational:introspection) with motion made
 deterministic by the driven clock.
+
+Where no Chrome can be found (or with `DECLARE_HEADLESS_BOOT=1`), rung 4 boots in Node
+instead: the layout is the runtime's own, but text is measured by a stand-in, so the
+checks that rest on text do not run — the run says so.
+
+**A program that never finishes** — a loop whose exit never comes, as it boots or under a
+click a script makes — is stopped at any browser rung once its page has gone the budget
+(`--boot-budget`, 15 s) without answering, and the line it was running is quoted:
+
+```
+R5 ✗ behavior
+     during click app.go: the program stopped answering for 15 s — something it ran does not finish (…)
+       it was running  {  let s = ""; while (s != "ready") { app.n = app.n + 1 }  }
+```
 
 A clean run ends with a count — `clean through R4 (351 of 460 constraints statically
 wired)`. It says how many constraints the compiler wired ahead of time; the rest find their
@@ -45,8 +61,13 @@ a task: a program with a lower count is not wrong.
 | `--states <script.mjs>` · `--baselines <dir>` | rung-6 named states and their baseline images (default: `baselines/` beside the states script) |
 | `--bless` | write current renders as the baselines |
 | `--wrap` | wrap a bare `class … extends` in a probe app, so a library class verifies standalone |
-| `--boot-budget=ms` | how long rung 4 waits for the boot to settle (default 15000) |
+| `--boot-budget=ms` | how long a page may go without answering before the program is stopped and its line quoted, at rungs 4–6 (default 15000) |
 | `--samples` | print the sample each `DataSource` was handed at rung 4 |
+| `--size WxH` · `--touch` | boot rung 4 in that window only (a touch device with `--touch`) |
+| `--read PATH.ATTR` | print a value from the booted program; repeatable |
+| `--outline [PATH]` | print every view under PATH (the App by default) with its place and size, as indented text — "is it where I meant?" without a picture |
+| `--semantics [PATH]` | print what a screen reader is given, from the booted program |
+| `--no-boot` | skip rung 4 and go to the browser rungs (`declare-look` does) |
 | `--only <file>` | verify the whole program, print only the diagnostics positioned in that one file (an include, by the path you would write it). The others are counted, and still fail the rung |
 
 Positions name their file: an error in the program file reads `(line 12, col 7)`;
@@ -57,12 +78,12 @@ to `eof`.
 
 ## What a rung cannot see
 
-A rung passing means *that rung* found nothing, and the first four never run a browser
-engine. Layout against real fonts, paint, CSS, input routing, and anything that only
-exists in a bundled or minified build are structurally invisible below rung 5 — a
-transparent view swallowing presses, or a class name minified out from under code that
-compared it, both settle cleanly at rung 4. When a bug survives a green rung 4, the next
-question is a live page, not a re-run. The tiers and their blind spots are tabulated in
+A rung passing means *that rung* found nothing. Rung 4 boots the program and looks at it,
+but presses nothing: input routing, a screen reached only after a press, and anything that
+only exists in a bundled or minified build are invisible to it — a transparent view
+swallowing presses, or a class name minified out from under code that compared it, both
+settle cleanly at rung 4. A rung-5 script that drives the program there is the check for
+those, and when a bug survives every rung, the next question is a live page, not a re-run. The tiers and their blind spots are tabulated in
 [Introspection](declare-docs:operational:introspection).
 
 ## Looking at it, in one call
@@ -93,10 +114,16 @@ is an assert script, below — and it stays behind as a test.
 
 ## Writing an assert script
 
-`--assert` takes a module whose default export receives `{ drive, expect, page }`. The script
-you explored with can be the test as it is: `page` is the puppeteer page with the app loaded
-(throw to fail the rung). Its scrollbars are real ones, the classic bar Windows and Linux
-draw, so a script can grab a thumb with `page.mouse` and drag it as a person would.
+`--assert` takes a module whose default export receives `{ drive, expect, page }` (throw to
+fail the rung). `drive` and `expect` are the vocabulary: everything a check of a flow needs
+is in them, and there is no reason to build a browser harness of your own. `page` is the
+browser page the app is loaded in, for the rare question they do not ask — a computed style,
+what holds the browser's focus; `declare-look --js` is the same door for a one-off question.
+Its scrollbars are real ones, the classic bar Windows and Linux draw, so a script can grab a
+thumb with the page's mouse and drag it as a person would.
+
+A script runs on a laptop-sized window by default. To run it on another device, export one:
+`export const device = { width: 390, height: 844, touch: true }` — the app loads once, on it.
 `drive` and `expect` drive the app by **view path**, never by DOM selector. A path names
 members (`app.toolbar.add`), a replicated row by its index (`app.list.3`), or a view by what
 it says — its label, accessible name or text (`app.tabs.Settings`, quoted when it holds a dot
@@ -118,12 +145,22 @@ the program (`afterDelay`, a tooltip's wait, a press-and-hold's half second) pas
 the script says time passes — `drive.wait(ms)` advances it by exactly `ms` (real time passes
 too, for the browser's own work), and `drive.settleMotion()` runs motion to rest frame by
 frame, carrying the timers with it. Holding the mouse down for 800 ms of real time fires no
-hold; `page.mouse.down()`, `drive.wait(800)`, `page.mouse.up()` does.
+hold; `drive.hold(path, 800)` does.
+
+**On a touch device the press is a finger.** After `drive.device({ …, touch: true })` (or
+`declare-look --touch`, or a state's `touch: true`), every `click`, `clickAt`, `drag` and
+`hold` sends touch events: there is no hover, a drag inside a scrolling pane scrolls it
+unless the view claims the gesture, and a tap is what a finger's tap is. A mouse in a
+phone-sized window is not a phone, and a check made with one passes what a finger fails.
 
 | call | what it does |
 |---|---|
 | `drive.click(path)`, `drive.drag(path, dx, dy)`, `drive.wheel(path, dy, dx?)` | a press, a drag, a wheel turn on the view, as a person makes them |
-| `drive.clickAt(path, x, y)`, `drive.pinch(path, scale)` | a press at a point inside the view (from its top-left); two fingers spread to `scale` about its centre |
+| `drive.clickAt(path, x, y)`, `drive.hold(path, ms?)` | a press at a point inside the view (from its top-left); a press held `ms` (default 600) of the program's time, then released — what `onHold` answers |
+| `drive.pinch(path, scale)` | a pinch about the view's centre to `scale`: two fingers on a touch device (`onPinch…` runs), a trackpad pinch otherwise (`onWheel` runs with `e.pinch`) |
+| `drive.device({ width, height, touch })` | the page becomes that device and the app loads again on it — a phone is `{ width: 390, height: 844, touch: true }` (to start on it, export `device` instead) |
+| `drive.requests()` | the requests the program has sent so far — its data sources and streams, not the page's own files: `{ method, url, path, body, status }` each, the body parsed when it is JSON |
+| `expect.request(method, path, { count?, body? })` | the program sent that request: `path` a prefix or a RegExp, `count` how many times, `body` the fields it must carry — failing, it lists what was sent |
 | `drive.key(name)`, `drive.type(text)`, `drive.tab(n?)` | keys, to whatever has the focus |
 | `drive.set(path, attr, value)` | an assignment, as a handler's write |
 | `drive.wait(ms)` | `ms` of real time, and exactly `ms` of the program's virtual time |
@@ -150,6 +187,7 @@ level is the classic mistake; they belong inside `viewport`):
 | `clock` | ISO date `string` | pin the WALL clock (`Date`) so a rendered time reads the same every run — the driven animation clock is separate and untouched |
 | `scheme` | `"light"` \| `"dark"` | the color scheme the capture renders under (default light) |
 | `dpr` | `number` | device pixel ratio of the capture (default 1) |
+| `touch` | `boolean` | a touch device: the route's presses are fingers (see above) |
 | `route` | `async ({ drive, expect, page })` | drive the app INTO this state before capturing — clicks, settles, anything an assert script can do; a route that scrolls the page is captured where it scrolled to |
 | `mask` | `[{ x, y, w, h }, …]` | rectangles **excluded from comparison** |
 

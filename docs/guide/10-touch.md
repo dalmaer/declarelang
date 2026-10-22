@@ -205,6 +205,26 @@ suspends that auto-zoom, and lets go on blur. In every other app the browser's
 behavior stands untouched; instead, the compiler flags a focusable field that
 sits below the 16px line and names the fix.
 
+## Checking it with a finger
+
+A touch interface is checked with touch, not with a mouse in a small window: a mouse
+hovers, never claims a gesture, and passes what a finger fails. `declare-look --touch`
+makes the window a touch device, and from then on every press is a finger:
+
+```sh
+npx declare-look app.declare --touch --size 390x844 \
+  --drag app.list 0,-400 --read app.list.scrollY \
+  --hold app.list.3 --read app.rowMenu.shown \
+  --pinch app.map 2 --read app.zoom
+```
+
+`--drag` is a finger's drag (in a scrolling pane, the scroll, unless the view claims
+it), `--hold` a press-and-hold, `--pinch` two fingers. Without `--touch`, `--pinch` is a
+trackpad's pinch, which reaches the program as `onWheel` with `e.pinch` — handle both if
+both should zoom. A whole flow is an assert script for `declare-verify --assert`, which
+starts with `drive.device({ width: 390, height: 844, touch: true })`
+([Verify](declare-docs:operational:verify)).
+
 ---
 
 **What you can now say:** you can design an interface fingers can actually use, you

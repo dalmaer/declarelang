@@ -38,6 +38,7 @@ const SUITE = [
   "test/path-write.test.mjs",
   "test/after-delay.test.mjs",
   "test/provided-text-style.test.mjs",
+  "test/theme-tokens.test.mjs",    // a theme token no theme declares is a compile error
   "test/hit-3d.test.mjs",
   "test/scene-walk.test.mjs",      // the retained-scene walks canvas and the Mac share: press, cursor, wheel, scroll range
   "test/super.test.mjs",
@@ -129,6 +130,14 @@ const SUITE = [
   "test/precompiled.test.mjs",
   "test/runtime-parity.test.mjs",
   "test/eval-references.test.mjs",
+  "test/api-signatures.test.mjs",   // the compiler's hand-written method signatures take the runtime's parameters
+  "test/size-branch.test.mjs",      // a size reading its parent's in one branch is marked by the branch taken
+  "test/member-by-name.test.mjs",   // a child reached by a name: written names checked, run-time names against every child
+  "test/look-touch.test.mjs",       // under --touch every press, drag, hold and pinch is a finger
+  "test/focus-reveal.test.mjs",     // focus a program moves is scrolled clear of pinned chrome
+  "test/verify-requests.test.mjs",  // an assert script checks what the program sent
+  "test/chrome-cleanup.test.mjs",   // a Chrome the tools start leaves no profile and no process behind
+  "test/check-gates-readonly.test.mjs", // a gate that checks writes nothing derive produced
 ];
 
 const argv = process.argv.slice(2);

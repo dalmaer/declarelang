@@ -77,7 +77,7 @@ cascade of consequences:
 1. **structure** — does it parse?
 2. **resolution** — does every name, tag and data path resolve?
 3. **analysis** — does every `{ }` typecheck, with every constraint's reads known?
-4. **boot** — does it construct and settle, headlessly?
+4. **boot** — does it construct and settle, in a browser, at a laptop's size and a phone's?
 5. **behavior** — does it do what a drive-and-assert script says?
 6. **visual** — does it match its named screenshots?
 
@@ -100,10 +100,9 @@ spring's end state can be asserted at all.
 
 ## Debugging a running program
 
-A green rung means that rung found nothing. The first four run without a browser —
-approximate text metrics, no real layout engine, no input routing — so some problems
-are invisible to them: a transparent view swallowing clicks, a size that only goes
-wrong with real fonts. When the checker is happy and the program is not, stop
+A green rung means that rung found nothing. The first four press nothing — rung 4 boots
+the program and looks at it, but routes no input — so some problems are invisible to
+them: a transparent view swallowing clicks, a screen reached only after a press. When the checker is happy and the program is not, stop
 re-reading the source and **ask the running program**. In the page's console:
 
 ```js

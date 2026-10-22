@@ -1,6 +1,6 @@
 import type { ClassSchema } from "../../runtime/dist/schema.js";
 import type { AttrType } from "../../runtime/dist/value.js";
-import type { ClassDecl, SchemaDecl } from "../../runtime/dist/parser.js";
+import type { ClassDecl, Literal, SchemaDecl } from "../../runtime/dist/parser.js";
 /** Every name the PRELUDE declares — the resolver's second tier of "known
  *  global" (compile.ts isKnownGlobal). Read off the prelude text itself, so
  *  a name declared here is admitted there and nowhere else: the prelude is
@@ -94,8 +94,20 @@ extraSignatureTypes?: readonly string[],
  *  real in every { } body, method signature, and script function. */
 shapes?: readonly SchemaDecl[], 
 /** The program's `theme Name [ … ]` declarations — each projects as an
- *  ambient `declare const Name: Theme`, so a body can name it. */
-themeNames?: readonly string[], 
+ *  ambient `declare const Name: Theme`, so a body can name it, and its tokens
+ *  join the keys `provided("theme")` can be read for (themeTokenTypes). */
+themes?: readonly {
+    name: string;
+    body: {
+        attrs: readonly {
+            name: string;
+            value: Literal;
+        }[];
+    };
+}[], 
+/** The keys the program's theme provisions add by writing a record
+ *  (typecheck.ts providedThemeKeys) — readable from `provided("theme")` too. */
+themeKeys?: readonly string[], 
 /** The program's `style Name [ … ]` bundles — each a value in body scope, like a
  *  theme, typed EXACTLY by the fields it sets (so `Caption.fontSize` is a number,
  *  not `number | undefined`), which is still a `TextStyle`. */
@@ -103,6 +115,21 @@ styles?: readonly {
     name: string;
     fields: readonly string[];
 }[]): string;
+/** Every key a provided theme can carry, with the type a read of it yields:
+ *  the presets' tokens, the library defaults every provided theme is laid
+ *  over, the tokens of each `theme` the program declares, and the keys its
+ *  provisions write as records (`provided`; `any` unless declared). A key is a
+ *  `number` when every declaration of it is one (a color or a metric) and
+ *  `any` otherwise — a word, a list, a constructor, or a name whose meaning
+ *  depends on its slot — so a read never fails on a value it would accept. */
+export declare function themeTokenTypes(themes: readonly {
+    body: {
+        attrs: readonly {
+            name: string;
+            value: Literal;
+        }[];
+    };
+}[], provided?: readonly string[]): Map<string, "number" | "any">;
 /** A shape's TS object-type text — `{ id: string; n?: number; owner: Person;
  *  status: "open" | "closed"; steps: { a: string }[] }`. A named ref prints
  *  its NAME (the interface is emitted beside it); an inline nested shape

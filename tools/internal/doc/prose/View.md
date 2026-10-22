@@ -517,8 +517,12 @@ rotation}`: a point `(px, py)` in the view lands at `x + scale·(px·cos r − p
 companions.
 
 ## transformTo()
-The composed similarity from this view's frame to another view's — `{x, y, scale,
-rotation}`, read as `rootTransform()` is. The two may be in different programs: the walk
+The composed similarity from this view's frame to the **visible box** of another view —
+`{x, y, scale, rotation}`, in the same form as `rootTransform()`. The frame is what `other`
+shows, so its own scroll is subtracted: for a scrolling pane it is the pane's frame, not its
+content, and for the App it is the window. On a scrolled page, `transformTo(app)` differs
+from `rootTransform()` by the page's scroll: its `y` is less by `app.scrollY` (and its `x`
+by `app.scrollX`). The two may be in different programs: the walk
 goes on from a hosted program's root through the island that hosts it, so a program in a
 desktop window can place a view of its own against one of the host's (what a `Menu` does
 when it opens in the window's layer). A one-shot query, like `rootTransform()`.
@@ -632,6 +636,16 @@ is — a switch, a slider, a drawn control, an icon.
 ## accessibilityHint
 A longer description, read after the name and value — what pressing it does, when the name
 alone does not say. Leave it empty rather than repeating the name.
+
+## accessibilityError
+What is wrong with this view's value, said with it — "Use at least three letters." — and
+empty when nothing is. While it says something the view reads as invalid, and the words are
+read after its name. A `TextInput` passes its own `error` here, so a field that validates
+needs nothing more; set it yourself on a control of your own that holds a value.
+
+## accessibilityRequired
+Whether a value is needed here before the person can go on. Said with the view's name;
+whether the value is *right* is `accessibilityError`'s to say.
 
 ## accessibilityLive
 Whether changes to what this view shows are announced as they happen, without the focus
@@ -877,6 +891,11 @@ bottom" with no magic number; the clamp resolves it against the range the pane h
 can finally take it. The `scrollY` fact follows the platform's answer. Call it on the
 `scrolls` view itself; to reveal a particular *view*, `scrollIntoView()` on the target
 finds the scroller for you. A no-op before the view is attached.
+
+**Both axes, or the other one.** `scrollTo({ x, y })` makes one request for both axes of a
+`scrolls = both` view, with the same optional glide: `scrollTo({ x: 0, y: 0 })` returns a
+large picture to its corner. Leave out an axis to keep it where it is. For the horizontal
+axis alone, `scrollToX(x)`.
 
 **The user may be scrolling the same pane.** Scrolling is a process the platform owns, driven
 by a hand that does not pause for the program, so a request can arrive mid-gesture and lose —

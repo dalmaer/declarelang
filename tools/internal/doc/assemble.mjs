@@ -763,7 +763,7 @@ const sharedTypesDoc = (spine) => {
 // type exactly once, so a new enum or a new PRELUDE declaration fails the
 // assembly until it is placed.
 const TYPE_GROUPS = [
-  ["Enums", ["AccessibilityLive", "AccessibilityRole", "AccessibilitySort", "Axis", "Backface", "Blend", "Claim", "Credentials", "CrossAlign", "Edges",
+  ["Enums", ["AccessibilityLive", "AccessibilityRole", "AccessibilitySort", "Axis", "Backface", "Blend", "Claim", "Credentials", "CrossAlign", "Edges", "EditorJudgeOn",
              "FitAlign", "FocusScope", "FontLate", "FontWeight", "Justify", "Motion", "Numerals", "NumeralWidth",
              "OutsidePress", "Process", "Purpose", "Scaling", "ScrollAnchor", "ScrollBelow", "Scrolls", "StreamStatus", "Stretch", "TextAlign", "TextTransform", "Tick"]],
   ["Values", ["Color", "Fill", "Gradient", "Length", "Percent", "Radius", "Inset", "Shape", "Stroke", "BoxStroke", "Outline",

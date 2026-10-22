@@ -19,6 +19,11 @@
 
 import pp from "/Users/temkin/Code/OpenLaszlo/openlaszlo-5.0/compiler/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js";
 import fs from "node:fs";
+// the profile this run makes goes when it ends, however it ends
+import { rmSync as rmProfile } from "node:fs";
+const PROFILES = [];
+const keepProfile = (dir) => { PROFILES.push(dir); return dir; };
+process.on("exit", () => { for (const d of PROFILES) { try { rmProfile(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const CHROME = "/Users/temkin/.cache/puppeteer/chrome/mac_arm-146.0.7680.31/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -51,7 +56,7 @@ const HOOK = `(function(){
 })();`;
 
 const b = await (async()=>{ for(let i=0;i<8;i++){ try{ return await pp.launch({ executablePath: CHROME,
-  headless:"new", userDataDir:"/tmp/tl-"+label+"-"+Date.now(), args:["--no-sandbox","--force-device-scale-factor="+DPR,"--window-size=1000,700"] }); }
+  headless:"new", userDataDir:keepProfile("/tmp/tl-"+label+"-"+Date.now()), args:["--no-sandbox","--force-device-scale-factor="+DPR,"--window-size=1000,700"] }); }
   catch(e){ await sleep(1200); } } throw new Error("launch x8"); })();
 const p = await b.newPage(); await p.setViewport({ width:1000, height:700, deviceScaleFactor:DPR });
 await p.evaluateOnNewDocument(HOOK);

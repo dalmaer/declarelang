@@ -168,7 +168,8 @@ export default async ({ drive, expect }) => {
 **`drive`** — `click(path)` · `drag(path, dx, dy, steps?)` · `wheel(path, dy, dx?)` · `key(name)` · `type(text)` ·
 `tab(n?)` · `wait(ms)` · `settleMotion(maxMs?)` · `settleData()` · `traceStart(n?)` ·
 `trace()` · `traceText()` (the wake trace, above — what the drive you just did changed, and
-why) · `page` (the raw puppeteer page, for what the vocabulary doesn't cover).
+why) · `requests()` (what the program has sent) · `page` (the browser page the app is
+loaded in, for what the vocabulary doesn't cover).
 
 Note `click(path)` computes the point from `inspect()` and dispatches a **real** press
 there — so it exercises the actual hit-test. It reaches what a user would reach, not

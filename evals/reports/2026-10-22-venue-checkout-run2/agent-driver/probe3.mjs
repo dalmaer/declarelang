@@ -1,0 +1,14 @@
+import { open, byRole, sleep, freeSeats } from "./lib.mjs";
+const { browser, page } = await open({ phone: true });
+page.on("console", (m) => { if (m.text().startsWith("reveal")) console.log(m.text()); });
+await (await byRole(page, "button", "Sat 14 Nov, 7:30pm")).tap();
+await sleep(1200);
+const s = await freeSeats("p02", 1, "BALC");
+await (await byRole(page, "button", s[0].name)).tap();
+await (await byRole(page, "button", "Checkout")).tap();
+await sleep(800);
+const el = await byRole(page, "textbox", "Name on card");
+await el.tap();
+await sleep(600);
+console.log(await page.evaluate(() => [scrollY, JSON.stringify(document.activeElement.getBoundingClientRect())]));
+await browser.close();

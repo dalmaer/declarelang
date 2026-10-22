@@ -81,7 +81,26 @@ const flags = {
   bootBudget: Number((args.find((a) => a.startsWith("--boot-budget=")) ?? "--boot-budget=15000").split("=")[1] ?? 15000),
   // --samples: print the sample each data source was fed at rung 4
   samples: args.includes("--samples"),
+  // --no-boot: go to the browser rungs without the headless boot — for
+  // declare-look, which runs the program in a browser at once and is asked
+  // again and again while a program is written
+  noBoot: args.includes("--no-boot"),
+  // --size WxH [--touch]: the window the headless boot fills (default: a laptop,
+  // then a phone held upright, touch). --read PATH.ATTR (repeatable), --outline
+  // [PATH], --semantics [PATH]: answered from that boot, no browser.
+  size: argVal("size"),
+  touch: args.includes("--touch"),
+  reads: args.flatMap((a, i) => a === "--read" && args[i + 1] !== undefined ? [args[i + 1]] : a.startsWith("--read=") ? [a.slice(7)] : []),
+  outline: optionalVal("outline"),
+  semantics: optionalVal("semantics"),
 };
+/** A flag that may stand alone (true) or name a path (`--outline app.list`). */
+function optionalVal(name) {
+  const i = args.indexOf(`--${name}`);
+  if (i < 0) return null;
+  const v = args[i + 1];
+  return v !== undefined && !v.startsWith("--") && !v.endsWith(".declare") ? v : true;
+}
 if (!file) {
   console.error("usage: node tools/verify.mjs <app.declare> [--json] [--rung=N] [--only <include>] [--wrap] [--boot-budget=ms] [--samples]");
   process.exit(2);
@@ -198,11 +217,56 @@ async function compiledProgram() {
 // settle is stopped and reported with what it was running. Typography-sensitive
 // assertions are out of scope at Node rung 4 BY DESIGN (verify-and-evals.md §2.8).
 const boot = { ran: false, ok: false, nodes: 0, ms: 0, errors: [], notes: [], samples: [] };
-if (failedRung === null && flags.rung >= 4) {
+// BOTH WINDOWS. With no --size, the boot fills a laptop window and then a phone
+// held upright (touch): a program is written for both, and what goes wrong on
+// one — a row past the edge, a target too small for a finger — is seen there.
+const sized = (() => {
+  const m = /^(\d+)x(\d+)$/.exec(flags.size ?? "");
+  return m !== null ? [{ size: [Number(m[1]), Number(m[2])], touch: flags.touch, tag: "" }] : null;
+})();
+const queries = flags.reads.length > 0 || flags.outline !== null || flags.semantics !== null
+  ? { reads: flags.reads, outline: flags.outline, semantics: flags.semantics } : null;
+boot.layout = []; boot.unbuilt = []; boot.answers = []; boot.where = null;
+// WHERE RUNG 4 BOOTS: in Chrome when there is one — the Chrome kept running
+// between checks (tools/internal/chrome.mjs), so a boot there costs about what
+// one headless did, with real text where headless measures by a stand-in. With
+// no Chrome, or DECLARE_HEADLESS_BOOT=1, it boots headless in Node.
+const inChrome = await (async () => {
+  if (process.env.DECLARE_HEADLESS_BOOT === "1") return false;
+  try { (await import("./internal/chrome.mjs")).findChrome(); return true; } catch { return false; }
+})();
+if (failedRung === null && flags.rung >= 4 && !flags.noBoot) {
   boot.ran = true;
+  boot.where = inChrome ? "chrome" : "headless";
   try {
-    const { bootInWorker } = await import("./internal/verify-boot.mjs");
-    Object.assign(boot, await bootInWorker(await compiledProgram(), { budgetMs: flags.bootBudget }));
+    const program = await compiledProgram();
+    const windows = sized ?? [{ size: [1280, 800], touch: false, tag: "" }, { size: [390, 844], touch: true, tag: "phone 390×844: " }];
+    const own = (program.classes ?? []).filter((c) => !String(c.pos?.file ?? "").startsWith("library/")).map((c) => c.name);
+    let results;
+    if (inChrome) {
+      const { runBootInBrowser } = await import("./internal/verify-behave.mjs");
+      const { dirname: dirOf, resolve: resolvePath } = await import("node:path");
+      results = await runBootInBrowser({ compiled: { program }, appDir: dirOf(resolvePath(file)), windows, queries, classes: own, budgetMs: flags.bootBudget });
+    } else {
+      const { bootInWorker } = await import("./internal/verify-boot.mjs");
+      results = [];
+      for (const [i, w] of windows.entries()) results.push(await bootInWorker(program, { budgetMs: flags.bootBudget, size: w.size, touch: w.touch, queries: i === 0 ? queries : null }));
+    }
+    let first = true;
+    for (const [i, r] of results.entries()) {
+      const w = windows[i];
+      if (first) Object.assign(boot, { ...r, layout: [] });
+      else {
+        boot.ok = boot.ok && r.ok;
+        for (const e of r.errors) if (!boot.errors.includes(e)) boot.errors.push(w.tag + e);
+        // the same finding at the other size, with other numbers, is one finding
+        const gist = (n) => n.replace(/\([^)]*\)/g, "");
+        for (const n of r.notes) if (!boot.notes.some((m) => gist(m) === gist(n))) boot.notes.push(w.tag + n);
+        boot.unbuilt = boot.unbuilt.filter((c) => r.unbuilt.includes(c));
+      }
+      for (const l of r.layout ?? []) boot.layout.push(w.tag + l);
+      first = false;
+    }
     if (!boot.ok) failedRung = 4;
   } catch (e) {
     boot.errors.push(`boot: ${e?.message ?? e}`);
@@ -223,6 +287,7 @@ if (failedRung === null && flags.rung >= 5 && flags.assert !== null) {
       appDir: dirOf(resolvePath(file)),
       assertPath: flags.assert,
       fixturesDir: flags.fixtures,
+      budgetMs: flags.bootBudget,
     });
     behave.ok = r.ok;
     behave.failures = r.failures;
@@ -251,6 +316,7 @@ if (failedRung === null && flags.rung >= 6 && flags.states !== null) {
       baselinesDir: flags.baselines ?? joinPath(dirOf(resolvePath(flags.states)), "baselines"),
       bless: flags.bless,
       fixturesDir: flags.fixtures,
+      budgetMs: flags.bootBudget,
     });
     visual.ok = r.ok;
     visual.failures = r.failures;
@@ -281,7 +347,7 @@ if (flags.json) {
     probe: probeNote,
     only: onlyNote,
     stats: { constraints: out.deps?.length ?? 0, bootNodes: boot.nodes, bootMs: boot.ms },
-    boot: boot.ran ? { ok: boot.ok, errors: boot.errors, notes: boot.notes, samples: boot.samples ?? [] } : null,
+    boot: boot.ran ? { ok: boot.ok, errors: boot.errors, notes: boot.notes, layout: boot.layout, unbuilt: boot.unbuilt, answers: boot.answers, samples: boot.samples ?? [] } : null,
     behavior: behave.ran ? { ok: behave.ok, failures: behave.failures, steps: behave.log } : null,
     visual: visual.ran ? { ok: visual.ok, failures: visual.failures, results: visual.results } : null,
     diagnostics: out.diagnostics,
@@ -296,7 +362,7 @@ if (flags.json) {
       optionalIdle || r.n > effectiveBuilt ? "·" : "✓";
     const note =
       optionalIdle || r.n > effectiveBuilt ? ` — ${r.what}` :
-      r.n === 4 && boot.ran && boot.ok ? ` (${boot.nodes} nodes, settled in ${boot.ms} ms, synthetic metrics)` :
+      r.n === 4 && boot.ran && boot.ok ? ` (${boot.nodes} nodes, in ${boot.where === "chrome" ? "Chrome, real text" : "Node, stand-in text"}${sized ? "" : ", a laptop and a phone"})` :
       r.n === 5 && behave.ran && behave.ok ? ` (${behave.log.length} steps, real input)` :
       r.n === 6 && visual.ran && visual.ok ? ` (${visual.results.length} states${flags.bless ? ", blessed" : ""})` : "";
     console.log(`  R${r.n} ${mark} ${r.name}${note}`);
@@ -312,6 +378,9 @@ if (flags.json) {
   for (const w of warnings) console.log(`  warn ${show(w)}`);
   for (const h of hints) console.log(`  hint ${show(h)}`);
   for (const n of boot.notes) console.log(`  note ${n}`);
+  for (const l of boot.layout) console.log(`  layout ${l}`);
+  if (boot.unbuilt.length > 0) console.log(`  note not built at boot, so not checked here: ${boot.unbuilt.slice(0, 12).join(", ")}${boot.unbuilt.length > 12 ? ", …" : ""} — they appear once data arrives or the state changes; an assert script, or declare-look, reaches them`);
+  for (const a of boot.answers) console.log(a);
   if (flags.samples) for (const s of boot.samples ?? []) console.log(`  sample ${s.source}: ${JSON.stringify(s.value)}`);
   if (failedRung === null) {
     // wired = rows with a non-empty dep set; an empty row is a constraint on
@@ -325,10 +394,13 @@ if (flags.json) {
     // other finding combined: a clean R4, then `Track is not defined` in a real
     // browser. verify.md said so; the verdict line did not, and the verdict is
     // what an author reads. Named here, once, where the good news is delivered.
-    if (climbed <= 4) {
-      console.log(`  note R1–R4 run in a synthetic backend — real fonts, layout, images and the`);
-      console.log(`       browser's own module evaluation are not exercised. Drive it for real:`);
-      console.log(`       --assert <script.mjs> (R5), or open it in the dev server.`);
+    if (climbed === 4 && boot.where === "headless") {
+      console.log(`  note R4 booted in Node (no Chrome found, or DECLARE_HEADLESS_BOOT=1): the layout is the`);
+      console.log(`       runtime's own, but text is measured by a stand-in, so the checks that rest on`);
+      console.log(`       text did not run, and nothing was painted.`);
+    } else if (climbed === 4) {
+      console.log(`  note R4 booted the program as it starts; a screen it reaches only after a press or`);
+      console.log(`       data is checked by driving it there: --assert <script.mjs> (R5).`);
     }
   } else {
     console.log(`  verify: ${file} — FAILED at R${failedRung}`);

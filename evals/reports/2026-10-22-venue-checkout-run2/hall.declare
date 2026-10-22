@@ -1,0 +1,420 @@
+/*
+## The hall
+
+The house is drawn as it is built: rows are arcs about a point behind the stage, so
+every row bends to face it, and each section starts a gap behind the one in front. A
+seat's place is its row's radius and its index along the arc — `unit` pixels to one
+seat's width — so the same room is drawn small on a desk and large on a phone.
+
+A seat is free, yours, or gone, and the three differ in shape and brightness as well
+as colour: a pale chair, a brass chair carrying a check, a small dim dot.
+*/
+
+class SeatView extends Control [
+    accessibilityRole = toggle,
+    accessibilityLabel = { seatName(provided("sectionName"), provided("rowName"), :number) },
+    accessibilityPressed = { classroot.mine },
+    accessibilityHint = { money(provided("priceCents")) + (classroot.gone ? ", sold" : classroot.mine ? ", chosen" : ", available") },
+
+    mine: boolean = { app.chosen.includes(:id) },
+    gone: boolean = { :status == "sold" },
+    lost: boolean = { app.lostIds.includes(:id) },
+    disabled = { classroot.gone },
+
+    // where it sits: along its row's arc, turned to face the stage
+
+    unit: number = { provided("unit") },
+    radius: number = { provided("radius") },
+    angle: number = { (rowIndex - (provided("count") - 1) / 2) / classroot.radius },
+    width = { classroot.unit },
+    height = { classroot.unit * app.rowPitch },
+    x = { (provided("originX") + classroot.radius * Math.sin(classroot.angle)) * classroot.unit - this.width / 2 },
+    y = { (provided("originY") + classroot.radius * Math.cos(classroot.angle) - app.stageDepth) * classroot.unit - this.height / 2 },
+    rotation = { -classroot.angle * 180 / Math.PI },
+
+    // choosing registers: the chair swells and settles
+
+    pop: number = 0,
+    popper: Animator [ attribute = pop, from = 1, to = 0, duration = 380, motion = cubicOut ],
+
+    press() {
+        app.toggleSeat(:id)
+        if (!classroot.mine) this.popper.start()
+        },
+
+    chair: View [ x = center, y = center,
+        width = { classroot.unit * 0.8 }, height = { classroot.unit * 0.74 },
+        cornerRadius = { [this.width * 0.36, this.width * 0.36, this.width * 0.16, this.width * 0.16] },
+        scale = { classroot.gone ? 0.38 : classroot.mine ? 1.04 + 0.3 * classroot.pop : classroot.hovered ? 1.08 : 1 },
+        fill = { classroot.mine ? provided("theme").seatMine
+               : classroot.gone ? provided("theme").seatGone
+               : provided("theme").seatFree[provided("tier")] },
+        stroke = { classroot.lost ? stroke(2.5, provided("theme").seatMine) : null },
+        mark: CheckIcon [ x = center, y = center, visible = { classroot.mine },
+            iconSize = { classroot.unit * 0.5 }, ink = { provided("theme").seatMineInk } ]
+        ]
+    ]
+
+
+// one row: an arc of seats, with its letter at both ends
+
+class SeatRowArc [
+    rowName: string = { :name },
+    count: number = { :seats.length },
+    radius: number = { provided("startRadius") + rowIndex * app.rowPitch },
+
+    endAngle: number = { ((this.count - 1) / 2 + 1.3) / this.radius },
+    left: Text [ fontSize = { Math.max(9, Math.min(13, provided("unit") * 0.42)) }, fontWeight = semibold, wrap = false,
+        textColor = { provided("theme").houseMuted }, text = { classroot.rowName },
+        x = { (provided("originX") - classroot.radius * Math.sin(classroot.endAngle)) * provided("unit") - this.width / 2 },
+        y = { (provided("originY") + classroot.radius * Math.cos(classroot.endAngle) - app.stageDepth) * provided("unit") - this.height / 2 } ],
+    right: Text [ fontSize = { Math.max(9, Math.min(13, provided("unit") * 0.42)) }, fontWeight = semibold, wrap = false,
+        textColor = { provided("theme").houseMuted }, text = { classroot.rowName },
+        x = { (provided("originX") + classroot.radius * Math.sin(classroot.endAngle)) * provided("unit") - this.width / 2 },
+        y = { (provided("originY") + classroot.radius * Math.cos(classroot.endAngle) - app.stageDepth) * provided("unit") - this.height / 2 } ],
+
+    SeatView [ datapath = :seats[] ]
+    ]
+
+
+// a section: its rows, and its name and price in the aisle in front of it
+
+class SectionBlock [
+    accessibilityRole = group,
+    accessibilityLabel = { :name + ", " + money(:priceCents) + " a seat" },
+    sectionName: string = { :name },
+    priceCents: number = { :priceCents },
+    tier: number = { Math.min(3, rowIndex) },
+    startRadius: number = { app.house.startRadius(rowIndex) },
+
+    caption: Text [ wrap = false, fontSize = { Math.max(10, Math.min(15, provided("unit") * 0.55)) },
+        fontWeight = semibold, letterSpacing = 1.2, textTransform = uppercase,
+        textColor = { provided("theme").houseText },
+        text = { :name + "  ·  " + money(:priceCents) },
+        x = { provided("originX") * provided("unit") - this.width / 2 },
+        y = { (provided("originY") + classroot.startRadius - app.stageDepth - (rowIndex == 0 ? app.frontGap : app.tierGap) / 2) * provided("unit") - this.height / 2 } ],
+
+    SeatRowArc [ datapath = :rows[], key = :name ]
+    ]
+
+
+// the stage: the edge everything faces
+
+class Stage [
+    unit: number = { provided("unit") },
+    width = { provided("hallWidth") * this.unit }, height = { (provided("originY") + 0.4) * this.unit },
+    accessibilityRole = image, accessibilityLabel = "Stage",
+    draw(d: Draw) {
+        const u = this.unit, cx = provided("originX") * u, top = (provided("originY") - 3.4) * u
+        const r = (app.stageDepth - 0.5) * u, focal = (provided("originY") - app.stageDepth) * u
+        const a = 0.62
+        d.fillStyle = provided("theme").stage
+        d.beginPath()
+        d.moveTo(cx - r * Math.sin(a), top)
+        d.lineTo(cx + r * Math.sin(a), top)
+        d.lineTo(cx + r * Math.sin(a), focal + r * Math.cos(a))
+        d.arc(cx, focal, r, Math.PI / 2 - a, Math.PI / 2 + a, false)
+        d.closePath()
+        d.fill()
+        },
+    label: Text [ fontSize = { Math.max(10, Math.min(14, provided("unit") * 0.5)) }, fontWeight = bold, letterSpacing = 3,
+        wrap = false, textColor = { provided("theme").stageText }, text = "STAGE",
+        x = { provided("originX") * provided("unit") - this.width / 2 },
+        y = { (provided("originY") - 1.6) * provided("unit") - this.height / 2 } ]
+    ]
+
+
+// the whole house at `unit` pixels a seat
+
+class HallMap [
+    accessibilityRole = group, accessibilityLabel = "Seats",
+    unit: number = 20,
+    hallWidth: number = { 2 * app.house.halfWidth() + 2 },
+    hallHeight: number = { app.house.lastRadius() - app.stageDepth + 4.6 + 1.6 },
+    originX: number = { this.hallWidth / 2 },
+    originY: number = 4.6,
+    width = { this.hallWidth * this.unit },
+    height = { this.hallHeight * this.unit },
+
+    // one Tab stop for the house; the arrows walk the seats
+
+    focusScope = stop,
+
+    stage: Stage [ ],
+    sections: View [ datapath = { app.house.value },
+        SectionBlock [ datapath = :sections[], key = :key ]
+        ]
+    ]
+
+
+/*
+## The house at a glance
+
+On a phone the seats are drawn large enough for a thumb, so the room no longer fits
+the screen. Above it sits the whole house in miniature, with a frame showing the part
+in view; touching the miniature moves the view there.
+*/
+
+class HouseOverview [
+    accessibilityRole = image,
+    accessibilityLabel = { "The whole house: " + app.house.freeCount() + " of " + app.house.seatTotal() + " seats free" },
+    pane: View? = null,
+    map: HallMap? = null,
+    scaleU: number = { Math.min(this.width / Math.max(1, this.map?.hallWidth ?? 1), this.height / Math.max(1, this.map?.hallHeight ?? 1)) },
+    offX: number = { (this.width - this.scaleU * (this.map?.hallWidth ?? 0)) / 2 },
+    cornerRadius = 10,
+    fill = { provided("theme").house },
+
+    draw(d: Draw) {
+        const m = this.map, p = this.pane
+        if (m == null || p == null) return
+        const s = this.scaleU, ox = this.offX, t = provided("theme")
+        const focal = m.originY - app.stageDepth
+        d.fillStyle = t.stage
+        d.fillRect(ox + (m.originX - 6) * s, (m.originY - 3.4) * s, 12 * s, 3 * s)
+        const secs = app.house.sections()
+        for (let si = 0; si < secs.length; si++) {
+            const r0 = app.house.startRadius(si)
+            secs[si].rows.forEach((row, ri) => {
+                const r = r0 + ri * app.rowPitch
+                row.seats.forEach((seat, k) => {
+                    const a = (k - (row.seats.length - 1) / 2) / r
+                    const mine = app.chosen.includes(seat.id)
+                    d.fillStyle = mine ? t.seatMine : seat.status == "sold" ? t.seatGone : t.seatFree[Math.min(3, si)]
+                    const size = mine ? s * 1.15 : seat.status == "sold" ? s * 0.45 : s * 0.75
+                    d.fillRect(ox + (m.originX + r * Math.sin(a)) * s - size / 2, (focal + r * Math.cos(a)) * s - size / 2, size, size)
+                    })
+                })
+            }
+        // the part of the house the view below is showing
+        const u = m.unit
+        d.strokeStyle = t.houseText
+        d.lineWidth = 1.5
+        d.strokeRect(ox + p.scrollX / u * s, p.scrollY / u * s, Math.min(p.width / u, m.hallWidth) * s, Math.min(p.height / u, m.hallHeight) * s)
+        },
+
+    look(e: PointerEvent) {
+        const m = this.map, p = this.pane
+        if (m == null || p == null) return
+        const ux = (e.x - this.offX) / this.scaleU, uy = e.y / this.scaleU
+        p.scrollBy(ux * m.unit - p.width / 2 - p.scrollX, uy * m.unit - p.height / 2 - p.scrollY)
+        },
+    onPointerDown(e: PointerEvent) { this.look(e) },
+    onPointerMove(e: PointerEvent) { if (app.pointerDown) this.look(e) }
+    ]
+
+
+// how the three states look, drawn as the hall draws them
+
+class LegendItem [
+    kind: "free" | "mine" | "gone" = "free",
+    label: string = "",
+    layout: SimpleLayout [ axis = x, spacing = 7, align = center ],
+    chip: View [ width = 18, height = 18, cornerRadius = 4, fill = { provided("theme").house },
+        View [ x = center, y = center, width = 13, height = 12,
+            cornerRadius = [5, 5, 2, 2],
+            scale = { classroot.kind == "gone" ? 0.4 : 1 },
+            fill = { classroot.kind == "mine" ? provided("theme").seatMine : classroot.kind == "gone" ? provided("theme").seatGone : provided("theme").seatFree[1] },
+            CheckIcon [ x = center, y = center, iconSize = 8, visible = { classroot.kind == "mine" }, ink = { provided("theme").seatMineInk } ]
+            ]
+        ],
+    Text [ fontSize = 13, wrap = false, textColor = { provided("theme").textMuted }, text = { classroot.label } ]
+    ]
+
+
+class Legend [
+    layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
+    LegendItem [ kind = "free", label = "Free" ],
+    LegendItem [ kind = "mine", label = "Yours" ],
+    LegendItem [ kind = "gone", label = "Taken" ]
+    ]
+
+
+// the prices, front to back, each beside the tone its seats are drawn in
+
+class PriceList [ width = 100%,
+    datapath = { app.house.value },
+    layout: SimpleLayout [ axis = y, spacing = 8 ],
+    View [ datapath = :sections[], width = 100%,
+        tier: number = { Math.min(3, rowIndex) },
+        layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
+        View [ width = 10, height = 10, cornerRadius = 3, fill = { provided("theme").seatFree[provided("tier")] },
+            stroke = { stroke(1, provided("theme").line) } ],
+        Text [ flexes = true, fontSize = 14, wrap = false, text = :name ],
+        Text [ fontSize = 14, wrap = false, numeralWidth = tabular, textColor = { provided("theme").textMuted },
+            text = { money(:priceCents) } ]
+        ]
+    ]
+
+
+// a chosen seat in the running summary, with the way to let it go
+
+class ChosenSeat [ width = 100%, height = 46,
+    layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
+    View [ width = 12, height = 11, cornerRadius = [5, 5, 2, 2], fill = { provided("theme").seatMine } ],
+    View [ flexes = true,
+        layout: SimpleLayout [ axis = y, spacing = 1 ],
+        Text [ fontSize = 14, fontWeight = semibold, wrap = false, text = :section ],
+        Text [ fontSize = 13, wrap = false, textColor = { provided("theme").textMuted }, text = { "Row " + :row + " · Seat " + :number } ]
+        ],
+    Text [ fontSize = 14, wrap = false, numeralWidth = tabular, text = { money(:priceCents) } ],
+    Button [ width = 34, height = 34, padH = 0, iconLeft = "CloseIcon", iconSize = 12,
+        accessibilityLabel = { "Remove " + :label },
+        onClick() { app.toggleSeat(:id) }
+        ]
+    ]
+
+
+// what someone else's purchase did to this person's choice
+
+class SeatNotice [ width = 100%, cornerRadius = 10, padding = [12, 14, 12, 14],
+    visible = { app.notice != "" },
+    fill = { provided("theme").errorFill },
+    accessibilityRole = status,
+    layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
+    View [ flexes = true,
+        Text [ width = 100%, wrap = true, fontSize = 14, lineHeight = 1.35, textColor = { provided("theme").error },
+            text = { app.notice } ]
+        ],
+    Button [ width = 32, height = 32, padH = 0, iconLeft = "CloseIcon", iconSize = 11,
+        accessibilityLabel = "Dismiss",
+        onClick() { app.notice = ""; app.lostIds = [] }
+        ]
+    ]
+
+
+/*
+## The hall screen
+
+At a desk: the house fills the window, and a panel beside it says which night this
+is, what the seats cost, and what has been chosen. On a phone: a bar above, the
+miniature, the house at thumb size, and the running total in reach at the bottom.
+*/
+
+class HallScreen [ width = 100%, height = { app.hostHeight },
+    unitFit: number = { Math.min(this.body.pane.width / Math.max(1, this.body.pane.map.hallWidth),
+                                 this.body.pane.height / Math.max(1, this.body.pane.map.hallHeight)) },
+    unit: number = { app.phone ? 34 : Math.max(15, Math.min(30, Math.floor(this.unitFit))) },
+
+    // arriving here puts focus on what the screen is: the night
+
+    arrive() { Focus.focus(app.phone ? this.top.titles.heading : this.body.side.intro.heading) },
+
+    // a new night opens on the front of the house, centred
+
+    frame() {
+        const p = this.body.pane
+        const m = p.map
+        p.scrollBy((m.width - p.width) / 2 - p.scrollX, (app.phone ? m.unit * 2.6 : 0) - p.scrollY)
+        },
+
+    layout: SimpleLayout [ axis = y ],
+
+    top: View [ visible = { app.phone }, width = 100%, height = 60, padding = [0, 12, 0, 6],
+        fill = { provided("theme").background },
+        layout: SimpleLayout [ axis = x, spacing = 4, align = center ],
+        back: BackButton [ accessibilityLabel = "All performances",
+            press() { app.toList() }
+            ],
+        titles: View [ flexes = true,
+            layout: SimpleLayout [ axis = y, spacing = 1 ],
+            heading: Text [ fontFamily = { app.serifStack }, fontSize = 19, wrap = false, accessibilityRole = heading, accessibilityLevel = 1,
+                focusable = true,
+                text = { app.perfLine } ],
+            Text [ fontSize = 13, wrap = false, numeralWidth = tabular, textColor = { provided("theme").textMuted }, accessibilityLive = polite,
+                text = { app.house.loaded ? app.house.freeCount() + " of " + app.house.seatTotal() + " seats free" : "Opening the house…" } ]
+            ]
+        ],
+
+    glance: View [ visible = { app.phone }, width = 100%, padding = [0, 16, 12, 16],
+        layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
+        overview: HouseOverview [ width = 150, height = 132, pane = { classroot.body.pane }, map = { classroot.body.pane.map } ],
+        View [ flexes = true,
+            layout: SimpleLayout [ axis = y, spacing = 10 ],
+            LegendItem [ kind = "free", label = "Free" ],
+            LegendItem [ kind = "mine", label = "Yours" ],
+            LegendItem [ kind = "gone", label = "Taken" ]
+            ]
+        ],
+
+    body: View [ width = 100%, flexes = true,
+        layout: SimpleLayout [ axis = x ],
+
+        pane: View [ flexes = true, height = 100%, scrolls = both, fill = { provided("theme").house },
+            map: HallMap [ unit = { classroot.unit },
+                x = { Math.max(0, (parent.width - this.width) / 2) },
+                y = { app.phone ? 0 : Math.max(0, (parent.height - this.height) / 2) } ],
+            loading: Text [ visible = { !app.house.loaded }, x = center, y = center, fontSize = 15,
+                textColor = { provided("theme").houseText }, accessibilityLive = polite,
+                text = { app.house.failed ? "The seat map didn't load. " + app.house.error : "Opening the house…" } ]
+            ],
+
+        side: View [ visible = { !app.phone }, width = 360, height = 100%, scrolls = y,
+            fill = { provided("theme").surface }, stroke = { [null, null, null, stroke(1, provided("theme").line)] },
+            padding = [24, 28, 28, 28],
+            layout: SimpleLayout [ axis = y, spacing = 14 ],
+
+            back: BackButton [ label = "All performances", ground = { provided("theme").surface },
+                press() { app.toList() }
+                ],
+            intro: View [ width = 100%,
+                layout: SimpleLayout [ axis = y, spacing = 4 ],
+                Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.4, textTransform = uppercase,
+                    textColor = { provided("theme").textMuted }, wrap = false,
+                    text = { app.season.title } ],
+                heading: Text [ fontFamily = { app.serifStack }, fontSize = 32, wrap = false, accessibilityRole = heading, accessibilityLevel = 1,
+                    focusable = true,
+                    text = { app.perf == null ? "" : dayLabel(app.perf.startsAt) } ],
+                Text [ fontSize = 15, wrap = false, textColor = { provided("theme").textMuted },
+                    text = { app.perf == null ? "" : timeLabel(app.perf.startsAt) + " · doors " + timeLabel(app.perf.doorsAt) } ]
+                ],
+            Text [ fontSize = 14, wrap = false, numeralWidth = tabular, accessibilityLive = polite,
+                text = { app.house.loaded ? app.house.freeCount() + " of " + app.house.seatTotal() + " seats free" : "Opening the house…" } ],
+            Legend [ ],
+            Divider [ ],
+            PriceList [ ],
+            Divider [ ],
+            empty: Text [ visible = { app.chosen.length == 0 }, width = 100%, wrap = true, fontSize = 14, lineHeight = 1.4,
+                textColor = { provided("theme").textMuted },
+                text = "Choose seats in the house. Choose one again to let it go." ],
+            SeatNotice [ ],
+            chosenList: View [ width = 100%, datapath = { app.chosenSeats.value },
+                accessibilityRole = list, accessibilityLabel = "Your seats",
+                layout: SimpleLayout [ axis = y ],
+                ChosenSeat [ datapath = :seats[], key = :id ]
+                ],
+            total: SeatTotal [ visible = { app.chosen.length > 0 } ]
+            ]
+        ],
+
+    bottom: View [ visible = { app.phone && (app.chosen.length > 0 || app.notice != "") }, width = 100%,
+        padding = { [12, 16, 12 + app.safeBottom, 16] },
+        fill = { provided("theme").surface }, stroke = { [stroke(1, provided("theme").line), null, null, null] },
+        layout: SimpleLayout [ axis = y, spacing = 10 ],
+        SeatNotice [ ],
+        SeatTotal [ visible = { app.chosen.length > 0 } ]
+        ]
+    ]
+
+
+// the running summary and the way on
+
+class SeatTotal [ width = 100%,
+    layout: SimpleLayout [ axis = x, spacing = 12, align = center ],
+    View [ flexes = true,
+        layout: SimpleLayout [ axis = y, spacing = 2 ],
+        sum: Text [ fontSize = 18, fontWeight = semibold, wrap = false, numeralWidth = tabular, accessibilityLive = polite,
+            text = { app.summary },
+            bump: number = 0,
+            scale = { 1 + 0.06 * this.bump },
+            pivotX = 0,
+            kick: Animator [ attribute = bump, from = 1, to = 0, duration = 320, motion = cubicOut ],
+            trackChanges = ["text"],
+            onChange() { this.kick.start() }
+            ],
+        Text [ fontSize = 12, wrap = false, textColor = { provided("theme").textMuted }, text = "Booking fees added at checkout" ]
+        ],
+    Button [ label = "Checkout", primary = true,
+        onClick() { app.toCheckout() }
+        ]
+    ]

@@ -63,3 +63,26 @@ export function inlineAppPage(build) {
   const booted = appJs.replace(/export\s*\{\s*([\w$]+) as default\s*\};?\s*$/, (_, fn) => `${fn}(${cfg});`);
   return `<!doctype html><div id=host></div><script type=module>${booted}</script>`;
 }
+
+// ── temporary folders ─────────────────────────────────────────────────────────
+// A test that needs a folder of its own gets one here, and it is removed when
+// the test's process exits — passed, failed or thrown. Folders made with a bare
+// mkdtemp were never removed, and a few hundred accumulated per machine.
+import { mkdtempSync as mkdtemp, rmSync as rmTree } from "node:fs";
+import { tmpdir as osTmpdir } from "node:os";
+import { join as joinPath } from "node:path";
+
+const TEMP_DIRS = [];
+let tempHook = false;
+/** A fresh folder in the system's temp folder, removed when this process exits. */
+export function tempDir(prefix) {
+  const dir = mkdtemp(joinPath(osTmpdir(), prefix));
+  TEMP_DIRS.push(dir);
+  if (!tempHook) {
+    tempHook = true;
+    const clean = () => { for (const d of TEMP_DIRS.splice(0)) { try { rmTree(d, { recursive: true, force: true }); } catch { /* best effort */ } } };
+    process.on("exit", clean);
+    for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { clean(); process.exit(130); });
+  }
+  return dir;
+}

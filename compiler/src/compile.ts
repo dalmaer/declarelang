@@ -1048,7 +1048,7 @@ export async function compile(source: string, opts: CompileOptions = {}): Promis
   const idiom = idiomDiagnostics(program, r.schemas);
   r.warnings.push(...idiom.warnings);
   const accessible = opts.accessibility ?? program.flags?.accessibility ?? true;
-  const a11y = accessibilityDiagnostics(program, r.schemas, { libraryEnd: preludeLen, warnings: accessible });
+  const a11y = accessibilityDiagnostics(program, r.schemas, { inLibrary: inLibrary(preludeLen, libSources, libIds, libFrom), warnings: accessible });
   r.errors.push(...a11y.errors);
   r.warnings.push(...a11y.warnings);
   const byPos = (a: DeclareError, b: DeclareError) => (a.pos?.offset ?? 0) - (b.pos?.offset ?? 0);
@@ -1429,6 +1429,24 @@ function countLines(s: string): number {
 /** A canonical include id as the author would write it: relative to the
  *  program's directory when it lives under it (the usual `rooms/x.declare`),
  *  else as the host named it (a library file, an absolute path, a URL). */
+/** Is a position in the class library — in the prelude, and not one of the
+ *  program's own files? Those are the files the main file includes, and the
+ *  files they include, outside the library: an app split into parts is
+ *  checked in every part, as the library (which its own tests hold) is not. */
+function inLibrary(preludeLen: number, sources: readonly string[], ids: readonly string[], from: readonly { how: CompiledSource["how"]; by: string | null }[]): (offset: number) => boolean {
+  const index = new Map(ids.map((id, i) => [id, i]));
+  const own = (i: number, depth = 0): boolean => {
+    const f = from[i];
+    if (f === undefined || f.how !== "include" || ids[i].includes("/library/") || depth > ids.length) return false;
+    if (f.by === null) return true;
+    const by = index.get(f.by);
+    return by !== undefined && own(by, depth + 1);
+  };
+  const ranges: [number, number][] = [];
+  for (let i = 0, at = 0; i < sources.length; at += sources[i].length + 1, i++) if (own(i)) ranges.push([at, at + sources[i].length]);
+  return (offset) => offset < preludeLen && !ranges.some(([a, b]) => offset >= a && offset < b);
+}
+
 function displayFile(id: string, originDir: string): string {
   if (originDir !== "") {
     const dir = originDir.endsWith("/") ? originDir : originDir + "/";

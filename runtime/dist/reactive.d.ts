@@ -68,6 +68,13 @@ export declare function kernel(): Kernel;
  *  this before materializing a Cell, so unobserved slots never allocate one. */
 export declare function isTracking(): boolean;
 export declare function trackCell(cell: number): void;
+/** Run `fn` and answer whether it read `cell` — the reads the running rule
+ *  makes, as they go into the track ring (before the kernel links them). For
+ *  a size that reads its parent's in only some branches (bind.ts). */
+export declare function readsCellDuring<T>(cell: number, fn: () => T): {
+    value: T;
+    hit: boolean;
+};
 /** One observable slot's dependency node. The value itself lives wherever it
  *  lives (a view field); a Cell exists only once something tracked a read of
  *  the slot — pay-per-use by construction — and its kernel id only once it is

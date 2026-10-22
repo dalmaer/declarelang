@@ -32,7 +32,7 @@ export const RUNTIME_METHODS = {
     // (islands.md): the provides list going down, the exposed values coming up,
     // and the verbs both ways — so they are listed on the concrete island.
     DOMIsland: ["exposed", "post"],
-    Editor: ["commit", "revert"],
+    Editor: ["commit", "revert", "judge"],
     TextInput: ["select"],
     RichText: [],
     Markdown: [],

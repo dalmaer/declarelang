@@ -11,12 +11,15 @@ The **required** tokens — the palette (`accent`, `surface`, `text`, `line`,
 here: a missing colour is an error to see, never a light default under a dark theme.
 
 A token whose natural default is another token (`trackFill` is `control` unless a
-theme says otherwise) is not here either; its reader says so with `??`. This record
-is not a preset: no program names it.
+theme says otherwise) has no value here; its reader says so with `??`. One that no
+preset states is listed as `null` all the same, so every token a theme can carry is
+declared somewhere and reading one that is not is a compile error. This record is
+not a preset: no program names it.
 */
 
 theme ThemeDefaults [
     accordionFontSize = 14,
+    accordionHeaderFill = null,
     accordionHeaderHeight = 34,
     appearanceSwitchSize = 32,
     buttonHeight = 40,
@@ -24,14 +27,18 @@ theme ThemeDefaults [
     comboboxHeight = 30,
     dialogBodyFontSize = 13,
     dialogButtonLayout = "end",
+    dialogCornerRadius = null,
+    dialogShadow = null,
     dialogTitleFontSize = 15,
     dialogWidth = 420,
     disabledOpacity = 0.45,
     dragShadow = shadow(0, 4, 14, #00000038),
     error = #C93429,
+    focusAnimate = true,
     focusRingGap = 0,
     focusRingInnerWidth = 0,
     focusRingWidth = 3,
+    focusSights = false,
     gridCellCornerRadius = 3,
     gridFontSize = 13,
     gridHeaderFontSize = 12,
@@ -53,8 +60,10 @@ theme ThemeDefaults [
     scrimFill = #000000,
     scrimOpacity = 0.32,
     searchFieldCornerRadius = "round",
+    searchFieldFill = null,
     searchFieldHeight = 32,
     searchFieldPadding = 16,
+    searchFieldStroke = null,
     segmentedCornerRadius = 8,
     segmentedFontSize = 13,
     segmentedHeight = 30,

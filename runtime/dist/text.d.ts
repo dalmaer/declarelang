@@ -60,7 +60,10 @@ export declare class Text extends View {
     /** The run's widest line: a hard line, or — with a `wrapWidth` and wrapping on —
      *  a line as wrapped at that width. */
     $widestLine(): number;
-    /** Whether the run wraps at its box: a width given it, or one taken from a `wrapWidth`. */
+    /** Whether the run wraps at its box: a width given it, or one taken from a `wrapWidth`.
+     *  `width` is read first, always: who owns it is not a tracked fact, so when a
+     *  layout takes the width over from the run's own auto-size (a flexing run
+     *  built after boot) it is the width's change that brings this question back. */
     $bounded(): boolean;
     /** True when the run sizes its own width: nothing set it, and what owns it, if
      *  anything, is the run's own auto-size. */

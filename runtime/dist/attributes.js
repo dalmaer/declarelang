@@ -1121,6 +1121,21 @@ export function markPercent(c) {
     PERCENTS.add(c);
     c.percent = true; // the kernel's auto-extent reads the flag off the owning rule
 }
+/** Mark or unmark a size as taken from the parent's, after the rule exists —
+ *  for a size that reads the parent's size in only some branches (bind.ts).
+ *  Answers whether the mark changed. */
+export function setPercentMark(c, on) {
+    if (c.percent === on)
+        return false;
+    if (on)
+        PERCENTS.add(c);
+    else
+        PERCENTS.delete(c);
+    c.percent = on;
+    if (c.id >= 0)
+        kernel().setPercent(c.id, on);
+    return true;
+}
 /** Is `self.name` owned by a percent binding — a slot whose value resolves
  *  against the parent's extent on that axis? */
 export function percentOwned(self, name) {

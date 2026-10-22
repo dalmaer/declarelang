@@ -611,6 +611,26 @@ export function trackCell(cell) {
         trackRing[trackCount[0]++] = cell;
     }
 }
+/** Run `fn` and answer whether it read `cell` — the reads the running rule
+ *  makes, as they go into the track ring (before the kernel links them). For
+ *  a size that reads its parent's in only some branches (bind.ts). */
+export function readsCellDuring(cell, fn) {
+    const start = trackCount[0];
+    const value = fn();
+    let hit = false;
+    if (trackCount[0] >= start) {
+        for (let i = start; i < trackCount[0]; i++)
+            if (trackRing[i] === cell) {
+                hit = true;
+                break;
+            }
+    }
+    else {
+        // the ring flushed mid-run: the kernel has linked the reads so far
+        hit = ACTIVE[0] >= 0 && K.deps(ACTIVE[0]).includes(cell);
+    }
+    return { value, hit };
+}
 /** One observable slot's dependency node. The value itself lives wherever it
  *  lives (a view field); a Cell exists only once something tracked a read of
  *  the slot — pay-per-use by construction — and its kernel id only once it is

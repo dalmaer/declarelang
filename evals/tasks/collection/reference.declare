@@ -18,7 +18,7 @@ class Row extends View [ height = 34, width = { parent.width }, cornerRadius = 8
     ]
 
 
-App [ theme = SanFrancisco, width = 440, height = 520, fill = { provided("theme").bg },
+App [ theme = SanFrancisco, width = 440, height = 520, fill = { provided("theme").background },
 
     tasks: Dataset {
         { "rows": [

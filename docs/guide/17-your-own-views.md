@@ -308,7 +308,19 @@ One path, three sizes. [`unit`](declare-docs:Icon.unit) scales the 16-box to the
 stroke by `unit` keeps its weight constant in real pixels, so the three look like one
 family. `ink` follows the provided text color, so an icon beside a muted label goes muted
 on its own; where no text color is provided it falls back to black, so state `ink` when
-you are not sure. A control names its icons by class — `Button [ iconLeft = "PlusIcon" ]`.
+you are not sure.
+
+A control names its icons by class: `Button [ iconLeft = "PlusIcon" ]`, and `iconRight`
+for the trailing slot. Any icon class works, your own included, and a subclass that sets
+an attribute is the way to give a control a variant of a library mark:
+
+```declare
+class BackChevron extends ChevronIcon [ dir = "left" ]
+
+App [ width = 320, height = 80, theme = { SanFrancisco }, fill = { provided("theme").background },
+    Button [ x = 20, y = 20, label = "Albums", iconLeft = "BackChevron" ]
+    ]
+```
 
 ## Writing a layout
 

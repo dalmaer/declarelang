@@ -1,0 +1,10 @@
+import { open, byRole, sleep, freeSeats } from "./lib.mjs";
+const { browser, page } = await open({ phone: true });
+await (await byRole(page, "button", "Sat 14 Nov, 7:30pm")).tap();
+await sleep(1200);
+const s = await freeSeats("p02", 1, "BALC");
+await (await byRole(page, "button", s[0].name)).tap();
+await (await byRole(page, "button", "Checkout")).tap();
+await sleep(800);
+console.log(await page.evaluate(() => JSON.stringify([__declare.explain("app", "height"), __declare.explain("app", "scrolls"), __declare.explain("app.checkoutScreen", "height")], null, 1).slice(0, 3000)));
+await browser.close();

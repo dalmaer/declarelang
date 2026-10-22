@@ -91,14 +91,14 @@ export function resolveShapes(program: Program, isBuiltinClass: (name: string) =
         resolveFields(a.value.shape);
         continue;
       }
-      if (a.name !== "schema" || a.value.kind !== "ident" || a.value.name === "null") continue;
+      if ((a.name !== "schema" && a.name !== "errorSchema") || a.value.kind !== "ident" || a.value.name === "null") continue;
       const written = a.value.name;
       const arrayRoot = written.endsWith("[]");
       const name = arrayRoot ? written.slice(0, -2) : written;
       const target = table.get(name);
       if (target === undefined) {
         errors.push(new DeclareError(
-          `schema = ${written}: '${name}' names no schema — ${table.size > 0 ? `declared schemas: ${[...table.keys()].join(", ")}` : "declare one with 'schema Name [ … ]', or write the shape inline: schema = [ field: type, … ]"}`,
+          `${a.name} = ${written}: '${name}' names no schema — ${table.size > 0 ? `declared schemas: ${[...table.keys()].join(", ")}` : "declare one with 'schema Name [ … ]', or write the shape inline: schema = [ field: type, … ]"}`,
           a.value.pos));
         continue;
       }

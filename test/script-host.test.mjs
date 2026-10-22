@@ -11,13 +11,13 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 import { compile } from "../compiler/dist/compile-node.js";
 import { parseProgram } from "../runtime/dist/parser.js";
 import { instantiate } from "../runtime/dist/index.js";
 import { applyDeps } from "../runtime/dist/deps.js";
 
-const dir = mkdtempSync(path.join(tmpdir(), "script-host-"));
+const dir = tempDir("script-host-");
 writeFileSync(path.join(dir, "dom.ts"), "export function title(): string { return document.title }\n");
 const build = (src) => compile(src, { originDir: dir });
 const APP = `App [ width = 10, height = 10 ]`;

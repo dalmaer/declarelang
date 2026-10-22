@@ -99,9 +99,13 @@ export class Text extends View {
             : disp.split("\n");
         return Math.ceil(lines.reduce((w, line) => Math.max(w, textWidth(line, font, this.letterSpacing)), 0));
     }
-    /** Whether the run wraps at its box: a width given it, or one taken from a `wrapWidth`. */
+    /** Whether the run wraps at its box: a width given it, or one taken from a `wrapWidth`.
+     *  `width` is read first, always: who owns it is not a tracked fact, so when a
+     *  layout takes the width over from the run's own auto-size (a flexing run
+     *  built after boot) it is the width's change that brings this question back. */
     $bounded() {
-        return (!this.$ownWidth || this.wrapWidth > 0) && this.width > 0;
+        const width = this.width;
+        return (!this.$ownWidth || this.wrapWidth > 0) && width > 0;
     }
     /** True when the run sizes its own width: nothing set it, and what owns it, if
      *  anything, is the run's own auto-size. */

@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 /** Boot `program` in a worker; resolve with the rung's record. Past `budgetMs`,
  *  the record says the boot did not settle and names the frames it was in. */
-export async function bootInWorker(program, { budgetMs = 15000 } = {}) {
+export async function bootInWorker(program, { budgetMs = 15000, size = null, touch = false, queries = null } = {}) {
   const session = new Session();
   session.connect();
   let paused = null;
@@ -40,7 +40,7 @@ export async function bootInWorker(program, { budgetMs = 15000 } = {}) {
     });
   });
   await session.post("NodeWorker.enable", { waitForDebuggerOnStart: false });
-  const worker = new Worker(fileURLToPath(import.meta.url), { workerData: { program } });
+  const worker = new Worker(fileURLToPath(import.meta.url), { workerData: { program, size, touch, queries } });
   const done = new Promise((resolve) => {
     worker.once("message", (m) => resolve({ kind: "done", record: m }));
     worker.once("error", (e) => resolve({ kind: "done", record: { ok: false, nodes: 0, ms: 0, errors: [`boot: ${e?.message ?? e}`], notes: [] } }));
@@ -96,11 +96,12 @@ export async function bootInWorker(program, { budgetMs = 15000 } = {}) {
 }
 
 // ── the worker ────────────────────────────────────────────────────────────
-/** The synthetic host the boot fills: a laptop window. */
+/** The synthetic host the boot fills: a laptop window, unless the run names one. */
 const HOST_W = 1280, HOST_H = 800;
 if (!isMainThread) {
-  const { program } = workerData;
-  const record = { ok: false, nodes: 0, ms: 0, errors: [], notes: [], samples: [] };
+  const { program, size, touch, queries } = workerData;
+  const [hostW, hostH] = size ?? [HOST_W, HOST_H];
+  const record = { ok: false, nodes: 0, ms: 0, errors: [], notes: [], samples: [], answers: [], layout: [], unbuilt: [] };
   installSyntheticHost();
   const rejections = [];
   process.on("unhandledRejection", (reason) => rejections.push(String(reason?.message ?? reason)));
@@ -115,26 +116,31 @@ if (!isMainThread) {
     const { buildProgram, settle } = await import("../../runtime/dist/index.js");
     const t0 = performance.now();
     const app = buildProgram(program);
+    // THE APP FILLS ITS HOST, as it does once a page mounts it — bound here
+    // without attaching (an attached boot would also draw, and drawing code
+    // meets the schema samples below, which are shaped right but say nothing
+    // a program's drawing can rely on)
+    app.$bindExtent?.();
     // A HOST TO FILL. A page feeds the App its window's size at mount; with no
     // window it would be 0 × 0, and every app sized from its host would boot
     // with no geometry for the checks below to read. A laptop window stands in.
     const { setBound } = await import("../../runtime/dist/attributes.js");
-    setBound(app, "hostWidth", HOST_W);
-    setBound(app, "hostHeight", HOST_H);
+    setBound(app, "hostWidth", hostW);
+    setBound(app, "hostHeight", hostH);
+    if (touch) setBound(app, "touchDevice", true);
     settle();
     record.ms = Math.round((performance.now() - t0) * 10) / 10;
-    // DATA FROM THE NETWORK never arrives headless, so the rows it would
-    // replicate are never built and their defects never surface here. Each
-    // DataSource that declares a `schema` and has not loaded is handed a small
-    // sample of that shape, as its fetch would deliver it, and onLoad runs.
-    const fed = await feedSchemaSamples(app, record.samples);
-    if (fed > 0) {
-      settle();
-      record.notes.push(`${fed} data source(s) fed a sample of their schema, so their rows were built (--samples prints them)`);
-    }
-    const walk = (n) => { record.nodes++; for (const c of n.children ?? []) walk(c); };
-    walk(app);
-    for (const n of await outOfReach(app)) record.notes.push(n);
+    // what rung 4 asks of the booted program — the same questions, in the
+    // same words, as a boot in a browser (runtime/src/boot-check.ts)
+    const { bootCheck } = await import("../../runtime/dist/boot-check.js");
+    const own = (program.classes ?? []).filter((c) => !String(c.pos?.file ?? "").startsWith("library/")).map((c) => c.name);
+    const r = bootCheck(app, { touch, realText: false, classes: own, feed: true, queries });
+    record.nodes = r.nodes;
+    record.notes.push(...r.notes);
+    record.layout = r.layout;
+    record.unbuilt = r.unbuilt;
+    record.answers = r.answers;
+    record.samples = r.samples;
     if (contained.length > 0) for (const c of new Set(contained)) record.errors.push(`boot: ${c}`);   // each row reports its own copy: once is enough
     else record.ok = true;
   } catch (e) {
@@ -161,8 +167,18 @@ function installSyntheticHost() {
     measureText(s) {
       const size = Number(/(\d+(?:\.\d+)?)px/.exec(this.font)?.[1] ?? 16);
       const ls = Number(/(-?\d+(?:\.\d+)?)px/.exec(this.letterSpacing)?.[1] ?? 0);
+      // per character, near a proportional face's widths (the compiler's
+      // approximate measurer): close enough for the layout checks to say
+      // "this runs past its box" about text that would
+      const mono = /mono|courier|consolas|menlo/i.test(this.font);
+      let em = 0;
+      for (const ch of s) {
+        const c = ch.codePointAt(0) ?? 0;
+        em += mono ? 0.6 : c >= 0x2e80 ? 1 : "mwMW@%".includes(ch) ? 0.85 : " fijlrt.,:;!'\"`|()[]{}".includes(ch) ? 0.31
+          : ch >= "A" && ch <= "Z" ? 0.68 : ch >= "0" && ch <= "9" ? 0.56 : 0.52;
+      }
       return {
-        width: s.length * size * 0.6 + Math.max(0, s.length - 1) * ls,
+        width: em * size + Math.max(0, s.length - 1) * ls,
         fontBoundingBoxAscent: size * 0.8,
         fontBoundingBoxDescent: size * 0.25,
       };
@@ -171,112 +187,4 @@ function installSyntheticHost() {
   globalThis.document = { __declareSyntheticMeasurer: true, createElement: () => ({ getContext: () => ctx }) };
   globalThis.requestAnimationFrame ??= () => 0; // motion needs the driven clock (phase 2)
   globalThis.cancelAnimationFrame ??= () => {};
-}
-
-/** CONTROLS NOBODY CAN REACH. A control that lies outside an ancestor which
- *  clips and does not scroll — with no scroller between them to bring it in —
- *  can never be seen or pressed; nor can one placed above or left of a
- *  scroller's origin, where no scroll reaches. Every other rung passes such a
- *  program (Cadence 12: a sheet's Save below its clip). Reported as a note,
- *  not a failure: a carousel that keeps cards outside its clip on purpose
- *  looks the same. Measured on the booted geometry; the App's own frame is
- *  not a clip here, because apps park closed panels off-stage by design. */
-async function outOfReach(app) {
-  const { View } = await import("../../runtime/dist/view.js");
-  const { rootFrameBox } = await import("../../runtime/dist/interaction.js");
-  const { pathOf } = await import("../../runtime/dist/inspect.js");
-  const isControl = (v) => { for (let c = v.constructor; c && c !== View; c = Object.getPrototypeOf(c)) if (c.name === "Control") return true; return false; };
-  const clips = (v) => v.clip !== null && v.clip !== false && v.clip !== "";
-  const out = [];
-  const say = (v, why) => out.push(`a control may be out of reach — ${pathOf(app, v)} (${v.constructor.name}) ${why}`);
-  const round = (b) => `x ${Math.round(b.x)}–${Math.round(b.x + b.width)}, y ${Math.round(b.y)}–${Math.round(b.y + b.height)}`;
-  const visit = (v) => {
-    if (isControl(v) && v.width > 0 && v.height > 0) {
-      const box = rootFrameBox(v);
-      for (let a = v.parent, child = v; a instanceof View && a.parent !== null; child = a, a = a.parent) {
-        if (a.scrolls !== "none") {
-          // in the scroller's content: nothing scrolls above or left of the origin
-          const c = rootFrameBox(v, undefined, a);
-          if (c.y + c.height <= 0 || c.x + c.width <= 0) say(v, `lies above or left of ${pathOf(app, a)}, a scroller, where no scroll reaches (${round(c)} in its content)`);
-          break;
-        }
-        if (clips(a) && !child.ignoreClip) {
-          const k = rootFrameBox(a);
-          // a clip with no area is a panel closed or not yet laid out: it hides
-          // its content by design, and says nothing about reach
-          if (k.width <= 0 || k.height <= 0) break;
-          const outside = box.x >= k.x + k.width || box.x + box.width <= k.x || box.y >= k.y + k.height || box.y + box.height <= k.y;
-          const partly = !outside && (box.x < k.x - 0.5 || box.y < k.y - 0.5 || box.x + box.width > k.x + k.width + 0.5 || box.y + box.height > k.y + k.height + 0.5);
-          if (outside || partly) {
-            say(v, `${outside ? "lies outside" : "is cut off by"} ${pathOf(app, a)}, which clips and does not scroll (the control ${round(box)}; the clip ${round(k)})`);
-            break;
-          }
-        }
-      }
-    }
-    for (const c of v.children ?? []) if (c instanceof View) visit(c);
-  };
-  visit(app);
-  return out;
-}
-
-/** Hand every unloaded, schema-declaring DataSource under `app` a sample
- *  of its schema, landed the way a fetch lands one (value, then onLoad).
- *  Each sample is recorded in `samples`. Returns how many were fed. */
-async function feedSchemaSamples(app, samples) {
-  const { DataSource } = await import("../../runtime/dist/data.js");
-  const { setBound } = await import("../../runtime/dist/attributes.js");
-  const sources = [];
-  const walk = (n) => { if (n instanceof DataSource) sources.push(n); for (const c of n.children ?? []) walk(c); };
-  walk(app);
-  let fed = 0;
-  for (const ds of sources) {
-    if (ds.value != null || ds.format === "text") continue;
-    // a list of fields (`schema = [ rows[]: Row ]`), or a bare array of records (`schema = Row[]`)
-    const shape = ds.schema;
-    const value = Array.isArray(shape) ? sampleOf(shape, 0)
-      : shape !== null && typeof shape === "object" && shape.arrayRoot === true && Array.isArray(shape.fields) ? [sampleOf(shape.fields, 1, 0), sampleOf(shape.fields, 1, 1)]
-      : undefined;
-    if (value === undefined) continue;
-    samples.push({ source: ds.name ?? ds.constructor.name, value });
-    setBound(ds, "value", value);
-    setBound(ds, "loading", false);
-    const h = ds.onLoad;
-    if (typeof h === "function") {
-      try { h.call(ds); } catch (e) { console.error(`[Declare] onLoad on ${ds.constructor.name} threw: ${e?.message ?? e}`); }
-    }
-    fed++;
-  }
-  return fed;
-}
-
-/** A small document of a schema's shape: every field present, two records per
- *  list, a literal union's first member, distinct ids so rows keep identity.
- *  A string field whose name says what it holds gets a value of that kind — a
- *  date, a time, an address — because code that reads it parses it, and a
- *  word where a date belongs is not a case a program is written for. */
-function sampleOf(fields, depth, index = 0) {
-  const out = {};
-  for (const f of fields) {
-    const one = (i) => {
-      if (f.fields !== undefined) return depth < 3 ? sampleOf(f.fields, depth + 1, i) : {};
-      if (f.tokens !== undefined && f.tokens.length > 0) return f.tokens[0];
-      if (f.type === "number") return f.name === "id" ? i + 1 : 1;
-      if (f.type === "boolean") return false;
-      if (f.name === "id") return `id${i + 1}`;
-      return stringFor(f.name, i);
-    };
-    out[f.name] = f.array ? [one(0), one(1)] : one(index);
-  }
-  return out;
-}
-
-function stringFor(name, i) {
-  const n = name.toLowerCase();
-  const day = `2026-01-${String(15 + i).padStart(2, "0")}`;
-  if (/(^|_)(date|day|today|birthday)$|date$|day$/.test(n)) return day;
-  if (/^(at|time|timestamp|when)$|_(at|time)$|(created|updated|started|ended|sent|seen|modified)(_?at)?$/.test(n) || /[a-z]At$/.test(name)) return `${day}T09:30:00Z`;
-  if (/url$|href$|link$|src$|image$|avatar$/.test(n)) return `https://example.com/${name}/${i + 1}`;
-  if (/email$/.test(n)) return `person${i + 1}@example.com`;
-  return "sample";
 }

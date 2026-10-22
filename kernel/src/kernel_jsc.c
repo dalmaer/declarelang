@@ -127,6 +127,7 @@ FN(js_touch)        { kernel_touch(K, U(1)); return JSValueMakeUndefined(ctx); }
 FN(js_is_set)       { return N(kernel_is_set(K, U(1))); }
 FN(js_own)          { return N(kernel_own(K, U(1), U(2))); }
 FN(js_release)      { kernel_release(K, U(1), U(2)); return JSValueMakeUndefined(ctx); }
+FN(js_set_percent)  { kernel_set_percent(K, U(1), (int)U(2)); return JSValueMakeUndefined(ctx); }
 FN(js_owner)        { return N(kernel_owner(K, U(1))); }
 FN(js_run)          { return N(kernel_run(K, U(1))); }
 FN(js_invalidate)   { kernel_invalidate(K, U(1)); return JSValueMakeUndefined(ctx); }
@@ -221,7 +222,7 @@ void declare_kernel_install(JSGlobalContextRef ctx) {
   def(ctx, o, "kernel_arena_size", js_arena_size); def(ctx, o, "kernel_load", js_load);
   def(ctx, o, "kernel_table", js_table); def(ctx, o, "kernel_nulls", js_nulls); def(ctx, o, "kernel_body_null", js_body_null); def(ctx, o, "kernel_cells", js_cells); def(ctx, o, "kernel_rules", js_rules); def(ctx, o, "kernel_elems", js_elems);
   def(ctx, o, "kernel_cell", js_cell); def(ctx, o, "kernel_write", js_write); def(ctx, o, "kernel_set", js_set); def(ctx, o, "kernel_touch", js_touch);
-  def(ctx, o, "kernel_is_set", js_is_set); def(ctx, o, "kernel_own", js_own); def(ctx, o, "kernel_release", js_release); def(ctx, o, "kernel_owner", js_owner);
+  def(ctx, o, "kernel_is_set", js_is_set); def(ctx, o, "kernel_own", js_own); def(ctx, o, "kernel_release", js_release); def(ctx, o, "kernel_set_percent", js_set_percent); def(ctx, o, "kernel_owner", js_owner);
   def(ctx, o, "kernel_run", js_run); def(ctx, o, "kernel_invalidate", js_invalidate); def(ctx, o, "kernel_dispose", js_dispose);
   def(ctx, o, "kernel_suspend", js_suspend); def(ctx, o, "kernel_resume", js_resume); def(ctx, o, "kernel_active", js_active);
   def(ctx, o, "kernel_track", js_track); def(ctx, o, "kernel_active_ptr", js_active_ptr); def(ctx, o, "kernel_settle", js_settle);

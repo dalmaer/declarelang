@@ -407,7 +407,7 @@ export function programFacts(program: ProgramLike, usedClasses: Iterable<string>
       if (v?.kind === "code" && v.src) readBody(v.src, f);
       literalCalls(v, f.calls);
       if (planful(v)) f.syntax.add("selector-path");
-      if (v?.kind === "schema" || (a.name === "schema" && v?.kind === "ident" && v.name !== "null")) f.syntax.add("schema");
+      if (v?.kind === "schema" || ((a.name === "schema" || a.name === "errorSchema") && v?.kind === "ident" && v.name !== "null")) f.syntax.add("schema");
       if (v?.kind === "path" && (v as { many?: boolean }).many === true) f.syntax.add("replication");
       if (a.bind === "two") f.syntax.add("two-way");
     }

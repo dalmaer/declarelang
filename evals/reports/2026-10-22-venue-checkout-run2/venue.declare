@@ -1,0 +1,548 @@
+/*
+# The Venue
+
+Box office for *The Marriage of Figaro* in the Grand Hall: pick a performance, choose
+seats in a drawn house, pay, and carry the tickets to the door.
+
+Everything lives behind the venue service (`api`), so the program is mostly the
+service's records seen four ways:
+
+- `season` — the production and its twenty performances;
+- `house` — the seat map of the performance being looked at, kept true by `feed`,
+  the service's stream of other people's purchases;
+- `account` — who is signed in, with their saved address and cards;
+- `order` — the payment, and the tickets it returns.
+
+Where the person is lives on the App: `location` names the performance (an address
+worth sharing), `waypoint` is the step past the hall (Back undoes it), `chosen` is their
+seats. What they type at checkout is one record, `form`, which no screen owns — so
+signing in halfway, or being sent back to the hall, loses nothing.
+
+The views are in three files: `hall.declare` (the room), `checkout.declare` (paying)
+and `tickets.declare` (what is held up at the door).
+*/
+
+include [ "list.declare", "hall.declare", "checkout.declare", "tickets.declare" ]
+
+// dates, money, cards and postcodes: functions of their arguments
+
+script {
+    const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    // "2026-11-13T19:30" is the hall's own wall-clock time: read it, never convert it
+    function stamp(iso: string): number[] {
+        const [date, time] = iso.split("T")
+        const [y, m, d] = date.split("-").map(Number)
+        const [hh, mm] = (time ?? "00:00").split(":").map(Number)
+        return [y, m, d, hh, mm]
+    }
+    function weekdayOf(iso: string): string {
+        const [y, m, d] = stamp(iso)
+        return DOW[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]
+    }
+    function dayNumber(iso: string): string { return "" + stamp(iso)[2] }
+    function monthOf(iso: string): string { return MON[stamp(iso)[1] - 1] }
+    function dayLabel(iso: string): string { return weekdayOf(iso) + " " + dayNumber(iso) + " " + monthOf(iso) }
+    function timeLabel(iso: string): string {
+        const [, , , hh, mm] = stamp(iso)
+        const h = hh % 12 == 0 ? 12 : hh % 12
+        return h + ":" + String(mm).padStart(2, "0") + (hh < 12 ? "am" : "pm")
+    }
+
+    function money(cents: number): string {
+        const c = Math.round(Math.abs(cents))
+        const dollars = Math.floor(c / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+        return (cents < 0 ? "−" : "") + "$" + dollars + "." + String(c % 100).padStart(2, "0")
+    }
+    function seatsWord(n: number): string { return n + (n == 1 ? " seat" : " seats") }
+    function seatName(section: string, row: string, n: number): string { return section + ", row " + row + ", seat " + n }
+
+    // the sentence a refusal carries, whatever shape the body arrived in
+    function messageOf(body: object, fallback: string): string {
+        const m = body != null ? (body as { message?: unknown }).message : null
+        return typeof m == "string" && m != "" ? m : fallback
+    }
+    function fieldOf(body: object): string {
+        const f = body != null ? (body as { field?: unknown }).field : null
+        return typeof f == "string" ? f : ""
+    }
+    function conflictsOf(body: object): string[] {
+        const c = body != null ? (body as { conflicts?: unknown }).conflicts : null
+        return Array.isArray(c) ? c.map(String) : []
+    }
+    function seatIdOf(data: string): string {
+        try { const m = JSON.parse(data); return typeof m.seatId == "string" ? m.seatId : "" } catch { return "" }
+    }
+
+    // ── cards ──
+
+    function digitsOf(s: string): string { return s.replace(/\D/g, "") }
+
+    // a field that groups its digits: deleting a separator deletes the digit before it
+    function editDigits(shown: string, typed: string, max: number): string {
+        let d = digitsOf(typed)
+        if (typed.length < shown.length && d == digitsOf(shown)) d = d.slice(0, -1)
+        return d.slice(0, max)
+    }
+
+    function brandOf(d: string): string {
+        if (/^3[47]/.test(d)) return "amex"
+        if (/^4/.test(d)) return "visa"
+        if (/^(5[1-5]|222[1-9]|22[3-9]|2[3-6]|27[01]|2720)/.test(d)) return "mastercard"
+        if (/^(6011|65|64[4-9]|622)/.test(d)) return "discover"
+        return ""
+    }
+    function brandName(b: string): string {
+        return b == "visa" ? "Visa" : b == "mastercard" ? "Mastercard" : b == "amex" ? "American Express" : b == "discover" ? "Discover" : ""
+    }
+    function cardLengths(b: string): number[] {
+        return b == "amex" ? [15] : b == "visa" ? [13, 16, 19] : b == "mastercard" ? [16] : b == "discover" ? [16, 17, 18, 19]
+             : [12, 13, 14, 15, 16, 17, 18, 19]
+    }
+    function cardMax(b: string): number { return Math.max(...cardLengths(b)) }
+    function groupCard(d: string): string {
+        const sizes = brandOf(d) == "amex" ? [4, 6, 5] : [4, 4, 4, 4, 3]
+        const out: string[] = []
+        let i = 0
+        for (const n of sizes) { if (i >= d.length) break; out.push(d.slice(i, i + n)); i += n }
+        return out.join(" ")
+    }
+    function luhn(d: string): boolean {
+        let sum = 0
+        for (let i = 0; i < d.length; i++) {
+            let n = Number(d[d.length - 1 - i])
+            if (i % 2 == 1) { n *= 2; if (n > 9) n -= 9 }
+            sum += n
+        }
+        return d.length > 0 && sum % 10 == 0
+    }
+    function cvcLength(b: string): number { return b == "amex" ? 4 : 3 }
+
+    // expiry is kept as up to four digits, MMYY; a first digit above 1 can only be a month
+    function expiryDigits(shown: string, typed: string): string {
+        let d = editDigits(shown, typed, 4)
+        if (d.length == 1 && d > "1") d = "0" + d
+        return d
+    }
+    function expiryText(d: string): string {
+        return d.length < 2 ? d : d.slice(0, 2) + " / " + d.slice(2)
+    }
+
+    // ── addresses ──
+
+    const POSTAL: { [c: string]: RegExp } = {
+        US: /^\d{5}(-\d{4})?$/,
+        CA: /^[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z] ?\d[ABCEGHJ-NPRSTV-Z]\d$/,
+        GB: /^(GIR ?0AA|[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2})$/
+    }
+    function postalOk(country: string, code: string): boolean {
+        const re = POSTAL[country]
+        return re != null && re.test(code.trim().toUpperCase())
+    }
+    // what a postcode can only be: lets an autofilled address bring its country with it
+    function postalCountry(code: string): string {
+        const hits = Object.keys(POSTAL).filter((c) => POSTAL[c].test(code.trim().toUpperCase()))
+        return hits.length == 1 ? hits[0] : ""
+    }
+    function postalNormal(country: string, code: string): string {
+        const s = code.trim().toUpperCase().replace(/\s+/g, "")
+        return country == "US" ? s : s.length > 3 ? s.slice(0, -3) + " " + s.slice(-3) : s
+    }
+    function postalExample(country: string): string {
+        return country == "US" ? "5 digits, like 94110" : country == "CA" ? "Like K1A 0B1" : "Like SW1A 2AA"
+    }
+    function emailOk(s: string): boolean { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim()) }
+
+    // ── barcodes ──
+    // Code 39: each character is five bars and four spaces, three of them wide,
+    // framed by '*'. Returns the module widths, bar first, narrow gap between characters.
+
+    const C39: { [c: string]: string } = {
+        "0": "nnnwwnwnn", "1": "wnnwnnnnw", "2": "nnwwnnnnw", "3": "wnwwnnnnn", "4": "nnnwwnnnw",
+        "5": "wnnwwnnnn", "6": "nnwwwnnnn", "7": "nnnwnnwnw", "8": "wnnwnnwnn", "9": "nnwwnnwnn",
+        "A": "wnnnnwnnw", "B": "nnwnnwnnw", "C": "wnwnnwnnn", "D": "nnnnwwnnw", "E": "wnnnwwnnn",
+        "F": "nnwnwwnnn", "G": "nnnnnwwnw", "H": "wnnnnwwnn", "I": "nnwnnwwnn", "J": "nnnnwwwnn",
+        "K": "wnnnnnnww", "L": "nnwnnnnww", "M": "wnwnnnnwn", "N": "nnnnwnnww", "O": "wnnnwnnwn",
+        "P": "nnwnwnnwn", "Q": "nnnnnnwww", "R": "wnnnnnwwn", "S": "nnwnnnwwn", "T": "nnnnwnwwn",
+        "U": "wwnnnnnnw", "V": "nwwnnnnnw", "W": "wwwnnnnnn", "X": "nwnnwnnnw", "Y": "wwnnwnnnn",
+        "Z": "nwwnwnnnn", "-": "nwnnnnwnw", "*": "nwnnwnwnn"
+    }
+    function code39(text: string): number[] {
+        const out: number[] = []
+        const chars = ("*" + text.toUpperCase() + "*").split("").filter((c) => C39[c] != null)
+        chars.forEach((c, i) => {
+            for (const w of C39[c]) out.push(w == "w" ? 3 : 1)
+            if (i < chars.length - 1) out.push(1)
+        })
+        return out
+    }
+    }
+
+
+// ── the service's records ──
+
+schema Performance [ id: string, startsAt: string, doorsAt: string, priceFromCents: number, seatsLeft: number, seats: number ]
+schema ProductionInfo [ title: string, hall: string, runningTime: string, performances[]: Performance ]
+
+schema Seat [ id: string, number: number, status: "available" | "sold" ]
+schema SeatRow [ name: string, seats[]: Seat ]
+schema Section [ key: string, name: string, priceCents: number, feeCents: number, rows[]: SeatRow ]
+schema SeatMap [ performanceId: string, sections[]: Section ]
+
+// one chosen seat, as the summary and checkout show it
+
+schema SeatInfo [ id: string, label: string, section: string, row: string, number: number, priceCents: number, feeCents: number ]
+
+schema SavedCardInfo [ id: string, brand: string, last4: string, expMonth: number, expYear: number ]
+schema Billing [ line1: string, line2?: string, city: string, postalCode: string, country: string ]
+schema Me [ name: string, email: string, billing?: Billing, cards[]: SavedCardInfo ]
+
+schema Ticket [ seatId: string, section: string, row: string, number: number, barcode: string ]
+schema Receipt [ code: string, email: string, totalCents: number, brand: string, last4: string, performanceId: string, tickets[]: Ticket ]
+
+// what the checkout form holds, typed as the person types it
+
+schema PayDraft [ email: string, name: string, number: string, expiry: string, cvc: string, savedCvc: string,
+    line1: string, line2: string, city: string, postalCode: string, country: string ]
+
+
+/*
+## The production
+
+Twenty performances, and how full each is. Fetched once; a performance's own
+`seatsLeft` is only the list's summary — the hall reads the live map.
+*/
+
+class Season extends DataSource [ schema = ProductionInfo, credentials = include,
+    title: string = { this.value?.title ?? "" },
+    hallName: string = { this.value?.hall ?? "" },
+    runningTime: string = { this.value?.runningTime ?? "" },
+    performances() -> Performance[] { return this.value?.performances ?? [] },
+    perf(id: string) -> Performance? { return this.performances().find((p) => p.id == id) ?? null }
+    ]
+
+
+/*
+## The house
+
+The seat map of one performance. Other people's purchases arrive on the App's
+`feed` and land here as `markSold`, so every view of a seat reads the truth. The
+hall's geometry starts here too: each section's first row sits a gap behind the last
+row of the section in front.
+*/
+
+class House extends DataSource [ schema = SeatMap, credentials = include,
+    sections() -> Section[] { return this.value?.sections ?? [] },
+
+    seatInfo(id: string) -> SeatInfo? {
+        for (const s of this.sections())
+            for (const r of s.rows)
+                for (const seat of r.seats)
+                    if (seat.id == id)
+                        return ({ id: id, label: seatName(s.name, r.name, seat.number), section: s.name, row: r.name,
+                                  number: seat.number, priceCents: s.priceCents, feeCents: s.feeCents })
+        return null
+        },
+    isFree(id: string) -> boolean {
+        return this.sections().some((s) => s.rows.some((r) => r.seats.some((seat) => seat.id == id && seat.status == "available")))
+        },
+    freeCount() -> number {
+        return this.sections().reduce((n, s) => n + s.rows.reduce((m, r) => m + r.seats.filter((seat) => seat.status == "available").length, 0), 0)
+        },
+    seatTotal() -> number {
+        return this.sections().reduce((n, s) => n + s.rows.reduce((m, r) => m + r.seats.length, 0), 0)
+        },
+
+    markSold(id: string) {
+        const secs = this.sections()
+        for (let si = 0; si < secs.length; si++)
+            for (let ri = 0; ri < secs[si].rows.length; ri++) {
+                const k = secs[si].rows[ri].seats.findIndex((seat) => seat.id == id)
+                if (k >= 0 && secs[si].rows[ri].seats[k].status != "sold")
+                    this.set(["sections", si, "rows", ri, "seats", k, "status"], "sold")
+                }
+        },
+
+    // in hall units (one seat's width): the radius of a section's first row
+
+    startRadius(si: number) -> number {
+        let r = app.stageDepth + app.frontGap
+        const secs = this.sections()
+        for (let i = 0; i < si && i < secs.length; i++) r += (secs[i].rows.length - 1) * app.rowPitch + app.tierGap
+        return r
+        },
+
+    // how far the widest row reaches either side of centre, its row letters included
+
+    halfWidth() -> number {
+        let w = 8
+        this.sections().forEach((s, si) => s.rows.forEach((r, ri) => {
+            const rad = this.startRadius(si) + ri * app.rowPitch
+            w = Math.max(w, rad * Math.sin(((r.seats.length - 1) / 2 + 1.9) / rad))
+            }))
+        return w
+        },
+    lastRadius() -> number {
+        const secs = this.sections()
+        return secs.length == 0 ? app.stageDepth + 10 : this.startRadius(secs.length - 1) + (secs[secs.length - 1].rows.length - 1) * app.rowPitch
+        }
+    ]
+
+
+/*
+## The account
+
+Who is signed in. The session is the service's cookie, so reloading asks again and
+signing out is the service's to do; `signedIn` is simply whether it answered.
+*/
+
+class Account extends DataSource [ schema = Me, credentials = include,
+    signedIn: boolean = { this.loaded && !this.failed },
+    name: string = { this.signedIn ? this.value?.name ?? "" : "" },
+    email: string = { this.signedIn ? this.value?.email ?? "" : "" },
+    cards() -> SavedCardInfo[] { return this.signedIn ? (this.value?.cards ?? []) : [] },
+    card(id: string) -> SavedCardInfo? { return this.cards().find((c) => c.id == id) ?? null },
+    expired(c: SavedCardInfo) -> boolean {
+        return c.expYear < app.clock.year || (c.expYear == app.clock.year && c.expMonth < app.clock.month)
+        },
+    firstUsable() -> string { return this.cards().find((c) => !this.expired(c))?.id ?? "" }
+    ]
+
+
+/*
+## The venue's look
+
+Paper and ink for the shop, a darkened house for the hall, and one accent — brass —
+which means *yours*: the seats you hold, and the one thing to press next.
+*/
+
+theme Venue [
+    background = #F5F0E8, surface = #FFFDF9, line = #E3DACC,
+    text = #1F1A16, textMuted = #6B6158, textFaint = #A99F92,
+    accent = #C9962B, accentTextColor = #1F1A16, accentHovered = #BB8A22, accentPressed = #A97B1C, linkColor = #1F1A16,
+    control = #ECE5DA, controlHovered = #E4DCCF, controlPressed = #D9D0C2, controlSelected = #F1E4C6,
+    controlCornerRadius = 10, buttonHeight = 48, buttonCornerRadius = 12,
+    error = #B3261E, errorFill = #FBEDEA,
+
+    // the house: lights down
+
+    house = #1C1815, houseLine = #3A332D, houseText = #CFC5B7, houseMuted = #8A7F72,
+    stage = #F3E6CC, stageText = #6B5A3C,
+    seatFree = [#EDE4D6, #D9CDBB, #C4B7A3, #AFA18C],      // by section, front to back: the dearer, the brighter
+    seatGone = #4B433B,
+    seatMine = #E0AC3A, seatMineInk = #1C1815,
+
+    // the ticket
+
+    ticketFill = #FFFDF9, ticketBand = #1C1815, ticketBandText = #F3E6CC
+    ]
+
+
+// the way back a step, pointing where it goes
+
+class BackButton extends Control [ height = 44, cornerRadius = 10, padding = [0, 12, 0, 8],
+    label: string = "",
+    ground: Color = { provided("theme").background },
+    accessibilityRole = button,
+    fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").control : this.ground },
+    layout: SimpleLayout [ axis = x, spacing = 4, align = center ],
+    ChevronIcon [ dir = "left", iconSize = 18, ink = { provided("theme").text } ],
+    Text [ visible = { classroot.label != "" }, fontSize = 15, fontWeight = semibold, wrap = false, text = { classroot.label } ]
+    ]
+
+
+// a round arrow that steps through a set
+
+class StepArrow extends Control [ width = 48, height = 48, cornerRadius = 24,
+    dir: string = "right",
+    accessibilityRole = button,
+    fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : provided("theme").control },
+    opacity = { disabled ? 0.35 : 1 },
+    ChevronIcon [ x = center, y = center, iconSize = 18, dir = { classroot.dir }, ink = { provided("theme").text } ]
+    ]
+
+
+App [ appName = "The Venue", theme = { { ...SanFrancisco, ...Venue } },
+    fill = { provided("theme").background }, textColor = { provided("theme").text },
+    fontFamily = { app.sans }, fontSize = 16,
+
+    // two families: a book face for the occasion, the system's for everything you read to act
+
+    serif: Font [ family = "Iowan Old Style" ],
+    serifStack: object = { [app.serif, "Palatino", "Georgia", "serif"] },
+    sans: Font [ family = "system-ui" ],
+
+    api: string = "http://127.0.0.1:8350",
+    clock: Time [ tick = day ],
+
+    // ── where the person is ──
+
+    phone: boolean = { app.width < 760 },
+    perfId: string = { app.season.perf(app.location) != null ? app.location : "" },
+    chosen: string[] = [],
+    notice: string = "",              // a sentence about the seats, from the stream or the service
+    lostIds: string[] = [],           // seats that just left their choice, marked in the hall
+    screen: "list" | "hall" | "checkout" | "tickets" = {
+          app.waypoint == "tickets" && app.order.loaded ? "tickets"
+        : app.perfId == "" ? "list"
+        : app.waypoint == "checkout" && app.chosen.length > 0 ? "checkout"
+        : "hall" },
+
+    // ── the records ──
+
+    season: Season [ url = { app.api + "/api/production" } ],
+    house: House [ url = { app.perfId == "" ? "" : app.api + "/api/performances/" + app.perfId + "/seats" }, auto = true,
+        onLoad() { app.reconcile() }
+        ],
+    account: Account [ url = { app.api + "/api/me" } ],
+
+    feed: EventStream [ listenTo = ["seatchanged"], retry = 2,
+        url = { app.perfId == "" ? "" : app.api + "/api/events?performance=" + app.perfId },
+        active = { app.screen == "hall" || app.screen == "checkout" },
+        onMessage(e: StreamMessage) { app.seatTaken(seatIdOf(e.data)) },
+
+        // a stream that drops and comes back may have missed sales: ask for the map again
+
+        trackChanges = ["status"],
+        onChange() { if (this.status == "open" && app.house.loaded) app.house.fetch() }
+        ],
+
+    onInit() {
+        this.season.fetch()
+        this.account.fetch()
+        },
+
+    perf: Performance? = { app.season.perf(app.perfId) },
+    perfLine: string = { app.perf == null ? "" : dayLabel(app.perf.startsAt) + " · " + timeLabel(app.perf.startsAt) },
+
+    // the hall's geometry, in seats: rows curve about a point this far behind the
+    // stage's edge, the first row a gap in front of it, each section a gap behind the last
+
+    stageDepth: number = 11,
+    frontGap: number = 2.8,
+    rowPitch: number = 1.25,
+    tierGap: number = 3,
+
+    // ── the choice ──
+
+    chosenSeats: Dataset [ schema = [ seats[]: SeatInfo ],
+        contents = { { seats: app.chosen.map((id) => app.house.seatInfo(id)).filter((s) => s != null) } } ],
+    seatsCents: number = { (app.chosenSeats.value?.seats ?? []).reduce((n, s) => n + s.priceCents, 0) },
+    feesCents: number = { (app.chosenSeats.value?.seats ?? []).reduce((n, s) => n + s.feeCents, 0) },
+    totalCents: number = { app.seatsCents + app.feesCents },
+    summary: string = { seatsWord(app.chosen.length) + " · " + money(app.seatsCents) },
+
+    toggleSeat(id: string) {
+        if (this.chosen.includes(id)) this.chosen = this.chosen.filter((c) => c != id)
+        else if (this.house.isFree(id)) this.chosen = [...this.chosen, id]
+        this.lostIds = []
+        this.notice = ""
+        },
+
+    // someone else bought a seat: the room shows it gone, and a choice that held it lets go
+
+    seatTaken(id: string) {
+        if (id == "") return
+        this.house.markSold(id)
+        if (this.chosen.includes(id)) this.release([id], "")
+        },
+
+    // seats leave the choice; the person is told which, in the service's words when it gave some
+
+    release(ids: string[], sentence: string) {
+        const names = ids.map((id) => this.house.seatInfo(id)?.label ?? id)
+        this.chosen = this.chosen.filter((c) => !ids.includes(c))
+        this.lostIds = ids
+        this.notice = sentence != "" ? sentence
+            : names.length == 1 ? names[0] + " was just taken by someone else."
+            : names.join(" and ") + " were just taken by someone else."
+        Accessibility.announce(this.notice, "assertive")
+        },
+
+    // a fresh map may disagree with the choice held against an older one
+
+    reconcile() {
+        const gone = this.chosen.filter((id) => !this.house.isFree(id))
+        if (gone.length > 0) this.release(gone, "")
+        },
+
+    // ── moving between the steps ──
+
+    pickPerformance(id: string) {
+        if (id != this.perfId) { this.chosen = []; this.notice = ""; this.lostIds = [] }
+        this.waypoint = ""
+        this.location = id
+        afterSettle(() => { app.hallScreen.frame(); app.hallScreen.arrive() })
+        },
+    toList() {
+        this.waypoint = ""
+        this.location = ""
+        afterSettle(() => Focus.focus(app.listScreen.col.title))
+        },
+    toCheckout() {
+        if (this.chosen.length == 0) return
+        this.notice = ""
+        this.lostIds = []
+        this.checkout.begin()
+        this.waypoint = "checkout"
+        afterSettle(() => { if (app.checkoutScreen != null) Focus.focus(app.checkoutScreen.head.title) })
+        },
+    toHall() {
+        this.waypoint = ""
+        afterSettle(() => app.hallScreen.arrive())
+        },
+    startAgain() {
+        this.chosen = []
+        this.notice = ""
+        this.lostIds = []
+        this.checkout.reset()
+        this.order.clear()
+        this.waypoint = ""
+        this.location = ""
+        afterSettle(() => Focus.focus(app.listScreen.col.title))
+        },
+
+    // ── signing in and out ──
+
+    signingIn: boolean = false,
+    signIn: DataSource [ url = { app.api + "/api/session" }, method = "POST", credentials = include,
+        onLoad() { app.account.fetch(); app.signingIn = false }
+        ],
+    signOut: DataSource [ url = { app.api + "/api/session" }, method = "DELETE", credentials = include, format = "text",
+        onLoad() { app.account.clear(); app.checkout.signedOut() }
+        ],
+    trackChanges = ["accountReady"],
+    accountReady: boolean = { app.account.signedIn },
+    onChange() { if (app.account.signedIn) app.checkout.signedIn() },
+
+    // ── paying ──
+
+    checkout: Checkout [ ],
+    order: DataSource [ url = { app.api + "/api/orders" }, method = "POST", credentials = include, schema = Receipt,
+        onLoad() { app.paid() },
+        trackChanges = ["loading"],
+        onChange() { if (!this.loading && this.failed) app.checkout.refused(this.statusCode, this.errorBody) }
+        ],
+
+    paid() {
+        this.chosen = []
+        this.checkout.reset()
+        this.waypoint = "tickets"
+        afterSettle(() => { if (app.ticketsScreen != null) Focus.focus(app.ticketsScreen.head.title) })
+        },
+
+    // ── the screens ──
+
+    listScreen: PerformanceList [ visible = { app.screen == "list" } ],
+    hallScreen: HallScreen [ visible = { app.screen == "hall" } ],
+    checkoutScreen: CheckoutScreen [ exists = { app.screen == "checkout" } ],
+    ticketsScreen: TicketsScreen [ exists = { app.screen == "tickets" } ],
+
+    payBar: PayBar [ exists = { app.screen == "checkout" && app.phone }, ignoreScroll = true ],
+
+    signInSheet: Sheet [ accessibilityLabel = "Sign in", shown = { app.signingIn },
+        input(open: boolean) { app.signingIn = open },
+        SignInForm [ exists = { app.signingIn } ]
+        ]
+    ]

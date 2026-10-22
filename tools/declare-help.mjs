@@ -554,6 +554,7 @@ function answer() {
   const answerHostGlobal = () => {
     const hostHint = hostGlobalHint(query);
     say(`'${query}' is the host's, not Declare's — a program runs on three renderers and names none of their globals. ${hostHint.charAt(0).toUpperCase()}${hostHint.slice(1)}`);
+    say(`  what code may name, and where (bodies, handlers, script): declare-help globals`);
     json = { kind: "host-global", name: query, hint: hostHint };
     return true;
   };
@@ -574,7 +575,11 @@ function answer() {
       }
     }) ||
     sharedHit("shared-alias", "aliases", (a) => say(`${a.name} — a shared type alias: ${a.type}`)) ||
-    sharedHit("shared-function", "functions", (f) => say(`${f.name} — a shared function, callable in ${HANDLER_ONLY.has(f.name) ? "a handler or a method (a { } value never waits)" : "any { } body"}: ${f.signature}`)) ||
+    sharedHit("shared-function", "functions", (f) => {
+      say(`${f.name} — a shared function, callable in ${HANDLER_ONLY.has(f.name) ? "a handler or a method (a { } value never waits)" : "any { } body"}: ${f.signature}`);
+      // a view's event by the same name (blur the filter, blur the focus leaving)
+      if ((schemaOf("View")?.events ?? []).includes(f.name)) say(`  also an event of every view, on${f.name[0].toUpperCase()}${f.name.slice(1)}(): declare-help View.event.${f.name}`);
+    }) ||
     sharedHit("shared-namespace", "namespaces", (n) => {
       say(`${n.name} — a shared namespace:`);
       for (const mline of n.members.slice(0, ALL ? Infinity : BUDGET_LINES - 3)) say(`  ${n.name}.${mline}`);

@@ -75,14 +75,14 @@ export function resolveShapes(program, isBuiltinClass = () => false) {
                 resolveFields(a.value.shape);
                 continue;
             }
-            if (a.name !== "schema" || a.value.kind !== "ident" || a.value.name === "null")
+            if ((a.name !== "schema" && a.name !== "errorSchema") || a.value.kind !== "ident" || a.value.name === "null")
                 continue;
             const written = a.value.name;
             const arrayRoot = written.endsWith("[]");
             const name = arrayRoot ? written.slice(0, -2) : written;
             const target = table.get(name);
             if (target === undefined) {
-                errors.push(new DeclareError(`schema = ${written}: '${name}' names no schema — ${table.size > 0 ? `declared schemas: ${[...table.keys()].join(", ")}` : "declare one with 'schema Name [ … ]', or write the shape inline: schema = [ field: type, … ]"}`, a.value.pos));
+                errors.push(new DeclareError(`${a.name} = ${written}: '${name}' names no schema — ${table.size > 0 ? `declared schemas: ${[...table.keys()].join(", ")}` : "declare one with 'schema Name [ … ]', or write the shape inline: schema = [ field: type, … ]"}`, a.value.pos));
                 continue;
             }
             a.value = { kind: "schema", shape: target.fields, pos: a.value.pos, refName: name, ...(arrayRoot ? { arrayRoot: true } : {}) };

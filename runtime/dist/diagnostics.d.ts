@@ -80,7 +80,9 @@ export declare const Diag: {
     unknownHandler: (owner: string, name: string, known: readonly string[], pos: Pos, near?: string | null) => DeclareError;
     accessibilityContract: (message: string, pos: Pos) => DeclareError;
     accessibilityRoleComputed: (pos: Pos) => DeclareError;
-    accessibilityNoName: (owner: string, role: string, pos: Pos) => DeclareError;
+    accessibilityNoName: (owner: string, role: string, pos: Pos, labelled?: boolean) => DeclareError;
+    accessibilityControlInControl: (inner: string, innerRole: string, outer: string, outerRole: string, pos: Pos) => DeclareError;
+    accessibilityCollapsedRead: (owner: string, axis: string, pos: Pos) => DeclareError;
     accessibilityDrawnFocusable: (owner: string, pos: Pos) => DeclareError;
     afterInValue: (pos: Pos) => DeclareError;
     scriptWrite: (name: string, pos: Pos) => DeclareError;

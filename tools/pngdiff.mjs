@@ -11,10 +11,11 @@
 // structural.
 import { readFileSync, existsSync } from "node:fs";
 import puppeteer from "puppeteer-core";
+import { launchChrome } from "./internal/chrome.mjs";
 const CHROME = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"].find(existsSync);
 const [a, b] = process.argv.slice(2);
 if (!a || !b) { console.error("usage: node tools/pngdiff.mjs a.png b.png"); process.exit(2); }
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
 const page = await browser.newPage();
 const r = await page.evaluate(async (A, B) => {
   const load = (d) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = "data:image/png;base64," + d; });

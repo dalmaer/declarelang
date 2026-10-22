@@ -6,7 +6,7 @@ App [ fill = 0xF6F8FA, textColor = 0x172530, fontSize = 14,
     d: Dataset { { "doc": { "title": "Untitled" } } },
     col: View [ x = 20, y = 16, width = 340, datapath = { d.value.doc },
         layout: SimpleLayout [ axis = y, spacing = 10 ],
-        TextInput [ width = 260, text <-> :title ],
+        TextInput [ width = 260, text <-> :title, accessibilityLabel = "Title" ],
         Text [ text = { "the record says: " + :title } ],
         Button [ label = "rename from the data side", height = 30,
             onClick() { app.d.set(["doc", "title"], "Set by a handler") }

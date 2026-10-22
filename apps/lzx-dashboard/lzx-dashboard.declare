@@ -371,12 +371,12 @@ App [ width = 1000, height = 710, fill = #80807E, appName = "Laszlo Dashboard",
 
                 nameLbl: Text [ x = 8, y = 36, text = "Name" ],
                 nameIn: TextInput [ x = 50, y = 34, width = 170, height = 20,
-                    fill = #FFFFFF, stroke = stroke(1, #1A1A1A), cornerRadius = 0,
+                    fill = #FFFFFF, stroke = stroke(1, #1A1A1A), cornerRadius = 0, accessibilityLabel = "Name",
                     onEnter() { Focus.next() }
                     ],
                 titleLbl: Text [ x = 8, y = 66, text = "Title" ],
                 titleIn: TextInput [ x = 50, y = 64, width = 170, height = 20,
-                    fill = #FFFFFF, stroke = stroke(1, #1A1A1A), cornerRadius = 0,
+                    fill = #FFFFFF, stroke = stroke(1, #1A1A1A), cornerRadius = 0, accessibilityLabel = "Title",
                     onEnter() { app.signIn(nameIn.text) }
                     ],
                 signBtn: DashButton [ x = 230, y = 64, width = 55, height = 20, label = "sign in",

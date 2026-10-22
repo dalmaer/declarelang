@@ -83,6 +83,9 @@ export function roleOf(v) {
 // What the tree needs of the role contracts (a11y-roles.ts), which the
 // compiler checks and a production build does not carry: whose name is its
 // content, and which roles are pressed or stepped.
+/** The roles a person reaches on their own — a container's name from content leaves them out. */
+export const REACHED_APART = new Set(["button", "toggle", "checkbox", "switch", "radio", "link", "menuItem", "slider", "spinButton", "textField", "searchBox", "combobox"]);
+const CELLS = new Set(["cell", "columnHeader"]);
 export const NAMED_BY_CONTENT = new Set(["button", "toggle", "checkbox", "switch", "radio", "link", "heading", "listItem", "cell", "columnHeader", "tab", "menuItem", "option", "treeItem"]);
 export const PRESSED = new Set(["button", "toggle", "checkbox", "switch", "radio", "tab", "menuItem", "option", "treeItem", "link", "row", "cell", "listItem"]);
 export const STEPPED = new Set(["slider", "spinButton", "separator"]);
@@ -154,6 +157,8 @@ function nodeFor(v, role) {
     }
     if (v.accessibilityHint !== "")
         node.hint = v.accessibilityHint;
+    if (v.accessibilityError !== "")
+        node.error = v.accessibilityError;
     // the value a slider or a progress bar reports
     const now = v.accessibilityValue, min = v.accessibilityMin, max = v.accessibilityMax, step = v.accessibilityStep;
     const text = v.accessibilityValueText;
@@ -184,6 +189,10 @@ function nodeFor(v, role) {
         st.push(v.accessibilityExpanded ? "expanded" : "collapsed");
     if (a.disabled === true)
         st.push("disabled");
+    if (v.accessibilityRequired)
+        st.push("required");
+    if (v.accessibilityError !== "")
+        st.push("invalid");
     if (v.focused)
         st.push("focused");
     if (v.accessibilityActiveItem !== null)
@@ -260,7 +269,8 @@ export function contentOf(v) {
     const words = [];
     const marks = [];
     const visit = (x) => {
-        if (!x.visible)
+        // what cannot be seen names nothing, as it is not read
+        if (!x.visible || x.opacity === 0)
             return;
         if (isText(x)) {
             const t = textOfRun(x).trim();
@@ -273,6 +283,10 @@ export function contentOf(v) {
                 words.push(blockText(b));
             return;
         }
+        // a control inside a row or an item is a stop of its own, reached and read
+        // there — the row's name is its own words, not its open editor's
+        if (x !== v && REACHED_APART.has(roleOf(x) ?? "") && !CELLS.has(roleOf(v) ?? ""))
+            return;
         // a field inside says what it holds, not what it is called (as a browser names a cell holding one)
         if (x !== v) {
             const r = roleOf(x);
@@ -399,6 +413,8 @@ export function formatSemantics(n, depth = 0) {
         else if (v.now !== undefined)
             parts.push(`= ${v.now === null ? "indeterminate" : v.now}${range}`);
     }
+    if (n.error !== undefined)
+        parts.push(`error ${JSON.stringify(n.error)}`);
     if (n.hint !== undefined)
         parts.push(`hint ${JSON.stringify(n.hint)}`);
     if (n.rowIndex !== undefined && n.rowCount !== undefined)

@@ -167,7 +167,7 @@ export function placedAttributeMessage(
   childClass: string,
   slot: string,
   arranger: string,
-  kind: "flow" | "cross" | "cross-offset" | "computed" | "share" | "drop" | "all",
+  kind: "flow" | "cross" | "cross-offset" | "computed" | "share" | "drop" | "all" | "flex",
   where?: Where | null
 ): string {
   const head = diag`${childClass}.${slot}${at(where)} — ${arranger} ${arranges(slot)} its children, so this child does not declare its ${slot}`;
@@ -181,6 +181,8 @@ export function placedAttributeMessage(
       return diag`${head} — its configuration is computed, so it may place either axis. Remove it, or ${yourself}.`;
     case "share":
       return diag`${head} — a plan gives it a share of the width. Remove it and let the plan size the child, or leave the child out of the share (or name it "auto") to keep its own width.`;
+    case "flex":
+      return diag`${head} — it flexes, so the run gives it its ${slot}: the room left, shared among the children that flex. Remove the ${slot} to let it flex, or remove 'flexes' to keep its own ${slot}.`;
     case "drop":
       return diag`${head} — a plan drops it (share: 0). Remove it and let the plan show and hide the child, or take the child out of that share.`;
     default:

@@ -58,6 +58,9 @@ toolbar). Control only declares the attribute; the concrete control lays it out.
 **computed** name needs `use [ Name ]` to survive the build, since no static reference
 reaches it. The name is read once, when the control is built: a name read from data gives
 each row its own icon, but changing the name later does not swap the icon (see `IconHost`).
+Any icon class may be named, your own included — a library icon set another way is a
+subclass: `class BackChevron extends ChevronIcon [ dir = "left" ]`, then
+`iconLeft = "BackChevron"`.
 
 ## iconRight
 The trailing icon slot, same vocabulary as `iconLeft`. Setting it **wins over the

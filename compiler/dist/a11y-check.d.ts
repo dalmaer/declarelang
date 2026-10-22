@@ -6,6 +6,6 @@ export interface A11yFindings {
     warnings: DeclareError[];
 }
 export declare function accessibilityDiagnostics(program: Program, schemas: Record<string, ClassSchema>, opts: {
-    libraryEnd: number;
+    inLibrary: (offset: number) => boolean;
     warnings: boolean;
 }): A11yFindings;

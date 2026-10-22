@@ -6,7 +6,7 @@ that reflows from a three-across row to a vertical stack below 640px. Fills its
 host (no fixed size), so the whole layout derives from `app.width` / `app.height`.
 */
 
-App [ theme = SanFrancisco, fill = { provided("theme").bg },
+App [ theme = SanFrancisco, fill = { provided("theme").background },
 
     title:  string  = "Dashboard",
     narrow: boolean = { app.width < 640 },

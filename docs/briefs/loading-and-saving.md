@@ -19,7 +19,7 @@ App [ width = 360, height = 300, fill = white,
         layout: SimpleLayout [ axis = y ],
         TaskRow [ datapath = :tasks[] ]
         ],
-    field: TextInput [ x = 8, y = 250, width = 220, height = 32, text = { app.draft },
+    field: TextInput [ x = 8, y = 250, width = 220, height = 32, text = { app.draft }, accessibilityLabel = "New task",
         onInput(v: string) { app.draft = v } ],
     add: Button [ x = 240, y = 250, label = { app.create.loading ? "Saving…" : "Add" },
         disabled = { app.create.loading || app.draft == "" }, onClick() { app.create.fetch() } ]

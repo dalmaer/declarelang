@@ -37,6 +37,12 @@ from it, so `Button [ Text [ text = "Send" ] ]` is a button called "Send" with n
 said. Views that are only layout — a row, a column, a padded box — say nothing and cost
 nothing.
 
+**What is out of sight is not read.** A view hidden with `visible = false`, or faded to
+`opacity = 0`, is passed over. Clipping, a size of 0 and a place off screen are geometry,
+not absence: what they hide is still read and still reached by Tab. A view that collapses
+to hide what it holds says so with `visible` as well — `visible = { this.height > 0 }` —
+and the compiler asks for it where it sees the collapse.
+
 **Focus is one fact.** Tab order is child order. The focus the keyboard sees, the ring
 that is drawn, and the focus a screen reader follows are the same focus.
 
@@ -51,7 +57,23 @@ Switch [ accessibilityLabel = "Wi-Fi", checked = { app.wifi } ]
 ```
 
 The compiler warns, with a fix, when a control has no name to give. A field inside a
-`Field` is named by the field's label; a field elsewhere takes `accessibilityLabel`.
+`Field` is named by the field's label; a field elsewhere takes `accessibilityLabel`. So
+does a control whose words are shown apart from it — a checkbox beside the text of its
+row has no `label` of its own, and is named with that text:
+
+```declare-fragment
+View [ datapath = :items[], layout: SimpleLayout [ axis = x, spacing = 8 ],
+    Checkbox [ checked = :done, accessibilityLabel = :title, input(v: boolean) { :done = v } ],
+    Text [ text = :title ]
+    ]
+```
+
+**One control at a time.** A control holds no other control: a checkbox inside a button is
+read as part of the button's name, and a screen reader that takes a button as one element
+(VoiceOver does) never reaches it. Lay the two side by side in a plain `View`, which says
+nothing; the compiler warns where one is written inside another. A list's row is not a
+control in this sense: a row that opens into an editor holds its fields and buttons, each
+reached on its own, and the row is named by its own words, not theirs.
 
 **A hint, where the name is not enough** — `accessibilityHint` is read after the name and
 the value: what pressing will do, or what a field expects. A control with a tooltip uses
@@ -119,8 +141,10 @@ motion to stand still, or its theme to raise its contrast, reads it where it dec
 
 ## Checking it
 
-- **The compiler** warns about a control with no role, a role with no name, and a drawn
-  view that takes the focus and says nothing, in the same loop as type errors.
+- **The compiler** warns about a role with no name, a control inside a control, content
+  clipped to a size of 0 that is still read, and a drawn view that takes the focus and says
+  nothing, in the same loop as type errors — in every file of the program, not only the
+  one it starts from.
 - **`declare-look app.declare --semantics`** prints what a screen reader is given — the
   tree of roles, names, values and states — with no browser and no screen reader. Click,
   type and press keys first to see it in any state.

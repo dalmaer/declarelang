@@ -16,6 +16,7 @@
 // §mutation. Keyboard delivery to the focused view (Keys → onKeyDown/onKeyUp)
 // is wired by the runtime entry, not here, keeping this layer independent.
 
+import { inPointerDispatch } from "./pointer-dispatch.js";
 import { View, fireEvent, setFocusDiscardHook, setKeyDefaultHook, noteFocused } from "./view.js";
 import type { KeyEvent } from "./keys.js";
 import { radiusMax } from "./value.js";
@@ -163,6 +164,10 @@ export class FocusService {
       return;
     }
     this.apply(view);
+    // Focus a program moves is shown, as Tab's is and as the web's
+    // element.focus() is: scrolled into view, clear of pinned chrome. Focus a
+    // press takes is not — the person is pointing at it already.
+    if (view !== null && this.current === view && !inPointerDispatch()) reveal(view);
   }
 
   /** Was the person's last input a key (true) or a press (false)? Set as each

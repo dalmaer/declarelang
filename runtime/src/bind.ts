@@ -11,9 +11,10 @@
 
 import { deferral } from "./boot-deferrals.js";
 import { DeclareError, type Pos } from "./errors.js";
-import { Constraint, kernel, touchCell } from "./reactive.js";
-import { defaultOf, markPercent, own, release, setBound, provideWrite, computingProvision, slotCellOf, writeOwned, isSetOrOwned, ownerOf, kernelLanding } from "./attributes.js";
+import { Constraint, kernel, touchCell, readsCellDuring } from "./reactive.js";
+import { defaultOf, markPercent, setPercentMark, own, release, setBound, provideWrite, computingProvision, slotCellOf, writeOwned, isSetOrOwned, ownerOf, kernelLanding } from "./attributes.js";
 import { KERNEL_FLAG } from "./kernel-loader.js";
+import { watchingContentRead } from "./size-probe.js";
 import { compileExpr, type ExprFn } from "./expr.js";
 import { View, inheritedCursor, withCursorDefining } from "./view.js";
 import { authoredName, onDiscard, type Node } from "./node.js";
@@ -277,6 +278,13 @@ function bindKernelExpr(view: Node, name: string, expr: { code: number[]; paths:
  *  reached through another attribute is not seen here: it is not a derivation
  *  the source states, and if it collapses the size, the negative-size report
  *  (view.ts) is what says so. */
+/** Does the body choose between branches? A size that reads the parent's size
+ *  in a body with branches may read it on one run and not the next — so it is
+ *  marked by the branch each run took (bindConstraint), not by its source. */
+function branches(src: string): boolean {
+  return /\?|&&|\|\||\bif\b|\bswitch\b/.test(src.replace(/\?\?|\?\./g, ""));
+}
+
 function sizeFromParent(name: string, deps: readonly string[] | undefined, src: string): boolean {
   const same = name === "width" ? "width|contentWidth" : name === "height" ? "height|contentHeight" : null;
   if (same === null) return false;
@@ -285,6 +293,35 @@ function sizeFromParent(name: string, deps: readonly string[] | undefined, src: 
     return deps.some((d) => path.test(d));
   }
   return new RegExp("(?:^|[^\\w$.])(?:this\\s*\\.\\s*)?parent\\s*\\.\\s*(?:" + same + ")\\b").test(src);
+}
+
+/** Whether a by-branch size's last run read the parent's size on its axis —
+ *  its size slot, or its content size. */
+const READ_PARENT = new WeakMap<object, boolean>();
+// (the mark is settled in the run itself: a numeric size's value is landed by
+// the kernel, which never calls the rule's apply)
+function branchWatched(view: Node, name: string, fn: ExprFn, rule: { k: Constraint | null }): ExprFn {
+  return function (this: unknown, ...args: unknown[]) {
+    const run = () => (fn as (...a: unknown[]) => unknown).apply(this, args);
+    const p = (view as { parent?: unknown }).parent;
+    if (!(p instanceof View)) return run();
+    const cell = slotCellOf(p, name);
+    const content = watchingContentRead(p, name, () => cell >= 0 ? readsCellDuring(cell, run) : { value: run(), hit: false });
+    READ_PARENT.set(view, content.hit || content.value.hit);
+    if (rule.k !== null) markByBranch(rule.k, view);
+    return content.value.value;
+  } as ExprFn;
+}
+/** Mark a by-branch size by what its last run read. A mark taken on means the
+ *  parent's content size stops counting this child; let go, it counts it again.
+ *  Either way whatever read the parent's content re-derives — woken through the
+ *  parent's child list, which every content walk watches (a walk that skipped
+ *  this child read nothing of it). */
+function markByBranch(k: Constraint, view: Node): void {
+  if (setPercentMark(k, READ_PARENT.get(view) === true)) {
+    const p = (view as { parent?: unknown }).parent;
+    if (p instanceof View) touchCell(p.$structureCellId());
+  }
 }
 
 /** WHAT A BINDING'S TEMPLATE DECIDES, decided once. A written `{ }` is one
@@ -345,7 +382,13 @@ export function bindConstraint(
 ): void {
   const plan = deps !== undefined ? planFor(name, deps, src, !exprStats.disabled, bytecode) : null;
   const derived = plan !== null ? plan.derived : sizeFromParent(name, deps, src);
-  const expr = plan !== null ? plan.expr : null;
+  // A size that reads the parent's in only some branches runs on the tracking
+  // path, in JavaScript: its reads are then the branch it took, and its mark
+  // follows them (below). Marked by its source instead, a branch never taken
+  // would take it out of its parent's content size, and a parent sized by its
+  // content would collapse round it.
+  const byBranch = derived && branches(src);
+  const expr = plan !== null && !byBranch ? plan.expr : null;
   if (expr !== null) {
     if (bindKernelExpr(view, name, expr, classroot, `${view.constructor.name}.${name}`, src, pos, yielding, deps, derived)) { exprStats.kernel++; return; }
     exprStats.fallback++;
@@ -355,7 +398,8 @@ export function bindConstraint(
   if ("error" in c) {
     throw new DeclareError(`${view.constructor.name}.${name} = { … } ${c.error}`, pos);
   }
-  const fn = c.fn;
+  const rule: { k: Constraint | null } = { k: null };
+  const fn = byBranch ? branchWatched(view, name, c.fn, rule) : c.fn;
   // A DECLARED default that cannot be evaluated yet (`{ app.shown.value.total
   // ?? 0 }` before the dataset delivers) is simply not applied yet — the live
   // fallback it replaces was never read before its inputs existed, so a
@@ -368,10 +412,11 @@ export function bindConstraint(
     0,
     yielding
   );
+  rule.k = k;
   // Retain the authored text + position for the Inspector (inspect.ts explain()).
   k.source = src;
   k.sourcePos = sourceAt(pos);
-  if (derived) markPercent(k);
+  if (derived && !byBranch) markPercent(k);
   k.declDefault = declDefault;
   own(view, name, k);
   // a numeric slot: the kernel lands the value (gate, store, wake; the surface
@@ -389,7 +434,7 @@ export function bindConstraint(
   // dataset's tracked view (data.ts trackedView) makes such reads subscribe to
   // region cells, which live on the value tree and are recreated with it, so
   // the tracking path (re-tracked each run) is the only honest wiring here too.
-  if (plan !== null && plan.probes !== null) {
+  if (plan !== null && plan.probes !== null && !byBranch) {
     // Each read-path is an analyzable expression (`this.root.n`, `this.theme`);
     // compiled once per template and read under tracking to wire the (stable) edge.
     const probes = plan.probes;

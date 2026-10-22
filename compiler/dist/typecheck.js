@@ -55,14 +55,14 @@ import ts from "typescript";
 import {} from "../../runtime/dist/parser.js";
 import { resolveShapes } from "../../runtime/dist/shape-resolve.js";
 import { programSchemas, resolveWrittenType } from "../../runtime/dist/program-schema.js";
-import { generateScaffold, memberSig, tsType, signatureTsType, shapeObjectText } from "./scaffold.js";
+import { generateScaffold, memberSig, tsType, signatureTsType, shapeObjectText, themeTokenTypes } from "./scaffold.js";
 import { SCHEMAS, attrType, descendsFrom } from "../../runtime/dist/schema.js";
 import { declaredType, isAuthoredUnion } from "../../runtime/dist/value.js";
 import { fillDatapaths } from "../../runtime/dist/datapath.js";
 /** TS primitives a Declare type name can resolve to — where "declare it" is
  *  not a fix (there is no slot to add to a `number`). */
 const PRIMITIVE_TYPES = new Set(["number", "string", "boolean", "any[]", "Length", "Color"]);
-import { Diag } from "../../runtime/dist/diagnostics.js";
+import { Diag, extensionsOf, nearestName } from "../../runtime/dist/diagnostics.js";
 import { DeclareError, insetOrRadiusShape, strokeShapeMessage } from "../../runtime/dist/errors.js";
 /** Typecheck every `{ }` body of a program whose bodies are scope-resolved
  *  (bare names already paths). `text` is the source its positions index into —
@@ -77,6 +77,8 @@ export function typecheckBodies(text, program) {
             if (t.kind === "enum" && !isAuthoredUnion(t.name))
                 WORD_TYPES.add(t.name);
     const rprog = program;
+    const providedKeys = providedThemeKeys(rprog);
+    THEME_TOKENS = [...themeTokenTypes(rprog.themes ?? [], providedKeys).keys()];
     // Resolve the program's schemas (typed data): the named `schema =` forms
     // become resolved shape literals, which is what the Dataset `.value`
     // narrowing below projects from. Idempotent; errors were already reported by
@@ -93,7 +95,7 @@ export function typecheckBodies(text, program) {
     for (const cls of rprog.classes)
         emitter.assignTypes(cls.body, true);
     const rootType = emitter.assignTypes(rprog.root, false);
-    let scaffold = generateScaffold(schemas, program.classes, rootType, emitter.classExtras, emitter.signatureTypeNames, rprog.shapes ?? [], (rprog.themes ?? []).map((t) => t.name), (rprog.styles ?? []).map((s) => ({ name: s.name, fields: s.body.attrs.map((a) => a.name) })));
+    let scaffold = generateScaffold(schemas, program.classes, rootType, emitter.classExtras, emitter.signatureTypeNames, rprog.shapes ?? [], rprog.themes ?? [], providedKeys, (rprog.styles ?? []).map((s) => ({ name: s.name, fields: s.body.attrs.map((a) => a.name) })));
     // A program's `script { … }` blocks are ambient TypeScript for every body:
     // their declarations are real signatures, so appending the source to the
     // scaffold is what makes `dbl(app.v)` typecheck against the actual function
@@ -363,7 +365,8 @@ function explainTs(d, u, synthTags) {
         const tag = synthTags.get(typeName);
         return tag === undefined ? `${typeName}` : `this ${tag}`;
     };
-    const msg = d.message.replace(/_E\d+/g, (n) => say(n));
+    // A theme read is typed `$ThemeTokens` (scaffold.ts), which an author knows as Theme.
+    const msg = d.message.replace(/_E\d+/g, (n) => say(n)).replace(/\$ThemeTokens\b/g, "Theme");
     const home = u.slot !== null ? `the { } body of '${u.slot}'` : "this method body";
     let m;
     // A WORD THAT WIDENED. `const tag = { fontWeight: "semibold" }` types its
@@ -382,6 +385,12 @@ function explainTs(d, u, synthTags) {
         }
     }
     switch (d.code) {
+        // A member named by a written string the view does not have (writtenMemberMissing).
+        case 7053:
+            m = msg.match(/expression of type '"([^"]*)"' can't be used to index type '([^']+)'/s);
+            if (m !== null)
+                return `nothing named '${m[1]}' is a member of ${m[2]} — a member named by a written string is checked as a path is: v["${m[1]}"] is v.${m[1]}`;
+            return msg;
         // The SEAM error — the body's value doesn't fit the slot's declared type.
         case 2322:
             m = msg.match(/Type '(.+?)' is not assignable to type '(.+?)'/s);
@@ -418,11 +427,15 @@ function explainTs(d, u, synthTags) {
         // the real instance type since the scaffold models it).
         case 2551:
             m = msg.match(/Property '(.+?)' does not exist on type '(.+?)'\. Did you mean '(.+?)'\?/s);
+            if (m !== null && m[2] === "Theme")
+                return themeTokenMiss(m[1], m[3]);
             if (m !== null)
                 return `'${m[1]}' is not a member of ${quoteType(m[2])} — did you mean '${m[3]}'?`;
             return msg;
         case 2339:
             m = msg.match(/Property '(.+?)' does not exist on type '(.+?)'/s);
+            if (m !== null && m[2] === "Theme")
+                return themeTokenMiss(m[1], null);
             if (m !== null) {
                 // A `:path` LOWERS to `this.$data(…)`, so a path written on a non-view
                 // node surfaces here as a missing `$data` member — and the generic advice
@@ -553,6 +566,83 @@ function plainLiteralText(lit) {
  *  emits them) — and the one of them a text style names. */
 let WORD_TYPES = new Set();
 const TEXT_STYLE_WORDS = new Set(["FontWeight"]);
+/** Every key `provided("theme")` can be read for (set per typecheck, as the
+ *  scaffold's `$ThemeTokens` is emitted). */
+let THEME_TOKENS = [];
+/** The names other systems give a palette role, each with the token that
+ *  plays it here — what a near-miss by spelling cannot find (`bg` is eight
+ *  edits from `background`). */
+const THEME_TOKEN_ALIASES = {
+    bg: "background", backgroundColor: "background", fg: "text", foreground: "text", textColor: "text",
+    border: "line", borderColor: "line", divider: "line", primary: "accent", danger: "error",
+};
+/** A read of a theme token that no theme declares. The suggestion is the
+ *  calibrated near-miss, then the role the name means elsewhere, then the
+ *  tokens that extend it; tsc's own guess is the last resort. */
+function themeTokenMiss(name, tsGuess) {
+    const alias = Object.hasOwn(THEME_TOKEN_ALIASES, name) ? THEME_TOKEN_ALIASES[name] : null;
+    const longer = extensionsOf(name, THEME_TOKENS);
+    const near = nearestName(name, THEME_TOKENS)
+        ?? (alias !== null && THEME_TOKENS.includes(alias) ? alias : null)
+        ?? (longer.length === 1 ? longer[0] : null)
+        ?? tsGuess;
+    const list = near === null && longer.length > 1 && longer.length <= 4 ? longer : null;
+    const fix = near !== null ? ` — did you mean '${near}'?`
+        : list !== null ? ` — did you mean ${list.map((n) => `'${n}'`).join(", ")}?`
+            : ` — fix the name, or declare the token in a theme of your own (theme Brand [ ${name} = … ]) and provide it over the preset: theme = { { ...SanFrancisco, ...Brand } }`;
+    return `'${name}' is not a token any theme declares${fix}`;
+}
+/** The keys a theme PROVISION adds by writing a record: the object literals in
+ *  a `theme = { … }` body or a Theme-typed declaration's default, and in the
+ *  bodies of the methods such a body calls (`{ ...SanFrancisco, ...app.tokens() }`),
+ *  followed call to call. Generous by design — a key written in any of them
+ *  is one some theme in force can carry. */
+function providedThemeKeys(program) {
+    const methods = new Map();
+    const sources = [];
+    const walk = (el) => {
+        for (const a of el.attrs)
+            if (a.name === "theme" && a.value.kind === "code")
+                sources.push(`(${a.value.src}\n)`);
+        for (const d of el.decls)
+            if (d.type === "Theme" && d.def?.kind === "code")
+                sources.push(`(${d.def.src}\n)`);
+        for (const m of el.methods) {
+            let list = methods.get(m.name);
+            if (list === undefined)
+                methods.set(m.name, (list = []));
+            list.push(`function f() {${m.body}\n}`);
+        }
+        for (const c of el.children)
+            walk(c);
+    };
+    for (const c of program.classes)
+        walk(c.body);
+    walk(program.root);
+    const keys = new Set();
+    const followed = new Set();
+    while (sources.length > 0) {
+        const sf = ts.createSourceFile("theme.ts", sources.pop(), ts.ScriptTarget.ES2022, false);
+        const visit = (n) => {
+            if (ts.isObjectLiteralExpression(n)) {
+                for (const p of n.properties) {
+                    if ((ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)))
+                        keys.add(p.name.text);
+                }
+            }
+            if (ts.isCallExpression(n)) {
+                const callee = ts.isPropertyAccessExpression(n.expression) ? n.expression.name.text : ts.isIdentifier(n.expression) ? n.expression.text : null;
+                if (callee !== null && !followed.has(callee)) {
+                    followed.add(callee);
+                    sources.push(...(methods.get(callee) ?? []));
+                }
+            }
+            n.forEachChild(visit);
+        };
+        visit(sf);
+    }
+    return [...keys];
+}
 /** "boolean" → "a boolean", "unknown"/"any" pass bare — tiny readability. */
 function article(type) {
     return /^(a|e|i|o|u)/i.test(type) ? `an ${type}` : `a ${type}`;
@@ -678,6 +768,9 @@ class CaseEmitter {
             const doc = this.docTypeOf(el);
             if (doc !== null)
                 members.push(`  value: ${doc}${this.isDataSource(el) ? " | null" : ""};`);
+            const refusal = this.docTypeOf(el, "errorSchema");
+            if (refusal !== null)
+                members.push(`  readonly errorBody: ${refusal} | null;`);
             if (members.length > 0)
                 this.classExtras.set(el.tag, members);
             this.instType.set(el, el.tag);
@@ -758,6 +851,10 @@ class CaseEmitter {
         const doc = this.docTypeOf(el);
         if (doc !== null)
             members.push(`  value: ${doc}${this.valueAlwaysHeld(el) ? "" : " | null"};`);
+        // a refusal's body, typed by the source's errorSchema — null until one arrives
+        const refusal = this.docTypeOf(el, "errorSchema");
+        if (refusal !== null)
+            members.push(`  readonly errorBody: ${refusal} | null;`);
         if (members.length === 0) {
             this.instType.set(el, el.tag);
             return el.tag;
@@ -826,11 +923,11 @@ class CaseEmitter {
      *  (`{ cols: Col[] }`, `TaskDoc`, `Task[]`), or null. Feeds two walls: the
      *  `.value` narrowing (readers) and the `contents` slot annotation below
      *  (the producer) — one declaration, both ends of a derived dataset. */
-    docTypeOf(el) {
+    docTypeOf(el, attr = "schema") {
         const dsSchema = this.schemas[el.tag];
         if (dsSchema === undefined || (el.tag !== "Dataset" && !descendsFrom(dsSchema, "Dataset")))
             return null;
-        const sa = el.attrs.find((a) => a.name === "schema" && a.value.kind === "schema");
+        const sa = el.attrs.find((a) => a.name === attr && a.value.kind === "schema");
         if (sa === undefined || sa.value.kind !== "schema")
             return null;
         const v = sa.value;
@@ -1117,8 +1214,8 @@ function runTsc(scaffold, caseSrc) {
     const sf = program.getSourceFile("case.ts");
     if (sf === undefined)
         return { diags: [], program };
-    const diags = [...program.getSyntacticDiagnostics(sf), ...program.getSemanticDiagnostics(sf)]
-        .filter((d) => !UNSATISFIABLE.has(d.code))
+    const diags = [...program.getSyntacticDiagnostics(sf), ...program.getSemanticDiagnostics(sf), ...childByNameDiags(ts, program, sf)]
+        .filter((d) => !UNSATISFIABLE.has(d.code) || writtenMemberMissing(d))
         .map((d) => {
         const lc = d.file && d.start !== undefined ? d.file.getLineAndCharacterOfPosition(d.start) : null;
         return {
@@ -1141,6 +1238,58 @@ function runTsc(scaffold, caseSrc) {
  *  evolving array, spraying downstream ghosts on every later push), and the
  *  inference must stay stock. Filtering the report keeps checking and
  *  inference intact and drops only the unactionable demands. */
+/** A CHILD NAMED AT RUN TIME — `form[name].width`, `name` a string. TypeScript
+ *  gives `form[name]` no type (no type says which member a string names), so
+ *  what is done with it would go unchecked. But the view's children are known:
+ *  what is read off it must be something EVERY child has, and a member one of
+ *  them lacks is said here, naming them. (A name with a type that says which —
+ *  `"alpha" | "beta"` — is checked by TypeScript itself, exactly.) */
+const CHILD_BY_NAME = 90053;
+function childByNameDiags(ts, program, sf) {
+    const checker = program.getTypeChecker();
+    const viewSym = checker.resolveName("View", sf, ts.SymbolFlags.Class, false);
+    if (viewSym === undefined)
+        return [];
+    const viewType = checker.getDeclaredTypeOfSymbol(viewSym);
+    const out = [];
+    const visit = (n) => {
+        if (ts.isPropertyAccessExpression(n) && ts.isElementAccessExpression(n.expression)) {
+            const ea = n.expression;
+            const key = checker.getTypeAtLocation(ea.argumentExpression);
+            const plainString = (key.flags & ts.TypeFlags.String) !== 0;
+            if (plainString) {
+                const holder = checker.getTypeAtLocation(ea.expression);
+                const children = checker.getPropertiesOfType(holder).filter((p) => {
+                    if (checker.getPropertyOfType(viewType, p.name) !== undefined)
+                        return false;
+                    const t = checker.getTypeOfSymbolAtLocation(p, ea);
+                    return (t.flags & ts.TypeFlags.Any) === 0 && checker.isTypeAssignableTo(t, viewType);
+                });
+                const want = n.name.text;
+                const lacking = children.filter((c) => checker.getPropertyOfType(checker.getTypeOfSymbolAtLocation(c, ea), want) === undefined);
+                if (children.length > 0 && lacking.length > 0) {
+                    out.push({
+                        file: sf, start: n.name.getStart(sf), length: n.name.getWidth(sf), category: ts.DiagnosticCategory.Error, code: CHILD_BY_NAME,
+                        messageText: `'${want}' is not something every child of ${ea.expression.getText(sf).replace(/^this\.root\./, "app.")} has — a name known only at run time may be any of them, and ${lacking.map((c) => c.name).join(", ")} ${lacking.length === 1 ? "has" : "have"} no '${want}'. Narrow the name's type to the children that do ("a" | "b"), or test which child it is first`,
+                    });
+                }
+            }
+        }
+        ts.forEachChild(n, visit);
+    };
+    visit(sf);
+    return out;
+}
+/** A member named by a WRITTEN string — `form["beta"]` — that the view does not
+ *  have: TypeScript files it with the implicit-any family (7053), but it is the
+ *  same mistake as a misspelled path, and is reported as one. A name computed at
+ *  run time stays unchecked: no type says which children a string will name. */
+function writtenMemberMissing(d) {
+    if (d.code !== 7053)
+        return false;
+    const text = typeof d.messageText === "string" ? d.messageText : d.messageText.messageText;
+    return /^Element implicitly has an 'any' type because expression of type '"[^"]*"' can't be used to index/.test(text);
+}
 const UNSATISFIABLE = new Set([
     7005, 7006, 7008, 7009, 7010, 7011, 7015, 7017, 7018, 7019, 7022, 7023, 7024, 7031, 7033, 7034, 7051, 7053,
 ]);

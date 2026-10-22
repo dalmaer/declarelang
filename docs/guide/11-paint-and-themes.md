@@ -153,7 +153,9 @@ none of that — nothing above them can provide a different value. A repeated *t
 ([Text and fonts](declare-docs:guide:text@reusing-a-text-style)).
 
 **Your tokens are yours; the library's are a contract.** Your own classes can read
-whatever token names you invent. The library's classes read specific names —
+whatever token names you invent, once a theme declares them: reading a token that no
+preset, no `theme` of yours and no record you provide declares is a compile error that
+names the nearest real one. The library's classes read specific names —
 `accent`, `control`, `surface`, `text`, `line` and a few more — so a theme used with
 library controls should start from a preset and change what it needs, never from an
 empty record:

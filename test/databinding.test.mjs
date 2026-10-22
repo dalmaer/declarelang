@@ -247,6 +247,23 @@ test("a method named like an event is dead only when the author never calls it",
   assert.match(dead, /is never called — 'input' is an EVENT here/, `an editor's input(v) saves nothing; got: ${dead}`);
   const alive = await errorsOf(`class Row extends View [ hold() { }, onClick() { hold() } ]\nApp [ r: Row [ ] ]`);
   assert.ok(!/never called/.test(alive), `hold() is the author's own verb, and they call it; got: ${alive}`);
+  // a bare call reaches its own class's member: a control's own input(…) call
+  // (a Checkbox's press) keeps that control's input alive, not a field's
+  const other = await errorsOf(`class Tick extends View [ input(v: boolean) { }, onClick() { input(true) } ]\nApp [ t: Tick [ ], f: TextInput [ input(v: string) { } ] ]`);
+  assert.match(other, /TextInput\.input\(…\) is never called/, `another class's bare input(…) excused the field; got: ${other}`);
+});
+
+test("a constrained text with nothing to take the typing is refused, naming onInput", async () => {
+  const dead = await errorsOf(`App [ note: string = "", f: TextInput [ text = { app.note } ] ]`);
+  assert.match(dead, /TextInput\.text is constrained here, so the field cannot take what is typed/, `typing into it does nothing; got: ${dead}`);
+  assert.match(dead, /onInput\(v: string\) \{ app\.note = v \}/);
+  for (const ok of [
+    `App [ note: string = "", f: TextInput [ text = { app.note }, onInput(v: string) { app.note = v } ] ]`,
+    `App [ note: string = "", f: TextInput [ initial = { app.note } ] ]`,
+  ]) {
+    const e = await errorsOf(ok);
+    assert.ok(!/cannot take what is typed/.test(e), `${ok}: ${e}`);
+  }
 });
 
 // Re-anchoring: a `:path` island inside `datapath = { }` resolves against the

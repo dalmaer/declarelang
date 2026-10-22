@@ -11,7 +11,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { test, summarize } from "./harness.mjs";
 import { compileProgram } from "../compiler/dist/declarec.js";
 import { instantiate, createViewIn } from "../runtime/dist/instantiate.js";
-import { settle, provideMeasurer } from "../runtime/dist/index.js";
+import { settle, provideMeasurer, HeadlessBackend } from "../runtime/dist/index.js";
 import { approximateMeasurer } from "../compiler/dist/headless.js";
 import { semanticTree, formatSemantics, NAMED_BY_CONTENT, PRESSED, STEPPED } from "../runtime/dist/semantics.js";
 import { slotIndex } from "../runtime/dist/attributes.js";
@@ -113,6 +113,95 @@ await test("accessibility = false silences the warnings, not the errors", async 
   assert.deepEqual(codes(broken.errors), ["DECLARE2006"]);
 });
 
+/** The lines (1-based) a source's warnings of one code sit on. */
+const warnedLines = (b, code) => b.warnings.filter((w) => w.code === code).map((w) => w.pos.line).sort((x, y) => x - y);
+
+await test("a control whose label is left empty has no name, wherever its class shows the label; the warning names both fixes", async () => {
+  const b = await compile(`App [ width = 400, height = 400, layout: SimpleLayout [ axis = y ],
+    d: Dataset { { "rows": [ { "title": "Water the plants", "done": false } ] } },
+    View [ datapath = { app.d.value.rows[0] }, Checkbox [ checked = :done ], Text [ text = :title ] ],
+    Button [ ],
+    Radio [ ],
+    ToolButton [ ],
+    Gauge [ ],
+    Combobox [ ],
+    TextInput [ ],
+    View [ datapath = { app.d.value.rows[0] }, Checkbox [ checked = :done, accessibilityLabel = :title ], Text [ text = :title ] ],
+    Checkbox [ label = "Mute" ], Button [ label = "Go" ], Button [ Text [ text = "Go" ] ], Radio [ label = { "Large" } ],
+    ToolButton [ icon = "PlusIcon", label = "Add" ], Gauge [ label = "Disk" ], Combobox [ placeholder = "City" ],
+    TextInput [ placeholder = "Search" ], Field [ label = "Name", TextInput [ ] ], Field [ label = "Muted", Checkbox [ ] ],
+    Button [ iconLeft = "CloseIcon" ], CloseIcon [ ] ]`);
+  assert.deepEqual(warnedLines(b, "DECLARE4017"), [3, 4, 5, 6, 7, 8, 9]);
+  const box = b.warnings.find((w) => w.code === "DECLARE4017" && w.pos.line === 3).message;
+  assert.match(box, /Checkbox is a checkbox with no name/);
+  assert.match(box, /Give it a label \("Mute"\), or, where the words that name it are shown apart from it .*accessibilityLabel/);
+  assert.match(b.warnings.find((w) => w.code === "DECLARE4017" && w.pos.line === 9).message, /TextInput is a textField with no name/);
+});
+
+await test("a label a method writes, or a state sets, may say something, and is not warned of", async () => {
+  const b = await compile(`class Named extends Control [ label: string = "", Text [ text = { label } ], onInit() { label = "Ready" } ]
+App [ width = 200, height = 200, Named [ ], Dialog [ ], Checkbox [ State [ applied = { app.width > 1 }, label = "On" ] ] ]`);
+  assert.deepEqual(warnedLines(b, "DECLARE4017"), []);
+});
+
+await test("a control inside a control is a warning naming both, written there or brought in by a class", async () => {
+  const b = await compile(`class Row [ Checkbox [ label = "Done" ] ]
+class PlanCard extends Control [ width = 200, height = 60, Text [ text = "Plan" ],
+    open: Button [ label = "Open" ] ]
+App [ width = 400, height = 400, layout: SimpleLayout [ axis = y ],
+    Button [ label = "Save", Checkbox [ label = "Also close" ] ],
+    Control [ width = 100, height = 30, Text [ text = "Pick" ], Row [ ] ],
+    PlanCard [ ],
+    View [ Button [ label = "Save" ], Checkbox [ label = "Also close" ] ],
+    Control [ width = 100, height = 30, accessibilityRole = group, Button [ label = "Inside a group" ] ] ]`);
+  assert.deepEqual(warnedLines(b, "DECLARE4020"), [3, 5, 6]);
+  const m = b.warnings.find((w) => w.code === "DECLARE4020" && w.pos.line === 5).message;
+  assert.match(m, /Checkbox \(a checkbox\) is inside Button \(a button\)/);
+  assert.match(m, /Make them siblings in a plain View/);
+  assert.match(b.warnings.find((w) => w.code === "DECLARE4020" && w.pos.line === 6).message, /Checkbox in Row/);
+});
+
+await test("a list's row may hold an editor: no warning, and the row is named by its own words, each control reached apart", async () => {
+  const src = `class Item extends View [ accessibilityRole = option, accessibilitySelected = false, height = 90, press() { },
+    layout: SimpleLayout [ axis = y ],
+    Text [ text = "Fix login" ],
+    TextInput [ width = 160, accessibilityLabel = "Title", text = "Fix login", onInput(v: string) { } ],
+    Button [ label = "Save" ] ]
+App [ width = 400, height = 300, View [ accessibilityRole = listbox, accessibilityLabel = "Issues", width = 400, height = 200, Item [ width = 400 ] ] ]`;
+  assert.deepEqual(warnedLines(await compile(src), "DECLARE4020"), []);
+  const t = tree(await boot(src));
+  assert.match(t, /option "Fix login"/, t);
+  assert.doesNotMatch(t, /option "[^"]*(Save|Fix login Fix login)/, t);
+  assert.match(t, /textField "Title"/, t);
+  assert.match(t, /button "Save"/, t);
+});
+
+await test("a view that clips what it holds to a size of 0, with no visible, is warned of; one that says visible is not", async () => {
+  const b = await compile(`class Drawer [ open: boolean = false, clip = true, width = 200, height = { open ? 120 : 0 }, Text [ text = "Notes" ] ]
+App [ width = 400, height = 400, layout: SimpleLayout [ axis = y ],
+    Drawer [ ],
+    View [ clip = true, width = 0, height = 40, Text [ text = "Hidden" ] ],
+    View [ clip = true, height = 0, visible = { this.height > 0 }, Text [ text = "Hidden" ] ],
+    View [ height = 0, Text [ text = "Overhangs, and is seen" ] ],
+    View [ clip = true, width = 0, height = 0 ],
+    View [ clip = true, height = { app.width > 500 ? 80 : 0 }, Text [ visible = { app.width > 500 }, text = "Shown when open" ] ] ]`);
+  assert.deepEqual(warnedLines(b, "DECLARE4021"), [1, 4]);
+  assert.match(b.warnings.find((w) => w.code === "DECLARE4021").message, /Add visible = \{ this\.height > 0 \}/);
+});
+
+await test("the warnings cover a program's own included files, and leave the class library out", async () => {
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { nodeIncludeHost } = await import("../compiler/dist/include-node.js");
+  const dir = mkdtempSync(tmpdir() + "/a11y-");
+  writeFileSync(`${dir}/part.declare`, `class Part [ Checkbox [ ] ]\n`);
+  const b = await compileProgram(`include [ "part.declare" ]\nApp [ width = 200, height = 200, Part [ ] ]`,
+    { originDir: dir, stripPos: false, host: nodeIncludeHost(process.cwd() + "/library") });
+  const w = b.warnings.filter((x) => x.code === "DECLARE4017");
+  assert.equal(w.length, 1);
+  assert.match(w[0].pos.file ?? "", /part\.declare$/);
+});
+
 // ── the semantic tree ─────────────────────────────────────────────────────────
 
 await test("the tree: an author's slider reads as a slider, with its value, range and actions", async () => {
@@ -128,13 +217,15 @@ App [ width = 400, height = 300, layout: SimpleLayout [ axis = y ],
   B [ width = 80, height = 30, Text [ text = "Send" ] ],
   B [ width = 30, height = 30, accessibilityLabel = "Close", accessibilityHint = "Closes the conversation" ],
   View [ visible = false, B [ accessibilityLabel = "Hidden" ] ],
-  View [ opacity = 0, Text [ text = "Faded" ] ] ]`);
+  View [ opacity = 0, Text [ text = "Faded" ] ],
+  B [ width = 80, height = 30, Text [ text = "Archive" ], Text [ opacity = 0, text = "Undo" ] ] ]`);
   assert.equal(tree(app), [
     "application",
     `  text "Inbox"`,
     `  button "Send" {press}`,
     `  button "Close" hint "Closes the conversation" {press}`,
-  ].join("\n"));
+    `  button "Archive" {press}`,
+  ].join("\n"), "a faded view is not read, nor does it name the control it sits in");
 });
 
 await test("the tree: a long list reports every row it holds, and builds nodes only for the rows on screen", async () => {
@@ -307,6 +398,35 @@ await test("the item a composite names as the one the keys are on is marked acti
   assert.doesNotMatch(tree(app), /option "Apple" \[active\]/);
   app.on = 0; settle();
   assert.match(tree(app), /option "Apple" \[active\]/);
+});
+
+// A field says what is wrong with its value, and that it needs one: its own
+// `error` is passed to `accessibilityError`, and with `judgeOn = leave` the
+// message waits until the field has been left (or judge() asked) while `valid`
+// is true to the draft throughout.
+await test("an invalid field says what is wrong, once judged, and that it is required", async () => {
+  const app = await boot(`App [ width = 400, height = 300,
+    d: Dataset { { "name": "" } },
+    name: TextInput [ width = 240, accessibilityLabel = "Display name", accessibilityRequired = true,
+        text <-> :name, datapath = { app.d.value }, judgeOn = leave,
+        validate(v: string) -> string { return v.trim().length < 3 ? "Use at least three letters." : "" } ] ]`);
+  app.$attach(new HeadlessBackend(), null);
+  settle();
+  const f = app.name;
+  f.$onNativeInput("ab");
+  settle();
+  assert.equal(f.valid, false, "valid is true to the draft at once");
+  assert.equal(f.error, "", "the message waits for the field to be left");
+  assert.match(tree(app), /textField "Display name" = "ab" \[required\]/);
+  f.judge();
+  settle();
+  assert.equal(f.error, "Use at least three letters.");
+  assert.equal(f.accessibilityError, "Use at least three letters.", "the field passes its error on");
+  assert.match(tree(app), /textField "Display name" = "ab" error "Use at least three letters\." \[required, invalid\]/);
+  f.$onNativeInput("Ada Lovelace");
+  settle();
+  assert.equal(f.error, "", "judged once, it follows each edit");
+  assert.doesNotMatch(tree(app), /invalid/);
 });
 
 summarize("accessibility");

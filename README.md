@@ -105,7 +105,7 @@ zooming rectangle — normally a bespoke project on its own:
 
 | <!--stat:calendar.code-->529<!--/stat--> | lines of Declare — four views, continuous zoom, drag, and edit |
 |----:|:---|
-| **<!--stat:calendar.wireKB-->137<!--/stat--> KB** | over the wire, gzipped — the whole app and its runtime |
+| **<!--stat:calendar.wireKB-->138<!--/stat--> KB** | over the wire, gzipped — the whole app and its runtime |
 | **0** | lines written by hand — an LLM wrote it; the compiler kept it honest |
 
 → How to think in it: [the guide](docs/guide/01-what-declare-is.md). The language in
@@ -117,8 +117,8 @@ full: [`docs/declare.md`](docs/declare.md).
   address: browse to a `.declare` file and it compiles and runs, no build step, no route
   config, no scaffold.
 - **`declare-verify`** — a six-rung ladder that stops at the first real problem: structure →
-  resolution → typecheck → headless boot → behavior under real input → visual baselines.
-  The first four need no browser and run in seconds.
+  resolution → typecheck → boot → behavior under real input → visual baselines.
+  The first four run in a couple of seconds.
 - **An Inspector** — press <kbd>⌥⌘D</kbd> on any page, or add `?inspector` to a program
   URL. Click any value and it shows the expression that produced it, every input that
   expression read, and their live values; type Declare at it and watch the program change.

@@ -15,7 +15,7 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 import { createMounts, MountError } from "../server/mounts.mjs";
 import { createProxy } from "../server/proxy.mjs";
 import { loadConfig } from "../server/config.mjs";
@@ -73,7 +73,7 @@ await test("config with no file is distro mode (root === platform install)", () 
   assert.equal(path.resolve(root.dir), ROOT);
 });
 await test("config: a declare.json's location becomes the root mount (workspace mode)", () => {
-  const ws = mkdtempSync(path.join(os.tmpdir(), "declare-ws-"));
+  const ws = tempDir("declare-ws-");
   try {
     writeFileSync(path.join(ws, "declare.json"), JSON.stringify({ proxy: { "/api": "http://127.0.0.1:9" } }));
     const c = loadConfig({ argv: [], cwd: ws });
@@ -85,7 +85,7 @@ await test("config: a declare.json's location becomes the root mount (workspace 
   } finally { rmSync(ws, { recursive: true, force: true }); }
 });
 await test("config: a --proxy flag overrides the file per-prefix", () => {
-  const ws = mkdtempSync(path.join(os.tmpdir(), "declare-ws-"));
+  const ws = tempDir("declare-ws-");
   try {
     writeFileSync(path.join(ws, "declare.json"), JSON.stringify({ proxy: { "/api": "http://from-file:1" } }));
     const c = loadConfig({ argv: ["--proxy", "/api=http://from-flag:2"], cwd: ws });
@@ -122,7 +122,7 @@ const GET = (port, urlPath, headers = {}) =>
   fetch(`http://127.0.0.1:${port}${urlPath}`, { headers: { "sec-fetch-mode": "navigate", accept: "text/html", ...headers }, redirect: "manual" });
 
 // a scratch build cache so these tests never touch the machine cache
-const CACHE = mkdtempSync(path.join(os.tmpdir(), "declare-buildcache-"));
+const CACHE = tempDir("declare-buildcache-");
 
 // ── distro mode ──────────────────────────────────────────────────────────────
 await (async () => {
@@ -213,7 +213,7 @@ await (async () => {
 
 // ── workspace mode + the ?build collision regression ─────────────────────────
 await (async () => {
-  const ws = mkdtempSync(path.join(os.tmpdir(), "declare-ws-"));
+  const ws = tempDir("declare-ws-");
   // two DIFFERENT programs sharing the basename "weather" — the exact collision
   mkdirSync(path.join(ws, "shop"), { recursive: true });
   writeFileSync(path.join(ws, "shop", "shop.declare"), 'App [ label: Text [ text = "workspace shop" ] ]\n');
@@ -242,8 +242,8 @@ await (async () => {
 
 // ── the collision, proven: two same-named programs build to DIFFERENT bytes ──
 await test("regression: same-named programs in different mounts do not collide", async () => {
-  const a = mkdtempSync(path.join(os.tmpdir(), "declare-a-"));
-  const b = mkdtempSync(path.join(os.tmpdir(), "declare-b-"));
+  const a = tempDir("declare-a-");
+  const b = tempDir("declare-b-");
   mkdirSync(path.join(a, "weather")); mkdirSync(path.join(b, "weather"));
   // distinct source → distinct compiled bytes; if the cache keyed on basename,
   // the second build would serve the first (the original bug).

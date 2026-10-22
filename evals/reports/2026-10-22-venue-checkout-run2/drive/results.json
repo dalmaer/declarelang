@@ -1,0 +1,171 @@
+[
+  {
+    "name": "guest_pays",
+    "pass": true,
+    "error": null,
+    "ms": 7137,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats",
+      "POST /api/orders"
+    ]
+  },
+  {
+    "name": "phone_guest_pays",
+    "pass": true,
+    "error": null,
+    "ms": 6642,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats",
+      "POST /api/orders"
+    ]
+  },
+  {
+    "name": "double_press_sends_one",
+    "pass": true,
+    "error": null,
+    "ms": 7259,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats",
+      "POST /api/orders"
+    ]
+  },
+  {
+    "name": "declined_then_retry",
+    "pass": true,
+    "error": null,
+    "ms": 8903,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats",
+      "POST /api/orders",
+      "POST /api/orders"
+    ]
+  },
+  {
+    "name": "security_code_wrong",
+    "pass": true,
+    "error": null,
+    "ms": 6987,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "POST /api/orders"
+    ]
+  },
+  {
+    "name": "seat_taken_before_paying",
+    "pass": true,
+    "error": null,
+    "ms": 6989,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats",
+      "POST /api/orders"
+    ]
+  },
+  {
+    "name": "seat_taken_while_choosing",
+    "pass": true,
+    "error": null,
+    "ms": 2336,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01"
+    ]
+  },
+  {
+    "name": "signed_in_saved_card",
+    "pass": false,
+    "error": "never shown: /Ada/",
+    "ms": 13122,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats",
+      "POST /api/session",
+      "GET /api/me",
+      "POST /api/orders",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats"
+    ]
+  },
+  {
+    "name": "wrong_password",
+    "pass": false,
+    "error": "not found: a field named /e-?mail/i",
+    "ms": 12263,
+    "requests": [
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01"
+    ]
+  },
+  {
+    "name": "bad_postcode_stays_home",
+    "pass": true,
+    "error": null,
+    "ms": 7625,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats"
+    ]
+  },
+  {
+    "name": "sign_in_midway_keeps_choice",
+    "pass": true,
+    "error": null,
+    "ms": 8697,
+    "requests": [
+      "GET /api/performances/p01/seats",
+      "GET /api/production",
+      "GET /api/me",
+      "GET /api/performances/p01/seats",
+      "GET /api/events?performance=p01",
+      "GET /api/performances/p01/seats",
+      "POST /api/session",
+      "GET /api/me"
+    ]
+  }
+]

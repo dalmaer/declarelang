@@ -134,8 +134,10 @@ Then check every need in the plan against
   `asteroids`, `stargate` and `tempest`, are written to mimic the classic arcade games
   exactly, and are not models of how to write Declare. The fourth, `vortex`, is
   structured more typically.
-- **The library** — `library/`: the source of every library class, written in Declare like
-  your program.
+- **The library** — every library class is written in Declare, in `library/`. Look a class
+  up with `npx declare-help`, not in its source: the reference is the place for what a class
+  does and takes. Read the source as a model when you write a control or a layout of your
+  own (`17-your-own-views.md`).
 - **Running, checking and building** — `docs/operational/`.
 - **Why the language is shaped as it is** — `docs/tenets/`.
 
@@ -162,6 +164,7 @@ build it: the guide section that teaches it, a program that does it, and names t
 | Where records live; a dataset with its own logic; a list derived from it that edits still write through; a job with no view | `14-data.md` § A Node class on a record, § Data in a whole app | tracker: the App's derived `shown: Dataset`; calendar: the App's `cal: Dataset`; desktop: `WinManager extends Node` and its `list` of window records | `Dataset`, `Dataset.contents`, `Node` |
 | Data from a service: loading, failure, typed records | `14-data.md` § Where data comes from; `15-schemas.md` | tracker: `schema Issue` and `class Issues extends DataSource`; marketmap: `class Market extends DataSource` | `DataSource`, `schema` |
 | Records edited in place; forms; a draft saved or cancelled | `14-data.md` § Writing a record, § Editing text, and forms | tracker: `EditorCard` (`text <-> :it.title`); calendar: `DetailSection` | `<->`, `TextInput`, `Editor.commitOn` |
+| A form that checks itself: a field judged once it is left, its message said to a screen reader too; fields that start from the signed-in account; one of many chosen; a service's refusal shown on the field it names; money and dates written out | `14-data.md` § Editing text, and forms, § A form in a sheet, § Talking to a server; `08-controls.md` § Choosing one of many, § Keyboard focus; `12-text.md` (numbers, money and dates) | tracker: `EditorCard` | `validate`, `Editor.judgeOn`, `View.event.blur`, `RadioGroup`, `Control.menu`, `DataSource.failed`, `DataSource.errorSchema`, `globals` (for `Intl`) |
 | A long list: only the rows near the screen built, rows of different heights and kinds, a heading between records | `16-collections.md` | tracker: the App's `ListRow [ … virtualize = true, classFor = { … } ]` over `GroupRow` and `IssueRow`; desktop: the App's `wins` (a class per kind of window) | `virtualize`, `classFor`, `rowIndex`, `exists` |
 | Drawing what attributes can't express: a gauge, a chart, an icon | `17-your-own-views.md` § Custom drawing, § Icons | weather (`weather-art.declare`): `WindDial`, `PressureGauge`; marketmap: `StageTile`'s sparkline | `draw`, `Draw`, `Icon` |
 | A layout of your own | `17-your-own-views.md` § Writing a layout | weather (`weather-art.declare`): `MasonryLayout`; marketmap: `MarketLayout` | `Layout`, `place` |
@@ -236,20 +239,33 @@ shows the Declare form.
 
 ## Checking and looking
 
-- **Check as you go** with `npx declare-verify app.declare`: it compiles and tests the
-  program without a browser, in a second or two — syntax, names, types, and that it starts.
-  Each error names its fix; apply exactly that, change nothing else, check again.
-  (`docs/operational/verify.md`: scripted behavior and screenshot comparisons.)
-- **Run it and look at milestones** — once the whole program first runs, and after a change
-  to what people see — because a clean check does not mean it looks or behaves right:
-  layout, fonts, paint and input exist only at run time. `npm start` serves a program at its
-  file's path (`my-apps/app.declare` at `http://127.0.0.1:8200/my-apps/app.declare`).
-  Without a browser of your own, `npx declare-look app.declare --size 390x844 --shot
-  out.png` runs it headless and saves a screenshot; it can also click, drag, scroll, type
-  and press keys, in the order you write them, read values, and switch to dark mode or
-  touch (`--help` lists them). A screenshot you read stays in your context for the rest
-  of the session, like any read, so look when there is something to see, not after every
-  edit.
+Climb from the cheapest check to the dearest, and stop as soon as one answers:
+
+- **Check as you go** with `npx declare-verify app.declare`: in a second or two it compiles
+  the program, checks it, and boots it in a browser at a laptop's size and a phone's —
+  syntax, names, types, that it starts, and what it can see wrong in the layout (a child
+  spilling out of a box sized by its content, text past its box or the window, a target too
+  small for a finger). A program that never finishes is stopped, and its line quoted. Each error names its fix;
+  apply exactly that, change nothing else, check again. It also lists the classes the boot
+  never built — screens that appear later — which it could not check.
+- **Ask where things are before you look.** `npx declare-verify app.declare --size 390x844
+  --touch --read app.list.height --outline app.sheet` answers from that boot: a value, and
+  every view under a path with its place and size, as text. It costs a fraction of a picture.
+- **Look at milestones** — once the whole program first runs, and after a change to what
+  people see — because paint, fonts and real text exist only in a browser.
+  `npx declare-look app.declare --size 390x844 --touch --shot out.png` runs it in a browser
+  and saves a picture; it can click, drag, hold, pinch, scroll, type and press keys, in the
+  order you write them, and read values (`--help` lists them). Under `--touch` every press
+  is a finger. `--shot-of PATH file.png` pictures one view instead of the window. A picture you read stays in your context for the rest of the session, like
+  any read, so look when there is something to see, not after every edit.
+- **Check a whole flow with an assert script** for `npx declare-verify app.declare --assert
+  flow.mjs` (`docs/operational/verify.md`): `drive` presses, types and waits as a person
+  does, `expect` checks what is shown and what the program sent (`expect.request`). A view
+  is named by its path or by what it says — `app.form."Pay $40.00"`. Don't build a browser
+  harness of your own; `page` in an assert script, and `declare-look --js`, answer what the
+  vocabulary doesn't.
+- `npm start` serves a program at its file's path (`my-apps/app.declare` at
+  `http://127.0.0.1:8200/my-apps/app.declare`) for a person to use.
 - **Before you hand it over, use it once as a person would.** Scroll a long list from end
   to end, drag its scrollbar, resize the window, switch to dark mode and to touch. A
   program can pass every check and still fail the first person who does one of these.

@@ -31,6 +31,9 @@ export declare function bindTwoWay(view: View, name: string, path: string | read
  *  `classroot.field` string. The path thunk reads the expr under the reseed's
  *  tracking, so changing the field reseeds the editor onto the new place. */
 export declare function bindTwoWayDynamic(view: View, name: string, src: string, pos: Pos, classroot: View | null, type: AttrType): void;
+/** @api Judge the draft now: an editor that judges on leaving says what is
+ *  wrong from here on. Leaving the field does this; so may a Save. */
+export declare function judgeDraft(view: View, name: string): void;
 /** @api The user changed the draft (a native edit, a picker selection). Refresh
  *  the session, and commit now if the policy is live (`commitOn === "input"`). */
 export declare function edited(view: View, name: string, commitOn: string): void;
@@ -51,6 +54,10 @@ export declare abstract class Editor extends View {
     protected $eagerSurface(): boolean;
     /** "input" (live) | "blur" | "enter" | "manual" — when a valid draft commits. */
     commitOn: string;
+    /** "edit" | "leave" — when `error` first says what is wrong: at every edit,
+     *  or once the field has been left (or judge() asked). `valid` is true to
+     *  the draft either way. */
+    judgeOn: string;
     /** The current validation message, "" when valid (reactive). */
     error: string;
     /** Does the draft pass validate()? (reactive) */
@@ -64,4 +71,7 @@ export declare abstract class Editor extends View {
     commit(): void;
     /** @api Discard edits — reset the field to the committed dataset value. */
     revert(): void;
+    /** @api Say what is wrong with the draft now, without waiting for the field
+     *  to be left — for a Save or a Pay that checks every field. */
+    judge(): void;
 }

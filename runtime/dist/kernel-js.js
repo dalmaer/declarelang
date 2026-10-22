@@ -1155,6 +1155,8 @@ export function instantiateKernelJS(host, caps = {}) {
         },
         release: (cell, rule) => { if (cell < ncells && ownerGet(cell) === rule)
             ownerSet(cell, -1); },
+        setPercent: (rule, on) => { if (known(rule))
+            rFlags[rule] = on ? rFlags[rule] | F_PERCENT : rFlags[rule] & ~F_PERCENT; },
         owner: (cell) => (cell < ncells ? ownerGet(cell) : -1),
         run: (rule) => {
             if (!known(rule))

@@ -1,0 +1,91 @@
+/*
+## Picking a performance
+
+The production's title page, then one row per performance: when it is, what it costs
+from, and how full the house is — a meter that fills as the house does, so a
+nearly-sold-out night reads before a word of it does.
+*/
+
+class FullnessMeter [ width = 96, height = 6, cornerRadius = 3,
+    left: number = 0,
+    total: number = 1,
+    fill = { provided("theme").line },
+    sold: View [ height = 100%, cornerRadius = 3, fill = { provided("theme").text },
+        width = { parent.width * (1 - classroot.left / Math.max(1, classroot.total)) } ]
+    ]
+
+
+class PerformanceRow extends Control [ width = 100%, height = 76, cornerRadius = 14,
+    padding = [0, 16, 0, 18],
+    left: number = { :seatsLeft },
+    scarce: boolean = { :seatsLeft > 0 && :seatsLeft / :seats < 0.15 },
+    soldOut: boolean = { :seatsLeft == 0 },
+    disabled = { classroot.soldOut },
+
+    accessibilityRole = button,
+    accessibilityLabel = { dayLabel(:startsAt) + ", " + timeLabel(:startsAt) },
+    accessibilityHint = { classroot.soldOut ? "Sold out"
+        : "From " + money(:priceFromCents) + ", " + :seatsLeft + " of " + :seats + " seats left" + (classroot.scarce ? ", nearly sold out" : "") },
+
+    fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").control : provided("theme").surface },
+    stroke = { stroke(1, provided("theme").line) },
+    layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
+
+    when: View [ flexes = true,
+        layout: SimpleLayout [ axis = y, spacing = 3 ],
+        date: Text [ fontFamily = { app.serifStack }, fontSize = 21, wrap = false, text = { dayLabel(:startsAt) } ],
+        line: View [ layout: SimpleLayout [ axis = x, spacing = 10, align = baseline ],
+            time: Text [ fontSize = 15, fontWeight = semibold, wrap = false, text = { timeLabel(:startsAt) } ],
+            from: Text [ fontSize = 14, wrap = false, numeralWidth = tabular, textColor = { provided("theme").textMuted },
+                text = { classroot.soldOut ? "" : "from " + money(:priceFromCents) } ]
+            ]
+        ],
+    house: View [
+        layout: SimpleLayout [ axis = y, spacing = 7, align = end ],
+        state: Text [ fontSize = 13, wrap = false, numeralWidth = tabular,
+            fontWeight = { classroot.scarce || classroot.soldOut ? "bold" : "regular" },
+            textColor = { classroot.scarce || classroot.soldOut ? provided("theme").text : provided("theme").textMuted },
+            text = { classroot.soldOut ? "Sold out" : classroot.scarce ? "Nearly sold out · " + :seatsLeft + " left" : :seatsLeft + " left" } ],
+        FullnessMeter [ left = { :seatsLeft }, total = { :seats } ]
+        ],
+    ChevronIcon [ dir = "right", iconSize = 14, ink = { provided("theme").textFaint } ],
+
+    press() { app.pickPerformance(:id) }
+    ]
+
+
+class PerformanceList [ width = 100%,
+    padding = { app.phone ? [28, 20, 40, 20] : [64, 0, 80, 0] },
+    layout: SimpleLayout [ axis = y, spacing = 0, align = center ],
+
+    col: View [ width = { Math.min(640, parent.width - (app.phone ? 40 : 48)) },
+        layout: SimpleLayout [ axis = y, spacing = 10 ],
+
+        kicker: Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.6, textTransform = uppercase,
+            textColor = { provided("theme").textMuted },
+            text = { app.season.loaded ? app.season.hallName + " · " + app.season.runningTime : "Grand Hall" } ],
+        title: Text [ width = 100%, wrap = true, fontFamily = { app.serifStack }, fontSize = { app.phone ? 38 : 52 },
+            letterSpacing = -0.5, lineHeight = 1.05,
+            accessibilityRole = heading, accessibilityLevel = 1, focusable = true,
+            text = { app.season.loaded ? app.season.title : "The Marriage of Figaro" } ],
+        lede: Text [ width = 100%, wrap = true, fontSize = 16, lineHeight = 1.45, textColor = { provided("theme").textMuted },
+            text = { app.season.loaded
+                ? app.season.performances().length + " performances, " + dayLabel(app.season.performances()[0].startsAt)
+                  + " to " + dayLabel(app.season.performances()[app.season.performances().length - 1].startsAt) + ". Choose one to see the house."
+                : "" } ],
+        View [ width = 1, height = 18 ],
+
+        status: Text [ visible = { !app.season.loaded }, fontSize = 15, textColor = { provided("theme").textMuted },
+            accessibilityLive = polite,
+            text = { app.season.failed ? "The box office isn't answering. " + app.season.error : "Finding performances…" } ],
+        retry: Button [ visible = { app.season.failed }, label = "Try again",
+            onClick() { app.season.fetch() }
+            ],
+
+        rows: View [ width = 100%, datapath = { app.season.value },
+            accessibilityRole = list, accessibilityLabel = "Performances",
+            layout: SimpleLayout [ axis = y, spacing = 10 ],
+            PerformanceRow [ datapath = :performances[] ]
+            ]
+        ]
+    ]

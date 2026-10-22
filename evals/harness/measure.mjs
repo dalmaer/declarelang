@@ -129,6 +129,14 @@ const readCount = new Map();   // file → times read
 const SOURCE_AREAS = [["runtime", /(?:^|[\s"'=/])runtime\/(?:src|dist)(?:\/([\w.\-/]*)|(?=[\s"'|;)]|$))/g], ["library", /(?:^|[\s"'=/])library(?:\/([\w.\-/]*)|(?=[\s"'|;)]|$))/g]];
 const sourceReads = { runtime: { calls: 0, files: new Map() }, library: { calls: 0, files: new Map() } };
 let truncated = 0, eyesCycles = 0, lastWasRender = false;
+// THE BROWSER: the dearest kind of check, counted on its own so a report shows
+// whether it is going down — when the build first used one, through which door
+// (the toolchain's look, an assert script, or a browser script of its own), and
+// how many pictures were read back.
+const browser = { firstTurn: null, look: 0, assert: 0, ownScripts: 0, pictures: 0 };
+// scripts the author wrote that drive a browser, known by what they import — a
+// run of one is a browser render whatever its command line says
+const ownBrowserFiles = new Set();
 
 for (const e of events) {
   if (e.type === "result") result = e;
@@ -138,7 +146,10 @@ for (const e of events) {
   const content = Array.isArray(msg.content) ? msg.content : [];
   for (const b of content) {
     if (b?.type === "tool_use") {
-      const bucket = bucketFor(b.name, b.input ?? {});
+      if ((b.name === "Write" || b.name === "Edit") && /puppeteer|playwright/.test(String((b.input ?? {}).content ?? (b.input ?? {}).new_string ?? "")))
+        ownBrowserFiles.add(String((b.input ?? {}).file_path ?? "").split("/").pop());
+      const runsOwn = b.name === "Bash" && [...ownBrowserFiles].some((f) => f !== "" && new RegExp(`\\b${f.replace(/[.]/g, "\\.")}\\b`).test(String((b.input ?? {}).command ?? "")));
+      const bucket = runsOwn ? "render" : bucketFor(b.name, b.input ?? {});
       pending.set(b.id, { at, bucket, name: b.name, input: b.input ?? {} });
       const cmd = String((b.input ?? {}).command ?? "");
       const file = String((b.input ?? {}).file_path ?? "");
@@ -168,6 +179,15 @@ for (const e of events) {
       // between. The expensive class — it costs a round trip AND the tokens to
       // read what came back.
       if (bucket === "edit" && lastWasRender) eyesCycles++;
+      {
+        const isLook = /declare-look|look\.mjs/.test(cmd), isAssert = /--assert\b/.test(cmd);
+        const isPicture = b.name === "Read" && /\.(png|jpe?g|webp)$/i.test(file);
+        if (isLook) browser.look++;
+        else if (isAssert) browser.assert++;
+        else if (bucket === "render") browser.ownScripts++;
+        if (isPicture) browser.pictures++;
+        if ((isLook || isAssert || bucket === "render") && browser.firstTurn === null) browser.firstTurn = turns;
+      }
       if (bucket === "render") lastWasRender = true;
       else if (bucket === "check" || bucket === "edit") lastWasRender = false;
     } else if (b?.type === "tool_result") {
@@ -278,6 +298,7 @@ const report = {
     permissionDenials: (result.permission_denials ?? []).length,
     correctionsNeedingEyes: eyesCycles,
   },
+  browser,
 };
 
 if (JSON_OUT) { console.log(JSON.stringify(report, null, 2)); process.exit(0); }
@@ -336,6 +357,9 @@ for (const [area, v] of Object.entries(fr.sourceReads)) {
   console.log(`  ${area} source read: ${v.calls} call(s)${files.length ? ` — ${files.slice(0, 8).map(([f, n]) => (n > 1 ? `${f}×${n}` : f)).join(", ")}` : ""}`);
 }
 console.log(`  corrections that needed eyes (render → edit) ${fr.correctionsNeedingEyes} · truncated outputs ${fr.truncatedOutputs} · permission denials ${fr.permissionDenials}`);
+const br = report.browser;
+console.log(`\nBROWSER — the dearest check: what reached for one, and when`);
+console.log(`  first used at turn ${br.firstTurn ?? "—"} · declare-look ${br.look} · assert scripts ${br.assert} · browser scripts of its own ${br.ownScripts} · pictures read ${br.pictures}`);
 
 if (SHOW_CALLS) {
   console.log("\nEVERY CALL, slowest first — audit the buckets here");

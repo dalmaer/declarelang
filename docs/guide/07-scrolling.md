@@ -104,6 +104,8 @@ scroller, ask:
 
 - `pane.scrollTo(y)` — go to an offset; [`scrollTo(Infinity)`](declare-docs:View.method.scrollTo) means the far end.
   Add a glide with `scrollTo(y, { duration: 300 })`.
+- `pane.scrollToX(x)` — the same for the horizontal axis.
+- `pane.scrollTo({ x, y })` — one request for both axes, with the same optional glide.
 - `pane.scrollBy(dx, dy)` — move relative to where it is.
 - `view.scrollIntoView()` — bring a view into its nearest scroller's visible area.
 - `scrollStartY = …` — where a pane starts, applied once.

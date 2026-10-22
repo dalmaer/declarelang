@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import puppeteer from "puppeteer-core";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 import { writeProduction } from "../tools/declarec.mjs";
 import { launchChrome } from "../tools/internal/chrome.mjs";
 
@@ -32,7 +32,7 @@ function findChrome() {
 }
 
 // ── the program: a folder two levels down, reading a file two levels up ──────
-const root = mkdtempSync(path.join(tmpdir(), "declare-package-"));
+const root = tempDir("declare-package-");
 const srcDir = path.join(root, "apps", "shipper");
 mkdirSync(path.join(srcDir, "demos"), { recursive: true });
 mkdirSync(path.join(root, "docs"));

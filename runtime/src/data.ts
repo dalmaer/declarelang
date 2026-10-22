@@ -829,6 +829,10 @@ export class DataSource extends Dataset {
    *  decision can read the code without any of the three fighting. */
   declare statusCode: number;
   declare errorBody: unknown;
+  /** The shape a refusal's body has (`errorSchema = [ message: string, … ]`,
+   *  or a named schema): `errorBody` is typed by it, and a body that does not
+   *  match is not handed over — `error` says why. */
+  declare errorSchema: DataShape | null;
   /** The reply's headers, names lowercased — `{ "content-type": …, "etag": … }`
    *  — the paging link, the rate limit, the version tag. Set with `statusCode`
    *  on every reply, a refusal's included; null before one. */
@@ -969,8 +973,12 @@ export class DataSource extends Dataset {
         // never `res.text is not a function`.
         let raw = "";
         try { raw = typeof res.text === "function" ? await res.text() : ""; } catch { raw = ""; }
-        if (seq === this.seq) setBound(this, "errorBody", parseProblem(raw));
-        throw new Error(`HTTP ${res.status} for ${url}`);
+        const body = parseProblem(raw);
+        // a refusal whose body is not the declared shape is not handed over
+        // typed as if it were: the mismatch is what `error` says
+        const bad = this.errorSchema !== null && body !== null && typeof body === "object" ? validateDoc(body, this.errorSchema) : null;
+        if (seq === this.seq) setBound(this, "errorBody", bad === null ? body : null);
+        throw new Error(bad === null ? `HTTP ${res.status} for ${url}` : `HTTP ${res.status} for ${url} — its body is not the errorSchema's shape: ${bad}`);
       }
       const value: unknown = this.format === "text" ? await res.text()
         : this.format === "bytes" ? new Uint8Array(await res.arrayBuffer())
@@ -1058,6 +1066,7 @@ defineAttributes(DataSource, {
   // code, so a constraint can tell "not asked" from "asked and refused".
   statusCode: { def: 0 },
   errorBody: { def: null },
+  errorSchema: { def: null },
   responseHeaders: { def: null },
 });
 

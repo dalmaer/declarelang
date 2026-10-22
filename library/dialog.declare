@@ -55,7 +55,7 @@ A dialog of your own:
 ```declare
 App [ width = 520, height = 300,
     rename: Dialog [ title = "Rename", buttons = { [ { id: "cancel", label: "Cancel", cancel: true }, { id: "ok", label: "Rename", default: true } ] },
-        TextInput [ width = 100% ]
+        TextInput [ width = 100%, accessibilityLabel = "New name" ]
         ],
     Button [ x = 20, y = 20, label = "Rename…", onClick() { app.rename.show() } ]
     ]

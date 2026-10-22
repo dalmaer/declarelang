@@ -1041,6 +1041,24 @@ await test(`scrollAnchor = end (virtualize = ${policy}): a program scroll away f
 });
 }
 
+// Both axes in one request: `scrollTo({ x, y })` lands both offsets, and either
+// alone leaves the other where it was.
+await test("scrollTo({ x, y }) requests both axes at once", async () => {
+  const r = await compile(`App [ width = 400, height = 400,
+    sc: View [ scrolls = both, width = 300, height = 300,
+      View [ width = 2000, height = 2000 ] ] ]`);
+  assert.deepEqual(r.errors.map((e) => e.message), [], "fixture compiles");
+  const app = buildProgram(r.program);
+  app.$attach(new HeadlessBackend(), null);
+  settle();
+  app.sc.scrollTo({ x: 300, y: 500 });
+  settle();
+  assert.deepEqual([app.sc.scrollX, app.sc.scrollY], [300, 500]);
+  app.sc.scrollTo({ y: 100 });
+  settle();
+  assert.deepEqual([app.sc.scrollX, app.sc.scrollY], [300, 100], "x left where it was");
+});
+
 // A request past the end of content still to come waits for it: the pane goes
 // as far as it can, follows the content as it arrives, and stops at the
 // offset asked for. The reader's own scroll lets a waiting request go.

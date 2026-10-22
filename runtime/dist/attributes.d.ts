@@ -273,6 +273,10 @@ export declare function armDivergence(self: object): void;
 export declare function nodeDiverged(self: object): boolean;
 /** Record that `c` is a percent binding (called by bindPercent). */
 export declare function markPercent(c: Constraint): void;
+/** Mark or unmark a size as taken from the parent's, after the rule exists —
+ *  for a size that reads the parent's size in only some branches (bind.ts).
+ *  Answers whether the mark changed. */
+export declare function setPercentMark(c: Constraint, on: boolean): boolean;
 /** Is `self.name` owned by a percent binding — a slot whose value resolves
  *  against the parent's extent on that axis? */
 export declare function percentOwned(self: object, name: string): boolean;

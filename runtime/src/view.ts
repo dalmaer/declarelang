@@ -85,6 +85,8 @@ import { Cell, Constraint, afterSettle, isSettling, kernel, kernelLoaded, noteOr
 import { setChangeDispatcher, trackNode } from "./change-event.js";
 import { boxThrough, fromParts, isIdentity as isIdentityAffine, leavesPlane, type Affine } from "./affine.js";
 import { footprint3D, spec3DOf } from "./projective.js";
+import { inPointer } from "./pointer-dispatch.js";
+import { noteContentRead } from "./size-probe.js";
 import { initInteraction, noteUserScroll, readHovered, readPressed, hitAt, boxContains, rootFrameOrigin, rootFrameBox, rootTransform, rootToLocal, transformBetween, type InteractionView } from "./interaction.js";
 import { bindDerived, blockOf, defineAttributes, disposeBindings, freeCells, isSet, localProvision, own, ownerOf, percentOwned, release, setBound, slotCellOf, slotIndex } from "./attributes.js";
 import { type AttrType } from "./value.js";
@@ -668,6 +670,8 @@ export class View extends Node {
   declare accessibilityRole: string;
   declare accessibilityLabel: string;
   declare accessibilityHint: string;
+  declare accessibilityError: string;
+  declare accessibilityRequired: boolean;
   declare accessibilityLive: string;
   declare accessibilityValue: number | null;
   declare accessibilityMin: number | null;
@@ -1028,6 +1032,7 @@ export class View extends Node {
   }
 
   private $extentOf(size: "width" | "height"): number {
+    noteContentRead(this, size);
     // The child-LIST is a dependency too: a container populated by
     // replication (or createView) starts empty — without this, a constraint
     // reading contentWidth/contentHeight at that moment tracks nothing and
@@ -1715,8 +1720,15 @@ export class View extends Node {
    *  mirror alone, so the model never holds `Infinity`. The surface call is
    *  deliberately unconditional — an equality-gated model write must not
    *  swallow the request (the boot-time trap applyDeclaredScroll records). */
-  scrollTo(y: number, glide?: { duration?: number; motion?: string }): void {
+  scrollTo(y: number | { x?: number; y?: number }, glide?: { duration?: number; motion?: string }): void {
     if (this.scrolling) { this.$pendingScroll = () => this.scrollTo(y, glide); return; }   // the user's hand first
+    // BOTH AXES AT ONCE — `scrollTo({ x, y })`: one request, so a request
+    // waiting on the user's hand holds both, not only whichever came last
+    if (typeof y === "object") {
+      if (y.x !== undefined) this.scrollToX(y.x, glide);
+      if (y.y !== undefined) this.scrollTo(y.y, glide);
+      return;
+    }
     noteScrollRequest(this, y);
     if (Number.isFinite(y) && glide === undefined) this.scrollY = y;   // a glide arrives through the mirror as it moves
     this.$surface?.scrollToY?.(y, glide);
@@ -1812,7 +1824,7 @@ export class View extends Node {
     // was declared beneath it.
     const scroller = this.scrolls !== "none";
     if (!handled && !scroller && this.tooltipLabel === "" && this.link === "") return null;
-    return (type, x, y, extra) => {
+    return (type, x, y, extra) => inPointer(() => {
       if (this.tooltipLabel !== "") {
         if (type === "pointerOver") Tooltips.over(this);
         else if (type === "pointerOut") Tooltips.out(this);
@@ -1843,7 +1855,7 @@ export class View extends Node {
         const app = this.root as unknown as { follow?: (ref: string, replace?: boolean) => void };
         app?.follow?.(this.link, this.replace);
       }
-    };
+    });
   }
 
   /** Re-derive the surface's input wiring — the pusher for attributes that
@@ -2114,6 +2126,8 @@ defineAttributes(View, {
       if ((typeof __DECLARE_ACCESSIBILITY__ === "undefined" || __DECLARE_ACCESSIBILITY__) && annotator !== null && v.accessibilityLabel !== "" && v.$surface !== null) annotator(v);
     } },
     accessibilityHint: { def: "" },
+    accessibilityError: { def: "" },
+    accessibilityRequired: { def: false },
     accessibilityLive: { def: "off" },
     accessibilityValue: { def: null },
     accessibilityMin: { def: null },

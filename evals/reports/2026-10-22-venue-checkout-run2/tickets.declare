@@ -1,0 +1,165 @@
+/*
+## The tickets
+
+What someone holds up at the door with a queue behind them: one ticket at a time,
+the seat in type you can read at arm's length, when to arrive, and the code to scan.
+The tickets sit side by side on one sprung position, so moving to the next slides the
+whole set; a swipe does the same on a phone.
+*/
+
+// the code to scan, drawn as bars, with its characters beneath
+
+class Barcode [ width = 100%, height = 74,
+    code: string = "",
+    accessibilityRole = image,
+    accessibilityLabel = { "Barcode " + this.code },
+    draw(d: Draw) {
+        const bars = code39(this.code)
+        const modules = bars.reduce((n, w) => n + w, 0)
+        const m = Math.max(1, Math.floor(this.width / modules))
+        let x = Math.floor((this.width - modules * m) / 2)
+        d.fillStyle = provided("theme").text
+        bars.forEach((w, i) => {
+            if (i % 2 == 0) d.fillRect(x, 0, w * m, this.height)
+            x += w * m
+            })
+        }
+    ]
+
+
+class TicketCard [ cornerRadius = 18, clip = true,
+    width = { provided("ticketWidth") },
+    fill = { provided("theme").ticketFill },
+    shadow = shadow(0, 14, 40, #1F1A1626),
+    accessibilityRole = group,
+    accessibilityLabel = { "Ticket " + (rowIndex + 1) + " of " + provided("ticketCount") + ": " + seatName(:section, :row, :number) },
+
+    // the set slides on one number; a ticket is where its place in the set puts it
+
+    offset: number = { rowIndex - provided("ticketPos") },
+    x = { (parent.width - this.width) / 2 + this.offset * (this.width + 24) },
+    opacity = { Math.max(0, 1 - Math.abs(this.offset)) },
+    scale = { 1 - Math.min(1, Math.abs(this.offset)) * 0.06 },
+    visible = { Math.abs(this.offset) < 0.999 },
+
+    layout: SimpleLayout [ axis = y ],
+
+    band: View [ width = 100%, padding = [22, 24, 20, 24], fill = { provided("theme").ticketBand },
+        layout: SimpleLayout [ axis = y, spacing = 4 ],
+        Text [ fontSize = 11.5, fontWeight = semibold, letterSpacing = 1.6, textTransform = uppercase, wrap = false,
+            textColor = { provided("theme").accent }, text = { provided("showTitle") } ],
+        Text [ fontFamily = { app.serifStack }, fontSize = 30, wrap = false, textColor = { provided("theme").ticketBandText },
+            text = { provided("showDay") } ],
+        Text [ fontSize = 15, wrap = false, textColor = { provided("theme").houseText },
+            text = { provided("showTime") + " · " + provided("hallName") } ]
+        ],
+
+    seat: View [ width = 100%, padding = [22, 24, 6, 24],
+        layout: SimpleLayout [ axis = y, spacing = 14 ],
+        Text [ fontSize = 13, fontWeight = semibold, letterSpacing = 1.6, textTransform = uppercase, wrap = false,
+            textColor = { provided("theme").textMuted }, text = :section ],
+        View [ width = 100%,
+            layout: SimpleLayout [ axis = x, spacing = 28 ],
+            View [ layout: SimpleLayout [ axis = y, spacing = 0 ],
+                Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.4, wrap = false, textColor = { provided("theme").textMuted }, text = "ROW" ],
+                Text [ fontFamily = { app.serifStack }, fontSize = 64, lineHeight = 1, wrap = false, text = :row ]
+                ],
+            View [ layout: SimpleLayout [ axis = y, spacing = 0 ],
+                Text [ fontSize = 12, fontWeight = semibold, letterSpacing = 1.4, wrap = false, textColor = { provided("theme").textMuted }, text = "SEAT" ],
+                Text [ fontFamily = { app.serifStack }, fontSize = 64, lineHeight = 1, wrap = false, numeralWidth = tabular, text = { "" + :number } ]
+                ]
+            ],
+        Text [ width = 100%, wrap = true, fontSize = 15, lineHeight = 1.4,
+            text = { "Doors open " + provided("doorsTime") + ". Arrive by then — latecomers wait for a suitable break." } ]
+        ],
+
+    // the tear line
+
+    perforation: View [ width = 100%, height = 28,
+        draw(d: Draw) {
+            d.fillStyle = provided("theme").background
+            d.beginPath(); d.arc(0, 14, 12, 0, Math.PI * 2, false); d.fill()
+            d.beginPath(); d.arc(this.width, 14, 12, 0, Math.PI * 2, false); d.fill()
+            d.fillStyle = provided("theme").line
+            for (let x = 20; x < this.width - 20; x += 10) d.fillRect(x, 13, 5, 1.5)
+            }
+        ],
+
+    stub: View [ width = 100%, padding = [4, 24, 22, 24],
+        layout: SimpleLayout [ axis = y, spacing = 8, align = center ],
+        Barcode [ code = :barcode ],
+        Text [ fontSize = 14, fontWeight = semibold, letterSpacing = 2, wrap = false, numeralWidth = tabular, text = :barcode ]
+        ]
+    ]
+
+
+class TicketsScreen [ width = 100%,
+    padding = { app.phone ? [28, 20, 40 + app.safeBottom, 20] : [56, 0, 72, 0] },
+    receipt: Receipt? = { app.order.value },
+    show: Performance? = { app.season.perf(this.receipt?.performanceId ?? "") },
+    count: number = { this.receipt?.tickets.length ?? 0 },
+    paidLine: string = { this.receipt == null ? "" : "Confirmation " + this.receipt.code + " · " + money(this.receipt.totalCents)
+        + " paid with " + brandName(this.receipt.brand) + " ending " + this.receipt.last4 },
+
+    index: number = 0,
+    ticketPos: number = 0,
+    slide: Spring [ attribute = ticketPos, to = { classroot.index }, stiffness = 260, damping = 28 ],
+    go(i: number) { this.index = Math.max(0, Math.min(this.count - 1, i)) },
+
+    // what every ticket prints, provided once
+
+    ticketCount: number = { this.count },
+    ticketWidth: number = { Math.min(380, app.width - 40) },
+    showTitle: string = { app.season.title },
+    hallName: string = { app.season.hallName },
+    showDay: string = { this.show == null ? "" : dayLabel(this.show.startsAt) },
+    showTime: string = { this.show == null ? "" : timeLabel(this.show.startsAt) },
+    doorsTime: string = { this.show == null ? "" : timeLabel(this.show.doorsAt) },
+
+    layout: SimpleLayout [ axis = y, spacing = 26, align = center ],
+
+    head: View [ width = { Math.min(560, parent.width - (app.phone ? 40 : 0)) },
+        layout: SimpleLayout [ axis = y, spacing = 8, align = center ],
+        title: Text [ fontFamily = { app.serifStack }, fontSize = { app.phone ? 34 : 44 }, wrap = false, focusable = true,
+            accessibilityRole = heading, accessibilityLevel = 1,
+            text = { classroot.count == 1 ? "Your ticket" : "Your tickets" } ],
+        sent: Text [ width = 100%, textAlign = center, fontSize = 16, wrap = true, text = { "Sent to " + (classroot.receipt?.email ?? "") } ],
+        Text [ width = 100%, fontSize = 14, wrap = true, textAlign = center, numeralWidth = tabular, textColor = { provided("theme").textMuted },
+            text = { classroot.paidLine } ]
+        ],
+
+    // the set: one ticket in view, the next a swipe away
+
+    deck: View [ width = 100%, datapath = { classroot.receipt },
+        accessibilityRole = region, accessibilityLabel = "Tickets",
+        TicketCard [ datapath = :tickets[], key = :seatId ],
+        downX: number = 0,
+        onPointerDown(e: PointerEvent) { this.downX = e.rootX },
+        onPointerMove(e: PointerEvent) { },
+        onPointerUp(e: PointerUpEvent) {
+            if (e.canceled) return
+            const dx = e.rootX - this.downX
+            if (dx < -40) classroot.go(classroot.index + 1)
+            else if (dx > 40) classroot.go(classroot.index - 1)
+            },
+        claim = x
+        ],
+
+    pager: View [ visible = { classroot.count > 1 },
+        layout: SimpleLayout [ axis = x, spacing = 16, align = center ],
+        StepArrow [ dir = "left", accessibilityLabel = "Previous ticket",
+            disabled = { classroot.index == 0 },
+            press() { classroot.go(classroot.index - 1) }
+            ],
+        Text [ fontSize = 15, wrap = false, numeralWidth = tabular, accessibilityLive = polite,
+            text = { "Ticket " + (classroot.index + 1) + " of " + classroot.count } ],
+        StepArrow [ dir = "right", accessibilityLabel = "Next ticket",
+            disabled = { classroot.index >= classroot.count - 1 },
+            press() { classroot.go(classroot.index + 1) }
+            ]
+        ],
+
+    Button [ label = "Book another performance",
+        onClick() { app.startAgain() }
+        ]
+    ]

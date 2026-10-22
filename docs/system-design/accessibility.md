@@ -207,7 +207,7 @@ These rules are applied by the runtime, identically on every platform:
 2. **Text is content.** A `Text` (and rich text) is a static-text node, unless an ancestor takes its **name from content**.
 3. **Name from content.** `button`, `link`, `tab`, `menuItem`, `cell`, `heading`, `listItem`, `checkbox`/`switch`/`radio` and `toggle` with an empty `accessibilityLabel` take their name from the text of their descendants, in reading order, which then contribute no nodes of their own. This is the ARIA and AppKit behaviour, and it makes `Button [ Text [ text = "Send" ] ]` correct with no extra code.
 4. **Drawn content is invisible.** A `draw()` paints pixels, not semantics. A drawn control must say what it is with `accessibilityRole`, `accessibilityLabel` and its contract. The compile-time check in §3.7 catches the common omission.
-5. **Pruning.** `visible = false` prunes (ruled, and the DOM already does it). `opacity` does not (ruled). A decorative `Image` with no `accessibilityLabel` is pruned. Content behind an open `focusScope = modal` is **inert** to assistive technology, as it already is to focus.
+5. **Pruning.** `visible = false` prunes (ruled, and the DOM already does it). An `opacity` of 0 prunes too — the view is pruned from the tree, `aria-hidden` on its element, and names no control it sits in — while any other opacity is paint. Geometry does not prune: what a clip, a size of 0 or a place off screen hides is still read (§13), and the compiler warns where a view clips its content to a size of 0 with no `visible` (§3.7). A decorative `Image` with no `accessibilityLabel` is pruned. Content behind an open `focusScope = modal` is **inert** to assistive technology, as it already is to focus.
 6. **Reading order is child order**, the same tree preorder as Tab order (input.md:30). Where the visual order is a layout's and differs, the fix is the child order, not a separate index. That is the same ruling as tabindex. One known defect follows from this: inline views in a paragraph read after the paragraph (text-selection.md:111), which belongs to the rich-text work.
 7. **Frames come from the runtime's geometry.** Every platform needs node rectangles for touch exploration, the VoiceOver cursor and magnifiers. The runtime has them (the same transforms the hit walk uses), so no backend measures anything.
 
@@ -246,7 +246,11 @@ accessibility audits catch at run time, if at all:
 - a `Control` subclass with no `accessibilityRole`: a warning that says to name one. `button` is the likely fix, but a guessed role is worse than a flagged one;
 - a named control (button, checkbox, slider, …) with no `accessibilityLabel` and no text content to take its name from: a warning, which is how location.md:120's rule for content-free links generalizes;
 - a view that handles `onPointerDown`/`onClick` but is not a Control (the existing drift check, now with an accessibility reason);
-- a `draw()` view that is focusable but has no role.
+- a `draw()` view that is focusable but has no role;
+- a control inside a control (a checkbox inside a button), written or brought in by a plain view's class: the inner is read as the outer's name and cannot be reached (DECLARE4020);
+- a view that clips its content to a size of 0 — a literal 0, or 0 as an arm of a choice — and sets no `visible`, so what it hides is still read (DECLARE4021).
+
+A name is judged by what each use site leaves it: a `label` left empty is no words, though the class's caption shows it, and an `accessibilityLabel` that reads an attribute left empty is no name. The checks cover every file of the program — the main file and the files it includes — and leave out only the class library.
 
 Warnings have DECLARE codes and fixes like every other diagnostic, and
 `declare-verify` reports them. An LLM author gets them in the same loop as type

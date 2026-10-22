@@ -346,6 +346,10 @@ const ViewSchema: ClassSchema = {
       accessibilityRole: enumType("AccessibilityRole", ...ROLES),
       accessibilityLabel: { kind: "string" },
       accessibilityHint: { kind: "string" },
+      // what is wrong with this field's value, said with it ("" when nothing is);
+      // and whether a value is needed — a field passes its own `error` on
+      accessibilityError: { kind: "string" },
+      accessibilityRequired: { kind: "boolean" },
       accessibilityLive: enumType("AccessibilityLive", ...LIVE),
       accessibilityValue: { kind: "number", nullable: true },
       accessibilityMin: { kind: "number", nullable: true },
@@ -906,6 +910,7 @@ const EditorSchema: ClassSchema = {
   base: ViewSchema,
   attrs: {
     commitOn: { kind: "string" }, // "input" (live) | "blur" | "enter" | "manual"
+    judgeOn: enumType("EditorJudgeOn", "edit", "leave"), // when `error` first speaks: at every edit, or once the field has been left
     error: { kind: "string" },    // the current validation error, "" when valid
     valid: { kind: "boolean" },   // does the draft pass validate()?
     dirty: { kind: "boolean" },   // does the draft differ from the committed value?
@@ -1148,6 +1153,9 @@ const DataSourceSchema: ClassSchema = {
     error: { kind: "string" },
     statusCode: { kind: "number" },
     errorBody: { kind: "object" },
+    // the shape a refusal's body has, as `schema` is the value's: `errorBody`
+    // is then typed, and a body that does not match is said in `error`
+    errorSchema: { kind: "dataschema" },
     // the reply's headers, names lowercased; null before a reply
     responseHeaders: { kind: "object" },
   },

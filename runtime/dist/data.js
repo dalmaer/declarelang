@@ -959,9 +959,13 @@ export class DataSource extends Dataset {
                 catch {
                     raw = "";
                 }
+                const body = parseProblem(raw);
+                // a refusal whose body is not the declared shape is not handed over
+                // typed as if it were: the mismatch is what `error` says
+                const bad = this.errorSchema !== null && body !== null && typeof body === "object" ? validateDoc(body, this.errorSchema) : null;
                 if (seq === this.seq)
-                    setBound(this, "errorBody", parseProblem(raw));
-                throw new Error(`HTTP ${res.status} for ${url}`);
+                    setBound(this, "errorBody", bad === null ? body : null);
+                throw new Error(bad === null ? `HTTP ${res.status} for ${url}` : `HTTP ${res.status} for ${url} — its body is not the errorSchema's shape: ${bad}`);
             }
             const value = this.format === "text" ? await res.text()
                 : this.format === "bytes" ? new Uint8Array(await res.arrayBuffer())
@@ -1054,6 +1058,7 @@ defineAttributes(DataSource, {
     // code, so a constraint can tell "not asked" from "asked and refused".
     statusCode: { def: 0 },
     errorBody: { def: null },
+    errorSchema: { def: null },
     responseHeaders: { def: null },
 });
 /** Turn a `datapath = { expr }` result into a place. The value must be a

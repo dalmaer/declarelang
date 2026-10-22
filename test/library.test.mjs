@@ -487,13 +487,14 @@ await test("DataGrid: a column added at runtime joins the column model — nothi
 
 // A warning is about the author's code. The library's own code must raise none
 // in a program that merely uses it — the author cannot act on it. (A switch, a
-// slider and a progress bar show no name of their own, so the program names them,
-// as an author's must: unnamed, each earns its use site a warning, which is the point.)
+// slider, a progress bar and a field show no name of their own, nor a gauge or a
+// combobox left without its label or placeholder, so the program names them, as an
+// author's must: unnamed, each earns its use site a warning, which is the point.)
 await test("the library raises no warnings in a program that uses it", async () => {
   const r = await (await import("../compiler/dist/compile-node.js")).compile(`App [ width = 600, height = 600,
     col: View [ layout: SimpleLayout [ axis = y ],
-    Button [ label = "b" ], Checkbox [ label = "c" ], Switch [ accessibilityLabel = "s" ], Slider [ accessibilityLabel = "v" ], ProgressBar [ accessibilityLabel = "p" ], Gauge [ ],
-    Segmented [ choices = { [ ({ id: "a", label: "A", location: "a" }) ] } ], Combobox [ ], TextInput [ ], AppearanceSwitch [ ],
+    Button [ label = "b" ], Checkbox [ label = "c" ], Switch [ accessibilityLabel = "s" ], Slider [ accessibilityLabel = "v" ], ProgressBar [ accessibilityLabel = "p" ], Gauge [ label = "g" ],
+    Segmented [ choices = { [ ({ id: "a", label: "A", location: "a" }) ] } ], Combobox [ placeholder = "o" ], TextInput [ accessibilityLabel = "t" ], AppearanceSwitch [ ],
     RadioGroup [ Radio [ choice = "a", label = "A" ] ], Field [ ], Card [ ], Divider [ ],
     Accordion [ Pane [ ] ], Menu [ ], MenuBar [ ], ContextMenu [ ], Dialog [ ], Tooltip [ ], Icon [ ] ] ]`);
   assert.deepEqual((r.errors ?? []).map((e) => e.message), []);

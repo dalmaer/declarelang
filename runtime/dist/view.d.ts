@@ -317,6 +317,8 @@ export declare class View extends Node {
     accessibilityRole: string;
     accessibilityLabel: string;
     accessibilityHint: string;
+    accessibilityError: string;
+    accessibilityRequired: boolean;
     accessibilityLive: string;
     accessibilityValue: number | null;
     accessibilityMin: number | null;
@@ -828,7 +830,10 @@ export declare class View extends Node {
      *  mirror alone, so the model never holds `Infinity`. The surface call is
      *  deliberately unconditional — an equality-gated model write must not
      *  swallow the request (the boot-time trap applyDeclaredScroll records). */
-    scrollTo(y: number, glide?: {
+    scrollTo(y: number | {
+        x?: number;
+        y?: number;
+    }, glide?: {
         duration?: number;
         motion?: string;
     }): void;

@@ -131,6 +131,14 @@ function runValidate(view, v) {
         return "invalid";
     return String(r);
 }
+/** Editors whose value has been judged — left once, or asked (judge()). */
+const JUDGED = new WeakSet();
+/** @api Judge the draft now: an editor that judges on leaving says what is
+ *  wrong from here on. Leaving the field does this; so may a Save. */
+export function judgeDraft(view, name) {
+    JUDGED.add(view);
+    refresh(view, name);
+}
 /** Publish an OPTIONAL session slot only when the editor declares it, so
  *  `error`/`valid`/`dirty` stay pay-per-use. */
 function publish(view, name, v) {
@@ -147,7 +155,10 @@ function refresh(view, name) {
     // the author's judgment first (their message, written for this form), then
     // the schema floor (structure — "must be a number")
     const err = runValidate(view, draft) ?? readDraft(declaredFloor(view, s), draft).error;
-    publish(view, "error", err ?? "");
+    // `valid` is the truth from the first keystroke; the MESSAGE waits, when the
+    // editor judges on leaving, until the field has been left once (or judge())
+    const speaks = view.judgeOn !== "leave" || JUDGED.has(view);
+    publish(view, "error", speaks ? err ?? "" : "");
     publish(view, "valid", err === null);
     publish(view, "dirty", draft !== committed(view, s));
 }
@@ -202,9 +213,15 @@ export class Editor extends View {
     revert() {
         revertDraft(this, this.$draftSlot());
     }
+    /** @api Say what is wrong with the draft now, without waiting for the field
+     *  to be left — for a Save or a Pay that checks every field. */
+    judge() {
+        judgeDraft(this, this.$draftSlot());
+    }
 }
 defineAttributes(Editor, {
     commitOn: { def: "input" },
+    judgeOn: { def: "edit" },
     error: { def: "" },
     valid: { def: true },
     dirty: { def: false },

@@ -159,6 +159,8 @@ int kernel_is_set(dk_kernel *k, uint32_t cell);
 
 /* Ownership (own / release / ownerOf): -1 = none. */
 int kernel_own(dk_kernel *k, uint32_t cell, uint32_t rule);
+/* Set or clear a rule's DK_PERCENT flag (a size taken from the parent's). */
+void kernel_set_percent(dk_kernel *k, uint32_t rule, int on);
 void kernel_release(dk_kernel *k, uint32_t cell, uint32_t rule);
 int32_t kernel_owner(dk_kernel *k, uint32_t cell);
 

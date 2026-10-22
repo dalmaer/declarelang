@@ -22,7 +22,7 @@ import { Focus, bareScroller } from "./focus.js";
 import { Constraint, untracked, afterSettle } from "./reactive.js";
 import { onDiscard } from "./node.js";
 import { readRowIndex } from "./view.js";
-import { rowsUnder, roleOf, textOf, contentOf, nameOfContent, NAMED_BY_CONTENT } from "./semantics.js";
+import { rowsUnder, roleOf, textOf, contentOf, nameOfContent, NAMED_BY_CONTENT, REACHED_APART } from "./semantics.js";
 import { provideAnnouncer, type Politeness } from "./accessibility-service.js";
 
 /** The ARIA role each word maps to on the web. */
@@ -48,9 +48,16 @@ type Any = Record<string, unknown>;
  *  infers from focus, so an option or a tree item says it either way. */
 const SELECTABLE = new Set(["tab", "row", "cell", "listItem", "option", "treeItem"]);
 
-/** What describes the view: its hint, else a tip that is not its name (a wordless
- *  control is named by its tip, and is not described by it again). */
+/** What describes the view: what is wrong with its value first, then its hint,
+ *  else a tip that is not its name (a wordless control is named by its tip, and
+ *  is not described by it again). A field that needs a value says so. */
 function describe(v: View, a: Attrs): void {
+  if (v.accessibilityRequired) a["aria-required"] = "true";
+  if (v.accessibilityError !== "") {
+    a["aria-invalid"] = "true";
+    a["aria-description"] = v.accessibilityHint !== "" ? `${v.accessibilityError}. ${v.accessibilityHint}` : v.accessibilityError;
+    return;
+  }
   if (v.accessibilityHint !== "") { a["aria-description"] = v.accessibilityHint; return; }
   const tip = v.tooltipLabel;
   if (tip === "" || a["aria-label"] === tip) return;
@@ -65,6 +72,13 @@ function activeItem(v: View, a: Attrs): void {
   const ae = act.visible ? focusElementOf(act) : null;
   if (ae !== null) { if (ae.id === "") ae.id = "declare-ax-" + (++AX_IDS); a["aria-activedescendant"] = ae.id; }
   else again(v, act);   // its element arrives with the settle that builds it
+}
+
+/** Whether a control a person reaches on their own shows inside v. */
+function holdsReachable(v: View): boolean {
+  const visit = (x: View): boolean => x.visible && x.opacity !== 0
+    && ((x !== v && REACHED_APART.has(roleOf(x) ?? "")) || x.children.some((c) => c instanceof View && visit(c)));
+  return visit(v);
 }
 
 function ariaOf(v: View): Attrs | null {
@@ -101,6 +115,9 @@ function ariaOf(v: View): Attrs | null {
   // a control with no words is named by its tip, or by the mark it shows —
   // neither of which the browser reads off the element
   else if (NAMED_BY_CONTENT.has(role) && contentOf(v).words === "") { const n = nameOfContent(v); if (n !== "") a["aria-label"] = n; }
+  // one holding a control is named by its own words: the browser's name from
+  // content would take in the control's text and labels too
+  else if (NAMED_BY_CONTENT.has(role) && holdsReachable(v)) a["aria-label"] = contentOf(v).words;
   describe(v, a);
   if (v.accessibilityChecked !== null) a["aria-checked"] = String(v.accessibilityChecked);
   if (v.accessibilityPressed !== null) a["aria-pressed"] = String(v.accessibilityPressed);

@@ -48,6 +48,8 @@ import { Cell, Constraint, afterSettle, isSettling, kernel, kernelLoaded, noteOr
 import { setChangeDispatcher, trackNode } from "./change-event.js";
 import { boxThrough, fromParts, isIdentity as isIdentityAffine, leavesPlane } from "./affine.js";
 import { footprint3D, spec3DOf } from "./projective.js";
+import { inPointer } from "./pointer-dispatch.js";
+import { noteContentRead } from "./size-probe.js";
 import { initInteraction, noteUserScroll, readHovered, readPressed, hitAt, boxContains, rootFrameOrigin, rootFrameBox, rootTransform, rootToLocal, transformBetween } from "./interaction.js";
 import { bindDerived, blockOf, defineAttributes, disposeBindings, freeCells, isSet, localProvision, own, ownerOf, percentOwned, release, setBound, slotCellOf, slotIndex } from "./attributes.js";
 import {} from "./value.js";
@@ -778,6 +780,7 @@ export class View extends Node {
         return words;
     }
     $extentOf(size) {
+        noteContentRead(this, size);
         // The child-LIST is a dependency too: a container populated by
         // replication (or createView) starts empty — without this, a constraint
         // reading contentWidth/contentHeight at that moment tracks nothing and
@@ -1477,6 +1480,15 @@ export class View extends Node {
             this.$pendingScroll = () => this.scrollTo(y, glide);
             return;
         } // the user's hand first
+        // BOTH AXES AT ONCE — `scrollTo({ x, y })`: one request, so a request
+        // waiting on the user's hand holds both, not only whichever came last
+        if (typeof y === "object") {
+            if (y.x !== undefined)
+                this.scrollToX(y.x, glide);
+            if (y.y !== undefined)
+                this.scrollTo(y.y, glide);
+            return;
+        }
         noteScrollRequest(this, y);
         if (Number.isFinite(y) && glide === undefined)
             this.scrollY = y; // a glide arrives through the mirror as it moves
@@ -1584,7 +1596,7 @@ export class View extends Node {
         const scroller = this.scrolls !== "none";
         if (!handled && !scroller && this.tooltipLabel === "" && this.link === "")
             return null;
-        return (type, x, y, extra) => {
+        return (type, x, y, extra) => inPointer(() => {
             if (this.tooltipLabel !== "") {
                 if (type === "pointerOver")
                     Tooltips.over(this);
@@ -1622,7 +1634,7 @@ export class View extends Node {
                 const app = this.root;
                 app?.follow?.(this.link, this.replace);
             }
-        };
+        });
     }
     /** Re-derive the surface's input wiring — the pusher for attributes that
      *  GRANT interest by their value (`link`; a post-attach handler install goes
@@ -1900,6 +1912,8 @@ defineAttributes(View, {
                     annotator(v);
             } },
         accessibilityHint: { def: "" },
+        accessibilityError: { def: "" },
+        accessibilityRequired: { def: false },
         accessibilityLive: { def: "off" },
         accessibilityValue: { def: null },
         accessibilityMin: { def: null },

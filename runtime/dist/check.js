@@ -1229,6 +1229,9 @@ function checkPlacedAttributes(schemas, layoutEl, owner) {
     if (known === null)
         return [];
     const errors = [...known.errors];
+    // the run's one flow axis (a SimpleLayout's): a WrappingLayout flows both
+    const flows = [...known.placed].filter(([k, v]) => v === "flow" && (k === "x" || k === "y")).map(([k]) => k);
+    const flow = flows.length === 1 ? flows[0] : null;
     const arranger = `${owner.tag}'s ${layoutEl.tag}`;
     const ownerSchema = Object.hasOwn(schemas, owner.tag) ? schemas[owner.tag] : null;
     for (const c of owner.children) {
@@ -1251,8 +1254,51 @@ function checkPlacedAttributes(schemas, layoutEl, owner) {
                 continue;
             errors.push(new DeclareError(placedAttributeMessage(c.tag, a.name, arranger, kind, null), a.pos));
         }
+        // A FLEXING CHILD of a run is sized along the flow by the run (the room
+        // left, shared among the flexing children), so it does not declare that
+        // size either — at its use site, or as a percent or a { } in its class
+        // (a plain number there is a default the run replaces: Spacer's own 0).
+        if (flow !== null && flexesStatically(c)) {
+            const size = flow === "x" ? "width" : "height";
+            const here = c.attrs.find((a) => a.name === size);
+            const inClass = here === undefined ? classSizeRule(c, size) : undefined;
+            const a = here ?? inClass;
+            if (a !== undefined)
+                errors.push(new DeclareError(placedAttributeMessage(c.tag, size, arranger, "flex", null), (here ?? { pos: c.pos }).pos));
+        }
     }
     return errors;
+}
+/** Does this child flex — `flexes = true` where it is used, or in its class? */
+function flexesStatically(c) {
+    const says = (el) => {
+        const f = el.attrs.find((a) => a.name === "flexes");
+        return f === undefined ? null : f.value.kind === "ident" && f.value.name === "true";
+    };
+    const here = says(c);
+    if (here !== null)
+        return here;
+    const seen = new Set();
+    for (let d = CHECK_CLASSES.get(c.tag); d !== undefined && !seen.has(d.name); d = CHECK_CLASSES.get(d.base)) {
+        seen.add(d.name);
+        const v = says(d.body);
+        if (v !== null)
+            return v;
+    }
+    return false;
+}
+/** A size the child's class states as a rule — a percent or a { } — which a
+ *  run that sizes the child cannot replace (a literal there is a default it can). */
+function classSizeRule(c, size) {
+    const seen = new Set();
+    for (let d = CHECK_CLASSES.get(c.tag); d !== undefined && !seen.has(d.name); d = CHECK_CLASSES.get(d.base)) {
+        seen.add(d.name);
+        const a = d.body.attrs.find((x) => x.name === size);
+        if (a === undefined)
+            continue;
+        return a.value.kind === "number" ? undefined : { pos: a.pos };
+    }
+    return undefined;
 }
 /** What a layout places, from the source alone: `placed` for every laid
  *  child, `byName` for what a plan allocates to a named child, and any error
@@ -1695,7 +1741,7 @@ function checkMethodHere(schema, m) {
     const r = checkMethod(schema, m);
     if (!r.ok)
         return r;
-    if (eventsOf(schema).includes(m.name) && !runtimeMethodsOf(schema).has(m.name) && !AUTHOR_CALLS.has(m.name)) {
+    if (eventsOf(schema).includes(m.name) && !runtimeMethodsOf(schema).has(m.name) && !AUTHOR_CALLS.has(m.name) && !AUTHOR_CALLS.has(schema.name + ":" + m.name)) {
         return { ok: false, error: new DeclareError(`${schema.name}.${m.name}(…) is never called — '${m.name}' is an EVENT here, delivered to '${handlerName(m.name)}'. ` +
                 `Rename it to '${handlerName(m.name)}(…)'. (The 'input(v)' value pattern belongs to CONTROLS — Checkbox, Slider, ` +
                 `Segmented — which fire no such event; an editor delivers through its event instead.)`, m.pos) };
@@ -1730,14 +1776,32 @@ function checkControlledInput(program) {
         writes.set(name, out);
         return out;
     };
+    const builtinOf = (name) => {
+        let n = name;
+        for (let c = byName.get(n), k = 0; c !== undefined && k < 32; c = byName.get(c.base), k++)
+            n = c.base;
+        return n;
+    };
     const visit = (el, tag) => {
+        // a text field's typing is its own write of `text`: constrained, every
+        // keystroke is refused and reaches the program only as the input event
+        if (builtinOf(tag) === "TextInput" && !el.methods.some((m) => m.name === "onInput")) {
+            const a = el.attrs.find((x) => x.name === "text" && x.value.kind === "code" && x.bind === undefined);
+            if (a !== undefined) {
+                errors.push(new DeclareError(`${tag}.text is constrained here, so the field cannot take what is typed — each keystroke is refused against ` +
+                    `your constraint and nothing changes. Add 'onInput(v: string)' beside it that writes your state — ` +
+                    `'text = { app.note }' with 'onInput(v: string) { app.note = v }' — or, for a field that starts from a value ` +
+                    `and is then the user's, 'initial = { … }' in place of 'text'`, a.pos));
+            }
+        }
         if (!el.methods.some((m) => m.name === "input")) {
             const attr = writtenByInput(tag);
             const a = attr === null ? undefined : el.attrs.find((x) => x.name === attr && x.value.kind === "code" && x.bind === undefined);
             if (a !== undefined) {
                 errors.push(new DeclareError(`${tag}.${attr} is constrained here, but the ${tag} also changes it itself — its own 'input(…)' writes ${attr} ` +
-                    `(closing on Esc or a press past it, a drag, a pick), and that write is refused against your constraint. ` +
-                    `Add 'input(…)' beside it that writes your state instead — '${attr} = { app.open }' with 'input(v: ${attr === "shown" ? "boolean" : "any"}) { app.open = v }'`, a.pos));
+                    `(whatever the user does to it — a press, a drag, Esc, a pick), and that write is refused against your constraint. ` +
+                    `Add 'input(…)' beside it that writes your state instead — '${attr} = { app.${attr === "shown" ? "open" : attr} }' with ` +
+                    `'input(v: ${attr === "shown" || attr === "checked" ? "boolean" : "any"}) { app.${attr === "shown" ? "open" : attr} = v }'`, a.pos));
             }
         }
         for (const c of el.children)
@@ -1780,38 +1844,58 @@ function checkPlacements(program) {
         elsewhere(c.body);
     return errors;
 }
-/** Every name the author's own code calls (`name(` anywhere in a method body
- *  or a `{ }` value outside library/), for checkMethodHere. */
+/** Every name the author's own code calls, for checkMethodHere: `x.name(`
+ *  anywhere counts as itself; a bare `name(` counts only for the element or
+ *  class it is written in, as `Tag:name` — a bare call reaches its own
+ *  member, so a Checkbox's own `input(!checked)` keeps a Checkbox's `input`
+ *  alive and says nothing of a TextInput's. (Library code does not count where
+ *  its file is known; where it is not, the scoping above is what keeps it out.) */
 let AUTHOR_CALLS = new Set();
 /** Built-in class names a program class tried to take (see check()). */
 let REFUSED_TAGS = new Set();
 function authorCalls(program) {
     const out = new Set();
-    const scan = (src) => { for (const m of src.matchAll(/(?<![\w$])([A-Za-z_$][\w$]*)\s*\(/g))
-        out.add(m[1]); };
-    const ours = (pos) => !(pos?.file ?? "").startsWith("library/");
-    const walk = (v) => {
+    const scan = (src, tags) => {
+        for (const m of src.matchAll(/(?<![\w$])(\.\s*)?([A-Za-z_$][\w$]*)\s*\(/g)) {
+            if (m[1] !== undefined)
+                out.add(m[2]);
+            else
+                for (const t of tags)
+                    out.add(t + ":" + m[2]);
+        }
+    };
+    // a library file is named from its `library/` root, or carries the whole path to it
+    const ours = (pos) => !/(^|\/)library\//.test(pos?.file ?? "");
+    // `tags`: what a bare call here names — the element's own tag, and on a
+    // class's body the class too (its members are the class's)
+    const walk = (v, tags, cls = null) => {
         if (v === null || typeof v !== "object")
             return;
         if (Array.isArray(v)) {
             for (const x of v)
-                walk(x);
+                walk(x, tags);
             return;
         }
         const o = v;
+        if (typeof o.name === "string" && typeof o.base === "string" && typeof o.body === "object") {
+            walk(o.body, tags, o.name);
+            return;
+        }
+        if (typeof o.tag === "string" && Array.isArray(o.children))
+            tags = cls === null ? [o.tag] : [o.tag, cls];
         if (typeof o.body === "string" && typeof o.bodyPos === "object") {
             if (ours(o.bodyPos))
-                scan(o.body);
+                scan(o.body, tags);
         }
         else if (o.kind === "code" && typeof o.src === "string") {
             if (ours(o.pos))
-                scan(o.src);
+                scan(o.src, tags);
         }
         for (const k in o)
             if (k !== "pos" && k !== "bodyPos")
-                walk(o[k]);
+                walk(o[k], tags);
     };
-    walk(program);
+    walk(program, []);
     return out;
 }
 export function checkMethod(schema, m) {

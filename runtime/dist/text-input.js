@@ -19,7 +19,7 @@ import { Constraint, settle } from "./reactive.js";
 import { Focus } from "./focus.js";
 import { fontMetrics, fontString, wrapEditable } from "./measure.js";
 import { heldFamily } from "./font-value.js";
-import { isTwoWay, edited, commitDraft, Editor } from "./editor.js";
+import { isTwoWay, edited, commitDraft, judgeDraft, Editor } from "./editor.js";
 import { insetSides, stroke } from "./value.js";
 import { hintsOf } from "./purpose.js";
 export class TextInput extends Editor {
@@ -70,6 +70,9 @@ export class TextInput extends Editor {
             bindDerived(this, "concealed", () => hintsOf(this.purpose).concealed);
         if (!isSet(this, "fill") && ownerOf(this, "fill") === null)
             bindDerived(this, "fill", () => tok("surface", 0xFFFFFF));
+        // what is wrong with the value is said with the field, as it is shown
+        if (!isSet(this, "accessibilityError") && ownerOf(this, "accessibilityError") === null)
+            bindDerived(this, "accessibilityError", () => this.error);
         if (!isSet(this, "stroke") && ownerOf(this, "stroke") === null)
             bindDerived(this, "stroke", () => stroke(1, this.focused ? tok("accent", 0x2E6FE0) : tok("line", 0xDBE1E9)));
         if (!isSet(this, "cornerRadius") && ownerOf(this, "cornerRadius") === null)
@@ -161,6 +164,8 @@ export class TextInput extends Editor {
                     Focus.blur();
                 if (this.commitOn === "blur" && isTwoWay(this, "text"))
                     commitDraft(this, "text");
+                if (isTwoWay(this, "text"))
+                    judgeDraft(this, "text");
             },
             onEnter: () => {
                 if (this.commitOn === "enter" && isTwoWay(this, "text"))

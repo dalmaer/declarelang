@@ -13,6 +13,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
+import { tempDir } from "./harness.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
@@ -173,7 +174,7 @@ await test("--sizes accounts for the whole build, and says how each file came in
 await test("a build compiles its islands ahead into programs/ and carries no compiler", async () => {
   const { mkdtempSync, mkdirSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
-  const dir = mkdtempSync(resolve(tmpdir(), "declarec-islands-"));
+  const dir = tempDir("declarec-islands-");
   mkdirSync(resolve(dir, "demos"));
   writeFileSync(resolve(dir, "demos", "tile.declare"), `App [ width = 80, height = 40, fill = tomato, Text [ x = 8, y = 8, text = "tile" ] ]`);
   writeFileSync(resolve(dir, "demos", "note.declare"), `App [ width = 200, height = 120, m: Markdown [ width = 100%, text = "# note" ] ]`);
@@ -206,7 +207,7 @@ await test("a build compiles its islands ahead into programs/ and carries no com
 await test("ship [ files ] copies each file into the package and maps its URL", async () => {
   const { mkdtempSync, mkdirSync } = await import("node:fs");
   const { tmpdir } = await import("node:os");
-  const root = mkdtempSync(resolve(tmpdir(), "declarec-files-"));
+  const root = tempDir("declarec-files-");
   const dir = resolve(root, "apps", "a");
   mkdirSync(dir, { recursive: true });
   mkdirSync(resolve(root, "docs"));
@@ -545,8 +546,15 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // change and the settle that re-points it; a drawing's raster placed on whole
   // pixels, so an arc can be bounded by the sweep it draws — measured 136.8 KB, from
   // 135.9 the build before.
+  //
+  // 137 → 138 KB (2026-10-22, the second eval's fixes): a size that reads its
+  // parent's in only some branches is marked by the branch taken; a scroll request
+  // past content still to arrive waits for it; a field says what is wrong with it to
+  // a screen reader, and may wait until it is left; a refusal's body is checked
+  // against its errorSchema; focus a program moves is shown — measured 137.7 KB,
+  // from 136.9 the build before.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 137 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 138 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 
@@ -617,7 +625,7 @@ await test("closure freshness: an edit to an INCLUDED file invalidates the build
   const { tmpdir } = await import("node:os");
   const { join } = await import("node:path");
   const { isUpToDate, diskProbe } = await import("../compiler/dist/compile-node.js");
-  const dir = mkdtempSync(join(tmpdir(), "declarec-closure-"));
+  const dir = tempDir("declarec-closure-");
   writeFileSync(join(dir, "part.declare"), "class Part extends View [ width = 40 ]\n");
   const source = 'include [ "part.declare" ]\nApp [ width = 100, height = 100, Part [ ] ]\n';
   writeFileSync(join(dir, "main.declare"), source);

@@ -11,7 +11,7 @@ import http from "node:http";
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname, extname, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { launchChrome } from "./chrome.mjs";
+import { sharedChrome } from "./chrome.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -49,6 +49,18 @@ export class VerifyAssertion extends Error {}
 // app's folder and its own index.html is the page — how the corpus gate
 // proves a slimmed build behaves as the program does.
 
+/** A request body, parsed when it is JSON. */
+function parseBody(raw) {
+  if (raw === undefined || raw === null || raw === "") return null;
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+/** Does `body` hold every field `want` names, with the same value (deeply)? */
+function bodyHas(body, want) {
+  if (want === null || typeof want !== "object") return body === want;
+  if (body === null || typeof body !== "object") return false;
+  return Object.entries(want).every(([k, v]) => bodyHas(body[k], v));
+}
+
 async function withHost({ compiled, appDir, fixturesDir = null, backendClass = "DomBackend", built = null, scrollbars = false }, fn) {
   const baseHref = "/" + relative(ROOT, resolve(appDir)).split("\\").join("/") + "/";
   const builtFiles = new Map((built?.files ?? []).map((f) => [f.name, f.contents]));
@@ -65,12 +77,37 @@ async function withHost({ compiled, appDir, fixturesDir = null, backendClass = "
 <script type="module">
 import { bootHost } from "/browser/host-client.js";
 const cfg = ${JSON.stringify(cfg)};
-cfg.compile = async () => null;
+// a program this one embeds (an AppIsland) is fetched beside it and compiled by
+// this harness's server, as the dev server compiles one
+cfg.islandBase = ${JSON.stringify(baseHref)};
+cfg.compile = async (source, name, dir) => {
+  const r = await fetch("/__verify__/compile", { method: "POST", body: JSON.stringify({ source, name, dir: dir || cfg.islandBase }) });
+  return r.ok ? r.json() : null;
+};
 bootHost(cfg);
 </script>`;
 
   const server = http.createServer((req, res) => {
     const pathname = decodeURIComponent(new URL(req.url, "http://x").pathname);
+    if (pathname === "/__verify__/compile" && req.method === "POST") {
+      let body = "";
+      req.on("data", (c) => { body += c; });
+      req.on("end", async () => {
+        try {
+          const { source, name, dir } = JSON.parse(body);
+          const { compile } = await import(pathToFileURL(join(ROOT, "compiler/dist/compile-node.js")).href);
+          const file = join(ROOT, String(dir ?? baseHref), String(name) + ".declare");
+          const r = await compile(source, { originDir: dirname(file) });
+          const out = r.errors.length > 0 ? { report: r.errors.map((e) => e.message).join("\n") } : { program: r.program };
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify(out));
+        } catch (e) {
+          res.writeHead(500, { "content-type": "text/plain" });
+          res.end(String(e?.message ?? e));
+        }
+      });
+      return;
+    }
     if (pathname === "/__verify__/" || pathname === "/__verify__/index.html") {
       res.writeHead(200, { "content-type": "text/html" });
       return res.end(hostPage);
@@ -103,18 +140,33 @@ bootHost(cfg);
   // (macOS) has no thumb until it is scrolling — so both are turned off, and the
   // page gets the classic bar Windows and Linux draw. The visual rung keeps them
   // hidden, as its baselines were drawn.
-  const browser = await launchChrome({ executablePath: findChrome(), headless: true,
+  // a Chrome kept running between calls (chrome.mjs): each run works in a
+  // browser context of its own, so nothing carries from one run to the next
+  const { context: browser, release } = await sharedChrome({
     args: ["--no-sandbox", ...(scrollbars ? ["--disable-features=OverlayScrollbar,OverlayScrollbars"] : [])],
     ...(scrollbars ? { ignoreDefaultArgs: ["--hide-scrollbars"] } : {}) });
   try {
     /** A fresh page with the app booted and the language-altitude API bound. */
-    const openApp = async ({ width = 1024, height = 768, clock = null, scheme = "light", dpr = 1 } = {}) => {
+    const openApp = async ({ width = 1024, height = 768, clock = null, scheme = "light", dpr = 1, touch = false, hideScrollbars = false, echoConsole = false, onPage = null, budgetMs = 15000 } = {}) => {
       const page = await browser.newPage();
+      // watched from before the program's first line: a program that stops
+      // answering — while it boots, or later, under a click — is paused where it
+      // is and its lines quoted, rather than holding the run until a timeout
+      const watch = watchPage(page, budgetMs);
+      onPage?.(page);
+      // what the page writes to its console, from its first line (declare-look --console)
+      // (the browser's own request for a favicon is not the program's)
+      if (echoConsole) page.on("console", (m) => { if (!/favicon\.ico$/.test(m.location()?.url ?? "")) console.log("console." + m.type() + ": " + m.text()); });
+      // scrollbars drawn or not is the page's from its first paint
+      if (hideScrollbars) await (await page.target().createCDPSession()).send("Emulation.setScrollbarsHidden", { hidden: true });
+      // `touch`: a phone or tablet — touch is the device's input, and every
+      // press, drag and hold the driver makes is a FINGER (touch events), not a
+      // mouse in a small window: no hover, gesture claims, a drag that scrolls.
       // `dpr` rasterizes at device pixels per CSS pixel — a specimen sheet whose
       // subject IS the rendering (stroke weight, a 1px hairline) needs the real
       // pixels, not a 1× approximation of them. Layout is unchanged; only the
       // raster grid is finer, so the baseline is dpr× the clip in each axis.
-      await page.setViewport({ width, height, deviceScaleFactor: dpr });
+      await page.setViewport({ width, height, deviceScaleFactor: dpr, hasTouch: touch, isMobile: touch });
       // A PINNED COLOUR SCHEME, for the same reason as the pinned clock: an app
       // that follows `prefers-color-scheme` renders whatever the HOST MACHINE
       // happens to be wearing, so baselines blessed in daylight fail when macOS
@@ -123,6 +175,21 @@ bootHost(cfg);
       await page.emulateMediaFeatures([{ name: "prefers-color-scheme", value: scheme }]);
       const pageErrors = [];
       page.on("pageerror", (e) => pageErrors.push(String(e?.message ?? e)));
+      // THE REQUESTS THE PROGRAM MAKES — its DataSources, streams and sockets,
+      // not the page's own scripts, styles, fonts and pictures — in order, with
+      // what each carried and what came back: a check asks what was sent
+      // (expect.request) rather than inferring it from the screen.
+      const requests = [];
+      const PROGRAM_KINDS = new Set(["fetch", "xhr", "eventsource", "websocket"]);
+      page.on("request", (r) => {
+        if (!PROGRAM_KINDS.has(r.resourceType()) || r.method() === "OPTIONS") return;
+        const u = new URL(r.url());
+        requests.push({ method: r.method(), url: r.url(), path: u.pathname + u.search, body: parseBody(r.postData()), status: null, $req: r });
+      });
+      page.on("response", (res) => {
+        const e = requests.find((q) => q.$req === res.request());
+        if (e !== undefined) e.status = res.status();
+      });
       // A PINNED WALL CLOCK, installed before any page script runs. An app whose
       // initial state derives from today — the calendar's month grid, a "3 days
       // ago" label — otherwise photographs a different program every day, and
@@ -179,7 +246,17 @@ bootHost(cfg);
           if (typeof id === "string" && pend.has(id)) { pend.delete(id); return; }
           realClear(id);
         };
+        // The frames the app has asked for and not yet had: a wait that drives
+        // the clock lets one go by while any is owed (an afterDelay arms its
+        // timer only once the frame it was asked in has been shown).
+        const realRaf = globalThis.requestAnimationFrame.bind(globalThis);
+        const realCaf = globalThis.cancelAnimationFrame.bind(globalThis);
+        const owed = new Set();
+        globalThis.requestAnimationFrame = (fn) => { const id = realRaf((t) => { owed.delete(id); fn(t); }); owed.add(id); return id; };
+        globalThis.cancelAnimationFrame = (id) => { owed.delete(id); realCaf(id); };
         globalThis.__declareTimers = {
+          framesOwed: () => owed.size,
+          nextFrame: () => new Promise((r) => realRaf(() => r())),
           advance(ms) {
             now += ms;
             // due-ordered, and re-read each pass: a fired callback may arm more
@@ -195,8 +272,46 @@ bootHost(cfg);
           pending: () => pend.size,
         };
       });
-      await page.goto(`http://127.0.0.1:${port}${built !== null ? baseHref + "index.html" : "/__verify__/"}`, { waitUntil: "networkidle0", timeout: 30000 });
-      await page.waitForFunction("!!window.__declare?.inspect", { timeout: 10000 });
+      // READY WHEN THE APP IS: booted, and nothing it asked for still on its way.
+      // This counts the page's own requests (a stream or a socket, open for good,
+      // is not one), and is quiet once none is in flight and two frames have
+      // gone by with none begun — a request the program makes is announced
+      // before the frame after it, so a data source that fetches as the app
+      // boots, or fetches again from what came back, has begun by then. No
+      // window of silence is waited out.
+      let inflight = 0, lastChange = Date.now();
+      const LONG_LIVED = new Set(["eventsource", "websocket"]);
+      page.on("request", (r) => { if (!LONG_LIVED.has(r.resourceType())) { inflight++; lastChange = Date.now(); } });
+      const settled = (r) => { if (!LONG_LIVED.has(r.resourceType())) { inflight = Math.max(0, inflight - 1); lastChange = Date.now(); } };
+      page.on("requestfinished", settled);
+      page.on("requestfailed", settled);
+      const quiet = async (timeoutMs = 10000) => {
+        const until = Date.now() + timeoutMs;
+        while (Date.now() < until) {
+          if (inflight > 0) { await new Promise((r) => setTimeout(r, 10)); continue; }
+          const seen = lastChange;
+          await frames(page);
+          if (inflight === 0 && lastChange === seen) return;
+        }
+      };
+      await watch.during("boot", async () => {
+        await page.goto(`http://127.0.0.1:${port}${built !== null ? baseHref + "index.html" : "/__verify__/"}`, { waitUntil: "load", timeout: 30000 });
+        await page.waitForFunction("!!window.__declare?.inspect", { timeout: 10000, polling: 10 });
+        // the program's own fonts: a Font starts its faces' loads as the app comes
+        // up, and the browser's document.fonts.ready can resolve before they begin
+        await page.waitForFunction(() => {
+          const pending = (n) => n.$pending === true || (n.children ?? []).some(pending);
+          return !pending(window.__declare.find("app"));
+        }, { timeout: 8000, polling: 20 }).catch(() => {});
+        await quiet();
+        await page.evaluate(() => document.fonts.ready);
+        // …and at rest: motion the app starts as it comes up (a spring settling into
+        // place) is run to its end on the driven clock — a loop that never ends
+        // does not hold it — and two frames go by, for what the page applies after
+        // a settle (its scroll extent among them)
+        await page.evaluate(() => { const c = window.__declare.clock; c?.settleMotion?.(5000); c?.auto?.(); });
+        await frames(page);
+      });
       // Deferred time now rides the driven clock for every stepper — the
       // asserts' clock.step, settleMotion, and the states' routes alike.
       await page.evaluate(() => {
@@ -240,7 +355,7 @@ bootHost(cfg);
         if (off(c)) {
           await page.evaluate((p) => { const n = window.__declare.find(p); n?.scrollIntoView?.("nearest"); }, path);
           await page.evaluate(() => window.__declare.clock?.settleMotion?.());
-          await new Promise((r) => setTimeout(r, 120));   // the platform's scroll lands as an event
+          await frames(page);   // the platform's scroll lands as an event, before the frame
           c = await center(path);
           if (off(c)) throw new VerifyAssertion(`'${path}' is outside the window at (${Math.round(c.x)}, ${Math.round(c.y)}) and scrolling did not bring it in`);
         }
@@ -261,7 +376,7 @@ bootHost(cfg);
         if (hit.clipped) {
           await page.evaluate((p) => { window.__declare.find(p)?.scrollIntoView?.("nearest"); }, path);
           await page.evaluate(() => window.__declare.clock?.settleMotion?.());
-          await new Promise((r) => setTimeout(r, 120));
+          await frames(page);
           c = await center(path);
           hit = await reaches();
         }
@@ -273,7 +388,7 @@ bootHost(cfg);
             if (below > 0) n?.scrollIntoView?.("start", false, below); else n?.scrollIntoView?.("nearest");
           }, path, hit.path, c.y);
           await page.evaluate(() => window.__declare.clock?.settleMotion?.());
-          await new Promise((r) => setTimeout(r, 120));
+          await frames(page);
           c = await center(path);
           hit = await reaches();
         }
@@ -282,20 +397,71 @@ bootHost(cfg);
         return c;
       };
 
+      // ON A TOUCH DEVICE THE PRESS IS A FINGER. The page decides by the
+      // viewport it was given (openApp's `touch`, declare-look's --touch): every
+      // verb below then sends touch events, as a hand would — a mouse in a
+      // phone-sized window would hover, never claim a gesture, and pass tests
+      // a finger fails.
+      const touching = () => page.viewport()?.hasTouch === true;
+      const press = async (x, y) => {
+        if (touching()) await page.touchscreen.tap(x, y);
+        else await page.mouse.click(x, y);
+      };
       const drive = {
         async click(path) {
           const c = await reach(path);
-          step(`click ${path}`);
-          await page.mouse.click(c.x, c.y);
+          step(`${touching() ? "tap" : "click"} ${path}`);
+          await press(c.x, c.y);
         },
-        /** Two fingers on the view, spread (scale > 1) or drawn together (< 1)
-         *  about its centre — real touch points, so the program's onPinch* run
-         *  as they would under a hand. */
+        /** Make the page another device, and load the app again on it:
+         *  `{ width, height, touch }` — a phone is `{ width: 390, height: 844,
+         *  touch: true }`. On a touch device every press, drag and hold after
+         *  this is a finger. */
+        async device({ width, height, touch = false } = {}) {
+          const vp = page.viewport() ?? { width: 1024, height: 768 };
+          step(`device ${width ?? vp.width}x${height ?? vp.height}${touch ? " touch" : ""}`);
+          await page.setViewport({ ...vp, width: width ?? vp.width, height: height ?? vp.height, hasTouch: touch, isMobile: touch });
+          await page.reload();
+          await page.waitForFunction(() => window.__declare && typeof window.__declare.find === "function", { timeout: 15000 });
+        },
+        /** Press and hold `ms` (the app's time advances by exactly that), then
+         *  release in place — a finger's press-and-hold, or a held mouse button.
+         *  What `onHold` answers, and a context menu on a touch screen. */
+        async hold(path, ms = 600) {
+          const c = await reach(path);
+          step(`hold ${path} for ${ms} ms`);
+          if (touching()) {
+            const t = await page.touchscreen.touchStart(c.x, c.y);
+            await this.wait(ms);
+            await t.end();
+          } else {
+            await page.mouse.move(c.x, c.y);
+            await page.mouse.down();
+            await this.wait(ms);
+            await page.mouse.up();
+          }
+        },
+        /** A pinch on the view about its centre, spread (scale > 1) or drawn
+         *  together (< 1), as the device makes it. On a touch device, two
+         *  fingers — the program's onPinch* run. Otherwise a trackpad pinch,
+         *  which the browser delivers as wheel events with ctrl held — the
+         *  program's onWheel runs with `e.pinch` true, as under a Mac trackpad. */
         async pinch(path, scale, steps = 12) {
           const c = await reach(path);
-          step(`pinch ${path} by ${scale}`);
+          step(`pinch ${path} by ${scale}${touching() ? "" : " (trackpad)"}`);
           const s = await page.target().createCDPSession();
-          await s.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 2 });
+          if (!touching()) {
+            // Chrome scales a page by exp(-deltaY / 100) per ctrl-wheel, so the
+            // same total delta is what a trackpad sends for this scale
+            const total = -100 * Math.log(scale);
+            await page.mouse.move(c.x, c.y);
+            for (let i = 0; i < steps; i++) {
+              await s.send("Input.dispatchMouseEvent", { type: "mouseWheel", x: c.x, y: c.y, deltaX: 0, deltaY: total / steps, modifiers: 2 });
+              await new Promise((r) => setTimeout(r, 16));
+            }
+            await s.detach();
+            return;
+          }
           const d0 = 40, d1 = d0 * scale;
           const at = (d) => [{ x: c.x - d, y: c.y, id: 1 }, { x: c.x + d, y: c.y, id: 2 }];
           await s.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(d0) });
@@ -312,12 +478,23 @@ bootHost(cfg);
         async clickAt(path, x, y) {
           await reach(path);
           const p = await pointIn(path, x, y);
-          step(`click ${path} at (${x}, ${y})`);
-          await page.mouse.click(p.x, p.y);
+          step(`${touching() ? "tap" : "click"} ${path} at (${x}, ${y})`);
+          await press(p.x, p.y);
         },
         async drag(path, dx, dy = 0, steps = 10) {
           const c = await reach(path);
           step(`drag ${path} by (${dx}, ${dy})`);
+          if (touching()) {
+            // a finger's drag, a frame between moves: inside a scroller it is
+            // the page's scroll unless the view claims it, as under a hand
+            const t = await page.touchscreen.touchStart(c.x, c.y);
+            for (let i = 1; i <= steps; i++) {
+              await t.move(c.x + (dx * i) / steps, c.y + (dy * i) / steps);
+              await new Promise((r) => setTimeout(r, 16));
+            }
+            await t.end();
+            return;
+          }
           await page.mouse.move(c.x, c.y);
           await page.mouse.down();
           await page.mouse.move(c.x + dx, c.y + dy, { steps });
@@ -330,9 +507,9 @@ bootHost(cfg);
           const c = await reach(path);
           step(`wheel ${path} by (${dx}, ${dy})`);
           await page.mouse.move(c.x, c.y);
-          // A native scroll lands after the wheel event: count the page's scroll
-          // events and wait, in real time (the page's own timers are the driven
-          // clock's), until they have been quiet a moment.
+          // A native scroll lands after the wheel event, over frames of its own:
+          // count the page's scroll events, and wait until three frames go by
+          // with none (or a second and a half, for a scroll that never stops).
           await page.evaluate(() => {
             window.__declareScrolls = 0;
             if (window.__declareScrollCount === undefined) {
@@ -341,25 +518,43 @@ bootHost(cfg);
             }
           });
           await page.mouse.wheel({ deltaX: dx, deltaY: dy });
-          const real = (ms) => new Promise((r) => setTimeout(r, ms));
-          let seen = -1, quiet = 0;
-          for (let t = 0; t < 1500 && quiet < 120; t += 40) {
-            await real(40);
-            const n = await page.evaluate(() => window.__declareScrolls);
-            quiet = n === seen ? quiet + 40 : 0;
-            seen = n;
-          }
+          await page.evaluate(() => new Promise((done) => {
+            const until = performance.now() + 1500;
+            let seen = -1, still = 0;
+            const frame = () => {
+              const n = window.__declareScrolls;
+              still = n === seen ? still + 1 : 0;
+              seen = n;
+              if (still >= 3 || performance.now() > until) done(); else requestAnimationFrame(frame);
+            };
+            requestAnimationFrame(frame);
+          }));
         },
+        /** The requests the program has made so far: { method, url, path, body,
+         *  status } each, in order (body parsed when it is JSON). */
+        requests() { return requests.map(({ $req, ...q }) => q); },
         async key(name) { step(`key ${name}`); await page.keyboard.press(name); },
         async type(text) { step(`type "${text}"`); await page.keyboard.type(text); },
         async tab(n = 1) { for (let i = 0; i < n; i++) await this.key("Tab"); },
-        /** Wait `ms`. Real time passes (browser work — layout, paint, network
-         *  — still needs it) AND the app's virtual deferred time advances by
-         *  exactly `ms`, so a route that waits 300ms always gets 300ms of
-         *  app-visible delay whatever the machine is doing. */
+        /** Let `ms` of the app's time pass: its clock is driven through it a
+         *  frame at a time — motion moves, later calls (`afterDelay`, a hold's
+         *  timer) come due — so a route that waits 300 ms always sees exactly
+         *  300 ms of the app's time, whatever the machine is doing, and none of
+         *  it is waited out for real. What the browser still owes — a request
+         *  the app made, the frame after — is waited for, as it lands. */
         async wait(ms) {
-          await new Promise((r) => setTimeout(r, ms));
-          await page.evaluate((m) => globalThis.__declareTimers?.advance(m), ms);
+          await page.evaluate(async (m) => {
+            const c = window.__declare.clock, T = globalThis.__declareTimers, was = c.mode;
+            c.manual();
+            // a frame the app is owed goes by for real — never more of them, in
+            // all, than `ms` of real time would have held
+            const until = performance.now() + m;
+            const owed = async () => { while (T.framesOwed() > 0 && performance.now() < until) await T.nextFrame(); };
+            await owed();
+            for (let t = 0; t < m; t += 16.7) { c.step(Math.min(16.7, m - t)); await owed(); }
+            if (was === "auto") c.auto();
+          }, ms);
+          await quiet(Math.max(ms, 1000));
         },
         /** Run in-flight motion to rest DETERMINISTICALLY (driven clock,
          *  in-page, frame-exact), then hand the clock back to rAF. */
@@ -372,7 +567,7 @@ bootHost(cfg);
           }, maxMs);
           if (!ok) throw new VerifyAssertion(`motion did not settle within ${maxMs} ms`);
         },
-        async settleData() { step("settleData"); await page.waitForNetworkIdle({ idleTime: 250, timeout: 10000 }); },
+        async settleData() { step("settleData"); await quiet(); },
         /** Assign an attribute on a live node — the write twin of the asserts'
          *  find-based read. An assignment, so constraints fire exactly as a
          *  handler's write would; a { }-owned slot refuses exactly as it should. */
@@ -385,6 +580,20 @@ bootHost(cfg);
 
       const fail = (msg) => { throw new VerifyAssertion(msg); };
       const expect = {
+        /** The program sent a request: `method` and a path (a string the
+         *  request's path starts with, or a RegExp), optionally how many times
+         *  (`count`) and what its body holds (`body`: the fields that must
+         *  match). Fails naming the requests that were sent. */
+        async request(method, path, { count, body } = {}) {
+          await quiet();   // a request just made has reached the log, and come back
+          const matches = requests.filter((q) => q.method === method.toUpperCase()
+            && (path instanceof RegExp ? path.test(q.path) : q.path.startsWith(path))
+            && (body === undefined || bodyHas(q.body, body)));
+          const said = requests.map((q) => `${q.method} ${q.path}${q.status !== null ? ` → ${q.status}` : ""}`).join(", ") || "none";
+          if (count === undefined ? matches.length === 0 : matches.length !== count)
+            fail(`expected ${count === undefined ? "a" : count} ${method.toUpperCase()} ${path}${body !== undefined ? ` with ${JSON.stringify(body)}` : ""} — sent: ${said}`);
+          step(`request ${method.toUpperCase()} ${path} ✓`);
+        },
         async exists(path) { await node(path); },
         async visible(path) {
           const n = await node(path);
@@ -444,27 +653,200 @@ bootHost(cfg);
         fail,
       };
 
-      return { page, drive, expect, node, log, pageErrors };
+      /** Run `work` (a script, a route) with the page watched: if the program
+       *  stops answering, the run fails at once, naming the step it was on and
+       *  the program's lines it was running. */
+      const watched = (work) => watch.during(() => log.length > 0 ? `during ${log[log.length - 1]}` : "the script", work);
+      return { page, drive, expect, node, log, pageErrors, quiet, watched };
     };
 
     return await fn({ openApp });
   } finally {
-    await browser.close();
+    await release();
     server.close();
   }
 }
 
 // ── rung 5: behavior ────────────────────────────────────────────────────────
 
-export async function runBehavior({ compiled, appDir, assertPath, fixturesDir = null, backendClass = "DomBackend", built = null }) {
+// ── rung 4 in a browser: the boot, with real layout and real text ──────────
+// The program booted in the Chrome kept running (chrome.mjs), at each window
+// asked, and asked rung 4's questions through the page bridge
+// (runtime/src/boot-check.ts) — the same questions the headless boot asks, now
+// with text measured for real. A boot that does not settle within its budget is
+// caught by the watch every page has (below), and the lines it was running quoted.
+
+export async function runBootInBrowser({ compiled, appDir, windows, queries = null, classes = [], budgetMs = 15000 }) {
+  return withHost({ compiled, appDir }, async ({ openApp }) => {
+    const out = [];
+    let first = true;
+    for (const w of windows) {
+      const record = { ok: false, nodes: 0, ms: 0, errors: [], notes: [], layout: [], unbuilt: [], answers: [], samples: [] };
+      const contained = [];
+      const t0 = Date.now();
+      let app;
+      try {
+        app = await openApp({ width: w.size[0], height: w.size[1], touch: w.touch, budgetMs, onPage: (p) => {
+          p.on("console", (m) => { const t = m.text(); if (m.type() === "error" && t.startsWith("[Declare] ")) contained.push(t.slice("[Declare] ".length)); });
+        } });
+      } catch (e) {
+        record.errors.push(...(e?.lines ?? [`boot: ${String(e?.message ?? e).split("\n")[0]}`]));
+        out.push(record);
+        if (e?.lines !== undefined) break;   // a program that runs away does so at every size
+        continue;
+      }
+      record.ms = Date.now() - t0;
+      try {
+        const r = await app.watched(() => app.page.evaluate((o) => window.__declare.bootCheck(o), { touch: w.touch, realText: true, classes, feed: true, queries: first ? queries : null }));
+        Object.assign(record, r);
+      } catch (e) {
+        record.errors.push(...(e?.lines ?? [`boot: ${String(e?.message ?? e).split("\n")[0]}`]));
+      }
+      for (const e of app.pageErrors) record.errors.push(`boot: ${e}`);
+      for (const c of new Set(contained)) record.errors.push(`boot: ${c}`);
+      record.ok = record.errors.length === 0;
+      await app.page.close().catch(() => {});
+      out.push(record);
+      first = false;
+    }
+    return out;
+  });
+}
+
+// ── a page that stops answering ─────────────────────────────────────────────
+// Every page a rung opens is watched the same way, from before the program's
+// first line to its close. The watch asks the page a trivial question every
+// moment; a page that leaves it unanswered for the budget is running something
+// that does not return. It is paused there — through a debugger enabled before
+// the program ran, since a page already caught in a loop cannot be given one —
+// the program's own lines on its stack are quoted, and the page is closed from
+// the browser's side, so the run fails at once with the line rather than at
+// some timeout with none.
+
+/** Race `p` against `ms`; `TIMED_OUT` when the time ran out first. Its timer is
+ *  cleared either way, so a watch ended early holds nothing open. */
+const TIMED_OUT = Symbol("timed out");
+function within(p, ms) {
+  let timer;
+  return Promise.race([p, new Promise((r) => { timer = setTimeout(() => r(TIMED_OUT), ms); })]).finally(() => clearTimeout(timer));
+}
+
+function watchPage(page, budgetMs) {
+  let pausing = false;
+  const session = page.target().createCDPSession().then(async (s) => {
+    // a `debugger` statement in the program is not a pause the watch asked for
+    s.on("Debugger.paused", () => { if (!pausing) s.send("Debugger.resume").catch(() => {}); });
+    await s.send("Debugger.enable");
+    return s;
+  }).catch(() => null);
+  const secs = Math.round(budgetMs / 1000);
+
+  /** Resolves once the page has gone the budget without answering; never, while
+   *  it answers or after `stop.done`. */
+  const silence = async (stop) => {
+    const s = await session;
+    while (s !== null && !stop.done && !page.isClosed()) {
+      const asked = Date.now();
+      const answer = s.send("Runtime.evaluate", { expression: "0" }).then(() => true, () => true);
+      if (await within(answer, budgetMs) === TIMED_OUT) { if (!stop.done && !page.isClosed()) return; break; }
+      await new Promise((r) => setTimeout(r, Math.max(0, 200 - (Date.now() - asked))));
+    }
+    return new Promise(() => {});
+  };
+
+  return {
+    /** `work` with the page watched; if the program stops answering, throws a
+     *  VerifyAssertion whose `lines` say so, `what` it was doing (or a function
+     *  that says, asked then), and where. */
+    async during(what, work) {
+      const stop = { done: false };
+      const SILENT = Symbol("silent");
+      const r = await Promise.race([
+        Promise.resolve().then(work).then((v) => ({ v }), (e) => ({ e })),
+        silence(stop).then(() => SILENT),
+      ]);
+      stop.done = true;
+      if (r !== SILENT) { if ("e" in r) throw r.e; return r.v; }
+      if (typeof what === "function") what = what();   // the step it had reached
+      const boot = what === "boot";
+      const head = boot
+        ? `boot: did not settle within ${secs} s — something the boot ran does not finish (a loop whose exit never comes, most often)`
+        : `${what}: the program stopped answering for ${secs} s — something it ran does not finish (a loop whose exit never comes, most often)`;
+      const quoted = await pausedLines(await session, () => { pausing = true; });
+      const lines = [head, ...quoted.map((q) => (boot ? "boot: " : "  ") + q)];
+      // left paused (so it answers), and closed from the browser's side
+      await within(page.close().catch(() => {}), 2000);
+      throw Object.assign(new VerifyAssertion(lines.join("\n")), { lines });
+    },
+  };
+}
+
+/** Pause a page whose program is running away, and quote the program's own
+ *  lines on its stack (a body compiled from source has no file: its text is
+ *  the clearer name). */
+async function pausedLines(s, asking) {
+  if (s === null) return [];
+  const quoted = [];
+  try {
+    asking();
+    const frames = await within(new Promise((resolve) => { s.once("Debugger.paused", (e) => resolve(e.callFrames)); s.send("Debugger.pause").catch(() => resolve([])); }), 3000);
+    for (const f of frames === TIMED_OUT ? [] : frames) {
+      if (quoted.length >= 4) break;
+      const src = (await s.send("Debugger.getScriptSource", { scriptId: f.location.scriptId })).scriptSource ?? "";
+      if (!src.startsWith("(function anonymous(") && !src.startsWith("(async function anonymous(")) continue;
+      // a body's first line carries the shared preamble: quote around where it was
+      // …past the preamble that unpacks the program's names, which is not its code
+      const whole = src.split("\n")[f.location.lineNumber] ?? "";
+      const pre = whole.lastIndexOf("} = $d;", f.location.columnNumber ?? 0);
+      const full = pre >= 0 ? whole.slice(pre + "} = $d;".length).trimStart() : whole;
+      const col = Math.max(0, (f.location.columnNumber ?? 0) - (whole.length - full.length));
+      const ret = full.lastIndexOf("return (", col);
+      const from = ret >= 0 && col - ret < 70 ? ret : Math.max(0, col - 40);
+      let line = full.length <= 110 ? full.trim() : full.slice(from, from + 110).trim();
+      line = line.replace(/this\.root\./g, "app.").replace(/^"use strict";\s*/, "");
+      if (full.length > 110 && from > 0 && ret < 0) line = "…" + line;
+      if (full.length > 110 && from + 110 < full.length) line = line + "…";
+      if (line !== "" && !quoted.includes(line)) quoted.push(line);
+    }
+  } catch { /* no stack to report: the budget message stands alone */ }
+  if (quoted.length === 0) return [];
+  return [`it was running  ${quoted[0]}`, ...quoted.slice(1).map((q) => `  called from  ${q}`)];
+}
+
+/** Two frames: what the page applies after a change has been applied, and
+ *  presented — and the browser's reports of what shows (IntersectionObserver,
+ *  which the renderer's visibility and raster density follow) delivered and
+ *  answered. Those come in a task of their own after a frame, so a frame count
+ *  alone can beat them; one observer's first report arrives in the same task
+ *  as every other observer's. */
+function frames(page) {
+  return page.evaluate(() => new Promise((r) => {
+    const io = new IntersectionObserver(() => {
+      io.disconnect();
+      requestAnimationFrame(() => requestAnimationFrame(() => r()));
+    });
+    io.observe(document.documentElement);
+  }));
+}
+
+export async function runBehavior({ compiled, appDir, assertPath, fixturesDir = null, backendClass = "DomBackend", built = null, budgetMs = 15000 }) {
   return withHost({ compiled, appDir, fixturesDir, backendClass, built, scrollbars: true }, async ({ openApp }) => {
     const failures = [];
-    const app = await openApp();
+    // a script may name the device it runs on — `export const device = { width,
+    // height, touch }` — so the app loads once, on it, rather than twice
     const mod = await import(pathToFileURL(resolve(assertPath)).href);
     if (typeof mod.default !== "function") throw new VerifyAssertion(`${assertPath} has no default export function`);
+    let app;
     try {
-      await mod.default({ drive: app.drive, expect: app.expect, page: app.page });
+      app = await openApp({ ...(mod.device ?? {}), budgetMs });
     } catch (e) {
+      if (e?.lines === undefined) throw e;
+      return { ok: false, failures: e.lines, log: [] };
+    }
+    try {
+      await app.watched(() => mod.default({ drive: app.drive, expect: app.expect, page: app.page }));
+    } catch (e) {
+      if (e?.lines !== undefined) { failures.push(...e.lines); return { ok: false, failures, log: app.log }; }
       const where = app.log.length > 0 ? ` (after: ${app.log.slice(-3).join(" → ")})` : "";
       // For an unexpected error, the first stack frame is the difference
       // between "my assert threw here" and an anonymous page error a reader
@@ -607,7 +989,7 @@ async function diffPng(page, aBase64, bBase64, tolerance = 4, mask = []) {
  *  capture a dark state) so a capture never depends on the host machine's own
  *  appearance. `mask` is a list of {x,y,w,h} rectangles excluded from the diff,
  *  for regions that measure the machine (see diffPng). */
-export async function runStates({ compiled, appDir, statesPath, baselinesDir, bless = false, fixturesDir = null, backendClass = "DomBackend", tolerance = 4, built = null }) {
+export async function runStates({ compiled, appDir, statesPath, baselinesDir, bless = false, fixturesDir = null, backendClass = "DomBackend", tolerance = 4, built = null, budgetMs = 15000 }) {
   const mod = await import(pathToFileURL(resolve(statesPath)).href);
   const states = mod.default;
   if (!Array.isArray(states)) throw new VerifyAssertion(`${statesPath} must default-export an array of states`);
@@ -616,7 +998,7 @@ export async function runStates({ compiled, appDir, statesPath, baselinesDir, bl
   return withHost({ compiled, appDir, fixturesDir, backendClass, built }, async ({ openApp }) => {
     const failures = [];
     const results = [];
-    const KNOWN_STATE_KEYS = new Set(["name", "viewport", "clock", "scheme", "dpr", "mask", "route", "frames"]);
+    const KNOWN_STATE_KEYS = new Set(["name", "viewport", "clock", "scheme", "dpr", "touch", "mask", "route", "frames"]);
     for (const st of states) {
       for (const k of Object.keys(st)) {
         if (KNOWN_STATE_KEYS.has(k)) continue;
@@ -627,71 +1009,85 @@ export async function runStates({ compiled, appDir, statesPath, baselinesDir, bl
         console.warn(`states: '${st.name ?? "?"}' has unknown key '${k}' (ignored)${hint}`);
       }
       const viewport = st.viewport ?? { width: 1024, height: 768 };
-      const app = await openApp({ ...viewport, clock: st.clock ?? null, scheme: st.scheme ?? "light", dpr: st.dpr ?? 1 });
+      let app;
       try {
-        if (typeof st.route === "function") await st.route({ drive: app.drive, expect: app.expect, page: app.page });
-        // LET LATE DATA LAND. The page is `networkidle0` when the program boots,
-        // but an `auto` DataSource fetches AFTER that — so a document app can be
-        // captured before its own document arrives. The viewer was exactly this:
-        // blessed empty at 360×220 one run and full at 1024×768 the next, which
-        // makes a baseline a coin toss rather than a fact.
-        //
-        // Tolerant by construction: an app that never goes idle (a live stream, a
-        // poll) simply proceeds after the wait times out, because "no more
-        // requests" is a convenience here and never a requirement.
-        try { await app.page.waitForNetworkIdle({ idleTime: 250, timeout: 5000 }); } catch { /* a program that keeps a connection open never idles */ }
-        // AND LET MOTION FINISH. A focus ring travels on springs, a menu opens on
-        // one, a dock magnifies on one — so a capture two frames after the model
-        // quiesces can still catch a spring mid-flight, and the frame it catches
-        // depends on how busy the machine was. That is what made the sampler's
-        // `focus-first-tab` differ run to run by tens of channels while nothing
-        // about the program changed.
-        //
-        // `motionBusy` is the shared clock's own answer (inspect.ts stats): true
-        // while any animator or spring is still running. Waiting for it makes the
-        // captured frame a property of the PROGRAM rather than of the machine.
-        // Perpetual motion — a `Time` at `tick = frame`, an idle animation — never
-        // rests, so this is a bounded wait and not a requirement; such a state
-        // should pin the clock instead.
-        try {
-          await app.page.waitForFunction(
-            () => window.__declare?.stats?.().motionBusy === false,
-            { timeout: 5000, polling: 50 });
-        } catch { /* perpetual motion: capture it where it is */ }
-        // `frames: true` — a long document, as a sequence of settled viewport
-        // frames rather than one very tall image. Each frame is its own baseline,
-        // so a failure names the screen to go and look at.
-        const shots = st.frames === true
-          ? await shootFrames(app.page, viewport.height)
-          : [{ top: null, data: await shootApp(app.page) }];
-        const base = join(resolve(baselinesDir), `${st.name}@${viewport.width}x${viewport.height}${suffix}`);
-        for (let i = 0; i < shots.length; i++) {
-          const { top, data: shot } = shots[i];
-          const label = top === null ? st.name : `${st.name} frame ${i + 1}/${shots.length} (y ${top})`;
-          const file = top === null ? `${base}.png` : `${base}.f${i + 1}.png`;
-          if (bless) {
-            mkdirSync(dirname(file), { recursive: true });
-            writeFileSync(file, Buffer.from(shot, "base64"));
-            results.push(`${label}: blessed → ${relative(ROOT, file)}`);
-          } else if (!existsSync(file)) {
-            failures.push(`${label}: no baseline (${relative(ROOT, file)}) — run with --bless to create it`);
-          } else {
-            const baseline = readFileSync(file).toString("base64");
-            const d = await diffPng(app.page, baseline, shot, tolerance, st.mask ?? []);
-            if (d.over !== 0) {
-              const actual = file.replace(/\.png$/, ".actual.png");
-              writeFileSync(actual, Buffer.from(shot, "base64"));
-              failures.push(`${label}: ${d.over === -1 ? d.note : `${d.over} channel values past tolerance (max Δ ${d.max})`} — actual saved to ${relative(ROOT, actual)}`);
+        app = await openApp({ ...viewport, clock: st.clock ?? null, scheme: st.scheme ?? "light", dpr: st.dpr ?? 1, touch: st.touch === true, budgetMs });
+      } catch (e) {
+        if (e?.lines === undefined) throw e;
+        failures.push(...e.lines.map((l, i) => i === 0 ? `${st.name}: ${l}` : l));
+        break;   // a program that runs away as it boots does so in every state
+      }
+      // a text caret blinks on its own clock: a picture taken mid-blink would
+      // differ from its baseline by the caret alone, so a state hides it
+      await app.page.addStyleTag({ content: "* { caret-color: transparent !important; }" });
+      try {
+        // the route and the capture alike, with the page watched
+        await app.watched(async () => {
+          if (typeof st.route === "function") await st.route({ drive: app.drive, expect: app.expect, page: app.page });
+          // LET LATE DATA LAND. The page is `networkidle0` when the program boots,
+          // but an `auto` DataSource fetches AFTER that — so a document app can be
+          // captured before its own document arrives. The viewer was exactly this:
+          // blessed empty at 360×220 one run and full at 1024×768 the next, which
+          // makes a baseline a coin toss rather than a fact.
+          //
+          // Tolerant by construction: an app that never goes idle (a live stream, a
+          // poll) simply proceeds after the wait times out, because "no more
+          // requests" is a convenience here and never a requirement.
+          await app.quiet(5000);
+          // AND LET MOTION FINISH. A focus ring travels on springs, a menu opens on
+          // one, a dock magnifies on one — so a capture two frames after the model
+          // quiesces can still catch a spring mid-flight, and the frame it catches
+          // depends on how busy the machine was. That is what made the sampler's
+          // `focus-first-tab` differ run to run by tens of channels while nothing
+          // about the program changed.
+          //
+          // `motionBusy` is the shared clock's own answer (inspect.ts stats): true
+          // while any animator or spring is still running. Waiting for it makes the
+          // captured frame a property of the PROGRAM rather than of the machine.
+          // Perpetual motion — a `Time` at `tick = frame`, an idle animation — never
+          // rests, so this is a bounded wait and not a requirement; such a state
+          // should pin the clock instead.
+          try {
+            await app.page.waitForFunction(
+              () => window.__declare?.stats?.().motionBusy === false,
+              { timeout: 5000, polling: 50 });
+          } catch { /* perpetual motion: capture it where it is */ }
+          // `frames: true` — a long document, as a sequence of settled viewport
+          // frames rather than one very tall image. Each frame is its own baseline,
+          // so a failure names the screen to go and look at.
+          const shots = st.frames === true
+            ? await shootFrames(app.page, viewport.height)
+            : [{ top: null, data: await shootApp(app.page) }];
+          const base = join(resolve(baselinesDir), `${st.name}@${viewport.width}x${viewport.height}${suffix}`);
+          for (let i = 0; i < shots.length; i++) {
+            const { top, data: shot } = shots[i];
+            const label = top === null ? st.name : `${st.name} frame ${i + 1}/${shots.length} (y ${top})`;
+            const file = top === null ? `${base}.png` : `${base}.f${i + 1}.png`;
+            if (bless) {
+              mkdirSync(dirname(file), { recursive: true });
+              writeFileSync(file, Buffer.from(shot, "base64"));
+              results.push(`${label}: blessed → ${relative(ROOT, file)}`);
+            } else if (!existsSync(file)) {
+              failures.push(`${label}: no baseline (${relative(ROOT, file)}) — run with --bless to create it`);
             } else {
-              results.push(`${label}: matches baseline`);
+              const baseline = readFileSync(file).toString("base64");
+              const d = await diffPng(app.page, baseline, shot, tolerance, st.mask ?? []);
+              if (d.over !== 0) {
+                const actual = file.replace(/\.png$/, ".actual.png");
+                writeFileSync(actual, Buffer.from(shot, "base64"));
+                failures.push(`${label}: ${d.over === -1 ? d.note : `${d.over} channel values past tolerance (max Δ ${d.max})`} — actual saved to ${relative(ROOT, actual)}`);
+              } else {
+                results.push(`${label}: matches baseline`);
+              }
             }
           }
-        }
+        });
         for (const e of app.pageErrors) failures.push(`${st.name}: page error: ${e}`);
       } catch (e) {
-        failures.push(`${st.name}: ${e?.message ?? e}`);
+        if (e?.lines !== undefined) failures.push(...e.lines.map((l, i) => i === 0 ? `${st.name}: ${l}` : l));
+        else failures.push(`${st.name}: ${e?.message ?? e}`);
       } finally {
-        await app.page.close();
+        await app.page.close().catch(() => {});
       }
     }
     return { ok: failures.length === 0, failures, results };

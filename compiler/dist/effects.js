@@ -66,7 +66,7 @@ export const LANGUAGE_METHOD_EFFECTS = new Map([
     // §1, order-as-slot). Structural mutation, no reactive READ → pure for
     // dependency analysis. A Menu raises at open; a Window raises on activation.
     ["raise", []],
-    // View.scrollIntoView(align?) — the imperative reveal (backend.ts). Writes
+    // View.scrollIntoView(align?, smooth?, inset?) — the imperative reveal (backend.ts). Writes
     // scroll state, reads no reactive cell → pure for analysis.
     ["scrollIntoView", []],
     // View.rootOrigin() is DELIBERATELY ABSENT — do not add it back.

@@ -15,9 +15,9 @@ import { compile, compileTracked } from "../compiler/dist/compile-node.js";
 import { compile as compileCore } from "../compiler/dist/compile.js";
 import { parseProgram } from "../runtime/dist/parser.js";
 import { instantiate, settle, explain } from "../runtime/dist/index.js";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 
-const DIR = mkdtempSync(join(os.tmpdir(), "declare-script-"));
+const DIR = tempDir("declare-script-");
 const F = (name, content) => { writeFileSync(join(DIR, name), content); return name; };
 
 async function run(src) {

@@ -201,6 +201,14 @@ node the code is written on), **`parent`**, and **`app`** (the running applicati
 — the home of the few values the whole app shares). Bare `App` is the class; `app` is the
 instance. A fourth, `classroot`, belongs to authoring a class and arrives in §4.
 
+**A member is a property of its view**, reached the way JavaScript reaches any property:
+`toolbar.share`, or by a name computed at run time, `toolbar[name]`. The two forms are the same
+access and chain freely (`app.prefs[section][field]`, `app.prefs[section].advanced`). Each
+bracket steps one level; its string names one member, not a dotted path. The result is the
+member by that name, or `undefined` when there is none. A string literal (`toolbar["share"]`) is
+checked like a path; a name known only at run time cannot be, so a path stays the form for names
+known as you write.
+
 ## 4. Composition
 
 Instantiate a class by naming it with a `[ ]` body; define one with `class Name [ … ]`. A class
@@ -403,8 +411,8 @@ message naming the fix. A **computed
 default** (`segIndex: number = { … }`, a *declaration* whose default is an expression) is only a
 formula: reading it inlines the expression, and an assignment simply replaces it —
 the right tool for a value you may take over later, which is why `TextInput` offers
-`initial = { … }`, the editable twin of a read-only `text = { … }` (a control's `input(v)`, §11,
-is the same idea).
+`initial = { … }`, the field-owned twin of a constrained `text = { … }`, which the program
+keeps, and the user's typing only proposes to through `onInput`.
 
 | you wrote | owned by its constraint? | reading it | assigning to it | reach for it when |
 |---|---|---|---|---|
@@ -448,9 +456,22 @@ change without your inputs changing, hold that state in a node. Two uses stay re
 constraint reading a script `let`, and any body writing one — state that changes is an
 attribute. Handler code is under none of the *reactivity* rules above — it is ordinary
 TypeScript: locals, loops, `switch`. It reaches the world through members, not host globals: a
-request is a `DataSource`, a repeating call a `Time`, one later call `afterDelay(ms, fn)` — a body
-naming `fetch`, the timers or `globalThis` is refused with these named. A handler is synchronous
-(no `async`); a `script { }` block may use the host directly.
+request is a `DataSource`, a repeating call a `Time`, one later call `afterDelay(ms, fn)`. A handler
+is synchronous (no `async`).
+
+Which globals a piece of code may name depends on where it is written:
+
+- **Everywhere**, `{ }` bodies and handlers included: the ECMAScript built-ins (`Math`, `JSON`,
+  `Date`, `Intl`, `Number`, `String`, `Array`, `Object`, `Map`, `Set`, `RegExp`, `Promise`, …),
+  and `URL`, `URLSearchParams`, `console`, `structuredClone`, `encodeURIComponent` and
+  `decodeURIComponent`.
+- **Not in a `{ }` body or a handler:** `fetch`, the timers (`setTimeout`, `setInterval`,
+  `queueMicrotask`, `requestAnimationFrame`), `performance` and `globalThis`. The compiler
+  refuses each and names the Declare way: `DataSource`, `Time`, `afterDelay`.
+- **In a `script { }` block:** all of the above, `fetch`, the timers and `performance` included.
+- **In a `script [ host = browser ] { }` block:** `window`, `document` and the rest of the
+  browser as well. An unmarked script runs on every host, so the compiler refuses those names
+  there.
 
 Only declared reactive attributes participate at all, so locals and plain objects in
 `script { }` cost nothing.
@@ -610,8 +631,11 @@ keys always pass: a schema declares what the program relies on.
 **Two-way binding is opt-in, with `<->`, and for leaf editors only** — `TextInput [ text <-> :title ]`:
 the right-hand side names a *place in data*, either a datapath or a `{ }` yielding a field name,
 resolved against the nearest enclosing `datapath` — an editor with none is a compile error. To
-drive an ordinary attribute, use the value pattern: `text = { app.note }` plus
-`input(v: string) { app.note = v }`. One-way `:path` everywhere else.
+drive an ordinary attribute, constrain it and write your state back from what the user did. An
+editor reports typing as an event — `text = { app.note }` plus `onInput(v: string) { app.note = v }`
+— and a control delivers through its `input` method — `checked = { app.muted }` plus
+`input(v: boolean) { app.muted = v }`. A constrained `text` with no `onInput` is a compile error,
+since every keystroke would be refused. One-way `:path` everywhere else.
 
 **Datasets are mutable from handlers** — `:done = v` writes the record under the cursor;
 `d.set(path, v)`, with `insert`, `removeAt` and `move` for collections, writes anywhere. A path is a segments array (`["rows", 0, "name"]`) or a JSON Pointer string
@@ -765,7 +789,9 @@ Start from a library preset — each a light record with a `…Dark` companion, 
 and spread to change a token; the standard library reads specific token names, so build from a
 preset rather than an empty record. You can declare your own with `theme Brand [ … ]`, a
 top-level named record like a `style` bundle. The `{ { … } }` is not special syntax: the outer
-braces open the constraint, the inner ones are a TypeScript object literal.
+braces open the constraint, the inner ones are a TypeScript object literal. A token read from
+`provided("theme")` must be one some theme declares — a preset, the library defaults, your own
+`theme`, or a record your `theme = …` writes — so a misspelled token is a compile error.
 
 A **`style` bundle** is a named record of literal text attributes — the style of a run of text
 that has no view, which a `<span class>` inside `HTMLText`/`Markdown` wears. Like a theme record

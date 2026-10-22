@@ -12,12 +12,12 @@ import path from "node:path";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 import { createDeclareServer } from "../server/create.mjs";
 import { launchChrome, findChrome } from "../tools/internal/chrome.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const dir = mkdtempSync(path.join(tmpdir(), "files-"));
+const dir = tempDir("files-");
 writeFileSync(path.join(dir, "a.txt"), "hello");
 mkdirSync(path.join(dir, "pics", "sub"), { recursive: true });
 writeFileSync(path.join(dir, "pics", "c.txt"), "top");

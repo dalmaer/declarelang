@@ -12,6 +12,11 @@
 
 import pp from "/Users/temkin/Code/OpenLaszlo/openlaszlo-5.0/compiler/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js";
 import fs from "node:fs";
+// the profile this run makes goes when it ends, however it ends
+import { rmSync as rmProfile } from "node:fs";
+const PROFILES = [];
+const keepProfile = (dir) => { PROFILES.push(dir); return dir; };
+process.on("exit", () => { for (const d of PROFILES) { try { rmProfile(d, { recursive: true, force: true }); } catch { /* best effort */ } } });
 
 const CHROME = "/Users/temkin/.cache/puppeteer/chrome/mac_arm-146.0.7680.31/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -53,7 +58,7 @@ const PROBE_FIELD = `(function(){
 })()`;
 
 async function launch(){ for(let i=0;i<8;i++){ try{ return await pp.launch({ executablePath:CHROME,
-  headless:"new", userDataDir:"/tmp/dlg-"+Date.now()+"-"+i,
+  headless:"new", userDataDir:keepProfile("/tmp/dlg-"+Date.now()+"-"+i),
   args:["--no-sandbox","--force-device-scale-factor=1","--window-size="+W+","+H] }); }
   catch(e){ await sleep(1200); } } throw new Error("chrome launch failed x8"); }
 

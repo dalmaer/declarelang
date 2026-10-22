@@ -13,7 +13,7 @@ import { readFileSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync
 import { join, dirname, basename, relative, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 import { requestType, REQ, viewerTab, runWrapper, programName, directoryProgram, stubPage, launchTarget, isEntryPage } from "../browser/serve-core.js";
 import { preloadsFor } from "../tools/internal/bake-app-stubs.mjs";
 import { programDirs } from "../tools/internal/program-dirs.mjs";
@@ -216,7 +216,7 @@ await test("every committed app stub matches the current stubPage template", () 
 // THE TREE RULE: a program directory is any directory under apps/, at any depth, holding
 // its name-matched .declare — inside another program too; a folder without one only groups.
 await test("programDirs finds programs at any depth, and nothing else", () => {
-  const root = mkdtempSync(join(tmpdir(), "program-dirs-"));
+  const root = tempDir("program-dirs-");
   const make = (rel) => { mkdirSync(join(root, dirname(rel)), { recursive: true }); writeFileSync(join(root, rel), "App [ ]\n"); };
   make("apps/calendar/calendar.declare");
   make("apps/calendar/data/events.declare");          // an app's own folder: not a program

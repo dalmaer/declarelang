@@ -321,6 +321,8 @@ function bindWith(x, mem, image, c, hooks) {
         isSet: (cell) => x.kernel_is_set(k, cell) === 1,
         own: (cell, rule) => x.kernel_own(k, cell, rule),
         release: (cell, rule) => { x.kernel_release(k, cell, rule); },
+        // a host built before this entry existed lacks it: the mark then stays as set
+        setPercent: (rule, on) => { x.kernel_set_percent?.(k, rule, on ? 1 : 0); },
         owner: (cell) => x.kernel_owner(k, cell),
         run: (rule) => x.kernel_run(k, rule),
         invalidate: (rule) => { x.kernel_invalidate(k, rule); },

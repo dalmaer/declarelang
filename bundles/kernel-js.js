@@ -1239,6 +1239,10 @@ ${new Error().stack ?? ""}`);
       if (cell < ncells && ownerGet(cell) === rule)
         ownerSet(cell, -1);
     }, "release"),
+    setPercent: /* @__PURE__ */ __name((rule, on) => {
+      if (known(rule))
+        rFlags[rule] = on ? rFlags[rule] | F_PERCENT : rFlags[rule] & ~F_PERCENT;
+    }, "setPercent"),
     owner: /* @__PURE__ */ __name((cell) => cell < ncells ? ownerGet(cell) : -1, "owner"),
     run: /* @__PURE__ */ __name((rule) => {
       if (!known(rule))

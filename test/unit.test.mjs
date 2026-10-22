@@ -11,7 +11,7 @@
 // perceptual.test.mjs's job.
 
 import assert from "node:assert/strict";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 import { compile, compileTracked, isUpToDate, diskProbe, extractStatic, settleHeadless } from "../compiler/dist/compile-node.js";
 import { KeysService } from "../runtime/dist/keys.js";
 import { wrapLines, wrapEditable, provideMeasurer } from "../runtime/dist/measure.js";
@@ -2925,7 +2925,7 @@ App [ width=1, height=1, W [ ] ]`);
 });
 
 await test("compile(): a sub-16px text field warns with the 16px rule and the fix named (DECLARE3005)", async () => {
-  const r = await compile(`App [ width=400, height=300,\n  TextInput [ width=200, height=30, fontSize = 12 ] ]`);
+  const r = await compile(`App [ width=400, height=300,\n  TextInput [ width=200, height=30, fontSize = 12, accessibilityLabel = "Name" ] ]`);
   assert.deepEqual(r.errors, []);
   assert.equal(r.warnings.length, 1);
   assert.match(r.warnings[0].message, /a text field at 12px: iOS zooms the whole page toward any focused field smaller than 16px/);
@@ -2936,16 +2936,16 @@ await test("compile(): a sub-16px text field warns with the 16px rule and the fi
 });
 
 await test("compile(): the 16px warning follows the nearest written size — inherited literals count, { } sizes stay silent", async () => {
-  const inherited = await compile(`App [ width=400, height=300, fontSize = 12,\n  TextInput [ width=200, height=30 ] ]`);
+  const inherited = await compile(`App [ width=400, height=300, fontSize = 12,\n  TextInput [ width=200, height=30, accessibilityLabel = "Name" ] ]`);
   assert.equal(inherited.warnings.length, 1, "a field inheriting a written 12px warns");
-  const computed = await compile(`App [ width=400, height=300,\n  TextInput [ width=200, height=30, fontSize = { app.width > 500 ? 12 : 16 } ] ]`);
+  const computed = await compile(`App [ width=400, height=300,\n  TextInput [ width=200, height=30, fontSize = { app.width > 500 ? 12 : 16 }, accessibilityLabel = "Name" ] ]`);
   assert.deepEqual(computed.warnings, [], "a computed size is unknowable — no guess, no warning");
-  const fine = await compile(`App [ width=400, height=300, fontSize = 12,\n  TextInput [ width=200, height=30, fontSize = 16 ] ]`);
+  const fine = await compile(`App [ width=400, height=300, fontSize = 12,\n  TextInput [ width=200, height=30, fontSize = 16, accessibilityLabel = "Name" ] ]`);
   assert.deepEqual(fine.warnings, [], "the field's own 16 overrides the inherited 12");
 });
 
 await test("compile(): full gesture control (raw touch on the App) exempts the 16px warning — the runtime locks the zoom instead", async () => {
-  const r = await compile(`App [ width=400, height=300, onTouchStart(e: TouchEvent) { },\n  TextInput [ width=200, height=30, fontSize = 12 ] ]`);
+  const r = await compile(`App [ width=400, height=300, onTouchStart(e: TouchEvent) { },\n  TextInput [ width=200, height=30, fontSize = 12, accessibilityLabel = "Name" ] ]`);
   assert.deepEqual([r.errors, r.warnings], [[], []]);
 });
 
@@ -3232,7 +3232,7 @@ await test("an unmodified SimpleLayout's shape, read from its inputs, is the sha
     const app = await buildL(`App [ width=300, height=300,
       layout: SimpleLayout [ axis = ${axis}, align = ${align}, spacing = 3 ],
       View [ width=10, height=10${b} ], Spacer [ ], View [ width=10, height=20, visible = false${b} ],
-      Spacer [ visible = false ], View [ width=10, height=10, flexes = true${b} ], View [ width=12, height=8, flexes = false${b} ] ]`);
+      Spacer [ visible = false ], View [ ${axis === "x" ? "height=10" : "width=10"}, flexes = true${b} ], View [ width=12, height=8, flexes = false${b} ] ]`);
     settle();
     const L = app.layout;
     assert.equal(L.$canon, "simple", "the library's SimpleLayout with attribute values only is canonical");
@@ -4087,6 +4087,33 @@ await test("DataSource failure surfaces as .failed + .error; stale arrivals are 
     await p;
     assert.equal(src.loaded, false, "the superseded arrival was discarded");
     assert.equal(src.value, null);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+// A refusal's body, typed by `errorSchema`: the compiler checks what a body reads
+// of it, and a body of another shape is not handed over — `error` says why.
+await test("DataSource errorSchema: errorBody is typed, and a refusal of another shape is said, not handed over", async () => {
+  const bad = await compile(`App [ width=10, height=10,
+      s: DataSource [ url = "/save", errorSchema = [ message: string, field?: string ] ],
+      note: string = { app.s.errorBody?.mesage ?? "" } ]`);
+  assert.ok(bad.errors.some((e) => /mesage/.test(e.message)), bad.errors.map((e) => e.message).join("; "));
+  const realFetch = globalThis.fetch;
+  try {
+    const app = buildProgram(await compiled(`App [ width=10, height=10,
+      s: DataSource [ url = "/save", errorSchema = [ message: string, field?: string ] ],
+      note: string = { app.s.errorBody?.message ?? "" } ]`));
+    settle();
+    globalThis.fetch = async () => ({ ok: false, status: 422, text: async () => JSON.stringify({ message: "Too short.", field: "title" }) });
+    await app.s.fetch();
+    settle();
+    assert.equal(app.note, "Too short.", "a refusal of the declared shape is handed over");
+    globalThis.fetch = async () => ({ ok: false, status: 500, text: async () => JSON.stringify({ oops: true }) });
+    await app.s.fetch();
+    settle();
+    assert.equal(app.s.errorBody, null, "a body of another shape is not handed over");
+    assert.match(app.s.error, /HTTP 500 .*not the errorSchema's shape/);
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -7607,7 +7634,7 @@ await test("include resolution agrees across hosts: a `..` path names the SAME f
   const { tmpdir } = await import("node:os");
   const nodePath = await import("node:path");
 
-  const root = mkdtempSync(nodePath.join(tmpdir(), "declare-dotdot-"));
+  const root = tempDir("declare-dotdot-");
   try {
     mkdirSync(nodePath.join(root, "apps/prog"), { recursive: true });
     mkdirSync(nodePath.join(root, "apps/shared"), { recursive: true });

@@ -8,11 +8,11 @@ App [ width = 400, height = 220, fill = white, textColor = black,
         layout: SimpleLayout [ axis = y, spacing = 10 ],
 
         nameF: TextInput [ width = 250, height = 28, padding = 5, cornerRadius = 6, fill = gainsboro,
-            commitOn = "manual", text <-> :name,
+            commitOn = "manual", text <-> :name, accessibilityLabel = "Name",
             validate(v: string) -> string { return v.length > 0 ? "" : "Name is required" }
             ],
         mailF: TextInput [ width = 250, height = 28, padding = 5, cornerRadius = 6, fill = gainsboro,
-            commitOn = "manual", text <-> :email,
+            commitOn = "manual", text <-> :email, accessibilityLabel = "Email",
             validate(v: string) -> string { return v.includes("@") ? "" : "That is not an address" }
             ],
 

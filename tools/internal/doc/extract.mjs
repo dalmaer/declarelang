@@ -421,6 +421,9 @@ for (const [cls, lines] of Object.entries(LANGUAGE_STATICS)) {
 // View page carries it (`## draw()` prose, View.md) and `declare-help View.draw`
 // answers. The Draw interface itself is on the Types page.
 (CALLABLE.View ??= new Map()).set("draw", { signature: "draw(d: Draw): void", isStatic: false });
+// `validate(v)` likewise: a reserved method an editor may define, called by its edit
+// session (editor.ts runValidate) — so `declare-help Editor.validate` answers.
+(CALLABLE.Editor ??= new Map()).set("validate", { signature: "validate(v): string | boolean", isStatic: false });
 
 const RUNTIME_NAME = {};                                // doc id → runtime class name (no mismatches since the DOMIsland rename)
 
@@ -1028,13 +1031,17 @@ if (!CHECK) for (const [id, src] of Object.entries(genFiles)) {
 // thinner document). Stale files from renamed/removed chapters are cleaned
 // first so nothing orphans.
 const CHAPTERS = path.join(ROOT, "apps/docs/chapters");
-if (!existsSync(CHAPTERS)) mkdirSync(CHAPTERS);
-const live = new Set(guide.map((ch) => ch.id + ".json"));
-for (const f of readdirSync(CHAPTERS)) {
-  if (f.endsWith(".json") && !live.has(f)) unlinkSync(path.join(CHAPTERS, f));
-}
-for (const ch of guide) {
-  writeFileSync(path.join(CHAPTERS, ch.id + ".json"), JSON.stringify({ segs: ch.segs, demo: ch.demo }) + "\n");
+// (under --check, as every write here: the gate reads, it never writes — a
+// gate that rewrote these left derive's record of them stale behind it)
+if (!CHECK) {
+  if (!existsSync(CHAPTERS)) mkdirSync(CHAPTERS);
+  const live = new Set(guide.map((ch) => ch.id + ".json"));
+  for (const f of readdirSync(CHAPTERS)) {
+    if (f.endsWith(".json") && !live.has(f)) unlinkSync(path.join(CHAPTERS, f));
+  }
+  for (const ch of guide) {
+    writeFileSync(path.join(CHAPTERS, ch.id + ".json"), JSON.stringify({ segs: ch.segs, demo: ch.demo }) + "\n");
+  }
 }
 const spine = guide.map(({ id, num, title, short, part }) => ({ id, num, title, short, part }));
 
@@ -1167,7 +1174,7 @@ if (!CHECK) {
 // ── report ──
 const counts = Object.values(nodes).reduce((a, n) => ((a[n.kind] = (a[n.kind] ?? 0) + 1), a), {});
 const documented = Object.values(nodes).filter((n) => n.api).length;
-console.log(`extract: wrote ${path.relative(ROOT, OUT)}`);
+console.log(CHECK ? "extract: checked (nothing written)" : `extract: wrote ${path.relative(ROOT, OUT)}`);
 console.log(`  classes: ${roots.join(", ")}`);
 console.log(`  nodes:   ${Object.keys(nodes).length} (${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(", ")})`);
 console.log(`  guide:   ${guide.length} chapters in ${guideParts.length} parts (${guideParts.map((p) => p.part + ":" + p.chapters.length).join(", ")})`);

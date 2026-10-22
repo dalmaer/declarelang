@@ -652,6 +652,14 @@ int kernel_own(dk_kernel *k, uint32_t cell, uint32_t rule) {
   return DK_OK;
 }
 
+/* Mark or unmark a rule as sizing its slot from the parent's (DK_PERCENT):
+ * a size whose { } reads the parent's size in only some branches is marked
+ * by the branch its last run took, so the content size skips it only then. */
+void kernel_set_percent(dk_kernel *k, uint32_t rule, int on) {
+  if (rule >= k->nrules) return;
+  if (on) k->rules[rule].flags |= DK_PERCENT; else k->rules[rule].flags &= (uint8_t)~DK_PERCENT;
+}
+
 void kernel_release(dk_kernel *k, uint32_t cell, uint32_t rule) {
   if (cell < k->ncells && k->cell_owner[cell] == (int32_t)rule) k->cell_owner[cell] = -1;
 }

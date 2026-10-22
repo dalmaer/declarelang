@@ -302,7 +302,7 @@ export function programFacts(program, usedClasses) {
             literalCalls(v, f.calls);
             if (planful(v))
                 f.syntax.add("selector-path");
-            if (v?.kind === "schema" || (a.name === "schema" && v?.kind === "ident" && v.name !== "null"))
+            if (v?.kind === "schema" || ((a.name === "schema" || a.name === "errorSchema") && v?.kind === "ident" && v.name !== "null"))
                 f.syntax.add("schema");
             if (v?.kind === "path" && v.many === true)
                 f.syntax.add("replication");

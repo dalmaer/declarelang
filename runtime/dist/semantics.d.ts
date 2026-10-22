@@ -6,6 +6,8 @@ export interface SemNode {
     role: string;
     name: string;
     hint?: string;
+    /** What is wrong with the value, said with it (an invalid field). */
+    error?: string;
     value?: {
         text?: string;
         now?: number | null;
@@ -38,6 +40,8 @@ export declare function semanticTree(root: View): SemNode;
 /** The view's role as the tree reads it: what it declares, or what a runtime
  *  leaf is (a field, a picture). */
 export declare function roleOf(v: View): string;
+/** The roles a person reaches on their own — a container's name from content leaves them out. */
+export declare const REACHED_APART: Set<string>;
 export declare const NAMED_BY_CONTENT: Set<string>;
 export declare const PRESSED: Set<string>;
 export declare const STEPPED: Set<string>;

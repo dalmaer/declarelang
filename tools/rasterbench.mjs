@@ -74,6 +74,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer-core";
 import { createDeclareServer } from "../server/create.mjs";
+import { launchChrome } from "./internal/chrome.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -428,7 +429,7 @@ function summarizeTrace(json) {
 }
 
 async function chromeEngine({ headless }) {
-  const browser = await puppeteer.launch({
+  const browser = await launchChrome({
     executablePath: findChrome(),
     headless,
     args: ["--no-sandbox"],
@@ -581,7 +582,7 @@ async function safariEngine(extraCaps = {}, label = "safari") {
 async function firefoxEngine() {
   const bin = ["/Applications/Firefox.app/Contents/MacOS/firefox"].find(existsSync);
   if (!bin) throw new Error("no Firefox at /Applications/Firefox.app");
-  const browser = await puppeteer.launch({
+  const browser = await launchChrome({
     browser: "firefox", executablePath: bin, headless: false,
     defaultViewport: { width: 900, height: 600, deviceScaleFactor: 2 },
   });

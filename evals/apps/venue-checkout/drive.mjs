@@ -16,6 +16,7 @@
 import puppeteer from "puppeteer-core";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { launchChrome } from "../../../tools/internal/chrome.mjs";
 
 const args = process.argv.slice(2);
 const opt = (n, d) => args.find((a) => a.startsWith(`--${n}=`))?.slice(n.length + 3) ?? d;
@@ -301,7 +302,7 @@ const SCENARIOS = {
 };
 
 // ── run ─────────────────────────────────────────────────────────────────────
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: !args.includes("--headful"), args: ["--no-sandbox"] });
+const browser = await launchChrome({ executablePath: CHROME, headless: !args.includes("--headful"), args: ["--no-sandbox"] });
 const results = [];
 for (const [name, run] of Object.entries(SCENARIOS)) {
   if (ONLY.length && !ONLY.includes(name)) continue;

@@ -71,6 +71,7 @@ import { isAuthoredUnion } from "../../runtime/dist/value.js";
 import { declaredType } from "../../runtime/dist/value.js";
 import { EVENT_PAYLOAD, handlerName } from "../../runtime/dist/schema.js";
 import { THEME_PRESET_NAMES } from "../../runtime/dist/themes.js";
+import { THEME_RECORDS, ThemeDefaults } from "../../runtime/dist/themes-data.js";
 import { runtimeMethodsOf } from "../../runtime/dist/runtime-methods.js";
 /** The fixed value-type prelude — the closed vocabulary of value.ts as TS
  *  types, plus the value constructors in scope for every body. Mirrors
@@ -142,9 +143,10 @@ type Filter = { fn: "blur"; radius: number } | { fn: "brightness" | "contrast" |
 type Backdrop = readonly Filter[];
 /** A token record — every color and metric an app names once. Provided down the
  *  tree (\`provided("theme")\`), spread to override a token, and declared at the top
- *  level with \`theme Name [ … ]\`. Its keys are open by design, which is why reads
- *  are typed \`any\`: a record whose keys the program chooses cannot be closed
- *  without firing on correct code. */
+ *  level with \`theme Name [ … ]\`. Its keys are open by design: a record whose keys
+ *  the program chooses cannot be closed without firing on correct code. A read of
+ *  \`provided("theme")\` is closed all the same, over every token some theme
+ *  declares, so a misspelled token is a compile error. */
 type Theme = Readonly<Record<string, any>>;
 /** The house ACTIVE TONE: \`accent\` laid 22% over the \`surface\` it sits on —
  *  what a theme's \`controlSelected\` holds. An app that overrides \`accent\` computes
@@ -798,7 +800,7 @@ export const LANGUAGE_API = {
         // callable by hand. Data-shaped → `any`: a datapath is checked against
         // the declared schemas by schema-check.ts, not here.
         `  $setData(path: string | readonly string[], v: any): void;`,
-        `  scrollIntoView(align?: "start" | "nearest", smooth?: boolean): void;`,
+        `  scrollIntoView(align?: "start" | "nearest", smooth?: boolean, inset?: number): void;`,
         // The scroll-offset REQUEST verbs (platform-authorship.md): the platform
         // clamps to the real range (Infinity = the far end) and holds a request a
         // hidden surface cannot take yet, applying it on show. `scrollY`/`scrollX`
@@ -806,7 +808,7 @@ export const LANGUAGE_API = {
         // motion — the browser's smooth scroll, an NSAnimationContext, the runtime
         // provider's tween — not a Declare Animator: the provider's curve, no
         // Animator semantics, cancelled by a gesture in flight (ruled 2026-09-10).
-        `  scrollTo(y: number, glide?: { duration?: number; motion?: string }): void;`,
+        `  scrollTo(y: number | { x?: number; y?: number }, glide?: { duration?: number; motion?: string }): void;`,
         `  scrollToX(x: number, glide?: { duration?: number; motion?: string }): void;`,
         `  scrollBy(dx: number, dy: number, glide?: { duration?: number; motion?: string }): void;`,
         // The view's origin in root space via THE one walk (scroll-aware) — the
@@ -905,7 +907,7 @@ export const LANGUAGE_API = {
     ],
     // The edit-session VERBS (editor.ts): `dirty`/`valid`/`error` are schema
     // attrs (readable state), but committing/reverting the draft are calls.
-    Editor: [`  commit(): void;`, `  revert(): void;`],
+    Editor: [`  commit(): void;`, `  revert(): void;`, `  judge(): void;`],
     // The selection write half (#22): one verb — a caret is a zero-length range.
     // "start" / "end" / "all" are the word forms; numbers clamp; `end` omitted
     // means a caret at `at`.
@@ -1004,6 +1006,11 @@ function emitClass(s, decl, rootType, extras, isClassName) {
         // compiles to `this.$provided(…)`; it returns `any` — a non-local read the
         // checker provably can't type — so static typing comes from binding it into
         // a typed slot (`t: Theme = provided("theme", …)`), never from the call.
+        // The one exception is the theme: every key it can carry is declared
+        // somewhere the compile sees (a preset, the library defaults, or one of the
+        // program's `theme` declarations), so its read is closed over those keys
+        // (`$ThemeTokens`, beside the theme names) and a misspelled token is an error.
+        lines.push(`  $provided(name: "theme", dflt?: any): $ThemeTokens;`);
         lines.push(`  $provided(name: string, dflt?: any): any;`);
         // `hostProvided("name", default)` → `this.$hostProvided(…)`: typed BY THE
         // DEFAULT — the host is compiled separately, so the default is the one
@@ -1063,8 +1070,12 @@ extraSignatureTypes = [],
  *  real in every { } body, method signature, and script function. */
 shapes = [], 
 /** The program's `theme Name [ … ]` declarations — each projects as an
- *  ambient `declare const Name: Theme`, so a body can name it. */
-themeNames = [], 
+ *  ambient `declare const Name: Theme`, so a body can name it, and its tokens
+ *  join the keys `provided("theme")` can be read for (themeTokenTypes). */
+themes = [], 
+/** The keys the program's theme provisions add by writing a record
+ *  (typecheck.ts providedThemeKeys) — readable from `provided("theme")` too. */
+themeKeys = [], 
 /** The program's `style Name [ … ]` bundles — each a value in body scope, like a
  *  theme, typed EXACTLY by the fields it sets (so `Caption.fontSize` is a number,
  *  not `number | undefined`), which is still a `TextStyle`. */
@@ -1153,7 +1164,9 @@ styles = []) {
     const motionLine = `type Motion = ${MOTION_TOKENS.map((t) => JSON.stringify(t)).join(" | ")} | MotionCurve;`;
     // The theme names in scope as `Theme` values: the built-in presets plus any
     // the program declares — a body names one (`theme = { app.dark ? … : … }`).
-    const themeLine = [...new Set([...THEME_PRESET_NAMES, ...themeNames])].map((n) => `declare const ${n}: Theme;`).join("\n")
+    const tokens = [...themeTokenTypes(themes, themeKeys)].map(([k, t]) => `readonly ${k}: ${t}`);
+    const themeLine = [...new Set([...THEME_PRESET_NAMES, ...themes.map((t) => t.name)])].map((n) => `declare const ${n}: Theme;`).join("\n")
+        + `\ntype $ThemeTokens = { ${tokens.join("; ")} };`
         + styles.map((s) => {
             const textAttr = (name) => {
                 for (let sc = schemas["Text"]; sc; sc = sc.base)
@@ -1166,6 +1179,33 @@ styles = []) {
             return `\ndeclare const ${s.name}: { ${fields.join("; ")} };`;
         }).join("");
     return [PRELUDE, enumLines.join("\n"), recordLines.join("\n"), shapeLines.join("\n"), motionLine, themeLine, tagLines.join("\n"), classes.join("\n\n")].filter((x) => x.length > 0).join("\n\n") + "\n";
+}
+/** Every key a provided theme can carry, with the type a read of it yields:
+ *  the presets' tokens, the library defaults every provided theme is laid
+ *  over, the tokens of each `theme` the program declares, and the keys its
+ *  provisions write as records (`provided`; `any` unless declared). A key is a
+ *  `number` when every declaration of it is one (a color or a metric) and
+ *  `any` otherwise — a word, a list, a constructor, or a name whose meaning
+ *  depends on its slot — so a read never fails on a value it would accept. */
+export function themeTokenTypes(themes, provided = []) {
+    const out = new Map();
+    const note = (k, numeric) => {
+        out.set(k, numeric && out.get(k) !== "any" ? "number" : "any");
+    };
+    for (const rec of [ThemeDefaults, ...Object.values(THEME_RECORDS)]) {
+        for (const [k, v] of Object.entries(rec))
+            note(k, typeof v === "number");
+    }
+    for (const t of themes) {
+        for (const a of t.body.attrs) {
+            const v = a.value;
+            note(a.name, v.kind === "number" || v.kind === "hexColor" || (v.kind === "value" && typeof v.value === "number"));
+        }
+    }
+    for (const k of provided)
+        if (!out.has(k))
+            out.set(k, "any");
+    return out;
 }
 /** A shape's TS object-type text — `{ id: string; n?: number; owner: Person;
  *  status: "open" | "closed"; steps: { a: string }[] }`. A named ref prints

@@ -8,10 +8,10 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
-import { test, summarize } from "./harness.mjs";
+import { test, summarize, tempDir } from "./harness.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const DIR = mkdtempSync(join(os.tmpdir(), "declare-boot-"));
+const DIR = tempDir("declare-boot-");
 
 function verify(name, src, ...flags) {
   const file = join(DIR, name);
@@ -59,6 +59,42 @@ await test("every command the package names is an executable node script", async
     assert.ok((statSync(p).mode & 0o111) !== 0, `${name} (${rel}) is not executable — chmod +x it`);
     assert.ok(readFileSync(p, "utf8").startsWith("#!/usr/bin/env node"), `${name} (${rel}) does not start with #!/usr/bin/env node`);
   }
+});
+
+// The headless boot answers questions about the program as it booted, at the
+// size asked — no browser — and says what it can see wrong in the layout.
+await test("--size/--read/--outline answer from the boot; a child the content size skips is reported", () => {
+  const r = verify("headless.declare", `class Later [ width = 10, height = 10 ]
+App [ width = 400, height = 300,
+    box: View [ width = 200, height = { this.contentHeight },
+        a: View [ width = 100, height = 40 ],
+        b: View [ y = 40, width = 100, height = { parent.height + 30 } ] ],
+    small: Button [ y = 200, label = "Go", width = 30, height = 30 ] ]`,
+    "--size", "390x844", "--touch", "--read", "app.box.height", "--read", "app.hostWidth", "--outline", "app.box");
+  const b = r.boot;
+  assert.deepEqual(b.answers.slice(0, 2), ["app.box.height = 40", "app.hostWidth = 390"]);
+  assert.match(b.answers[2], /^box View {2}0,0 {2}200×40\n {2}a View/);
+  assert.ok(b.layout.some((l) => /app\.box is 40 tall, sized by its content — but app\.box\.b \(70\) takes its height from it/.test(l)), b.layout.join("\n"));
+  assert.ok(b.layout.some((l) => /smaller than 44 × 44, a finger's target: app\.small 30×30/.test(l)), b.layout.join("\n"));
+  assert.deepEqual(b.unbuilt, ["Later"], "a class the boot never built is named");
+});
+
+await test("with no --size the boot fills a laptop window and then a phone", () => {
+  const r = verify("two.declare", `App [ small: Button [ label = "Go", width = 30, height = 30 ] ]`);
+  assert.ok(r.boot.layout.some((l) => l.startsWith("phone 390×844: ") && /app\.small/.test(l)), r.boot.layout.join("\n"));
+  assert.ok(!r.boot.layout.some((l) => !l.startsWith("phone") && /finger/.test(l)), "no touch-target warning at the laptop size");
+});
+
+await test("a panel past the window's edge is named once, with what it carries; a frame held wider pans and is not", () => {
+  const r = verify("edge.declare", `App [
+    panel: View [ x = -60, y = 20, width = 200, height = 80,
+        a: Text [ x = 8, text = "First line" ], b: Text [ x = 8, y = 30, text = "Second line" ] ] ]`, "--size", "390x844");
+  const edge = r.boot.layout.filter((l) => /edge/.test(l));
+  assert.equal(edge.length, 1, edge.join("\n"));
+  assert.match(edge[0], /app\.panel runs past the window's left edge \(it starts at -60\), and app\.panel\.a with it/);
+  const held = verify("held.declare", `App [ minWidth = 800,
+    side: View [ x = 600, width = 180, height = 40, t: Text [ text = "Beyond the phone" ] ] ]`, "--size", "390x844");
+  assert.ok(!held.boot.layout.some((l) => /edge/.test(l)), held.boot.layout.join("\n"));
 });
 
 summarize("verify-boot");

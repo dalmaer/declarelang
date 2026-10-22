@@ -12,6 +12,7 @@
 import { Node, authoredName } from "./node.js";
 import { hitAt, traceHitAt, rootFrameOrigin, rootFrameBox, rootTransform } from "./interaction.js";
 import { apply as applyAffine } from "./affine.js";
+import { bootCheck } from "./boot-check.js";
 import { View } from "./view.js";
 import { semanticTree, formatSemantics } from "./semantics.js";
 import { declarationsOf, isSet, ownerOf, ownValues, ownedSlots } from "./attributes.js";
@@ -441,6 +442,10 @@ export function bridgeFor(root) {
             return n !== null ? inspect(n, path ?? "app") : null;
         },
         find: (path) => find(root, path),
+        /** Rung 4's questions of the booted program (boot-check.ts): what it can
+         *  see wrong in reach and layout, which classes were never built, the
+         *  answers to reads, an outline and the semantic tree. */
+        bootCheck: (opts) => bootCheck(root, opts),
         /** Where a point in a view's own units lands in root space — through every
          *  scale, rotation and scroll above it, by the walk the pointer is routed
          *  by. What a driver presses at to reach "(x, y) inside this view". */

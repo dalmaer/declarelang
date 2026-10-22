@@ -4,7 +4,7 @@ App [ width = 640, height = 420,
         ],
     entry: Sheet [ edge = "end",
         Text [ fontWeight = bold, text = "New entry" ],
-        TextInput [ width = 100% ],
+        TextInput [ width = 100%, accessibilityLabel = "Title" ],
         Button [ label = "Save", primary = true,
             onClick() { app.entry.close() }
             ]

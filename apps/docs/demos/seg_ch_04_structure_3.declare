@@ -1,22 +1,22 @@
-class Die extends Node [
-    sides: number = 6,
-    last: number = 0,
-    rolls: number = 0,
-    roll() { last = 1 + Math.floor(Math.random() * sides); rolls = rolls + 1 },
-    reset() { last = 0; rolls = 0 }
-    ]
-
-
-App [ width = 340, height = 90, fill = white, textColor = black,
-    die: Die [ ],
-    row: View [ x = 20, y = 24,
-        layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
-        Button [ label = "Roll", primary = true,
-            onClick() { app.die.roll() }
-            ],
-        Button [ label = "Reset",
-            onClick() { app.die.reset() }
-            ],
-        Text [ text = { app.die.rolls == 0 ? "not rolled" : `${app.die.last} (roll ${app.die.rolls})` } ]
+App [ width = 640, height = 220, theme = { SanFrancisco }, fill = { provided("theme").background },
+    tour: Dataset { { "steps": [ { "target": "share", "say": "Send this page to someone." },
+                                { "target": "export", "say": "Or save a copy." } ] } },
+    step: number = 0,
+    toolbar: Toolbar [ x = 20, y = 20,
+        share: ToolButton [ label = "Share" ],
+        export: ToolButton [ label = "Export" ]
+        ],
+    callout: Popover [ datapath = { app.tour.value.steps[app.step] },
+        anchorTo = { app.toolbar[:target] },
+        Text [ text = :say ],
+        Button [ label = "Next",
+            onClick() {
+                if (app.step + 1 < app.tour.value.steps.length) app.step = app.step + 1
+                else app.callout.close()
+                }
+            ]
+        ],
+    Button [ x = 20, y = 160, label = "Take the tour",
+        onClick() { app.step = 0; app.callout.show() }
         ]
     ]

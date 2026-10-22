@@ -5,7 +5,7 @@
 
 ```declare
 class TaskRow [ width = 100%, height = 32,
-    box: Checkbox [ x = 8, y = 6, checked = :done, input(v: boolean) { :done = v } ],
+    box: Checkbox [ x = 8, y = 6, checked = :done, accessibilityLabel = :title, input(v: boolean) { :done = v } ],
     t: Text [ x = 36, y = 8, text = :title ],
     onClick() { app.pick = :id }
     ]
@@ -19,7 +19,7 @@ App [ width = 360, height = 260, fill = white,
         TaskRow [ datapath = :rows[] ]
         ],
     editor: View [ y = 90, x = 8, width = 340, height = 80, datapath = { app.draft.value },
-        field: TextInput [ width = 240, height = 30, text <-> :title ],
+        field: TextInput [ width = 240, height = 30, text <-> :title, accessibilityLabel = "Title" ],
         save: Button [ x = 250, label = "Save", onClick() { app.save() } ]
         ],
     edit() {
@@ -39,6 +39,8 @@ App [ width = 360, height = 260, fill = white,
   with `insert`, `removeAt` and `move` for arrays. `d.value` itself is read-only.
 - A control shows a value and hands edits back: `checked = :done` down, `input(v)` up.
   Without the `input` override, the control's edit is refused.
+- A control whose words are shown apart from it is named by them: the checkbox beside a
+  row's text takes `accessibilityLabel = :title`, a field with no caption its own.
 - `<->` is for editors only (`TextInput`), and needs a `datapath` above it.
 - Edits that should wait for Save go into a working copy (`draft`), filled when editing
   starts and written back on Save.

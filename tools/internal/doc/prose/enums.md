@@ -54,6 +54,11 @@ leaves the cross placement to the child, which is what lets an ordinary
 `baseline` only where each child can report one: a `Text` does by itself, and a
 composite must **declare** which of its parts carries it.
 
+## EditorJudgeOn
+
+When a field first says what is wrong with its draft (`Editor.judgeOn`): `edit` at every
+edit, `leave` once the field has been left — or `judge()` asked — and at every edit after.
+
 ## Edges
 
 How an app meets the device's **own** chrome — a notch, a home-indicator bar.

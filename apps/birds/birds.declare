@@ -69,7 +69,7 @@ class Plate [ fill = { provided("theme").mat }, stroke = { stroke(1, provided("t
 
 // ── a shelf tile: plate + caption, the whole thing one link to the bird ──────
 
-class Tile [ width = { app.tileW }, height = { app.tileW + 44 },
+class Tile [ width = { app.tileW }, height = { app.tileW + 60 },
     link = { "#b/" + :slug },
     x = { (rowIndex % app.cols) * (app.tileW + 18) },
     y = { (Math.floor(rowIndex / app.cols)) * (app.tileW + 62) },
@@ -89,9 +89,9 @@ class Tile [ width = { app.tileW }, height = { app.tileW + 44 },
         visible = { !app.inFlight("" + :slug) },
         lift = { classroot.hoverT },
         scale = { 1 + 0.03 * classroot.hoverT }, pivotX = { this.width / 2 }, pivotY = { this.height / 2 } ],
-    cap: Text [ y = { parent.width + 8 }, width = 100%, textAlign = center, wrap = false,
+    cap: Text [ y = { parent.width + 8 }, width = 100%, textAlign = center, maxLines = 2,
         fontSize = 13, textColor = { classroot.hovered ? provided("theme").oxblood : provided("theme").ink }, text = { :name } ],
-    lost: Text [ y = { parent.width + 26 }, width = 100%, textAlign = center, wrap = false,
+    lost: Text [ y = { parent.cap.y + parent.cap.height + 2 }, width = 100%, textAlign = center, wrap = false,
         fontSize = 11, textColor = { provided("theme").wrong }, visible = { :status == "extinct" }, text = "extinct" ]
     ]
 

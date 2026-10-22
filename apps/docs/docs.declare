@@ -34,13 +34,13 @@ class Mono extends Text [ fontFamily = { app.mono } ]
 // (`app.selected`, the class name); a tab lights when it matches and writes
 // the location on click, so the whole navigator is one string
 
-class ClassTab [ width = 100%, height = 30, cornerRadius = 6,
+class ClassTab [ width = 100%, height = { app.touchDevice ? 44 : 30 }, cornerRadius = 6,
     cname:   string = "",
     lit: boolean = { app.mode == "reference" && app.selected == classroot.cname },
     fill = { lit ? provided("theme").sel : hovered ? provided("theme").control : null },
     link = { "#reference/" + cname },
-    onClick()     { app.goRef(classroot.cname) },
-    lbl: Mono [ x = 24, y = 7, fontSize = 14, wrap = false,
+    onClick()     { app.goRef(classroot.cname); app.navOpen = false },
+    lbl: Mono [ x = 24, y = { 7 + (parent.height - 30) / 2 }, fontSize = 14, wrap = false,
         text = { classroot.cname },
         textColor = { classroot.lit ? provided("theme").text : provided("theme").tabIdle } ]
     ]
@@ -61,7 +61,7 @@ class ClassTab [ width = 100%, height = 30, cornerRadius = 6,
    One class serves the guide's parts, the language's form groups, and the class
    groups alike. */
 
-class FoldHead extends Control [ width = 100%, height = 28, cornerRadius = 6, cursor = "pointer",
+class FoldHead extends Control [ width = 100%, height = { app.touchDevice ? 44 : 28 }, cornerRadius = 6, cursor = "pointer",
     label:    string  = "",
     accessibilityExpanded = { this.open },
     contains: boolean = false,             // does this group hold the current page?
@@ -86,9 +86,9 @@ class FoldHead extends Control [ width = 100%, height = 28, cornerRadius = 6, cu
         if (open) { opened = false; shut = true; shutAt = app.page }
         else { opened = true; shut = false }
         },
-    mark: Mono [ x = 8, y = 8, fontSize = 10, wrap = false, textColor = { provided("theme").textMuted },
+    mark: Mono [ x = 8, y = { 8 + (parent.height - 28) / 2 }, fontSize = 10, wrap = false, textColor = { provided("theme").textMuted },
         text = { classroot.open ? "\u25BC" : "\u25B6" } ],
-    lbl: Text [ x = 24, y = 6, fontSize = 14, fontWeight = semibold, wrap = false,
+    lbl: Text [ x = 24, y = { 6 + (parent.height - 28) / 2 }, fontSize = 14, fontWeight = semibold, wrap = false,
         text = { classroot.label },
         textColor = { classroot.contains ? provided("theme").text : provided("theme").tabIdle } ]
     ]
@@ -218,12 +218,19 @@ class SigRun [
     size:   number = 15,
     weight: number = 400,                  // the hundreds ARE the weight keywords (FontWeight)
     dim:    Color  = { provided("theme").text },   // the colour of every run that is not a link
+
+    // the widest it may run: a longer signature wraps between its parts, its
+    // later lines stepped in. (Its own width is the face's measure of the whole
+    // string, never the layout's, which would wrap at whatever it was handed.)
+
+    limit:  number = 100000,
+    natural: number = { Math.ceil(measureText(classroot.sig, ({ fontSize: classroot.size * app.fontScale, fontWeight: classroot.weight, fontFamily: app.mono })).width) + 2 },
     parts: Dataset [ contents = { { items: app.typeParts(classroot.sig) } } ],
     width  = { this.run.width },
     height = { this.run.height },
     run: View [ datapath = { classroot.parts.value },
-        width = { this.contentWidth }, height = { this.contentHeight },
-        layout: SimpleLayout [ axis = x, spacing = 0 ],
+        width = { Math.min(classroot.natural, classroot.limit) }, height = { this.contentHeight },
+        layout: WrappingLayout [ spacing = 0, rowSpacing = 2, hangingIndent = 16 ],
         Mono [ datapath = :items[], wrap = false,
             fontSize = { classroot.size * app.fontScale },
             fontWeight = { classroot.weight },
@@ -263,16 +270,57 @@ class JumpLink [
     width = { this.row.width + 24 },
     fill = { hovered ? provided("theme").chipHov : provided("theme").chipBg },
 
+    // a title longer than the strip it sits in is cut to it, ending in an ellipsis
+
+    room: number = { provided("tocSpan", parent.width) - 24 - (this.count > 0 ? this.row.n.width + 6 : 0) },
+
     // the page this link sits on, which its page view provides — a page stays
     // resident when hidden, so the current location is not necessarily its own
 
     link = { to != "" ? "#" + provided("docPage", app.page) + "@" + to : "" },
     row: View [ x = 12, y = { 5 * app.fontScale }, width = { this.contentWidth }, height = { 18 * app.fontScale },
         layout: SimpleLayout [ axis = x, spacing = 6, align = baseline ],
-        name: Text [ fontSize = { 13 * app.fontScale }, fontWeight = semibold, wrap = false,
+        name: Text [ fontSize = { 13 * app.fontScale }, fontWeight = semibold, wrap = false, maxLines = 1,
+            width = { Math.min(Math.ceil(measureText(classroot.label, providedTextStyle({ fontSize: this.fontSize, fontWeight: 600 })).width) + 1, classroot.room) },
             textColor = { provided("theme").accent }, text = { classroot.label } ],
         n: Mono [ fontSize = { 12 * app.fontScale }, wrap = false, textColor = { provided("theme").sigDim },
             visible = { classroot.count > 0 }, text = { "" + classroot.count } ]
+        ]
+    ]
+
+
+// "On this page": the section links of a page. Beside a rail they wrap under one
+// another; on a phone the strip is one line that scrolls sideways, each title
+// cut to the strip's width rather than the line's.
+
+class TocFlow extends WrappingLayout [
+    oneLine: boolean = false,
+    place() {
+        if (!this.oneLine) return super.place()
+        const kids = this.laid()
+        let base = 0
+        for (const c of kids) if (c.visible && typeof (c as any).baseline == "number") base = Math.max(base, (c as any).baseline)
+        const out = [] as any
+        let cx = 0
+        for (const c of kids) {
+            if (!c.visible) { out.push({ x: cx, y: 0 }); continue }
+            const f = (c as any).footprint()
+            const b = (c as any).baseline
+            out.push({ x: cx - f.x, y: (typeof b == "number" ? base - b : 0) - f.y })
+            cx = cx + f.width + this.spacing
+        }
+        return out
+        }
+    ]
+
+
+class OnThisPage [ width = 100%,
+    tocSpan: number = { this.width },          // provided: the room a link's title is cut to
+    scrolls = { app.docked ? "none" : "x" },
+    defaultplacement = row,
+    row: View [ width = { app.docked ? parent.width : this.contentWidth },
+        layout: TocFlow [ oneLine = { !app.docked }, spacing = 8, rowSpacing = 8, align = baseline ],
+        Muted [ fontSize = { 16 * app.fontScale }, wrap = false, text = "On this page:" ]
         ]
     ]
 
@@ -346,7 +394,7 @@ class OverrideLine [ width = 100%,
     from:  string = "",
     slot:  string = "",
     was:   string = "",
-    layout: SimpleLayout [ axis = x, spacing = 8, align = baseline ],
+    layout: WrappingLayout [ spacing = 8, rowSpacing = 4, align = baseline ],
     Muted [ fontSize = { 13 * app.fontScale }, text = "overrides" ],
     Chip [ kind = "class", cls = { classroot.from }, label = { classroot.from + "." + classroot.slot } ],
     Mono [ fontSize = { 13 * app.fontScale }, textColor = { provided("theme").sigDim }, visible = { classroot.was != "" },
@@ -361,13 +409,13 @@ class AttrRow [ width = 100%,
     // a long or multi-line `{ … }` default leaves the signature line and sits on its
     // own, indented — a signature is never truncated and never scrolls
 
-    long: boolean = { ("" + (:default ?? "")).length > 44 || ("" + (:default ?? "")).indexOf("\n") >= 0 || this.longType },
+    long: boolean = { ("" + (:default ?? "")).length > (app.docked ? 44 : 20) || ("" + (:default ?? "")).indexOf("\n") >= 0 || this.longType },
 
     // a long union type (blendMode's eleven modes) leaves the line the same way and
     // wraps — an unwrapped line wider than the pane would let a click-to-jump scroll
     // the whole page sideways
 
-    longType: boolean = { ("" + :type).length > 56 },
+    longType: boolean = { ("" + :type).length > (app.docked ? 56 : 24) },
 
     // the printed type's own page, when it has one — a name, or a named enum's
     // token list. "" (no page) leaves the type unlinked.
@@ -376,7 +424,7 @@ class AttrRow [ width = 100%,
     layout: SimpleLayout [ axis = y, spacing = 6 ],
 
     sig: View [ width = 100%,
-        layout: SimpleLayout [ axis = x, spacing = 8, align = baseline ],
+        layout: WrappingLayout [ spacing = 8, rowSpacing = 4, align = baseline ],
         Mono [ fontSize = { 15 * app.fontScale }, fontWeight = semibold, textColor = { provided("theme").text }, text = { :name } ],
         ty: Mono [ fontSize = { 15 * app.fontScale }, visible = { !classroot.longType }, text = { ": " + :type },
             textColor = { classroot.typeTo != "" && this.hovered ? provided("theme").accent : provided("theme").accentSecondary },
@@ -424,8 +472,9 @@ class MethodRow [ width = 100%,
 
     sig: View [ width = 100%,
         layout: SimpleLayout [ axis = x, spacing = 0 ],
-        Mono [ fontSize = { 15 * app.fontScale }, fontWeight = semibold, textColor = { provided("theme").text }, text = { classroot.aname } ],
-        SigRun [ sig = { classroot.tailtext }, size = 15, dim = { provided("theme").mtail } ]
+        nm: Mono [ fontSize = { 15 * app.fontScale }, fontWeight = semibold, textColor = { provided("theme").text }, text = { classroot.aname } ],
+        SigRun [ sig = { classroot.tailtext }, size = 15, dim = { provided("theme").mtail },
+            limit = { app.docked ? 100000 : parent.width - parent.nm.width } ]
         ],
 
     OverrideLine [ visible = { :overrides != null }, from = { "" + :overrides.from }, slot = { :name + "()" }, was = "" ],
@@ -440,7 +489,8 @@ class EventRow [ width = 100%,
     live:  boolean = false,
     layout: SimpleLayout [ axis = y, spacing = 6 ],
 
-    sig: SigRun [ sig = { "" + :signature }, size = 15, weight = 600, dim = { provided("theme").text } ],
+    sig: SigRun [ sig = { "" + :signature }, size = 15, weight = 600, dim = { provided("theme").text },
+        limit = { app.docked ? 100000 : parent.width } ],
 
     Block [ datapath = :docSegs[], width = 100%,
         live = { classroot.live }, tone = { provided("theme").refDim }, lead = 1.6 ]
@@ -462,7 +512,7 @@ class ReadStrip [ width = 100%, cornerRadius = 10, visible = { :n > 0 },
     cname: string = { "" + :name },
     fill = { provided("theme").surface }, stroke = { stroke(1, provided("theme").line) },
     layout: SimpleLayout [ axis = y, spacing = 0 ],
-    head: Control [ width = 100%, height = 40, cursor = "pointer", cornerRadius = 10,
+    head: Control [ width = 100%, height = { app.touchDevice ? 44 : 40 }, cursor = "pointer", cornerRadius = 10,
         accessibilityExpanded = { classroot.open },
         fill = { hovered ? provided("theme").chipBg : null },
         padding = [10, 16, 10, 16],
@@ -503,7 +553,7 @@ class Strip [ width = 100%, cornerRadius = 10,
         fill = { hovered ? provided("theme").chipBg : null }, cornerRadius = 10,
         press() { classroot.open = !classroot.open },
         title: View [ x = 16, y = 12, width = { parent.width - 32 },
-            layout: SimpleLayout [ axis = x, spacing = 10, align = baseline ],
+            layout: WrappingLayout [ spacing = 10, rowSpacing = 4, align = baseline ],
             Mono [ fontSize = { 15 * app.fontScale }, wrap = false, textColor = { provided("theme").accent }, text = { classroot.open ? "▼" : "▶" } ],
             Muted [ fontSize = { 13 * app.fontScale }, wrap = false, text = "from" ],
             Chip [ kind = "class", cls = { classroot.cname }, label = { classroot.cname } ],
@@ -593,6 +643,8 @@ class Example [ width = 100%,
         height = { Math.min(classroot.elines * 15 * app.fontScale + 105, 900) },   // 15px/line measured; field pad + 60/8 chrome
         bar:   View [ x = 0, y = 0, width = 3, height = 100%, fill = { classroot.broken ? provided("theme").errBar : provided("theme").live } ],
         fname: Mono [ x = 18, y = 10, fontSize = { 11 * app.fontScale }, fontWeight = semibold, textColor = { provided("theme").strong },
+            wrap = false, maxLines = 1,                // cut, ending in an ellipsis, where Revert begins
+            width = { Math.min(Math.ceil(measureText(this.text, ({ fontSize: this.fontSize, fontWeight: 600, fontFamily: app.mono })).width) + 1, parent.rev.x - 28) },
             text = { classroot.cname + ".declare" } ],
 
         // the marker is an inverted chip — the amber accent as fill, dark letters —
@@ -606,15 +658,20 @@ class Example [ width = 100%,
 
         // Revert — restore the pristine source and republish (see RunIsland)
 
-        rev: Control [ y = 5, height = 20, cornerRadius = 6, stroke = { stroke(1, provided("theme").line) },
+        // (on touch the control is a finger's height around the same pill)
+
+        rev: Control [ y = { app.touchDevice ? 3 : 5 }, height = { app.touchDevice ? 44 : 20 }, cornerRadius = 6,
             x = { parent.tag.x - this.width - 10 },
-            width = { this.rlbl.width + 16 },
-            fill = { hovered ? provided("theme").control : null },
+            width = { this.pill.width },
             press() { classroot.panel.field.text = classroot.esrc
                       app.liveCard = classroot.demo
                       app.liveSource = classroot.esrc },
-            rlbl: Text [ x = 8, y = 3, fontSize = 11, fontWeight = semibold,
-                textColor = { parent.hovered ? provided("theme").text : provided("theme").textMuted }, text = "Revert" ]
+            pill: View [ y = center, height = 20, cornerRadius = 6, stroke = { stroke(1, provided("theme").line) },
+                width = { this.rlbl.width + 16 },
+                fill = { parent.hovered ? provided("theme").control : null },
+                rlbl: Text [ x = 8, y = 3, fontSize = 11, fontWeight = semibold,
+                    textColor = { parent.parent.hovered ? provided("theme").text : provided("theme").textMuted }, text = "Revert" ]
+                ]
             ],
 
         // a line of breathing room below the label before the code starts
@@ -709,17 +766,26 @@ class RunIsland [ width = 100%,
         // Revert restores the pristine source and republishes it — the way back the
         // guide owes a reader it just told to break something
 
-        rev: Control [ y = 5, height = 20, cornerRadius = 6, stroke = { stroke(1, provided("theme").line) },
+        // (on touch the control is a finger's height around the same pill)
+
+        rev: Control [ y = { app.touchDevice ? 1 : 5 }, height = { app.touchDevice ? 44 : 20 }, cornerRadius = 6,
             x = { parent.width - this.width - 10 },
-            width = { this.rlbl.width + 16 },
-            fill = { hovered ? provided("theme").control : null },
+            width = { this.pill.width },
             press() { classroot.editor.field.text = classroot.rsrc
                       app.liveCard = classroot.demo
                       app.liveSource = classroot.rsrc },
-            rlbl: Text [ x = 8, y = 3, fontSize = 11, fontWeight = semibold,
-                textColor = { parent.hovered ? provided("theme").text : provided("theme").textMuted }, text = "Revert" ]
+            pill: View [ y = center, height = 20, cornerRadius = 6, stroke = { stroke(1, provided("theme").line) },
+                width = { this.rlbl.width + 16 },
+                fill = { parent.hovered ? provided("theme").control : null },
+                rlbl: Text [ x = 8, y = 3, fontSize = 11, fontWeight = semibold,
+                    textColor = { parent.parent.hovered ? provided("theme").text : provided("theme").textMuted }, text = "Revert" ]
+                ]
             ],
+
+        // the hint is the first to go when the header narrows
+
         hint: Muted [ y = 9, fontSize = { 11 * app.fontScale }, italic = true, text = "runs live below ↓",
+            visible = { parent.width >= 420 },
             x = { parent.rev.x - this.width - 12 } ],
 
         // a line of breathing room below the label before the code starts
@@ -779,9 +845,7 @@ class Block [ width = 100%,
     // a chapter's title segment carries its sections, as the reference's pages
     // carry theirs: each a link to the section's anchor
 
-    toc: View [ width = 100%, visible = { (:toc ?? []).length > 0 },
-        layout: WrappingLayout [ spacing = 8, rowSpacing = 8, align = baseline ],
-        Muted [ fontSize = { 16 * app.fontScale }, text = "On this page:" ],
+    toc: OnThisPage [ visible = { (:toc ?? []).length > 0 },
         JumpLink [ datapath = :toc[], label = { "" + :title }, to = { "" + :anchor } ]
         ],
     RunIsland [ datapath = :code[], width = 100%, live = { classroot.live } ]
@@ -820,7 +884,9 @@ class ClassDetail [ width = 100%,
     header: View [ width = 100%,
         layout: SimpleLayout [ axis = y, spacing = 12 ],
         eyebrow: View [ layout: SimpleLayout [ axis = x, spacing = 14, align = baseline ],
-            Eyebrow [ text = { "REFERENCE · " + (:origin == "library" ? "STANDARD LIBRARY" : "BUILT-IN") + (:source != null ? " · " + :source : "") } ],
+            // (the source's path is left to VIEW SOURCE where the line is too short for it)
+
+            Eyebrow [ text = { "REFERENCE · " + (:origin == "library" ? "STANDARD LIBRARY" : "BUILT-IN") + (:source != null && app.docked ? " · " + :source : "") } ],
 
             // a library class is Declare like any program: its source opens in
             // the Viewer (`navigate` resolves the path against the distro root)
@@ -852,9 +918,7 @@ class ClassDetail [ width = 100%,
         // who came for a fact
 
         Divider [ ],
-        jump: View [ width = 100%,
-            layout: WrappingLayout [ spacing = 8, rowSpacing = 8, align = baseline ],
-            Muted [ fontSize = { 16 * app.fontScale }, text = "On this page:" ],
+        jump: OnThisPage [
             JumpLink [ label = "Usage",      visible = { :example.length > 0 },    count = { :example.length },    to = "usage" ],
             JumpLink [ label = "Attributes", visible = { :attributes.length > 0 }, count = { :attributes.length }, to = "attributes" ],
             JumpLink [ label = "Methods",    visible = { :methods.length > 0 },    count = { :methods.length },    to = "methods" ],
@@ -961,13 +1025,13 @@ shows the index: every form, grouped, one line each.
 
 // a form tab in the rail — the form's display name, lit when it is the location's cursor
 
-class FormTab [ width = 100%, height = 28, cornerRadius = 6,
+class FormTab [ width = 100%, height = { app.touchDevice ? 44 : 28 }, cornerRadius = 6,
     slug: string = "",
     lit: boolean = { app.mode == "language" && app.form == classroot.slug },
     fill = { lit ? provided("theme").sel : hovered ? provided("theme").control : null },
     link = { "#language/" + slug },
-    onClick()     { app.goForm(classroot.slug) },
-    lbl: Mono [ x = 24, y = 6, fontSize = 13, wrap = false,
+    onClick()     { app.goForm(classroot.slug); app.navOpen = false },
+    lbl: Mono [ x = 24, y = { 6 + (parent.height - 28) / 2 }, fontSize = 13, wrap = false,
         text = { "" + (:short ?? :name) },
         textColor = { classroot.lit ? provided("theme").text : provided("theme").tabIdle } ]
     ]
@@ -1073,15 +1137,13 @@ class FormDetail [ width = 100%,
 
     header: View [ width = 100%,
         layout: SimpleLayout [ axis = y, spacing = 14 ],
-        Eyebrow [ text = { "LANGUAGE · " + ("" + :family).toUpperCase() + " · declare.md " + :spec } ],
+        Eyebrow [ width = 100%, wrap = true, text = { "LANGUAGE · " + ("" + :family).toUpperCase() + " · declare.md " + :spec } ],
         Mono [ fontSize = { 32 * app.fontScale }, fontWeight = semibold, textColor = { provided("theme").text }, text = { "" + :name } ],
         SyntaxBox [ lines = { "" + :syntaxText } ],   // the lines as written (a line may hold a comma)
         Block [ datapath = :docSegs[], width = 100%, live = { classroot.pageLive }, tone = { provided("theme").refDim }, lead = 1.6 ]
         ],
 
-    jump: View [ width = 100%,
-        layout: WrappingLayout [ spacing = 8, rowSpacing = 8, align = baseline ],
-        Muted [ fontSize = { 16 * app.fontScale }, text = "On this page:" ],
+    jump: OnThisPage [
         JumpLink [ label = "Usage",   visible = { :example.length > 0 }, count = { :example.length }, to = "usage" ],
         JumpLink [ label = "Rules",   visible = { :rules.length > 0 },   count = { :rules.length },   to = "rules" ],
         JumpLink [ label = "Related", visible = { classroot.nRelated > 0 }, count = { classroot.nRelated }, to = "related" ]
@@ -1150,13 +1212,13 @@ return it. All of it derived from the model; nothing on the page is hand-listed.
 
 // a type tab in the rail — lit when it is the location's cursor
 
-class TypeTab [ width = 100%, height = 28, cornerRadius = 6,
+class TypeTab [ width = 100%, height = { app.touchDevice ? 44 : 28 }, cornerRadius = 6,
     tname: string = "",
     lit: boolean = { app.mode == "type" && app.tname == classroot.tname },
     fill = { lit ? provided("theme").sel : hovered ? provided("theme").control : null },
     link = { "#type/" + tname },
-    onClick()     { app.goType(classroot.tname) },
-    lbl: Mono [ x = 24, y = 6, fontSize = 13, wrap = false,
+    onClick()     { app.goType(classroot.tname); app.navOpen = false },
+    lbl: Mono [ x = 24, y = { 6 + (parent.height - 28) / 2 }, fontSize = 13, wrap = false,
         text = { classroot.tname },
         textColor = { classroot.lit ? provided("theme").text : provided("theme").tabIdle } ]
     ]
@@ -1181,7 +1243,8 @@ class UseRow [ width = 100%,
     LocChip [ label = { "" + :label }, to = { "" + :loc } ],
     Muted [ fontSize = { 12 * app.fontScale }, wrap = false, text = { "" + :kind } ],
     Mono [ fontSize = { 13 * app.fontScale }, textColor = { provided("theme").sigDim },
-        visible = { ("" + :detail) != "" }, text = { "" + :detail } ]
+        visible = { ("" + :detail) != "" }, text = { "" + :detail },
+        width = { Math.min(Math.ceil(measureText(this.text, ({ fontSize: this.fontSize, fontFamily: app.mono })).width) + 2, app.docked ? 100000 : parent.width) } ]   // on a phone, wider than the row, it wraps
     ]
 
 
@@ -1203,9 +1266,7 @@ class TypeDetail [ width = 100%,
             ]
         ],
 
-    jump: View [ width = 100%,
-        layout: WrappingLayout [ spacing = 8, rowSpacing = 8, align = baseline ],
-        Muted [ fontSize = { 16 * app.fontScale }, text = "On this page:" ],
+    jump: OnThisPage [
         JumpLink [ label = "Tokens",  visible = { :nTokens > 0 }, count = { :nTokens }, to = "tokens" ],
         JumpLink [ label = "Used by", visible = { :nUsed > 0 },   count = { :nUsed },   to = "used-by" ]
         ],
@@ -1255,17 +1316,17 @@ control for the content pane; the rail keeps its designed sizes.
 
 // one chapter link in the guide rail — lights when it is the current chapter
 
-class ChapterTab [ width = 100%, height = 32, cornerRadius = 6,
+class ChapterTab [ width = 100%, height = { app.touchDevice ? 44 : 32 }, cornerRadius = 6,
     cid: string = { :id },
     cnum: number = { :num },
     ctitle: string = { :short },
     fill = { app.chapter == classroot.cid ? provided("theme").sel : hovered ? provided("theme").control : null },
     link = { "#guide/" + cid },
-    onClick()     { app.goGuide(classroot.cid) },
+    onClick()     { app.goGuide(classroot.cid); app.navOpen = false },
 
     // numbered, because the chapters cite each other by number ("chapter 3")
 
-    lbl: Text [ x = 24, y = 8, fontSize = 14, wrap = false,
+    lbl: Text [ x = 24, y = { 8 + (parent.height - 32) / 2 }, fontSize = 14, wrap = false,
         text = { classroot.cnum + ". " + classroot.ctitle },
         textColor = { app.chapter == classroot.cid ? provided("theme").text : provided("theme").tabIdle } ]
     ]
@@ -1281,6 +1342,28 @@ class PartGroup [ width = 100%,
         layout: SimpleLayout [ axis = y, spacing = 2 ],
         ChapterTab [ datapath = :chapters[] ]
         ]
+    ]
+
+
+// the chapter before or after this one, at the chapter's foot — a card naming it,
+// a link like a rail tab
+
+class ChapterLink extends Control [ flexes = true, cornerRadius = 10, cursor = "pointer",
+    step: number = 1,                          // -1: the chapter before; 1: the one after
+    ch: object? = null,                        // its guide entry, or null at either end
+    cid: string = { this.ch != null ? "" + (this.ch as any).id : "" },
+    visible = { this.cid != "" },
+    link = { "#guide/" + this.cid },
+    press() { app.goGuide(this.cid) },
+    fill = { hovered ? provided("theme").chipBg : null },
+    stroke = { stroke(1, hovered ? provided("theme").rule : provided("theme").line) },
+    padding = [12, 16, 14, 16],
+    layout: SimpleLayout [ axis = y, spacing = 6 ],
+    Eyebrow [ width = 100%, textAlign = { classroot.step > 0 ? "right" : "left" }, text = { classroot.step > 0 ? "NEXT" : "PREVIOUS" } ],
+    Text [ width = 100%, fontSize = { 15 * app.fontScale }, fontWeight = semibold, textColor = { provided("theme").accent },
+        textAlign = { classroot.step > 0 ? "right" : "left" },
+        text = { classroot.ch == null ? "" : classroot.step > 0 ? (classroot.ch as any).num + ". " + (classroot.ch as any).title + " →"
+            : "← " + (classroot.ch as any).num + ". " + (classroot.ch as any).title } ]
     ]
 
 
@@ -1321,7 +1404,98 @@ class ChapterDetail [ width = 100%,
 
         demoBox: View [ width = 100%, visible = { :demo.length > 0 },
             Example [ datapath = :demo[], width = 100%, live = { classroot.pageLive } ]
+            ],
+
+        // the way on, and back: the chapters either side of this one
+
+        foot: View [ width = 100%, padding = [20, 0, 0, 0],
+            layout: SimpleLayout [ axis = y, spacing = 24 ],
+            Divider [ ],
+            links: View [ width = 100%,
+                layout: SimpleLayout [ axis = x, spacing = 12 ],
+                ChapterLink [ step = -1, ch = { app.guideStep(classroot.cid, -1) } ],
+                ChapterLink [ step = 1, ch = { app.guideStep(classroot.cid, 1) } ]
+                ]
             ]
+        ]
+    ]
+
+
+/*
+## The nav column
+
+The Guide/Reference switch, then the nav for the live mode. One class in two
+places: fixed in the rail beside the page on a wide screen, and inside the
+drawer on a narrow one. What it shows is the App's — the mode, the location —
+so either instance shows the same place.
+*/
+
+class NavColumn [ width = 100%,
+    layout: SimpleLayout [ axis = y, spacing = 4 ],
+
+    // Guide / Reference — a full-width segmented pair, each tab half the
+    // rail, at the rail's own fixed type size. The pair's value is
+    // `app.mode`, deriving from `app.location`, so a pick writes the
+    // location and the value comes back round — the single source of
+    // truth the App's location comment asks for.
+
+    // Two tabs, four modes: the language and type pages have their own
+    // locations (`language/<form>`, `type/<Name>`) but live in the
+    // reference rail, so the Reference tab lights for them too.
+
+    modes: TabBar [ width = 100%, height = { app.touchDevice ? 44 : 30 },
+        value = { app.mode == "guide" ? "guide" : "reference" },
+        input(v: object) { if (("" + v) == "guide") app.goGuide(app.guideAt); else app.goRef(app.refAt) },
+
+        // each half declares where it goes, so the switch is a link the
+        // crawler can follow — without it the reference half of the docs
+        // is unreachable from the default location (see SegmentedItem)
+
+        choices = { [ ({ id: "guide",     label: "Guide",     location: "guide/" + app.guideAt }),
+                      ({ id: "reference", label: "Reference", location: "reference/" + app.refAt }) ] }
+        ],
+
+    // guide nav — the parts, each a fold over its chapters
+
+    guideNav: View [ width = 100%, visible = { app.mode == "guide" }, padding = [12, 0, 0, 0],
+        layout: SimpleLayout [ axis = y, spacing = 2 ],
+        PartGroup [ datapath = :guideParts[] ]
+        ],
+
+    // reference nav — the language (the forms, by group, with the index
+    // above them), then the TYPES (the vocabulary a signature prints:
+    // model.types.groups), then the classes (by topic:
+    // model.classGroups). Each group folds. Types sit on the language
+    // side because that is what they are — the words the grammar and
+    // every signature are written in, not classes you instantiate —
+    // and they keep their own eyebrow so a page with tokens and members
+    // is never mistaken for a form with syntax and rules.
+
+    // its padding is the rail's own margin: 16 above the first eyebrow, as
+    // the column starts, and 26 under the last class group
+
+    refNav: View [ width = 100%, visible = { app.mode == "reference" || app.mode == "language" || app.mode == "type" },
+        exists = { app.refSeen || app.langSeen || app.typeSeen },     // built when that half is first shown
+        padding = [16, 0, 26, 0],
+        layout: SimpleLayout [ axis = y, spacing = 2 ],
+        langEyebrow: Mono [ fontSize = 12, letterSpacing = 1.4, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "LANGUAGE" ],
+        g2:    View [ height = 4 ],
+        idx: View [ width = 100%, height = { app.touchDevice ? 44 : 28 }, cornerRadius = 6,
+            lit: boolean = { app.mode == "language" && app.form == "" },
+            fill = { lit ? provided("theme").sel : hovered ? provided("theme").control : null },
+            link = "#language/",
+            onClick() { app.goForm(""); app.navOpen = false },
+            Text [ x = 24, y = { 6 + (parent.height - 28) / 2 }, fontSize = 14, wrap = false, text = "All forms", textColor = { parent.lit ? provided("theme").text : provided("theme").tabIdle } ]
+            ],
+        FormGroup [ datapath = :forms.groups[] ],
+        g3:    View [ height = 18 ],
+        typeEyebrow: Mono [ fontSize = 12, letterSpacing = 1.4, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "TYPES" ],
+        g3b:   View [ height = 4 ],
+        TypeGroup [ datapath = :types.groups[] ],
+        g3c:   View [ height = 18 ],
+        classEyebrow: Mono [ fontSize = 12, letterSpacing = 1.4, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "CLASSES" ],
+        g4:    View [ height = 4 ],
+        ClassGroup [ datapath = :classGroups[] ]
         ]
     ]
 
@@ -1366,8 +1540,9 @@ class SearchHit [ width = 100%, cornerRadius = 8,
     layout: SimpleLayout [ axis = y, spacing = 3 ],
     row: View [ width = 100%, height = 18,
         layout: SimpleLayout [ axis = x, spacing = 10 ],
-        Title [ fontSize = 14, wrap = false, text = { :title } ],
-        Mono [ y = 3, fontSize = 10, letterSpacing = 0.6, textColor = { provided("theme").eyebrow }, wrap = false, text = { :crumb } ]
+        Title [ fontSize = 14, wrap = false, maxLines = 1, text = { :title },
+            width = { Math.min(Math.ceil(measureText(this.text, providedTextStyle({ fontSize: 14, fontWeight: 600 })).width), parent.width - parent.crumb.width - 10) } ],
+        crumb: Mono [ y = 3, fontSize = 10, letterSpacing = 0.6, textColor = { provided("theme").eyebrow }, wrap = false, text = { :crumb } ]
         ],
     snip: Markdown [ width = 100%, fontScale = 0.92, lineHeight = 1.45,
         bodyColor = { provided("theme").refDim },
@@ -1376,10 +1551,61 @@ class SearchHit [ width = 100%, cornerRadius = 8,
 
 
 /*
+## The bar's icon buttons
+
+On a narrow window the bar trades words for marks: the contents (the drawer)
+and the search, each a square control the size of the theme switch beside
+them — a finger's size on touch.
+*/
+
+class MenuIcon extends Icon [
+    accessibilityLabel = "Contents",
+    draw(d: Draw) {
+        d.scale(unit, unit)
+        d.strokeStyle = ink
+        d.lineWidth = weight / unit
+        d.lineCap = "round"
+        d.beginPath()
+        d.moveTo(2.5, 4.5); d.lineTo(13.5, 4.5)
+        d.moveTo(2.5, 8); d.lineTo(13.5, 8)
+        d.moveTo(2.5, 11.5); d.lineTo(13.5, 11.5)
+        d.stroke()
+        }
+    ]
+
+
+class SearchIcon extends Icon [
+    accessibilityLabel = "Search",
+    draw(d: Draw) {
+        d.scale(unit, unit)
+        d.strokeStyle = ink
+        d.lineWidth = weight / unit
+        d.lineCap = "round"
+        d.beginPath()
+        d.arc(7, 7, 4.5, 0, Math.PI * 2)
+        d.moveTo(10.4, 10.4); d.lineTo(13.5, 13.5)
+        d.stroke()
+        }
+    ]
+
+
+class BarButton extends Control [
+    width = { app.touchDevice ? 44 : 32 },
+    height = { this.width },
+    cornerRadius = { Math.min(provided("theme").controlCornerRadius, height / 2) },
+    fill = { pressed ? provided("theme").controlPressed : hovered ? provided("theme").controlHovered : null },
+    ink: Color = { hovered ? provided("theme").text : provided("theme").textMuted }
+    ]
+
+
+/*
 ## The app
 
 A top chrome bar (the house header — brand · search · type-size + theme), a
-left rail below it, and a scrolling detail pane, over the model.
+left rail below it, and a scrolling detail pane, over the model. Below
+`docked` the rail leaves: the page takes the window, the bar's menu button
+opens the same nav as a drawer from the start edge, and the search pill
+becomes a button that opens the field across the bar.
 */
 
 App [ fill = { provided("theme").background }, appName = "Declare Docs",
@@ -1461,6 +1687,14 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         if (app.mode == "type") app.typeSeen = true
         },
 
+    // the guide chapter `d` places from `id` (-1 the one before), or null past either end
+
+    guideStep(id: string, d: number) -> object? {
+        const g = (app.docs.read(["guide"]) || []) as any[]
+        const i = g.findIndex((c) => c.id == id)
+        return i < 0 ? null : g[i + d] ?? null
+        },
+
     // a form's display name, for a related-forms chip
 
     formName(slug: string) -> string {
@@ -1508,6 +1742,12 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
     barH: number = 52,                         // the house chrome bar (Viewer/Calendar/Tracker share the height)
     compact: boolean = { app.width < 780 },    // narrow bar: the type-size stepper stands down so the pill keeps its room
 
+    // Narrower than a rail and a readable column, the rail leaves the layout:
+    // the page takes the whole width, and the nav is a drawer (`navOpen`).
+
+    docked: boolean = { app.width >= 720 },
+    navOpen: boolean = false,
+
     /* ## Search
        The header pill searches the whole corpus — guide and reference — over
        `search-index.json`, a flat plain-text index (one entry per chapter and
@@ -1519,6 +1759,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     searchQ: string = "",
     searchSel: number = -1,                    // the focused result row (-1 = the field itself holds focus)
+    searchOpen: boolean = false,               // undocked, the field is open across the bar
     searchIdx: DataSource [ auto = true,
         url = { app.searchQ != "" || this.loaded ? app.base + "search-index.json" : "" } ],
     searchHits: array = { app.findDocs(app.searchQ, app.searchIdx.value) },
@@ -1615,7 +1856,13 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         app.dismissSearch()
         },
 
-    dismissSearch() { app.searchQ = ""; app.searchSel = -1; app.bar.search.text = "" },
+    dismissSearch() { app.searchQ = ""; app.searchSel = -1; app.searchOpen = false; app.bar.search.text = "" },
+
+    // The field is in the bar once it is open, so focus goes to it a turn later:
+    // a finger's tap ends with the browser focusing what was pressed, after the
+    // press itself has run.
+
+    openSearch() { app.searchOpen = true; afterDelay(0, () => Focus.focus(app.bar.search as any)) },
 
     // Focus result row `i` — the keyboard walk's one move. The rows are the
     // replicated children of the results column, each carrying its `idx`;
@@ -1632,8 +1879,8 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     keys: Keys [
         onKeyDown(e: KeyEvent) {
-            if ((e.meta || e.ctrl) && e.code == "KeyK") { Focus.focus(app.bar.search as any) }
-            else if (e.key == "Escape" && app.searchQ != "") app.dismissSearch()
+            if ((e.meta || e.ctrl) && e.code == "KeyK") app.openSearch()
+            else if (e.key == "Escape" && (app.searchQ != "" || app.searchOpen)) app.dismissSearch()
             }
         ],
 
@@ -1730,12 +1977,22 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
     /* ## The chrome bar
        The house header — Viewer's and Tracker's bar, on this app: brand at 18
        (gradient "Declare", solid "Docs"), the search pill centered, and the
-       type-size stepper + theme switch on the right. */
+       type-size stepper + theme switch on the right. Undocked, a menu button
+       leads, and the pill is a search button until it is pressed. */
 
     bar: View [ ignoreScroll = true, x = 0, y = 0, width = { app.width }, height = { app.barH }, fill = { provided("theme").rail },
         hair: View [ x = 0, y = { app.barH - 1 }, width = 100%, height = 1, fill = { provided("theme").edge } ],
 
-        brand: View [ x = 20, y = center, height = 22,
+        // the drawer's opener, where the rail would be
+
+        menu: BarButton [ x = 8, y = center, visible = { !app.docked && !app.searchOpen },
+            accessibilityLabel = "Contents", accessibilityExpanded = { app.navOpen },
+            press() { app.navOpen = true },
+            MenuIcon [ x = center, y = center, iconSize = 18, ink = { parent.ink } ]
+            ],
+
+        brand: View [ y = center, height = 22, visible = { app.docked || !app.searchOpen },
+            x = { app.docked ? 20 : parent.menu.x + parent.menu.width + 6 },
             layout: SimpleLayout [ axis = x, spacing = 5 ],
 
             // "Declare" is the way home — navigate() resolves against the
@@ -1767,16 +2024,21 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
            reading zoom is the most droppable control; the theme switch and the
            search are not), which is what keeps the pill usable at 560. */
 
-        search: TextInput [ y = center, height = 32, cornerRadius = 16,
-            lo: number = { parent.brand.x + parent.brand.width + 16 },
-            hi: number = { (app.compact ? parent.themeSwitch.x : parent.size.x) - 16 },
-            x = { Math.max(this.lo, Math.min((app.width - this.width) / 2, this.hi - this.width)) },
-            width = { Math.max(120, Math.min(440, this.hi - this.lo)) },
+        /* Undocked, the field is closed until the search button opens it, and
+           then runs across the bar from the start edge to that button, which
+           has become the way to close it. */
+
+        search: TextInput [ y = center, height = { app.touchDevice ? 44 : 32 }, cornerRadius = { this.height / 2 },
+            visible = { app.docked || app.searchOpen },
+            lo: number = { app.docked ? parent.brand.x + parent.brand.width + 16 : 12 },
+            hi: number = { app.docked ? (app.compact ? parent.themeSwitch.x : parent.size.x) - 16 : parent.find.x - 8 },
+            x = { app.docked ? Math.max(this.lo, Math.min((app.width - this.width) / 2, this.hi - this.width)) : this.lo },
+            width = { app.docked ? Math.max(120, Math.min(440, this.hi - this.lo)) : this.hi - this.lo },
             fill = { provided("theme").surface },
             stroke = { stroke(1, this.focused ? provided("theme").accent : provided("theme").line) },
             padding = [0, 16, 0, 16],
             fontSize = 16, textColor = { provided("theme").text },   // 16: a field under it makes iOS zoom the page toward it
-            placeholder = "Search the docs…   ⌘K",
+            placeholder = { app.docked ? "Search the docs…   ⌘K" : "Search the docs…" },
             onInput(t: string) { app.searchQ = "" + t; app.searchSel = -1 },
             onEnter() { if (app.searchHits.length > 0) app.openResult(app.searchHits[0].loc) },
             onKeyDown(e: KeyEvent) {
@@ -1800,87 +2062,32 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         // light / dark: shows the appearance in force, a press flips it; until
         // then `themeMode` stays "auto" and the OS decides
 
-        themeSwitch: AppearanceSwitch [ y = center, x = { app.width - this.width - 16 },
+        themeSwitch: AppearanceSwitch [ y = center, x = { app.width - this.width - (app.docked ? 16 : 8) },
+            width = { app.touchDevice ? 44 : provided("theme").appearanceSwitchSize },
             dark = { app.darkUI },
             input(v: boolean) { app.themeMode = v ? "dark" : "light" }
+            ],
+
+        // undocked, the search pill folded to its mark — and, while the field
+        // is open, the way to close it
+
+        find: BarButton [ y = center, x = { parent.themeSwitch.x - this.width - 4 }, visible = { !app.docked },
+            accessibilityLabel = { app.searchOpen ? "Close search" : "Search" },
+            press() { if (app.searchOpen) app.dismissSearch(); else app.openSearch() },
+            SearchIcon [ x = center, y = center, iconSize = 18, ink = { parent.ink }, visible = { !app.searchOpen } ],
+            CloseIcon [ x = center, y = center, iconSize = 18, ink = { parent.ink }, visible = { app.searchOpen } ]
             ]
         ],
 
     /* ## The left rail
        Below the bar, fixed beside the page (`ignoreScroll`, like the bar) and
-       scrolling its own nav: the Guide/Reference switch, then the nav for the
-       live mode. */
+       scrolling its own nav. Built only while the window is wide enough to
+       keep it (`docked`); narrower, the same nav opens as a drawer. */
 
     rail: View [ ignoreScroll = true, x = 0, y = { app.barH }, width = { app.railW }, height = { app.height - app.barH }, scrolls = y, fill = { provided("theme").rail },
+        exists = { app.docked },
         edge: View [ x = { app.railW - 1 }, y = 0, width = 1, height = 100%, fill = { provided("theme").edge } ],
-        col: View [ x = 16, y = 16, width = { app.railW - 32 },
-            layout: SimpleLayout [ axis = y, spacing = 4 ],
-
-            // Guide / Reference — a full-width segmented pair, each tab half the
-            // rail, at the rail's own fixed type size. The pair's value is
-            // `app.mode`, deriving from `app.location`, so a pick writes the
-            // location and the value comes back round — the single source of
-            // truth the location comment above asks for.
-
-            // Two tabs, four modes: the language and type pages have their own
-            // locations (`language/<form>`, `type/<Name>`) but live in the
-            // reference rail, so the Reference tab lights for them too.
-
-            modes: TabBar [ width = 100%, height = 30,
-                value = { app.mode == "guide" ? "guide" : "reference" },
-                input(v: object) { if (("" + v) == "guide") app.goGuide(app.guideAt); else app.goRef(app.refAt) },
-
-                // each half declares where it goes, so the switch is a link the
-                // crawler can follow — without it the reference half of the docs
-                // is unreachable from the default location (see SegmentedItem)
-
-                choices = { [ ({ id: "guide",     label: "Guide",     location: "guide/" + app.guideAt }),
-                              ({ id: "reference", label: "Reference", location: "reference/" + app.refAt }) ] }
-                ],
-
-            // guide nav — the parts, each a fold over its chapters
-
-            guideNav: View [ width = 100%, visible = { app.mode == "guide" }, padding = [12, 0, 0, 0],
-                layout: SimpleLayout [ axis = y, spacing = 2 ],
-                PartGroup [ datapath = :guideParts[] ]
-                ],
-
-            // reference nav — the language (the forms, by group, with the index
-            // above them), then the TYPES (the vocabulary a signature prints:
-            // model.types.groups), then the classes (by topic:
-            // model.classGroups). Each group folds. Types sit on the language
-            // side because that is what they are — the words the grammar and
-            // every signature are written in, not classes you instantiate —
-            // and they keep their own eyebrow so a page with tokens and members
-            // is never mistaken for a form with syntax and rules.
-
-            // its padding is the rail's own margin: 16 above the first eyebrow, as
-            // the column starts, and 26 under the last class group
-
-            refNav: View [ width = 100%, visible = { app.mode == "reference" || app.mode == "language" || app.mode == "type" },
-                exists = { app.refSeen || app.langSeen || app.typeSeen },     // built when that half is first shown
-                padding = [16, 0, 26, 0],
-                layout: SimpleLayout [ axis = y, spacing = 2 ],
-                langEyebrow: Mono [ fontSize = 12, letterSpacing = 1.4, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "LANGUAGE" ],
-                g2:    View [ height = 4 ],
-                idx: View [ width = 100%, height = 28, cornerRadius = 6,
-                    lit: boolean = { app.mode == "language" && app.form == "" },
-                    fill = { lit ? provided("theme").sel : hovered ? provided("theme").control : null },
-                    link = "#language/",
-                    onClick() { app.goForm("") },
-                    Text [ x = 24, y = 6, fontSize = 14, wrap = false, text = "All forms", textColor = { parent.lit ? provided("theme").text : provided("theme").tabIdle } ]
-                    ],
-                FormGroup [ datapath = :forms.groups[] ],
-                g3:    View [ height = 18 ],
-                typeEyebrow: Mono [ fontSize = 12, letterSpacing = 1.4, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "TYPES" ],
-                g3b:   View [ height = 4 ],
-                TypeGroup [ datapath = :types.groups[] ],
-                g3c:   View [ height = 18 ],
-                classEyebrow: Mono [ fontSize = 12, letterSpacing = 1.4, fontWeight = semibold, textColor = { provided("theme").textMuted }, text = "CLASSES" ],
-                g4:    View [ height = 4 ],
-                ClassGroup [ datapath = :classGroups[] ]
-                ]
-            ]
+        col: NavColumn [ x = 16, y = 16, width = { app.railW - 32 } ]
         ],
 
     /* ## The detail column
@@ -1902,14 +2109,14 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
        `visible` conceals, it never tears down. No matches (or the index still
        loading) says so in the middle of the pane. */
 
-    detail: View [ x = { app.railW }, y = { app.barH }, width = { app.width - app.railW }, selectable = true,
+    detail: View [ x = { app.docked ? app.railW : 0 }, y = { app.barH }, width = { app.width - (app.docked ? app.railW : 0) }, selectable = true,
 
         // the reading margins are the pane's own content box, so every column
-        // in it is simply the room it is given
+        // in it is simply the room it is given — narrower without the rail
 
-        padding = [0, 48, 0, 48],
+        padding = { app.docked ? [0, 48, 0, 48] : [0, 20, 0, 20] },
         top: View [ x = 0, y = 0, width = 1, height = 1 ],       // showPage's scroll-to-top anchor
-        col: View [ y = 40, width = 100%, visible = { app.searchQ == "" },
+        col: View [ y = { app.docked ? 40 : 24 }, width = 100%, visible = { app.searchQ == "" },
             guideCol: View [ width = 100%, visible = { app.mode == "guide" },
                 ChapterDetail [ datapath = :guide[], cid = :id ]
                 ],
@@ -1960,5 +2167,16 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
             msg: Muted [ x = center, y = center, fontSize = 14,
                 text = { app.searchIdx.loaded ? "No matches — the corpus has nothing for “" + app.searchQ + "”." : "Loading the search index…" } ]
             ]
+        ],
+
+    /* ## The drawer
+       Undocked, the rail's nav opens over the page from the start edge. It
+       closes on a pick (each nav row writes `navOpen` back), and as a sheet
+       does on Esc, a press past it, and a swipe back toward its edge. */
+
+    drawer: Sheet [ edge = "start", sheetWidth = 300, accessibilityLabel = "Contents",
+        shown = { app.navOpen && !app.docked },
+        input(open: boolean) { app.navOpen = open },
+        NavColumn [ ]
         ]
     ]

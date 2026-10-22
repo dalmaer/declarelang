@@ -180,6 +180,36 @@ App [ width = 340, height = 120, theme = { SanFrancisco }, fill = { provided("th
     ]
 ```
 
+### Choosing one of many
+
+Four controls choose one value from a set. Which fits depends on how many choices there
+are and how much room they may take:
+
+- [`Segmented`](declare-docs:Segmented) — two to five short choices, all shown at once.
+- [`RadioGroup`](declare-docs:RadioGroup) — a handful of choices that need a sentence each,
+  shown at once.
+- **A pop-up button** — a list of choices that stays closed until pressed, as a `<select>` is
+  in HTML. It is a `Button` with a [`menu`](declare-docs:Control.menu) whose rows carry
+  `checked`; the row that is checked is the current choice.
+- [`Combobox`](declare-docs:Combobox) — a long list the user narrows by typing.
+
+```declare
+App [ width = 340, height = 160, theme = { SanFrancisco }, fill = { provided("theme").background },
+    sort: string = "name",
+    sorts: Menu [
+        items = { [ ({ id: "name", label: "Name", checked: app.sort == "name" }),
+                    ({ id: "date", label: "Date", checked: app.sort == "date" }),
+                    ({ id: "size", label: "Size", checked: app.sort == "size" }) ] },
+        picked(id: string) { app.sort = id }
+        ],
+    Button [ x = 20, y = 20, label = { "Sort by " + app.sort }, menu = { app.sorts } ]
+    ]
+```
+
+The button shows the current choice and a chevron; pressing it opens the menu under it
+with a check beside the current row. [Menus, dialogs and overlays](declare-docs:guide:overlays)
+covers menus in full.
+
 You cannot nest rows inside a `Menu` — there is nowhere to put them. That is the
 contract, not a gap: a class that owns its arrangement owns how it draws, and can
 change either without any use site noticing. A list of cards that *you* position and
@@ -215,6 +245,16 @@ When you need more:
   the keys it doesn't want to `super.onKeyDown(e)`.
 - Every view carries [`focused`](declare-docs:View.focused), true while it holds focus — a
   fact a constraint reads (`stroke = { focused ? stroke(2, provided("theme").accent) : null }`).
+- [`onFocus`](declare-docs:View.event.focus) and [`onBlur`](declare-docs:View.event.blur)
+  run when a view gains and loses focus. `onBlur` is the place to tidy a field once the
+  user leaves it, rather than on every keystroke:
+
+  ```declare-fragment
+  TextInput [ placeholder = "Tag", text = { app.tag },
+      onInput(v: string) { app.tag = v },
+      onBlur() { app.tag = app.tag.trim().toLowerCase() } ]
+  ```
+
 - [`Focus.focus(view)`](declare-docs:Focus.method.focus) moves focus from code;
   [`Focus.getFocus()`](declare-docs:Focus.method.getFocus) answers which view has it — a
   constraint reading it follows focus — and is what you save before a modal opens and restore

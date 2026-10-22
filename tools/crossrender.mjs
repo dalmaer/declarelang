@@ -24,6 +24,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import puppeteer from "puppeteer-core";
 import { hostBinary, CTL_IN, CTL_OUT } from "../mac-host/app.mjs";
+import { launchChrome } from "./internal/chrome.mjs";
 
 const args = process.argv.slice(2);
 const flag = (n) => args.includes(n);
@@ -331,7 +332,7 @@ async function macPixels(browser, file) {
 
 const fmt = (n) => (n > 0 ? "+" : "") + (Math.round(n * 10) / 10);
 const report = [];
-const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
+const browser = await launchChrome({ executablePath: CHROME, headless: true, args: ["--no-sandbox"] });
 try {
   for (const file of files) {
     const dom = await chromeDump(browser, file, "dom");

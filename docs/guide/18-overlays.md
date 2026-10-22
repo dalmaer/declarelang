@@ -49,6 +49,13 @@ A menu's items, like a dialog's buttons, are **records, not children** — the c
 record is `{ id, label, key?, icon?, enabled?, checked?, divider?, submenu? }`, and the
 choice comes back through `picked(id)`.
 
+A menu whose rows carry `checked` is a choice of one: derive `checked` from your state
+(`checked: app.sort == "date"`) and set the state in `picked`. Put it on a `Button` whose
+label names the current choice, and that button is a pop-up button, the `<select>` of
+other platforms. For two to five choices shown at once, use `Segmented`; for a long list
+the user filters by typing, `Combobox`
+([Controls](declare-docs:guide:controls@choosing-one-of-many)).
+
 ## Opening at a view or at the pointer
 
 | verb | anchors | for |
@@ -151,7 +158,7 @@ App [ width = 400, height = 220, theme = { SanFrancisco }, name: string = "untit
     rename: Dialog [ title = "Rename",
         buttons = { [ { id: "cancel", label: "Cancel", cancel: true }, { id: "ok", label: "Rename", default: true } ] },
         picked(id: string) { if (id == "ok") app.name = this.field.text },
-        field: TextInput [ width = 100% ]
+        field: TextInput [ width = 100%, accessibilityLabel = "New name" ]
         ]
     ]
 ```
