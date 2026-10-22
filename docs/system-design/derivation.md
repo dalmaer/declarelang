@@ -74,8 +74,12 @@ The driver enforces two invariants on every run, both build errors:
 
 - **I1 — one author per output.** Two rules declaring the same output path.
 - **I2 — no forward reads.** A rule whose input is an output *or stamp* of a later
-  rule. A forward read is a cycle waiting for its second edge; refusing it at one
-  edge is what makes loops impossible rather than unlikely.
+  rule — of *any* later rule that writes the file, not only its first writer — or
+  whose own output a later rule stamps. A forward read is a cycle waiting for its
+  second edge; refusing it at one edge is what makes loops impossible rather than
+  unlikely. It is also what keeps the ledger honest: a rule's record is taken when
+  it runs, so a later write into what it read leaves it stale after every derive
+  that moved that file, and the next push is refused over work already done.
 
 **Skipping** is by content hash: a rule runs only when the hash of its declared
 inputs differs from the manifest (`.derive/manifest.json`, untracked, per-clone), or

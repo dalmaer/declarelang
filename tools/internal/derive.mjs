@@ -141,9 +141,25 @@ const RULES = [
       `import { rebuildStale } from "${join(ROOT, "tools/internal/bundle-freshness.mjs")}"; rebuildStale("${ROOT}", { log: console.log, force: true });`]),
   },
   {
+    name: "extract",                 // the doc tree: intermediate model + the docs app's chapters and demo islands
+    inputs: [{ dir: "tools/internal/doc", exclude: ["assemble.mjs"] }, "runtime/dist", "compiler/dist", "library",
+             "docs/guide", "docs/tenets",
+             "tools/format.mjs",     // the generated islands are written THROUGH canonize — a formatter change changes them
+             { dir: "apps/docs/demos", notPre: "seg_" }],       // the authored per-class examples it embeds
+    outputs: [".derive/docs-extract.json", "apps/docs/chapters", "apps/docs/search-index.json",
+              { dir: "apps/docs/demos", pre: "seg_" }],         // the generated islands, and only those
+    run: () => run("node", ["tools/internal/doc/extract.mjs"]),
+  },
+  {
     name: "stats",                   // the measured figures (in-memory production builds; no crawl, no prose read)
+    // AFTER extract: the desktop ships the docs program as an island, and its
+    // bundle names the docs' files by their content, so the desktop's figure is
+    // only final once extract has written them. (It once ran first and a second
+    // rule re-measured into this same file afterwards — which left this rule's
+    // record, and every reader's, stale after any derive that moved the docs.)
     inputs: ["tools/internal/prewarm.mjs", "tools/declarec.mjs", "compiler/dist", "runtime/dist", "library", "browser",
-             { dir: "apps", ext: ".declare", exclude: ["dist"], notPre: "seg_" }],
+             { dir: "apps", ext: ".declare", exclude: ["dist"], notPre: "seg_" },
+             "apps/docs/chapters", "apps/docs/search-index.json", { dir: "apps/docs/demos", pre: "seg_" }],
     outputs: ["apps/homepage/stats.json"],
     run: () => run("node", ["tools/internal/prewarm.mjs", "--stats-only"]),
   },
@@ -172,27 +188,6 @@ const RULES = [
              "apps/homepage/declare-faq.md", "apps/homepage/getstarted.md", "docs/declare.md"],
     outputs: ["bundles/cache"],
     run: () => run("node", ["tools/internal/prewarm.mjs", "--no-stats"]),
-  },
-  {
-    name: "extract",                 // the doc tree: intermediate model + the docs app's chapters and demo islands
-    inputs: [{ dir: "tools/internal/doc", exclude: ["assemble.mjs"] }, "runtime/dist", "compiler/dist", "library",
-             "docs/guide", "docs/tenets",
-             "tools/format.mjs",     // the generated islands are written THROUGH canonize — a formatter change changes them
-             { dir: "apps/docs/demos", notPre: "seg_" }],       // the authored per-class examples it embeds
-    outputs: [".derive/docs-extract.json", "apps/docs/chapters", "apps/docs/search-index.json",
-              { dir: "apps/docs/demos", pre: "seg_" }],         // the generated islands, and only those
-    run: () => run("node", ["tools/internal/doc/extract.mjs"]),
-  },
-  {
-    name: "stats-docs",              // the desktop's figure, once the docs it carries are final
-    // The desktop ships the docs program as an island, and its bundle names the
-    // docs' files by their content — so the desktop's size moves with what extract
-    // just wrote, after `stats` measured it. The figures prose cites (calendar,
-    // tracker) carry no docs and come out the same, so the stamps stay true.
-    inputs: ["apps/docs/chapters", "apps/docs/search-index.json", { dir: "apps/docs/demos", pre: "seg_" }],
-    outputs: [],
-    stamps: ["apps/homepage/stats.json"],
-    run: () => run("node", ["tools/internal/prewarm.mjs", "--stats-only"]),
   },
   {
     name: "bake-crawler",            // the root page's static extraction (runs the homepage itself)
@@ -275,17 +270,23 @@ function validate() {
       producers.set(f, r.name);
     }
   }
-  const producedAt = new Map();                                  // path → earliest producing index
+  // EVERY writer of a file, not just the first: a rule that reads (or authors)
+  // a file another rule writes into later records a hash that is stale the
+  // moment the later rule runs, and the next --dry refuses a push over work
+  // already done. A rule stamping its own input is fine (its record is taken
+  // after it runs).
+  const writers = new Map();                                     // path → indices of the rules that write it
   RULES.forEach((r, i) => {
     for (const f of [...fileSet(r.outputs), ...fileSet(r.stamps)]) {
-      if (!producedAt.has(f)) producedAt.set(f, i);
+      if (!writers.has(f)) writers.set(f, []);
+      writers.get(f).push(i);
     }
   });
   RULES.forEach((r, i) => {
-    for (const f of fileSet(r.inputs)) {
-      const j = producedAt.get(f);
-      if (j !== undefined && j > i) {
-        console.error(`derive: INVALID GRAPH — '${r.name}' reads '${f}', which '${RULES[j].name}' produces LATER.`);
+    for (const f of [...fileSet(r.inputs), ...fileSet(r.outputs)]) {
+      const j = (writers.get(f) ?? []).find((k) => k > i);
+      if (j !== undefined) {
+        console.error(`derive: INVALID GRAPH — '${r.name}' reads '${f}', which '${RULES[j].name}' writes LATER.`);
         console.error(`  Reorder the rules, or delete the edge — a forward read is a cycle waiting for a second edge.`);
         process.exit(1);
       }

@@ -64,6 +64,11 @@ const page = await browser.newPage();
 
 async function shot(url) {
   await page.goto(url, { waitUntil: "networkidle0", timeout: 90000 });
+  // booted: every top-level app, dev or production, sets window.__declare as
+  // the last step of booting (the bridge, or a stub in a build without it).
+  // Without this, a dev compile slowed by a busy machine is shot as the
+  // empty page before it, which holds still and so passes for settled.
+  await page.waitForFunction(() => globalThis.__declare !== undefined, { timeout: 90000 });
   // settle: fonts + first paints + any load-driven relayout have landed
   await page.evaluate(() => document.fonts.ready);
   await settled(page);
