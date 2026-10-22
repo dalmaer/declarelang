@@ -294,6 +294,8 @@ function validate() {
   });
 }
 
+const readOrNull = (p) => { try { return readFileSync(p); } catch { return null; } };
+
 // ── the committed derived paths (--paths / --outputs) ────────────────────────
 // Generated from the rules so it cannot drift from them; .derive/* is untracked
 // and excluded.
@@ -358,6 +360,17 @@ const specKey = (r) => createHash("sha1")
 const t0 = Date.now();
 let ran = 0, skipped = 0;
 const movedFiles = [];
+
+// Each stamped file as it stood before any rule ran: afterwards, one whose staged
+// copy was this pre-image held no edit of yours, so everything derive changed in it
+// is derive's to stage. One you were still editing is left to you, and named.
+const stampPre = new Map();
+if (!DRY && !CHECK && !NO_STAGE) {
+  for (const r of RULES) {
+    if (ONLY !== null && !ONLY.has(r.name)) continue;
+    for (const f of fileSet(r.stamps)) if (!stampPre.has(f)) stampPre.set(f, readOrNull(join(ROOT, f)));
+  }
+}
 const staleRules = [];
 
 for (const r of RULES) {
@@ -467,8 +480,26 @@ if (CHECK) {
   if (NO_STAGE || specs.length === 0) staged = false;
   else try { run("git", ["add", "-A", "--", ...specs]); staged = true; }
   catch (e) { console.error(`derive: could not stage (${String(e.message ?? e).split("\n")[0]}) — stage by hand:\n   git add -A -- ${specs.join(" ")}`); }
+  // the stamps this run rewrote: staged where nothing else in the file was unstaged
+  const stampsStaged = [], stampsYours = [];
+  for (const [f, pre] of stampPre) {
+    const post = readOrNull(join(ROOT, f));
+    if (post === null || pre === null || post.equals(pre)) continue;
+    let indexed = null;
+    try { indexed = execFileSync("git", ["show", `:${f}`], { cwd: ROOT, maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "ignore"] }); } catch { }
+    if (indexed !== null && indexed.equals(pre)) stampsStaged.push(f); else stampsYours.push(f);
+  }
+  if (stampsStaged.length > 0) {
+    try { run("git", ["add", "--", ...stampsStaged]); }
+    catch (e) { console.error(`derive: could not stage stamps (${String(e.message ?? e).split("\n")[0]}) — stage by hand:\n   git add -- ${stampsStaged.join(" ")}`); }
+  }
   console.log(`derive: ${movedFiles.length} derived file(s) regenerated — ${ran} rule(s) ran, ${skipped} skipped (${total}s)` +
     (staged ? ` · outputs staged` : NO_STAGE ? ` · index untouched (--no-stage)` : "") +
+    (stampsStaged.length > 0 ? ` · ${stampsStaged.length} stamp(s) staged` : "") +
     (ONLY !== null ? ` · only ${[...ONLY].join(",")}` : ""));
   for (const p of movedFiles.slice(0, 12)) console.log(`   ${p}`);
+  if (stampsYours.length > 0) {
+    console.log(`derive: ${stampsYours.length} stamp(s) rewritten in a file with unstaged edits of yours — stage it with them:`);
+    for (const p of stampsYours) console.log(`   ${p}`);
+  }
 }
