@@ -23,6 +23,12 @@
 // history there (no start exception). A pane opens at its end, and a request to
 // go to the end (`scrollTo(Infinity)`) counts as being there while it travels.
 //
+// A request past the end of content that has not arrived yet — `scrollTo(2400)`
+// while the rows are still loading — is held, as a browser holds a restored
+// scroll position on a page still loading: the offset goes as far as the content
+// lets it now, and follows the content as it grows until it gets there. The
+// reader scrolling, or another request, lets it go.
+//
 // A correction is not a request: it is written straight to the surface, never
 // queued behind the user's scroll (view.ts), because the content under the
 // reader really moved. Works on the model's own geometry, so every renderer
@@ -40,6 +46,7 @@ interface AnchorState {
   atEnd: boolean;             // the pane was at its end at the last look (end mode)
   held: boolean;              // a correction was held back during a touch scroll
   wantEnd: boolean;           // a request to the end is travelling (end mode)
+  wantY: number | null;       // a request past the end, waiting for the content to reach it
   opened: boolean;            // an end pane has opened at its end
   endY: number | null;        // the offset the anchor last put an end pane at (end mode)
   corrected: number | null;   // the offset the last correction wrote (its own scroll is not a move)
@@ -113,7 +120,7 @@ function correct(s: View, y: number, st: AnchorState): void {
 /** Install the anchor on a scroller (idempotent). */
 export function installScrollAnchor(s: View): void {
   if (STATE.has(s)) return;
-  const st: AnchorState = { view: null, top: 0, vis: 0, atEnd: false, wantEnd: false, opened: false, held: false, endY: null, corrected: null };
+  const st: AnchorState = { view: null, top: 0, vis: 0, atEnd: false, wantEnd: false, wantY: null, opened: false, held: false, endY: null, corrected: null };
   STATE.set(s, st);
   const mode = (): string => (s as unknown as { scrollAnchor?: string }).scrollAnchor ?? "content";
 
@@ -165,6 +172,14 @@ export function installScrollAnchor(s: View): void {
     return `${m}|${h}|${s.height}|${top}`;
   }, () => {
     afterSettle(() => {
+      // A WAITING REQUEST goes as far as the content now reaches; arrived, it
+      // is done, and the place it reached is the one to keep.
+      if (st.wantY !== null && !s.scrolling) {
+        const end = Math.max(0, s.contentHeight - s.height);
+        correct(s, Math.min(st.wantY, end), st);
+        if (end >= st.wantY - 0.5) { st.wantY = null; repick(); }
+        return;
+      }
       const m = mode();
       if (m === "none") return;
       // A FINGER IS SCROLLING in a browser that drives the scroll itself: an
@@ -222,11 +237,26 @@ export function readsAtEnd(s: View): boolean {
 
 /** A program request: to the far end, it is travelling — an end pane keeps
  *  following while it gets there (and a pane already there has arrived);
- *  anywhere else, it supersedes one still travelling (view.ts scrollTo). */
-export function noteScrollRequest(s: View, toEnd: boolean): void {
+ *  past the end of the content as it is now, it waits for the content to
+ *  reach it; anything later supersedes either (view.ts scrollTo). */
+export function noteScrollRequest(s: View, y: number): void {
   const st = STATE.get(s);
   if (st === undefined) return;
-  if (!toEnd) { st.wantEnd = false; return; }
+  const toEnd = y === Infinity;
+  st.wantY = null;
+  if (!toEnd) {
+    st.wantEnd = false;
+    if (Number.isFinite(y) && y > s.contentHeight - s.height + 0.5) st.wantY = y;
+    return;
+  }
   if (atEndOf(s)) { st.atEnd = true; st.endY = s.scrollY; st.wantEnd = false; return; }
   st.wantEnd = true;
+}
+
+/** The reader has taken the pane: a request still waiting for its content is
+ *  let go (view.ts $scrollingChanged — at the moment the scroll starts, not at
+ *  the next look, by which time it may be over). */
+export function dropWaitingScroll(s: View): void {
+  const st = STATE.get(s);
+  if (st !== undefined) st.wantY = null;
 }

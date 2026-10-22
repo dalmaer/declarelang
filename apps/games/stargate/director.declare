@@ -18,7 +18,7 @@ schema Squad [ name: "landers" | "bombers" | "pods" | "mutants" | "swarmers" | "
     waves[]: number ]
 
 // A wave setting for how hard the enemies are: the most and least it may reach, what is
-// added every six hundred frames of a wave and what between waves, and its value for the
+// added every six hundred passes of a wave and what between waves, and its value for the
 // easy start and waves 1 to 11 (the eleventh serving every wave after).
 
 schema Setting [ name: "squadEvery" | "squadSize" | "landerSpeed" | "landerDropHigh" | "landerDropLow" |
@@ -123,7 +123,7 @@ class Director extends Rules [ kinds = ["director", "death", "blink", "wreck"],
 
     // A wave's settings are its column of the table (the counts of every fifth wave from
     // the fifth's, of every tenth from the tenth's), with the between-waves change made five
-    // times, and once more for each wave past the eleventh.
+    // times, and once more for each wave past the eleventh, up to thirty in all.
 
     settingsFor(n: number) -> Wave {
         const column = n > 0 && n % 10 == 0 ? 10 : n > 0 && n % 5 == 0 ? 5 : Math.min(n, 11)
@@ -232,7 +232,7 @@ class Director extends Rules [ kinds = ["director", "death", "blink", "wreck"],
 
     // The director's look at the wave, every fifteen passes. It ends the wave when no enemy
     // is left; sends the next squad of landers when the last have gone or their time is up,
-    // while fewer than eight are out; every six hundred frames makes the wave a little
+    // while fewer than eight are out; every six hundred passes makes the wave a little
     // harder; ends the first wave's easy start once the player has scored; and when every
     // man left is in the air, flashes the ground and warns of it until one is back down.
 
@@ -449,8 +449,8 @@ class Director extends Rules [ kinds = ["director", "death", "blink", "wreck"],
         else t.wait = 1
         },
 
-    // The ship's wreck: its picture bursting, where the ship is drawn. One of its explosions
-    // comes from a random place in it; true once all are done.
+    // The ship's wreck: its picture bursting, where the ship is drawn. Each burst comes from a
+    // random place in it; `burstOnce` says when the last is done.
 
     wreckOf(t: Turn, px: number, py: number) -> Thing {
         const wreck = game.newThing("wreck")

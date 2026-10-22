@@ -525,6 +525,13 @@ export class KeysService {
     this.noteCommandHold(e, false);
     const h0 = this.heldKeys.get(e.code);
     this.heldKeys.delete(e.code);
+    // On a Mac a key pressed while ⌘ is down sends no key-up of its own (the
+    // system keeps it), so ⌘'s release is the last word on it: anything else
+    // still held but a modifier was let go then. Without this, ⌘K left K held
+    // for good — Keys.isDown("KeyK") stayed true, and ⌘ alone never armed again.
+    if (IS_MAC && (e.code === "MetaLeft" || e.code === "MetaRight")) {
+      for (const code of [...this.heldKeys.keys()]) if (!MODIFIERS.has(code)) this.heldKeys.delete(code);
+    }
     this.claimedAtDispatch = h0 !== undefined ? h0.owned : this.navClaimed();
     // the release goes where the press went; a press the keyboard moved away
     // from was released to its program already, and reaches only the runtime

@@ -279,7 +279,7 @@ class SetPieces extends Rules [ kinds = ["blast", "warp"],
         game.clock.endAll(game.world, [t])
         this.clearScreen()
         game.director.save()
-        t.kind = "warp"                     // (the gate's process goes on as the warp, and after it as the director's)
+        t.kind = "warp"                     // (the gate's turn goes on as the warp, and after it as the director's)
         this.rest(t, 1, "begin")
         },
 

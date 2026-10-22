@@ -3,7 +3,7 @@
 
 Gates stand a set distance apart round the planet, the first at one of three places. A
 gate's three rings take their colors from where on the planet the screen is (see
-scenery.declare).
+cycles.declare).
 
 The ship flying into one goes through: after a fade to black it comes out where a man is
 being carried off, the highest of them, or else half way round the planet. Carrying four

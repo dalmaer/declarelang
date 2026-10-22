@@ -17,7 +17,8 @@ class Chance extends Node [
 
     // A draw: `second` and `third`, read as one 16-bit number, shift down a place, and what
     // comes in at the top is whether bits 3 and 0 of `third` differed; the new number is three
-    // times the last plus 17, plus both, plus 1 if the first sum ran past 255 — kept to a byte.
+    // times the last plus 17, plus the new `second` and `third`, plus 1 if the first sum ran
+    // past 255 — kept to a byte.
 
     draw() -> number {
         const mixed = byte(last * 3 + 17)
@@ -42,8 +43,8 @@ class Chance extends Node [
     placeOnPlanet() -> number { return second * 8 + third / 32 },
 
     // The pass's own draw is the one an interrupt can fall inside, and the interrupt draws
-    // numbers of its own (the volcano's): so the same steps, with the points between them
-    // where the arcade has read or written each byte.
+    // numbers of its own (the volcano's). So this is the same draw taken a byte at a time,
+    // marking each point where the arcade reads or writes one.
 
     passDraw(w: World) {
         const mixed = byte(last * 3 + 17)

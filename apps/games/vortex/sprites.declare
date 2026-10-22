@@ -2,8 +2,8 @@
 # What is drawn in the tube
 
 The tube itself (`Web`), and everything placed in it. A `Sprite` is placed by
-constraints over a lane and a depth — `x`, `y`, `scale`, `rotation` and
-`opacity` all come from `app.tube.at(lane, depth)` — and its subclass draws
+constraints over a lane and a depth — `x`, `y`, `scale` and `rotation` come
+from `app.tube.at(lane, depth)`, `opacity` from the depth — and its subclass draws
 its shape once, in a fixed 40×40 box, the lane running left to right across the
 middle and −y facing out of the tube. Motion is attributes; a shape is never
 re-drawn to move it.
@@ -19,7 +19,7 @@ App replicates them.
 Drawn whole: the far rim, the near rim, and a line along each lane edge. It reads
 the tube, the camera (through `corner`), and the claw's lane, so it re-records when
 one of them changes — while the claw sits still nothing is re-drawn, and in the
-dive it is re-drawn every frame, as it must be.
+dive, where the camera moves, it is re-drawn every frame.
 */
 
 class Web [ width = 100%, height = 100%,
@@ -124,7 +124,8 @@ class Flipper extends FoeView [
 
 
 // Carries two of something inside, and shows what: a little flipper, pulsar
-// or fuseball in its middle, in that kind's color.
+// or fuseball in its middle, in that kind's color (a fuseball, which has many,
+// in the spiker's).
 
 class Tanker extends FoeView [
     cargo: string = { :cargo ?? "flipper" },

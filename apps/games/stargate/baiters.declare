@@ -18,8 +18,8 @@ class Baiters extends Rules [ kinds = ["baiter", "master", "munchy"],
     mastersOut: number = 0,
     munchiesOut: number = 0,
 
-    // A master and a munchy each have three pictures for going right and three for going
-    // left, in a color of their own, and show the next of them at every look.
+    // A master and a munchy each have five pictures, in a color of their own: three going
+    // right and three going left, the first shared. They show the next at every look.
 
     picture(t: Thing) -> string {
         return t.kind == "baiter" ? "baiter-" + t.frame : t.kind + "-" + t.look + "-" + [1, 2, 3, 1, 4, 5][t.frame]
@@ -117,8 +117,8 @@ class Baiters extends Rules [ kinds = ["baiter", "master", "munchy"],
         },
 
     // Every six passes a master counts down to its next munchy — four times as fast while
-    // the ship is some way below it — and may take a new course for the ship. A square one
-    // lets munchies go twice as often.
+    // the ship is eleven to twenty rows above it — and may take a new course for the ship. A
+    // square one lets munchies go twice as often.
 
     hunt(turn: Turn, t: Thing) {
         if (t.appearing) { this.rest(turn, 6, "hunt"); return }

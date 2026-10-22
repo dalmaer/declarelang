@@ -8,8 +8,8 @@ why the pulse, the fall down the tube and the fall through space share one —
 and why `pulseOff`, which is nearly silent, exists: it cuts the pulse.
 
 The game calls `cue(name)`; nothing plays in the attract mode or the demo.
-While the game is paused every clip is muted, and a new life hushes the first
-four voices (the death, the explosions, the shots, the bonus).
+While the game is paused every clip is muted, and play resuming after a death
+hushes the first four voices (the death, the explosions, the shots, the bonus).
 */
 
 class Clip extends Audio [ inMemory = true,
@@ -48,11 +48,11 @@ class SoundBoard [ width = 0, height = 0,
         clip.play()
         },
 
-    // A new life: the first four voices fall silent.
+    // Play resumes after a death: the first four voices fall silent.
 
     hush() { for (const c of this.clips()) if (c.voice <= 4 && c.playing) c.playing = false },
 
-    // Everything stops (the game is over, or the demo begins).
+    // Everything stops: a game, or the demo, is starting.
 
     stopAll() { for (const c of this.clips()) if (c.playing) c.playing = false }
     ]

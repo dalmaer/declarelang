@@ -48,7 +48,7 @@ import { splitPath, isSelective, type PathSeg } from "./path-plan.js";
 import { Focus } from "./focus.js";
 import { arriveSubtree } from "./spring.js";
 import { selectNodes, type PathNode } from "./select.js";
-import type { Dataset } from "./data.js";
+import { noteRowRecord, type Dataset } from "./data.js";
 import type { Surface } from "./backend.js";
 import type { WindowHost, Windowing, WindowingFactory } from "./virtualize.js";
 
@@ -579,6 +579,9 @@ export class Replicator {
     // wave dies at the attribute layer's gate.
     next.forEach((v, i) => {
       setBound(v, "datapath", data === null ? null : data.$cursorAt(nodes[i].path));
+      // the record this row presents, so its reads follow that record until the
+      // next reconcile re-points it (data.ts rowPlace)
+      if (data !== null) noteRowRecord(v, data, nodes[i].path);
       setRowIndex(v, rowIndexOf(nodes[i].path));
     });
     // Leftovers: instances whose record left. Their onRetire fires NOW —

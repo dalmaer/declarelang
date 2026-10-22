@@ -123,11 +123,10 @@ class PageWords [ width = 100%, height = 100%,
             text = { "WILLIAMS ELECTRONICS PRESENTS".slice(0, classroot.pages.typed) } ]
         ],
 
-    // Under the title, where the arcade asks for coins and points to its high scores and
-    // secrets: how to start, in the credits' ink, and the keys in the small letters and the
-    // secrets' ink, two columns of four, centered under the title; and at the foot of the
-    // screen the copyright, on one line, in its ink. The secrets follow (the warp's line
-    // placing itself).
+    // Under the title, where the arcade asks for coins: how to start, the keys in two columns
+    // of four (left out on a touch screen, which has its own buttons), how to see the
+    // secrets, and the copyright at the foot. The secrets' lines follow; the warp's line
+    // places itself.
 
     keyRows: Dataset { { "rows": [
         { "id": 0, "py": 144, "a": "UP", "k": "Q", "b": "REVERSE", "l": "Z" },

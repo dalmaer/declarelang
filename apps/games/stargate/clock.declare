@@ -11,9 +11,8 @@ buttons pressed, and then every turn that has come round, in a fixed order. A pa
 runs long is interrupted wherever it has got to, and the next begins late, a frame lost.
 
 Played live, the time each piece of work takes is estimated from measurements of the
-arcade. (Checked against a recording, the recording's own schedule is played instead: see
-the reference folder's checked/recording.declare, which listens at `pointReached` and
-`worldChanged`.)
+arcade. (Checked against a recording of the arcade, the recording's own schedule is played
+instead; it listens at `pointReached` and `worldChanged`.)
 
 Where things and turns live in the arcade's memory, and what they leave there, is the
 memory's (memory.declare).

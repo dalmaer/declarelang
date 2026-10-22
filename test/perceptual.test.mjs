@@ -1322,13 +1322,14 @@ try {
 
   await test("DOM: a drawing rasterizes into a per-view canvas sized by its bounds", async () => {
     // The recording's bounds are (0,0,60,30) — triangle ∪ stroke-expanded
-    // line — so the per-view canvas (dpr=1) must be exactly that box.
+    // line — so the per-view canvas (dpr=1) is that box and one pixel more on
+    // every side, for the antialiased edge: 62×32 at (−1, −1).
     const shape = await domR3.page.evaluate(() => {
       const drawDiv = document.getElementById("host").firstElementChild.children[5];
       const canvas = drawDiv.firstElementChild;
       return [canvas.tagName, canvas.width, canvas.height, canvas.style.left, canvas.style.top];
     });
-    assert.deepEqual(shape, ["CANVAS", 60, 30, "0px", "0px"]);
+    assert.deepEqual(shape, ["CANVAS", 62, 32, "-1px", "-1px"]);
   });
 
   await test("cross-backend: R3 strict outside soft regions, blur-agree inside", async () => {

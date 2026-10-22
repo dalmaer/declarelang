@@ -3,10 +3,11 @@
 //
 // Five kinds. A flipper climbs and flips from lane to lane, in one of six ways that the wave
 // decides. A tanker climbs, and at the top splits into the two it carries. A spiker climbs
-// laying a spike behind it, turns back two-thirds of the way up, and starts again in the lane
-// with the shortest spike. A pulsar climbs only as far as its reach and pulses there, deadly
-// in its lane while the pulse is on, and flips toward the player between pulses. A fuseball
-// rises and sinks along a spoke and crosses to the next spoke now and then.
+// laying a spike behind it, turns back near the top, and starts again in the lane with the
+// shortest spike. A pulsar rises to the rim and sinks back to its reach, again and again,
+// deadly in its lane within that reach while the pulse is on, and flips toward the player
+// between pulses. A fuseball rises and sinks along a spoke and crosses to the next spoke now
+// and then.
 //
 // Each enemy follows a plan, a short rhythm of moves and flips, and `plan` says where in it
 // the enemy is. Every frame an enemy carries its plan on until a step that ends its frame:
@@ -35,7 +36,8 @@ class Enemies extends Node [
         game.kindCount = noneOfEach()
         },
 
-    // The nymphs wait in bands of sixteen, one to a band's place, each in a random lane.
+    // Nymph i waits 16·i frames plus its lane, counted round at 256 (so nymphs sixteen apart
+    // share a band of sixteen frames), each in a random lane; a wait of nought becomes 15.
     // (With none left the arcade still runs its loop once, and draws a number for nothing.)
 
     placeNymphs(field: Playfield) {
@@ -72,7 +74,7 @@ class Enemies extends Node [
             }
         },
 
-    // a lane and its mirror, 15 less it, as one
+    // a lane and its mirror (15 less it), as one
 
     mirrored(lane: number) -> number { return Math.min(lane, 15 - lane) },
 
@@ -414,7 +416,8 @@ class Enemies extends Node [
 
     // Reaching the rim: a pulsar goes back down while nymphs are left; one mid-flip finishes
     // its flip first; anything else becomes a chaser and heads for the player the short way
-    // round — or, if exactly one other chaser is there, the other way, as a flipper.
+    // round — or, if exactly one other chaser is there, becomes a flipper turning the opposite
+    // way to that one.
 
     reachRim(field: Playfield, e: Enemy) -> string {
         e.depth = field.claw.depth
@@ -483,9 +486,10 @@ class Enemies extends Node [
         return !e.flipping
         },
 
-    // A step of a fuseball's crossing. It lands on the next spoke after seven, and turns
-    // round to go back the way it came; once no nymphs are left, one landing at the rim at
-    // once crosses again toward the player, and one landing below the rim stops firing.
+    // A step of a fuseball's crossing. It lands on the next spoke after seven, and turns round
+    // on it: rising if it was sinking, sinking if it was rising. Once no nymphs are left, one
+    // landing at the rim at once crosses again toward the player, and one landing below the
+    // rim stops firing.
 
     fuseballFlipStep(field: Playfield, e: Enemy) -> "flipping" | "landed" | "chasing" {
         e.angle = (e.angle + (e.turning == "cw" ? 1 : -1) + 16) & 15
@@ -550,7 +554,7 @@ class Enemies extends Node [
     // ── pulsars ──
 
     // A pulsar climbs at its own speed within its reach, at a flipper's beyond it; going down
-    // it turns at its reach (at once once no nymphs are left). While the pulse is on, a pulsar
+    // it turns at its reach (and at once when no nymphs are left). While the pulse is on, a pulsar
     // within its reach kills the player in its lane.
 
     pulsarMove(field: Playfield, e: Enemy) -> string {
@@ -572,10 +576,11 @@ class Enemies extends Node [
 
     // ── fuseballs ──
 
-    // Up its spoke and down again. Rising past the rim it stops there; early waves turn back
-    // near the top. At either end it crosses toward the player on later waves, at random on
-    // early ones; part way, a high enough random number sometimes makes it cross anyway.
-    // Answers whether a crossing began.
+    // Up its spoke and down again, never below halfway. Rising past the rim it stops there.
+    // At the top (on early waves, near it) and at halfway it crosses, toward the player or
+    // either way at random, as the wave says; between them, a random number at or above the
+    // wave's `fuseballRestless` sometimes makes it cross anyway. Once no nymphs are left, a
+    // rising one crosses only at the rim. Answers whether a crossing began.
 
     fuseMove(field: Playfield, e: Enemy) -> boolean {
         const lv = game.level
@@ -662,7 +667,7 @@ class Enemies extends Node [
     // ── enemy shots ──
 
     // An enemy at least 48 deep that can fire, not flipping, its wait over, fires when a random
-    // number beats the odds (longer the more of its shots are already up). The wait counts
+    // number beats the odds (longer the more enemy shots are already up). The wait counts
     // down only while the enemy is deep enough to fire.
 
     enemiesFire(field: Playfield) {

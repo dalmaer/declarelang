@@ -199,13 +199,21 @@ export class Draw {
     beginPath() { this.push({ op: "beginPath" }); this.path = null; this.pen = null; }
     moveTo(x, y) { this.push({ op: "moveTo", x, y }); this.extend(x, y, x, y); this.pen = { x, y }; }
     lineTo(x, y) { this.push({ op: "lineTo", x, y }); this.extend(x, y, x, y); this.pen = { x, y }; }
-    /** Bounds take the full circle's box — conservative for partial arcs,
-     *  exact for full ones. (The sweep's own box is tighter, but a raster is
-     *  placed by its box's rounded origin, so a tighter box moves an arc's
-     *  antialiased edge by a fraction of a pixel in every drawing that has one.) */
+    /** Bounds are the arc's own: its two ends, and each of the circle's four
+     *  extremes the sweep passes — a shallow arc of a large circle is a thin
+     *  box, not the circle's (a row of seats on a 900-unit radius). */
     arc(x, y, r, a0, a1, ccw = false) {
         this.push({ op: "arc", x, y, r, a0, a1, ccw });
-        this.extend(x - r, y - r, x + r, y + r);
+        const TAU = Math.PI * 2;
+        // the sweep as the canvas draws it: from `from`, increasing, by `sweep`
+        const span = ccw ? a0 - a1 : a1 - a0;
+        const sweep = span >= TAU ? TAU : ((span % TAU) + TAU) % TAU;
+        const from = ccw ? a1 : a0;
+        const at = (t) => this.extend(x + r * Math.cos(t), y + r * Math.sin(t), x + r * Math.cos(t), y + r * Math.sin(t));
+        at(from);
+        at(from + sweep);
+        for (let k = Math.ceil(from / (Math.PI / 2)); k * (Math.PI / 2) <= from + sweep; k++)
+            at(k * (Math.PI / 2));
         this.pen = { x: x + r * Math.cos(a1), y: y + r * Math.sin(a1) };
     }
     /** The tangent arc's box is bounded by its two guide points (conservative:

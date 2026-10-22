@@ -145,7 +145,7 @@ schema Rock [ id: number, x: number, y: number, vx: number, vy: number, px: numb
 schema Ship [
     x: number, y: number,               // on the screen, as a shot's
 
-    // speed: the planet's movement under it, in 256ths of a 32nd of a pixel a frame
+    // speed: the planet's movement under it, which moves it by whole 32nds of a pixel
 
     speed: number,                      // across the planet, pixels a frame
     climb: number,
@@ -488,8 +488,8 @@ class Game extends Dataset [ schema = World,
     // Things far from the screen move eight frames at a time, and change lists as the
     // screen comes near them or leaves them behind.
 
-    // (Both measure from where the screen was as they began: an interrupt part way through
-    // may move it.)
+    // Both of these (sendFar, bringNear) measure from where the screen was as they began,
+    // since an interrupt part way through may move it.
 
     sendFar() {
         const screenAt = scroll
@@ -555,8 +555,8 @@ class Game extends Dataset [ schema = World,
         return null
         },
 
-    // An outline holds, for each pair of pixels across, a number whose binary digits are its
-    // rows from the top, 1 where something is lit.
+    // An outline holds, for each pair of pixels across, a string of its rows from the top,
+    // "1" where something is lit.
 
     solidAt(o: Outline, pair: number, row: number) -> boolean { return o.solid[pair]?.[row] == "1" },
 

@@ -91,10 +91,9 @@ class Hud [ width = 100%, padding = [18, 28, 0, 28],
 /*
 ## The attract screen
 
-The title, the
-keys (one `KeyRow` per record of `help`), and the invitation, blinking on a
-half-second clock. The tube shapes cycle behind it, and every so often the
-demo plays a game.
+The title, the keys (one `KeyRow` per record of `help`, hidden on a touch
+screen), and the invitation, blinking on a half-second clock. The tube shapes
+cycle behind it, and every so often the demo plays a game.
 */
 
 class KeyRow [
@@ -179,8 +178,8 @@ class ChooseScreen [ x = center, y = center,
 /*
 ## Cards over play
 
-A level's opening banner, the pause card and the game-over card: each a column
-of `Text`, centered.
+A level's opening banner, the demo card, the pause card and the game-over card:
+each a column of `Text`, centered.
 */
 
 class Notice [ x = center, y = center, padding = [14, 28, 14, 28], cornerRadius = 10, fill = #000000B8,

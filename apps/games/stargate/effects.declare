@@ -65,7 +65,7 @@ class Effects extends Node [
             w.appears = []; w.bursts = []
             return
             }
-        // (from nothing, slowing down wraps round to the fastest)
+        // (a rate pushed below zero wraps round to the fastest)
         const rate = burstRate + (game.clock.behind() ? 1 : -1) / 32
         burstRate = rate < 0 || rate > 1.25 ? 1.25 : rate < 0.6640625 ? 0.6640625 : rate
         const slid = signed8(Math.floor(game.lastScroll / 2) - Math.floor(game.scroll / 2))

@@ -106,7 +106,8 @@ class Landers extends Rules [ kinds = ["lander", "mutant"],
         },
 
     // At the top the lander draws its man up a row a pass; when he reaches it he is lost,
-    // and it is a mutant. If he was shot on the way, the lander goes back to wait.
+    // and it is a mutant. If he was shot meanwhile, the lander leaves and goes back among the
+    // wave's landers still to come.
 
     drawIn(turn: Turn, t: Thing) {
         const man = game.thing(t.man!)
@@ -185,7 +186,8 @@ class Landers extends Rules [ kinds = ["lander", "mutant"],
         },
 
     // A mutant always heads for the ship across the planet. Far off it keeps clear of the
-    // ship's height; close in it makes for it, hopping a row or two at random, and shoots.
+    // ship's height; close in it makes for it. It hops a row or two at random and shoots,
+    // except when close in and off the screen.
 
     hunt(turn: Turn, t: Thing) {
         // (the arcade compares two places as signed numbers, so a mutant on the other half of

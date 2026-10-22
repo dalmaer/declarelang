@@ -4,9 +4,8 @@
 // The arcade has two fonts: a small one, five rows high, whose letters stand on even pixels,
 // and a large one, seven rows high, that goes down pixel by pixel. Their shapes, the score's
 // digits and the panel's small pictures are in art/lettering.json, and the arcade's 153
-// phrases in art/phrases.json (both written by reference/tools/extract-fonts.mjs). Everything
-// here is drawn as whole arcade pixels in one of the sixteen colors, so it follows the
-// colors as they change.
+// phrases in art/phrases.json. Everything here is drawn as whole arcade pixels in one of the
+// sixteen colors, so it follows the colors as they change.
 //
 // The App holds one `Letters` under the name `letters`; the views here read it.
 
@@ -96,8 +95,8 @@ class Lettering [ width = 100%, height = 100%,
         return digits > 0 ? [{ text: text }, { figures: digits == 4 ? 4 : 2 }] : [{ text: text }]
         },
 
-    // The pixels the printing writes, in order: where (row × 512 + pixel) and in which color,
-    // 0 for a blanked one.
+    // The pixels the printing writes, in order: [pixel, row, color], with color 0 for a
+    // blanked pixel.
 
     printed(art: LetterShapes) -> number[][] {
         const out = new Map<string, number[]>()

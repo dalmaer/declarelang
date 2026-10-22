@@ -870,9 +870,9 @@ ancestor's `scrollOffset`). A no-op if nothing above it scrolls.
 Ask **this scroller** to go to offset `y` — a **request, not an assignment**: the platform
 clamps it to the real scroll range, and a pane that cannot take it yet (hidden, or not yet
 laid out) holds the request and applies it the moment it can — so `scrollTo(0)` before
-showing a pane simply works. The range is the content's as it stands: content still to get
-its size is a short range, and a request past its end lands at the end — scroll once
-`contentHeight` has its value. **`scrollTo(Infinity)` means the far end** — "scroll to the
+showing a pane simply works. A request past the end of content still to arrive waits
+for it: the pane goes as far as it can now and follows the content as it grows, until it
+reaches `y` — unless the reader scrolls, or another request comes first. **`scrollTo(Infinity)` means the far end** — "scroll to the
 bottom" with no magic number; the clamp resolves it against the range the pane has when it
 can finally take it. The `scrollY` fact follows the platform's answer. Call it on the
 `scrolls` view itself; to reveal a particular *view*, `scrollIntoView()` on the target
@@ -898,7 +898,9 @@ while a gesture or its momentum owns the pane is dropped.
 
 ## scrollToX()
 The horizontal twin of `scrollTo()` — the same clamped, held request against `scrollX`,
-for a `scrolls = x` (or `both`) view, with the same optional glide.
+for a `scrolls = x` (or `both`) view, with the same optional glide. One difference: a
+request past the end stops at the end the content has when it is made, rather than waiting
+for more.
 
 ## scrollBy()
 A **relative** request — `scrollBy(dx, dy)`, or `scrollBy(dx, dy, { duration, motion })`

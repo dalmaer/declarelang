@@ -5,11 +5,13 @@ What the game is about, with no views: the shapes of its records, the tube's
 geometry, and the field of play — every nymph, enemy, shot, spike and blast in
 the tube, with the rules they follow.
 
-The one idea to take from this file: **nothing here is stepped per frame.** A
-record says when a thing set out and how fast it goes; where it is *now* is a
-function of the game clock `t`. Records are written only when something
-happens — a nymph surfacing, a flip starting, a hit — and every sprite's
-position is a constraint over its record and `t`.
+The one idea to take from this file: **things do not move by being stepped per
+frame.** A record says when a thing set out and how fast it goes; where it is
+*now* is a function of the game clock `t`. `step` runs each frame only to
+decide what happens, and records are written only when something does — a
+nymph surfacing, a flip starting, a hit — while every sprite's position is a
+constraint over its record and `t`. The one exception is the nymphs' clock,
+`risen`, which `step` moves on only while there is room in the tube.
 */
 
 
@@ -71,7 +73,7 @@ schema Launch [ kind: "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar", c
 
 schema Shot [ id: number, lane: number, from: number, firedAt: number ]
 
-// A spike: one per lane at most, `h` deep from the far end.
+// A spike: one per lane at most, standing `h` high from the far end.
 
 schema Spike [ id: number, lane: number, h: number ]
 
@@ -154,7 +156,7 @@ class Tube extends Node [
         return this.point(p.x, p.y, depth)
         },
 
-    // the middle of a lane's edge, across the tube (not projected)
+    // the middle of a lane at the rim, in tube radii (not projected)
 
     laneMiddle(lane: number) -> Point {
         const a = this.rimPoint(lane), b = this.rimPoint(lane + 1)
@@ -362,7 +364,7 @@ class Playfield extends Dataset [
         },
 
     // A new enemy at the far end of a lane. Tankers climb as fast as flippers;
-    // a flipper whose wave has it stop for each flip climbs at half the pace.
+    // in a climb-then-flip wave a flipper climbs at half the pace.
 
     surface(lane: number, t: number, w: Wave, l: Launch) -> Foe {
         const speed = l.kind == "spiker" ? w.spikerSpeed : l.kind == "pulsar" ? pulsarSpeed
@@ -376,10 +378,12 @@ class Playfield extends Dataset [
     //   climbThenFlip — eight frames' climb, then a flip, and again;
     //   spiral — flip after flip, one way;
     //   spiralBack — two flips one way, three the other, and again;
-    //   flipOffSpikes — flip after flip, but not beside a spike as high as it is;
+    //   flipOffSpikes — flip after flip, waiting while the spike in its own lane
+    //     is as high as it is;
     //   avoid — a flip away from the claw, then four frames' climb.
-    // At the rim, every flipper waits four frames and then flips round the rim
-    // toward the claw, faster as the waves go on.
+    // At the rim, every flipper flips round the rim toward the claw, each flip
+    // taking the wave's `rimFlip` and four frames' rest after it, faster as the
+    // waves go on.
 
     flipperMove(f: Foe, t: number, clawLane: number, closed: boolean, w: Wave) -> Moves {
         const d = this.depthOf(f, t)

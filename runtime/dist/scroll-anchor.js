@@ -23,6 +23,12 @@
 // history there (no start exception). A pane opens at its end, and a request to
 // go to the end (`scrollTo(Infinity)`) counts as being there while it travels.
 //
+// A request past the end of content that has not arrived yet — `scrollTo(2400)`
+// while the rows are still loading — is held, as a browser holds a restored
+// scroll position on a page still loading: the offset goes as far as the content
+// lets it now, and follows the content as it grows until it gets there. The
+// reader scrolling, or another request, lets it go.
+//
 // A correction is not a request: it is written straight to the surface, never
 // queued behind the user's scroll (view.ts), because the content under the
 // reader really moved. Works on the model's own geometry, so every renderer
@@ -103,7 +109,7 @@ function correct(s, y, st) {
 export function installScrollAnchor(s) {
     if (STATE.has(s))
         return;
-    const st = { view: null, top: 0, vis: 0, atEnd: false, wantEnd: false, opened: false, held: false, endY: null, corrected: null };
+    const st = { view: null, top: 0, vis: 0, atEnd: false, wantEnd: false, wantY: null, opened: false, held: false, endY: null, corrected: null };
     STATE.set(s, st);
     const mode = () => s.scrollAnchor ?? "content";
     const repick = () => {
@@ -163,6 +169,17 @@ export function installScrollAnchor(s) {
         return `${m}|${h}|${s.height}|${top}`;
     }, () => {
         afterSettle(() => {
+            // A WAITING REQUEST goes as far as the content now reaches; arrived, it
+            // is done, and the place it reached is the one to keep.
+            if (st.wantY !== null && !s.scrolling) {
+                const end = Math.max(0, s.contentHeight - s.height);
+                correct(s, Math.min(st.wantY, end), st);
+                if (end >= st.wantY - 0.5) {
+                    st.wantY = null;
+                    repick();
+                }
+                return;
+            }
             const m = mode();
             if (m === "none")
                 return;
@@ -238,13 +255,18 @@ export function readsAtEnd(s) {
 }
 /** A program request: to the far end, it is travelling — an end pane keeps
  *  following while it gets there (and a pane already there has arrived);
- *  anywhere else, it supersedes one still travelling (view.ts scrollTo). */
-export function noteScrollRequest(s, toEnd) {
+ *  past the end of the content as it is now, it waits for the content to
+ *  reach it; anything later supersedes either (view.ts scrollTo). */
+export function noteScrollRequest(s, y) {
     const st = STATE.get(s);
     if (st === undefined)
         return;
+    const toEnd = y === Infinity;
+    st.wantY = null;
     if (!toEnd) {
         st.wantEnd = false;
+        if (Number.isFinite(y) && y > s.contentHeight - s.height + 0.5)
+            st.wantY = y;
         return;
     }
     if (atEndOf(s)) {
@@ -254,5 +276,13 @@ export function noteScrollRequest(s, toEnd) {
         return;
     }
     st.wantEnd = true;
+}
+/** The reader has taken the pane: a request still waiting for its content is
+ *  let go (view.ts $scrollingChanged — at the moment the scroll starts, not at
+ *  the next look, by which time it may be over). */
+export function dropWaitingScroll(s) {
+    const st = STATE.get(s);
+    if (st !== undefined)
+        st.wantY = null;
 }
 //# sourceMappingURL=scroll-anchor.js.map

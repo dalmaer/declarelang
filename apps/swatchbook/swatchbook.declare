@@ -41,8 +41,8 @@ App [ minWidth = 340,
         FontFace [ src = "../../assets/fonts/roboto/roboto-500.woff2", weight = medium ]
         ],
 
-    // THE MATRIX: every case of every section, on one page — the view the
-    // conformance gate renders. `#matrix` in the address.
+    // `#matrix` in the address shows every section on one page; `on(p)` is
+    // true for the chosen page, and for every page in the matrix.
 
     matrix: boolean = { app.location == "matrix" },
     on(p: string) -> boolean { return this.matrix || this.page == p },

@@ -46,6 +46,7 @@ import { splitPath, isSelective } from "./path-plan.js";
 import { Focus } from "./focus.js";
 import { arriveSubtree } from "./spring.js";
 import { selectNodes } from "./select.js";
+import { noteRowRecord } from "./data.js";
 // parent view → its replication blocks: the KERNEL WINDOW API's registry
 // (D5: the live window — realized instances + logical positions — is
 // first-class runtime/library API; the app-language childViews read refuses
@@ -505,6 +506,10 @@ export class Replicator {
         // wave dies at the attribute layer's gate.
         next.forEach((v, i) => {
             setBound(v, "datapath", data === null ? null : data.$cursorAt(nodes[i].path));
+            // the record this row presents, so its reads follow that record until the
+            // next reconcile re-points it (data.ts rowPlace)
+            if (data !== null)
+                noteRowRecord(v, data, nodes[i].path);
             setRowIndex(v, rowIndexOf(nodes[i].path));
         });
         // Leftovers: instances whose record left. Their onRetire fires NOW —

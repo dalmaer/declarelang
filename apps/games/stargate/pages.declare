@@ -13,11 +13,11 @@ demonstration and the fights the ship is flown by the player's own rules: the pa
 thrust, up and down in the player's place (`fed`), and fires the laser and turns the ship
 by beginning the turns a press begins.
 
-    page            title → titleDark → type … → titleIn → sign → outlineRed → outlining …
+    page            title → logo → titleDark → type … → titleIn → sign → outlineRed → outlining … → titleHeld …
                     catch → catchScene → catchFlight → catchDusk → catchDawn → catchBegins → script …
                     fights → fightScene → fightBegins → fight … → fightOver → fightDark → fightScene …
-                    enemies → enemy … → enemiesNamed … → enemiesMended ⇄ enemiesLettered … → title
-                    secrets → secretsDark → secretsTold → secretsHeld … → title
+                    enemies → enemy … → enemiesNamed … → enemiesMended ⇄ enemiesLettered … → logo
+                    secrets → secretsDark → secretsTold → secretsHeld … → logo
                     (with the fades, and wipeIn for the word STARGATE, between)
     buttons         watch …
     notice color   notices …           title color    titleColors …
@@ -169,11 +169,10 @@ class Pages extends Rules [ kinds = ["page", "buttons", "notice color", "title c
 
     // After a game the lights go down, step by step; coming round again, they go out at
     // once. Then the screen is cleared; the operator's line is typed, a letter every three
-    // passes, in the time the arcade takes for its two; the word is wiped in, black on a
-    // flashing background; forty passes later the background goes black, the letters take
-    // their colors and the notices go up; forty after that the word is outlined in red, a
-    // pair of pixel columns a pass and then half a row a pass; and then the title is held
-    // (titleHeld) before the demonstration begins.
+    // passes; the word is wiped in, black on a flashing background; forty passes later the
+    // background goes black, the letters take their colors and the notices go up; forty
+    // after that the word is outlined in red, a pair of pixel columns a pass and then half a
+    // row a pass; and then the title is held (titleHeld) before the demonstration begins.
 
     title(t: Turn) {
         this.allOff()
@@ -390,8 +389,8 @@ class Pages extends Rules [ kinds = ["page", "buttons", "notice color", "title c
         },
     rise(turn: Turn) { turn.wait = 60 },
 
-    // (Caught while still in a lander's grip — the ship touching him — a man's turn is the
-    // lander's; it carries on as a falling man's, as in the arcade.)
+    // (A man the ship catches while a phony lander still holds him is run by the lander's
+    // turn; that turn carries on as a falling man's, as in the arcade.)
 
     hanging(turn: Turn, t: Thing?) { turn.kind = "fall"; game.men.hanging(turn, t!) },
 

@@ -6,10 +6,10 @@ and drawn in the arcade's own pixels: the App scales the whole picture up to the
 (stargate.declare). Colors are the arcade's sixteen inks, which every view reads from its
 playfield as `provided("inks")`.
 
-Pictures are the arcade's, all on one sheet, art/pictures.png (written by export-art.mjs
-in the reference folder): each picture is a row of white plates, one for every ink it uses,
-and each is tinted with what that ink is now. What is genuinely lines and dots — the
-ground, the stars, shots, the laser, the star gate, the scanner — is drawn.
+Pictures are the arcade's, all on one sheet, art/pictures.png: each picture is a row of
+white plates, one for every ink it uses, and each is tinted with what that ink is now. What
+is genuinely lines and dots — the ground, the stars, shots, the laser, the star gate, the
+scanner — is drawn.
 */
 
 script {

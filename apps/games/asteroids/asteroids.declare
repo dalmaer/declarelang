@@ -4,8 +4,10 @@
 Atari's 1979 arcade game, with the same shapes, letters, sounds, motion and patterns.
 Given the same controls, it plays the arcade's game frame for frame from power-on to the
 end of the first game, checked against MAME's emulation: every value of the game's state
-on every frame, and the vector picture the beam draws. Keys: ← → or A S turn, ↑ or ' thrust, Space or Return fire, ↓ or / hyperspace,
-Return or Space start, Escape pause.
+on every frame, and the vector picture the beam draws.
+
+Keys: ← → or A S turn, ↑ or ' thrust, Space or Return fire, ↓ or / hyperspace, Return or
+Space start, Escape pause.
 
 The shape to notice:
 
@@ -46,7 +48,7 @@ include [ "game.declare", "art.declare", "sounds.declare", "../touch-pad.declare
 defaultFlags [ render = canvas, accessibility = false ]
 
 App [ appName = "Asteroids", fill = black,
-    // the field before power-on, which fills it
+    // the game's records start empty; powerOn fills them
 
     game: Game [ highScore = 32460 ] { { "rocks": [], "shots": [], "saucerShots": [],
         "saucer": { "inPlay": false, "size": "large", "x": 0, "y": 0, "vx": 0, "vy": 0, "blast": 0, "struck": false },
@@ -72,8 +74,8 @@ App [ appName = "Asteroids", fill = black,
 
     paused: boolean = false,
 
-    // The keyboard goes where focus is, so a press on the game takes it: on its own
-    // page, and in a host that runs it among other programs.
+    // Keys go to the focused view, so a click or touch on the game gives it focus — needed
+    // when a host runs it among other programs.
 
     focusable = true,
     onPointerDown() { Focus.focus(app) },
@@ -166,10 +168,9 @@ App [ appName = "Asteroids", fill = black,
         Score [ cx = 480, cy = 876, points = { app.game.highScore } ],
         Score [ cx = 768, cy = 876, magnify = 2, visible = { !app.game.playing } ],      // a second player's, between games
 
-        // Between games: "1 COIN 1 PLAY" at the top, then how to start, and the controls in the
-        // small letters of the high score, set as its list is, in two columns, the last line
-        // where the arcade puts "1 COIN 1 PLAY". All are centered on the copyright's middle (490
-        // across), the line the screen's own text keeps to.
+        // Between games: "1 COIN 1 PLAY" at the top, then how to start, and the controls in two
+        // columns of small letters, the last of them on the line where the arcade itself shows
+        // "1 COIN 1 PLAY". All are centered on the copyright's middle (490 across).
 
         ArcadeText [ cx = 338, cy = 792, magnify = 2, text = "1 COIN 1 PLAY", visible = { !app.game.playing } ],
 
@@ -202,7 +203,7 @@ App [ appName = "Asteroids", fill = black,
     pad: TouchPad [ startShown = { !app.game.playing }, ink = #8C8C8C, startInk = white,
         fieldX = { app.screen.x }, fieldY = { app.screen.y },
         fieldW = { app.screen.width * app.screen.scale }, fieldH = { app.screen.height * app.screen.scale },
-        middle = { app.screen.x + 499 * app.screen.scale },        // the copyright's middle: 180 across from 409
+        middle = { app.screen.x + 499 * app.screen.scale },        // the copyright's middle: 490 screen units, plus the 10 a view's x adds
         keys = { [
             { id: "left", label: "ROTATE LEFT", icon: "ccw", side: "left", col: 0, row: 0 },
             { id: "right", label: "ROTATE RIGHT", icon: "cw", side: "left", col: 1, row: 0 },

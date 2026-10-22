@@ -315,6 +315,12 @@ export class Dataset extends Node {
 
   private readonly cursors = new Map<string, Cursor>();
 
+  /** Counts changes to the dataset's SHAPE — a record inserted, removed,
+   *  moved or replaced, or the whole value adopted. A replicated row's
+   *  positional cursor is current while this matches the count it was given
+   *  at (rowPlace): the cheap test that spares every ordinary read a check. */
+  $shape = 0;
+
   /** The interned cursor for `path` — one object per distinct place, so a
    *  re-derived cursor is `===` the old one and the equality gate holds.
    *  The intern key joins on NUL, not "." — a key containing a dot must not
@@ -407,6 +413,7 @@ export class Dataset extends Node {
     }
     const old = getOwn(container, key);
     if (old === v) return;
+    if (isContainer(old) || isContainer(v)) this.$shape++;
     (container as Record<string, unknown>)[key] = v;
     tagTree(this, v, segs);
     this.$wakeChain(chain);
@@ -427,6 +434,7 @@ export class Dataset extends Node {
       throw new DeclareError(`'${showPath(segs)}' refuses this insert — ${werr} (the write is held to the dataset's schema)`);
     }
     arr.splice(index, 0, v);
+    this.$shape++;
     tagTree(this, v, [...segs, String(index)]);
     wakeAll(arr);
     this.$wakeChain(chain);
@@ -440,6 +448,7 @@ export class Dataset extends Node {
       return h.data.removeAt(h.path, index);
     }
     const [removed] = arr.splice(index, 1);
+    this.$shape++;
     wakeAll(arr);
     this.$wakeChain(chain);
     wakeTree(removed);
@@ -460,6 +469,7 @@ export class Dataset extends Node {
     }
     const [item] = arr.splice(from, 1);
     arr.splice(to, 0, item);
+    this.$shape++;
     wakeAll(arr);
     this.$wakeChain(chain);
   }
@@ -580,6 +590,7 @@ defineAttributes(Dataset, {
     push: (d, v) => {
       const raw = unwrapValue(v);
       if (raw !== v) { setBound(d, "value", raw); return; }
+      d.$shape++;
       if (DERIVED.has(d)) adoptTree(d, v, []);
       else tagTree(d, v, []);
     },
@@ -1117,6 +1128,34 @@ function homeOf(data: Dataset, container: object, segs: readonly string[], verb:
     t.at = path = healed;
   }
   return { data: t.data, path };
+}
+
+/** The record each replicated row presents, and the dataset's shape count
+ *  when its cursor was set (replicate.ts). Between a structural change and the
+ *  settle that re-points the rows, a row's positional cursor can name another
+ *  record or none — the second of two rows removed in one frame read its own
+ *  id as empty, and removed nothing. */
+const ROW_RECORDS = new WeakMap<object, { rec: object; shape: number }>();
+
+/** The replicator's half: `row` presents the record at `path` (or nothing). */
+export function noteRowRecord(row: object, data: Dataset, path: readonly string[]): void {
+  const rec = resolveRaw(data, path);
+  if (rec !== null && typeof rec === "object") ROW_RECORDS.set(row, { rec, shape: data.$shape });
+  else ROW_RECORDS.delete(row);
+}
+
+/** Where a row's reads go: its cursor's path while that still holds its
+ *  record; the record's new place in the same array when it has moved; the
+ *  record itself when it has left the dataset (it reads as it last was, and
+ *  takes no writes) — until the settle re-points the row. */
+export function rowPlace(owner: object, cursor: Cursor): { path: readonly string[] } | { rec: object } {
+  const r = ROW_RECORDS.get(owner);
+  if (r === undefined || r.shape === cursor.data.$shape) return { path: cursor.path };
+  if (resolveRaw(cursor.data, cursor.path) === r.rec) { r.shape = cursor.data.$shape; return { path: cursor.path }; }
+  const up = cursor.path.slice(0, -1);
+  const arr = resolveRaw(cursor.data, up);
+  if (Array.isArray(arr)) { const i = arr.indexOf(r.rec); if (i >= 0) return { path: [...up, String(i)] }; }
+  return { rec: r.rec };
 }
 
 /** Navigate `path` in the raw tree, untracked. */

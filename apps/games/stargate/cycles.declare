@@ -16,9 +16,9 @@ class Cycles extends Rules [ kinds = ["laser color", "shot color", "bomber color
         game.begin("bomber color", "bombers")
         },
 
-    // The laser's color changes every other pass. Where it has got to in the list is one
-    // place for every such turn, and a new turn starts it from the top: two at once (as the
-    // end of the demonstration leaves) run through it twice as fast.
+    // The laser's color changes every other pass. Every laser-color turn moves the same place
+    // in the list on, and a new turn starts it from the top: two at once (as the end of the
+    // demonstration leaves) run through it twice as fast.
 
     laserColors: number[] = { [rgb(0, 7, 0), rgb(1, 7, 0), rgb(2, 7, 0), rgb(3, 7, 0), rgb(4, 7, 0), rgb(5, 7, 0), rgb(6, 7, 0), rgb(7, 7, 0), rgb(7, 6, 0), rgb(7, 5, 0), rgb(7, 4, 0), rgb(7, 3, 0), rgb(7, 2, 0),
         rgb(7, 0, 1), rgb(7, 0, 1), rgb(7, 0, 2), rgb(7, 0, 2), rgb(7, 0, 3), rgb(7, 0, 3), rgb(6, 0, 3), rgb(5, 0, 3), rgb(4, 1, 3), rgb(3, 1, 3), rgb(2, 1, 3), rgb(2, 3, 3), rgb(0, 5, 3), rgb(0, 7, 3), rgb(1, 7, 3), rgb(2, 7, 3), rgb(3, 7, 3), rgb(5, 7, 3), rgb(7, 7, 3),
@@ -55,8 +55,8 @@ class Cycles extends Rules [ kinds = ["laser color", "shot color", "bomber color
         t.wait = 6
         },
 
-    // The ground's color, by the sixty-fourth of the planet the screen is in; the gate's
-    // rings by the thirty-second, one of the three in turn in the bombs' color.
+    // The ground's color, by the thirty-second of the planet the screen is in; the gate's
+    // rings by the sixteenth, one of the three in turn in the bombs' color.
 
     groundColors: number[] = { [rgb(7, 0, 3), rgb(7, 0, 3), rgb(7, 0, 3), rgb(7, 0, 3), rgb(7, 0, 3), rgb(7, 0, 3), rgb(7, 0, 2), rgb(7, 0, 1), rgb(7, 0, 1), rgb(7, 0, 0), rgb(7, 0, 0), rgb(7, 0, 0), rgb(7, 0, 0), rgb(7, 0, 0), rgb(7, 0, 0), rgb(7, 0, 0),
         rgb(7, 0, 0), rgb(7, 0, 0), rgb(7, 1, 0), rgb(7, 3, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 0), rgb(7, 2, 1), rgb(7, 2, 2), rgb(7, 0, 2)] },

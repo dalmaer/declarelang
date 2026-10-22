@@ -126,10 +126,9 @@ class Pods extends Rules [ kinds = ["pod", "swarmer", "pod countdown", "pod boom
             }
         },
 
-    // Every third pass a swarmer heads for the ship across; and, once it is about, it is
-    // pulled toward the ship's height (to two pixels a frame), slowed by about a 64th, and
-    // jostled.
-    // Within 150 pixels of the ship it counts down to a shot.
+    // Every third pass a swarmer is pulled toward the ship's height (to two pixels a frame),
+    // slowed by about a 64th, and jostled. Within 150 pixels of the ship it keeps its course
+    // across and counts down to a shot; farther off it turns to head for the ship.
 
     aim(turn: Turn, t: Thing) { this.headFor(turn, t) },
     weave(turn: Turn, t: Thing) {

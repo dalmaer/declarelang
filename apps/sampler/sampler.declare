@@ -5,22 +5,20 @@ The library's controls under four switchable stylings — San Francisco (the
 default), Mountain View, Cupertino, and Redmond. One machinery, four token
 records: the stylings are **data**, never code paths.
 
-The chrome is the house arrangement (Viewer/Calendar): a fixed-height top bar
-— the brand at left (compacting to just "Declare" when narrow, the Calendar
-move), the page switch in the center (Controls · Table · DataGrid), and at
-right a Styling button whose menu holds the four stylings, the accent-tint dot
-row and the focus-flourish toggle, beside the light/dark switch — the whole
-styling rig, off the page. The Controls page reads as cards, two columns wide,
-one below the breakpoint the cards actually need.
+The chrome is a fixed-height top bar: the brand at left (compacting to just
+"Declare" when narrow), the page switch in the center (Controls · Table ·
+DataGrid · Overlays · More), and at right a Styling button whose menu holds
+the four stylings, the accent-tint dot row and the focus-animation toggle,
+beside the light/dark switch — the whole styling rig, off the page. The
+Controls and More pages read as cards, two columns wide, one below the
+breakpoint the cards actually need.
 */
 
 use [ TintRow ]   // the styling menu names its tint row in data
 
-// A custom menu-item content class: named in the items data (`kind: "TintRow"`),
-// created by name through the menu's row host, fed `props` as its datapath
-// context. The row's interior is individually interactive — each dot claims its
-// own click (deepest sink wins), applies the accent, and closes the menu; the
-// row wrapper suppresses its own pick and highlight for kind rows.
+// A custom menu row: the items data names it (`kind: "TintRow"`) and the menu
+// creates it by name (hence the `use` above). Each dot handles its own click:
+// it applies the accent and closes the menu itself.
 
 class TintDot [ width = 16, height = 16, cornerRadius = 8,
     c: Color = #2E6FE0,
@@ -37,9 +35,8 @@ class TintDot [ width = 16, height = 16, cornerRadius = 8,
     ]
 
 
-// The dots row: color and the selected ring say everything — no caption. The
-// menu's row host aligns it to the text edge, the rollover enlarges the
-// hovered dot, a re-click clears the tint.
+// The dots row: color and the selected ring say everything, so there is no
+// caption. Clicking the selected dot again clears the tint.
 
 class TintRow [
     height = 22,
@@ -79,7 +76,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     // ── the responsive facts, each scoped to what it governs ───────────────
 
     compact: boolean = { app.width < 640 },      // the bar: brand drops "Sampler", tighter segments
-    narrow: boolean = { app.width < 940 },       // the Controls page: the card columns stack
+    narrow: boolean = { app.width < 940 },       // the page column: tighter side margins
     gridNarrow: boolean = { app.width < 760 },   // the grid: the narrow column-width set
 
     barH: number = { app.compact ? 92 : 52 },    // fixed for a width — on a narrow one the page switch takes a second row
@@ -99,8 +96,7 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
     accentPick: number = 0,                      // 0 = the mode's own accent; a pick overrides it everywhere
 
     // the library presets, by city and mode: SanFrancisco / MountainView /
-    // Cupertino / Redmond and their …Dark companions. An accent pick re-derives
-    // the active tone (activeTone) so nothing keeps a stale one.
+    // Cupertino / Redmond and their …Dark companions
 
     preset: Theme = { style == "mountainView" ? (darkUI ? MountainViewDark : MountainView) : style == "cupertino" ? (darkUI ? CupertinoDark : Cupertino) : style == "redmond" ? (darkUI ? RedmondDark : Redmond) : (darkUI ? SanFranciscoDark : SanFrancisco) },
 
@@ -110,10 +106,9 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
         // the calendar name it; no preset carries it
         accentSecondary: darkUI ? 0x37E0C8 : 0x12A594,
         focusAnimate: animateFocus,
-        // The rig's choice, as data: authentic Windows focus rests (the record
-        // says "rest"), but with the flourish switched on the role upgrades to
-        // "both" — and the two-tone rectangle flies. The theme file stays
-        // faithful; the demo overrides one token.
+        // Redmond's focus ring appears in place ("rest"); with focus animation
+        // switched on, the app overrides that one token to "both" so it moves
+        // too. The preset stays as shipped.
         ...(style == "redmond" && animateFocus ? ({ focusRingStyle: "both" }) : ({})),
         ...(accentPick != 0 ? ({ accent: accentPick, controlSelected: activeTone(accentPick, app.preset.surface) }) : ({})),
     } },
@@ -142,8 +137,8 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
 
     gd: Dataset { { "rows": [] } },
 
-    // the grid's width overrides, app-owned (the value pattern working):
-    // user resizes merge here; the narrow set folds beneath them
+    // the grid's column widths, app-owned: user resizes merge here, and on a
+    // narrow window they override the narrow defaults
 
     gridWidths: object = null,
 
@@ -221,8 +216,8 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
             }
         ],
 
-    // the context menu — declared once, opened by the serving surface's own
-    // two-line gesture wiring (right-click on fine pointers, hold on touch)
+    // the context menu, declared once; the view that offers it opens it from
+    // its own onContextMenu and onHold handlers
 
     ctxMenu: ContextMenu [
         items = { [
@@ -318,14 +313,13 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                 onClick() { app.navigate("apps/homepage/homepage.declare") }
                 ],
 
-            // the Calendar compaction: the app word yields first
+            // on a narrow bar the app name hides first, leaving "Declare"
 
             Text [ fontSize = 18, fontWeight = semibold, letterSpacing = { -0.02 * fontSize }, wrap = false,
                 visible = { !app.compact }, text = "Sampler" ]
             ],
 
-        // the page switch is the library's TabBar, a Segmented as tabs — one tab
-        // stop, the arrows move and show each page, the ring hugs the tab
+        // the page switch is the library's TabBar: a Segmented that acts as tabs
 
         pageSwitch: TabBar [ y = { app.compact ? 52 : 11 },
             x = { app.compact ? (app.width - this.width) / 2 : Math.max(200, (app.width - this.width) / 2) },
@@ -637,10 +631,10 @@ App [ fill = { provided("theme").background }, textColor = { provided("theme").t
                     GridRow [ datapath = :rows[], virtualize = true ]
                     ],
                 cap: Text [ width = 100%, wrap = true, fontSize = 12, textColor = { provided("theme").textMuted },
-                    text = "Title edits live; State and Owner pick from a menu; Done is a checkbox — every edit writes the RECORD (windowing keeps it). Drag headers to reorder, edges to resize, click to sort. From the keyboard: arrows move the active cell, Enter or typing edits, Esc puts it back." ]
+                    text = "Title edits live; State and Owner pick from a menu; Done is a checkbox — every edit writes the record. Drag headers to reorder, edges to resize, click to sort. From the keyboard: arrows move the active cell, Enter or typing edits, Esc puts it back." ]
                 ],
 
-            // ── More page: the newer controls, two balanced columns ─────────
+            // ── More page: more controls, two balanced columns ──────────────
 
             morePage: View [ visible = { app.page == "more" }, width = 100%,
                 accessibilityRole = tabPanel, accessibilityLabel = "More",

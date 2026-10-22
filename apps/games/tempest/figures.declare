@@ -2,14 +2,14 @@
 ## What the screen is drawn with
 
 Everything on Tempest's screen is lines of light. `Lit` is a view drawn as such lines, the way
-the arcade's color vector monitor shows them (after the Asteroids port's): a soft bloom in the
-line's color round a bright core of the same color. The arcade sets each line's brightness,
-0 to 15, and the picture follows it as the tube does: a brighter line is brighter, wider and
-blooms further, so a near tanker (14) stands out and a far one (10) is dimmer. A dot is the
-beam resting on one spot, so it is round, and blooms more than a line.
+the arcade's color vector monitor shows them (as the Asteroids program draws them): a soft
+bloom in the line's color round a bright core of the same color. The arcade sets each line's
+brightness, 0 to 15, and the picture follows it as the tube does: a brighter line is
+brighter, wider and blooms further, so a near tanker (14) stands out and a far one (10) is
+dimmer. A dot is the beam resting on one spot, so it is round, and blooms more than a line.
 
-Every view here works in the screen's pixels (scene.declare), and reads three values from the
-screen that holds it: `palette`, each color's role as 0xRRGGBB; `px`, how much of the
+Every view here works in the screen's pixels (camera.declare), and reads three values from the
+screen that holds it: `palette`, each role's color as 0xRRGGBB; `px`, how much of the
 screen one of the display's own pixels is, which keeps the lines' widths in the display's
 pixels whatever the window's size; and `beam`, how the beam looks (beam.declare).
 
@@ -87,8 +87,8 @@ class Lit [
             }
         },
 
-    // its lines, each a segment (a dot's two ends the same), where the view's parent has them:
-    // for the port's conformance tests, which set them beside the arcade's
+    // its lines as segments in its parent's pixels (a dot's two ends the same), for checking
+    // the picture against the arcade's
 
     lines() -> object[] {
         const palette = provided("palette") as Record<string, number>
@@ -125,8 +125,8 @@ class Figure extends Lit [
 
 
 // A line of the arcade's letters, from the start of its baseline (or, aligned right, to its
-// end): large, or small, in a color. The arcade has no keyboard, so its letters have no arrows or slash: those, after the
-// Asteroids port's, are drawn in its strokes on its grid of 16 × 24.
+// end): large, or small, in a color. The arcade has no keyboard, so its letters have no
+// arrows or slash; those are drawn in its strokes on its 16 × 24 grid.
 
 class ArcadeText extends Lit [
     text: string = "",
@@ -188,7 +188,7 @@ class Message extends ArcadeText [
     ]
 
 
-// A figure drawn on a lane (Scene.between): its strokes, in the screen's pixels, and where
+// A figure drawn on a lane (Camera.between): its strokes, in the screen's pixels, and where
 // they start. It sits in a box round that point as large as such a figure can reach.
 
 class LaneFigure extends Lit [

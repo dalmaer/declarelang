@@ -10,7 +10,8 @@
 // allocates until asked). The `__declare` page bridge is installed by boot.ts
 // for top-level apps.
 import { Node, authoredName } from "./node.js";
-import { hitAt, traceHitAt, rootFrameOrigin, rootFrameBox } from "./interaction.js";
+import { hitAt, traceHitAt, rootFrameOrigin, rootFrameBox, rootTransform } from "./interaction.js";
+import { apply as applyAffine } from "./affine.js";
 import { View } from "./view.js";
 import { semanticTree, formatSemantics } from "./semantics.js";
 import { declarationsOf, isSet, ownerOf, ownValues, ownedSlots } from "./attributes.js";
@@ -440,6 +441,16 @@ export function bridgeFor(root) {
             return n !== null ? inspect(n, path ?? "app") : null;
         },
         find: (path) => find(root, path),
+        /** Where a point in a view's own units lands in root space — through every
+         *  scale, rotation and scroll above it, by the walk the pointer is routed
+         *  by. What a driver presses at to reach "(x, y) inside this view". */
+        rootPoint: (path, x, y) => {
+            const n = find(root, path);
+            if (!(n instanceof View))
+                return null;
+            const [rx, ry] = applyAffine(rootTransform(n).matrix, x, y);
+            return { x: rx, y: ry };
+        },
         explain: (path, attr) => {
             const n = find(root, path);
             return n !== null ? explain(n, attr) : null;

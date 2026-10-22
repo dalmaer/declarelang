@@ -108,11 +108,12 @@ scroller, ask:
 - `view.scrollIntoView()` — bring a view into its nearest scroller's visible area.
 - `scrollStartY = …` — where a pane starts, applied once.
 
-A request is clamped to the range the content has when it is made, and a pane that cannot
-take one yet (hidden, not laid out) holds it until it can. Content that is still to get its
-size — data that has not arrived — is a short range, not a pane waiting, so a request past
-its end lands at the end. Make the request once the content has its size: `trackChanges`
-on the pane's `contentHeight` (or `contentWidth`), then scroll.
+A request goes as far as the content reaches, and a pane that cannot take one yet (hidden,
+not laid out) holds it until it can. A request past the end of content still to arrive —
+`pane.scrollTo(2400)` while the rows load — waits for it: the pane goes as far as it can
+now and follows the content as it grows, until it reaches the offset asked for. The reader
+scrolling, or another request, lets it go. (This is the vertical axis; a horizontal
+request stops at the end the content has when it is made.)
 
 ## Keeping the reader's place
 

@@ -8,8 +8,7 @@ Each POKEY holds a 17-bit noise counter that steps once for every cycle of the p
 what a read finds depends on the very cycle it happens on. Played live, the machine keeps the
 processor's time from an estimate of how long the game's work takes, and reads the counter
 there. Checked against a recording, it hands back the arcade's own numbers in the order they
-were drawn instead (see the port's tests/check.mjs). The rules never
-know which.
+were drawn instead. The rules never know which.
 
 Holding a chip in reset holds its counter still at all ones. Whenever the game stops and
 restarts the chips (at power-on and for each new life) it reads each one six times while
@@ -71,9 +70,9 @@ class Machine extends Node [
 
     // ── for checking against a recording ──
 
-    // The conformance tests (the port's tests/check.mjs) set these: the machine
-    // then hands back a recording's draws instead of reading its counters, and notes where
-    // each frame's rules ended. Played live, none of it is used.
+    // A test that checks the game against a recording sets these: the machine then hands
+    // back the recording's draws instead of reading its counters, and notes where each
+    // frame's rules ended. Played live, none of it is used.
 
     replaying: boolean = false,
     recorded: number[] = [],            // a recording's draws, chip and number: 0x100 · chip + number

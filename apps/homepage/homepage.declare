@@ -69,10 +69,8 @@ class Heading extends Text [ fontWeight = { app.headWeight }, textColor = { prov
 
 // The same treatment, worn by things that are NOT headings — a sequence
 // numeral, a stat figure, the wordmark. Identical to `Heading` in every pixel;
-// what it carries is intent. `Heading` sets weight, colour and tracking but no
-// size, so on its own it says "display type" rather than "a heading", and the
-// static extractor reads a document outline off the settled type. Saying which
-// of the two a piece of text is keeps the outline honest at the source.
+// the separate name says which text is a heading and which is only display
+// type, so the page's outline lists real headings alone.
 
 class Display extends Heading [ ]
 
@@ -96,9 +94,8 @@ class Body extends Text [ fontSize = 17, fontWeight = normal, textColor = { prov
 // The CENTERED band treatment — the two closing sections (the feedback loop
 // and the closer) are statements addressed to the whole column rather than
 // copy running down its left edge, so each line is centered on its own
-// measure. `measure` is the only thing that differs between the four of them,
-// and `x = center` with `textAlign = center` is one idea, so it is one class
-// rather than two attributes to keep in step at every use site.
+// `measure`. `x = center` with `textAlign = center` is one idea, so it lives
+// in the class rather than as two attributes to keep in step at every use site.
 
 class BannerHead extends Heading [ measure: number = 880,
     width = { Math.min(this.measure, parent.width) }, x = center, textAlign = center
@@ -113,12 +110,6 @@ class BannerLead extends Lead [ measure: number = 620,
 // the short accent rule the closer wears above and below its line
 
 class BandRule [ x = center, width = 140, height = 2, fill = { provided("theme").accent } ]
-
-// The site's prose lives beside this program, not inside it: why.md, the
-// getting-started guide, the FAQ and the language document are all fetched as
-// text and flowed by the Markdown view, so every article on the site is
-// one rendition with one set of numbers.
-
 
 /*
 ## The header pills
@@ -140,9 +131,9 @@ class NavLink extends Control [ height = 33, cornerRadius = 8, padding = [0, 12,
     accessibilityHint = { this.dropdown ? "opens a menu" : "" },
 
     // a pill WITH children opens the dropdown instead of following a link —
-    // the wide rendition of the sheet's group rows. The anchor is snapshotted
-    // at the gesture (rootOrigin, converted to viewport space), the sanctioned
-    // overlay pattern (Menu.openAt).
+    // the wide rendition of the sheet's group rows. The anchor is read once,
+    // at the press (the pill's root origin, converted to viewport space), so
+    // the menu opens under the pill.
 
     dropdown: boolean = false,
     press() {
@@ -153,14 +144,9 @@ class NavLink extends Control [ height = 33, cornerRadius = 8, padding = [0, 12,
         app.appsOpen = !app.appsOpen
         },
 
-    // ONE reference does all three jobs: "#why" is a
-    // destination, "#apps" a bare anchor (the runtime derives its location and
-    // reveals it), a URL leaves the app. The follow,
-    // the real <a> (hover preview, ⌘-click, copy-link), the keyboard stop,
-    // and the crawler's edge all come from the `link` the use site sets.
-
-    // pressed deepens the pill + lights the label — the tap feedback a touch
-    // device gets in place of hover (mouseDown/Up fire on a tap, hover does not).
+    // where it goes is the `link` the use site sets — "#why" is a destination,
+    // "#apps" an anchor, a URL leaves the app — and that one attribute also
+    // makes it a real anchor (hover preview, ⌘-click, copy-link) and a Tab stop
 
     fill = { pressed ? provided("theme").pillPress : hovered ? provided("theme").pillHover : null },
     lbl: Text [ y = 8, fontFamily = { app.uiFace }, fontSize = 14,
@@ -197,8 +183,8 @@ class MobileNavRow [ width = 100%, height = 44, cornerRadius = 8,
 
     fill = { pressed ? provided("theme").pillPress : hovered ? provided("theme").pillHover : null },
 
-    // the coexistence rule: the handler runs — closing the
-    // sheet — then the follow. Navigation itself is the `link`.
+    // the handler closes the menus, then the row's `link` is followed —
+    // a row can have both, and the navigation itself is the link
 
     onClick()     { app.menuOpen = false; app.appsOpen = false },
 
@@ -284,12 +270,11 @@ class Shot [
         loop = true, source = { classroot.motion },
         playing = { classroot.live && classroot.motion != "" } ],
 
-    // THE EDGE, drawn OVER the picture — a stroke on the plate itself sits
-    // under its children, so the screenshot or video painted over it and the
-    // rule showed only where a picture left the edge bare. Translucent ink
-    // (`plateEdge`) reads on a light picture and a dark one alike; the accent
-    // rule on hover says "this is a door". It takes no pointer, so hovering
-    // and pressing still land on the plate.
+    // THE EDGE, drawn OVER the picture — a stroke on the plate itself would
+    // sit under its children, hidden wherever the picture covers it.
+    // Translucent ink (`plateEdge`) reads on a light picture and a dark one
+    // alike; the accent rule on hover says "this is a door". It takes no
+    // pointer, so hovering and pressing still land on the plate.
 
     edge: View [ width = 100%, height = 100%, cornerRadius = 12,
         pointerEvents = "none",
@@ -354,20 +339,16 @@ class AppNum [ width = 30,
     hot: boolean = false,
     visible = { n != "" },
 
-    // BASELINE BY CONSTRUCTION, because there is no metrics read to do it by
-    // arithmetic: the numeral is a `Heading` at the title's own size, so it
-    // shares the title's font, weight and tracking exactly — and this box's
-    // height IS the numeral's line box, top-aligned in the head row beside the
-    // title's. Same metrics, same box top, same baseline, no font constants.
+    // the box is the numeral's own line box, top-aligned beside the title's —
+    // same metrics, same top, so the baselines match with no font constants
 
     height = { this.num.height },
 
-    // the disc paints first (under the digit): white at rest, the accent while
-    // the row is hot or the badge itself is pressed — the title's own change,
-    // answered in fill rather than ink. The NUMERAL stays ink in every state:
-    // ink-on-accent is already the page's text-on-accent pairing (Button).
-    // Centered on the line box — a disc has no baseline of its own, so the box
-    // center is the honest anchor.
+    // the disc paints first (under the digit): the `badge` colour at rest, the
+    // accent while the row is hot or the badge itself is pressed — the title's
+    // own change, answered in fill rather than ink. The NUMERAL stays ink in
+    // every state: ink-on-accent is already the page's text-on-accent pairing
+    // (Button). Centered on the line box — a disc has no baseline of its own.
 
     disc: View [ width = 30, height = 30, cornerRadius = 15,
         fill = { classroot.hot || classroot.pressed ? provided("theme").accent : provided("theme").badge },
@@ -413,8 +394,7 @@ class CardHead [ width = 100%, height = { this.contentHeight },
 
 The tracker and the desktop: the app's name over a screenshot, what it does as
 one dot-separated run, its figures small and dim, and a source link. The plate
-and the name run the app; the source link opens the reader — and because events
-do not bubble, that link answers its own click without the card also firing.
+and the name run the app; the source link opens the reader.
 */
 
 class AppCard [
@@ -505,7 +485,7 @@ class SiteButton extends Button [ height = 46, cornerRadius = 9,
 One line, shared by every page of the site — the scrolling front page and the
 in-app Why / Language / Get Started / FAQ views alike.
 
-A `FootLink` is the footer’s link rendition: the eyebrow treatment with the
+A `FootLink` is the footer’s link rendition: the `FootLabel` treatment with the
 teal hover and the brighter pressed tap feedback, over View's own `link`.
 */
 
@@ -527,8 +507,7 @@ class FootSep extends FootLabel [ text = "·", textColor = { provided("theme").f
 // One centered flow — every item on a line, dot-separated at full width. As the
 // width narrows the separator dots drop out and the items wrap to centered rows
 // (the wider spacing keeps them legible), so provenance and legal never collide
-// the way a left/right split does. Dropping the dots on wrap is what avoids a
-// stranded separator at a line's end.
+// the way a left/right split does.
 //
 // The air under the footer is its own bottom `padding`: the inset counts into
 // the unset height, so the box is exactly the row plus the air under it, and
@@ -688,9 +667,9 @@ class DocView [ width = { app.width }, fill = { provided("theme").ink },
 Two `theme` records — the language's own notation for a token set, so the
 tokens are declarations rather than a JavaScript object a `{ }` body happens to
 hold. The App spreads one of them over a library preset (below), which is what
-lets the few library widgets on the page — a `Card`, a `Segmented`, a
-`Tooltip` — find every token they read without a second record bolted onto
-their subtree.
+lets the few library widgets on the page — the buttons, the code fields, the
+dividers, a tooltip — find every token they read without a second record
+bolted onto their subtree.
 
 `Ink` is the dark page, `Paper` the light one: the same roles re-chosen for
 paper rather than inverted.
@@ -766,17 +745,14 @@ theme Paper [
 /*
 ## The page
 
-The palette lives once as a provided `theme` token record — every semantic
-type class defaults its color to `{ provided("theme").… }`, so the whole page reskins
-from this one place. The scroller fills the viewport and scrolls its taller
-content natively; the chrome further down (header, cursor) are its
-**siblings**, not its children, so they never move.
+The App provides one of the two palettes as `theme`, and every color below
+reads it. The App itself scrolls, and its scroll carries the content; the
+chrome further down (header, pointer dot, menus) sets `ignoreScroll`, so it
+stays put.
 */
 
 // The headline lives here, once. The hero reads it, and `appName` carries it
-// into the document's title, which is also what the crawl extraction reports
-// as the page's title and what the build stamps into index.html's <title> and
-// social cards.
+// into the document's title.
 
 App [ tagline: string = "a UI language for you and your AI",
     edges = cover,
@@ -807,32 +783,22 @@ App [ tagline: string = "a UI language for you and your AI",
 
     linkUnderline = false,
 
-    // in-app location: "home" (the scrolling page), "why" (the mini-article),
-    // "language" (the one-file core doc, rendered in-app), or "getstarted" (the
-    // quick-start guide, rendered the same way) — the app’s slice of the
-    // URL. `location` is a BUILT-IN App attribute;
-    // setting it here declares the INITIAL, which is the default: the host shows a
-    // clean URL at "home" and `#why`/`#language` elsewhere, seeds it from a deep
-    // link before first paint, and walks it on back/forward — no hash wiring in app
-    // code. Every `shows` below derives from it; the header pills write it.
-    // Nothing here returns the page to the top on a destination change either:
-    // an anchorless follow lands its destination at the start, and an anchored
-    // one is measured-reveal'd — both the runtime's, neither the app's.
+    // in-app location — "home", "why", "language", "getstarted", "faq" or
+    // "architecture" — the app’s slice of the URL. `location` is a BUILT-IN App
+    // attribute, and this is its initial value: the host shows a clean URL at
+    // "home" and `#why` and the like elsewhere, seeds it from a deep link, and
+    // walks it on back/forward — no hash wiring in app code. Every `shows`
+    // below derives from it, and following a "#name" link sets it.
 
     location = "home",
 
     /* No link-routing code, and none is wanted. Every href in the rendered
-       Markdown below — the FAQ's, the guide's, the language doc's — routes
-       through the runtime's own default: a "#name" follows in-app (destination
-       or anchor alike, measured-reveal and all), anything else leaves through
-       `navigate`. */
+       Markdown below follows the same default as a `link`: a "#name" stays
+       in-app, anything else leaves through `navigate`. */
     // the page’s textual material, fetched as text (format = "text") and loaded
     // on its own (auto): the core doc itself (docs/declare.md — up the tree, but
     // still the deployed repo’s own material), the getting-started guide, and
-    // the FAQ. The authored .md files carry assembler markers as HTML comments,
-    // which Markdown drops, so the page reads the files themselves. stats.json is
-    // JSON: line metrics computed by the prewarm pass, so the figures below
-    // cannot go stale.
+    // the FAQ; and stats.json, the app figures, typed by its schema.
 
     lang: DataSource [ url = "../../docs/declare.md", format = "text", auto = true ],
     stats: DataSource [ url = "stats.json", auto = true,
@@ -866,10 +832,9 @@ App [ tagline: string = "a UI language for you and your AI",
     // "Calendar", "Desktop" and "Tracker" name nothing a first-time reader can
     // act on — and beside a GitHub link two of them read as something else
     // entirely (a desktop build; an issue tracker). The parent supplies the
-    // category the labels can't, and lands on §01, which is the page that
-    // actually answers what they are: three shots, each with its line count and
-    // wire size. The children keep their direct doors in the sheet, where there
-    // is room for both.
+    // category the labels can't. On the wide row its pill opens a dropdown of
+    // the children; in the sheet the parent row lands on §01 and the children
+    // get rows of their own.
 
     navItems: array = { [
         ({ label: "Getting Started", link: "#getstarted", children: [] }),
@@ -939,14 +904,9 @@ App [ tagline: string = "a UI language for you and your AI",
         grid: GridBg [ bottom = { parent.page.y + parent.page.height } ],
 
         // the centered content column: a fixed measure, and a VERTICAL FLOW of
-        // sections — each auto-sizes, the page stacks them.
-        //
-        // `selectable` once, here, the way the Why and DocView columns say it:
-        // this column is COPY, so every text leaf under it reads the provision
-        // and the column is one selection surface (a drag can cross from a
-        // heading into the paragraph under it). The controls inside it — a
-        // Button's caption, a SourcePanel's chip and Revert, the links — each
-        // say `selectable = false` where they stand.
+        // sections — each auto-sizes, the page stacks them. It is copy, so it
+        // says `selectable` once and is one selection surface (a drag can cross
+        // from a heading into the paragraph under it).
 
         page: View [ width = { Math.min(app.measure, app.width - 48) }, selectable = true,
             x = { app.gutter }, y = 96,
@@ -996,21 +956,17 @@ App [ tagline: string = "a UI language for you and your AI",
 
             /* ### 01 — Three applications. The calendar leads at full width; the
                tracker and the desktop share the row beneath, and stack on a
-               phone. Each numbered section fades in on a Spring the moment it
-               scrolls into view — a reveal declared as a reactive target, not
-               scheduled. Every figure below is read from `stats.json`, which the
-               prewarm pass regenerates from the real production builds, so no
-               number here can drift from the tree. */
+               phone. The section fades in as it scrolls into view (ScrollReveal).
+               The line counts and wire sizes are read from `stats.json`. */
 
-            // `anchor = "apps"` — the §01 section IS the `#apps` reference's
-            // target, so the reference survives the section moving; and
-            // App.revealInset clears the fixed header on arrival
+            // `anchor = "apps"` makes this the target of "#apps";
+            // App.revealInset keeps it clear of the fixed header on arrival
 
             apps: ScrollReveal [ anchor = "apps",
 
-                // 72, not the page's usual 40: the three applications are three
-                // separate things, and the calendar's own caption sits inside its
-                // row — too little air here and the button reads as the tracker's
+                // generous air: the three applications are three separate
+                // things, and the calendar's own caption sits inside its row —
+                // too little here and the button reads as the tracker's
 
                 layout: SimpleLayout [ axis = y, spacing = 72 ],
 
@@ -1056,17 +1012,13 @@ App [ tagline: string = "a UI language for you and your AI",
                         Lead [ fontSize = 17, width = 100%,
                             text = "It runs on real data: open an event, drag it to another day, and it’s moved." ],
 
-                        // computed, not claimed — stats.json, regenerated from the
-                        // real production build on every prewarm
-
                         stat: View [ width = 100%, height = { this.contentHeight },
                             layout: SimpleLayout [ axis = x, spacing = 20 ],
 
                             // CODE lines, and the note says so. The file is longer
-                            // than this — open it and you count ~800 — so a bare
-                            // "lines of Declare" reads as caught out rather than
-                            // modest. Naming the comment lines is what makes the
-                            // smaller number legible as the honest one.
+                            // than this, so a bare "lines of Declare" reads as
+                            // caught out rather than modest. Naming the comment
+                            // lines makes the smaller number legible as the honest one.
 
                             MiniMetric [ value = { "" + (app.stats.value?.calendar?.code ?? "—") },
                                 note = { "lines of code, plus "
@@ -1081,10 +1033,10 @@ App [ tagline: string = "a UI language for you and your AI",
                         actions: View [ width = 100%,
                             layout: ResponsiveLayout [ plan = { [({ from: 420, flow: "row", gap: 18, align: "center" }), ({ from: 0, flow: "stack", gap: 14 })] } ],
 
-                            // PRIMARY: the accent fill. This is the page's one
-                            // call to action — running the thing the section has
-                            // just described — and it reads as the button it is
-                            // rather than as another quiet surface.
+                            // PRIMARY: the accent fill. Running the thing the
+                            // section has just described is the call to action
+                            // here, so it reads as the button it is rather than
+                            // as another quiet surface.
 
                             SiteButton [ width = 240, primary = true, label = "Run Declare Calendar →",
                                 link = "apps/calendar/calendar.declare" ],
@@ -1097,19 +1049,17 @@ App [ tagline: string = "a UI language for you and your AI",
                             ]
                         ],
 
-                    // the one claim a still cannot make: four views that BECOME each
-                    // other. It runs once the section has revealed — `parent.parent`
-                    // is the apps band, whose opacity is that reveal — so a visitor
-                    // who never scrolls here never decodes a frame.
+                    // a clip shows what a still cannot: the app being used. It
+                    // runs once the section has revealed — `parent.parent` is the
+                    // apps band, whose opacity is that reveal — so a visitor who
+                    // never scrolls here never decodes a frame.
 
                     plate: Shot [ src = { app.isDark ? "shots/calendar-dark.webp" : "shots/calendar-light.webp" }, link = "apps/calendar/calendar.declare",
                         accessibilityLabel = "Open Declare Calendar",
 
                         // Its last frame IS its first, so the loop has no seam to
-                        // notice. What it shows is the app being USED — a detail
-                        // panel opening on a real record, an event dragged to
-                        // another day — not a view transforming for its own sake.
-                        // shots/video/ holds the clip and the script that cuts it
+                        // notice. shots/video/ holds the clip and the script that
+                        // cuts it.
 
                         motion = { app.isDark ? "shots/video/calendar-dark.mp4" : "shots/video/calendar-light.mp4" },
                         live = { parent.parent.opacity > 0.9 },
@@ -1262,18 +1212,16 @@ App [ tagline: string = "a UI language for you and your AI",
             /* ### The closing call to action — the primary blue button that
                leads into the getting-started page, centered above the footer */
 
-            /* the page flow’s 112px would sit both above and below this one
-               short row — the button pulls up into the gap (negative y, no
-               clip) and the zero-height container lets the footer follow
-               closer: ~88px above, ~90px below instead of 112/112 */
+            /* the page flow's full spacing would sit both above and below
+               this one short row — the button pulls up into the gap (negative
+               y, no clip) and the zero-height container lets the footer
+               follow closer */
 
             cta: View [ width = 100%, height = 0,
                 SiteButton [ width = 260, x = center, y = -24, label = "Get Started →", link = "#getstarted" ]
                 ],
 
             /* ### Footer */
-
-            // the footer carries its own bottom margin (see Footer)
 
             footer: Footer [ ]
             ]
@@ -1330,8 +1278,7 @@ App [ tagline: string = "a UI language for you and your AI",
                 breath: View [ width = 8, height = 18 ],
 
                 // `anchor = "story"` — "#story" reaches this note from anywhere
-                // (the FAQ's cross-reference), the destination derived, the
-                // landing measured-reveal'd, the header cleared by revealInset
+                // (the FAQ links to it), landing clear of the header
 
                 rule:   Divider [ anchor = "story" ],
                 Marker [ text = "WHERE THIS CAME FROM" ],
@@ -1355,13 +1302,7 @@ App [ tagline: string = "a UI language for you and your AI",
 
     /* ## The "Language" view
 
-       The one-file core doc (docs/declare.md), rendered in-app by the native
-       Markdown view — same skin and same location machinery as the Why
-       article, so it deep-links (#language) and is crawled into the static
-       document like any other reachable location. The text arrives as the
-       app's own material — docs/declare.md fetched directly, format = "text":
-       loading and failure are lifecycle states the view derives from, never
-       a blank. */
+       The one-file core doc (docs/declare.md) as a DocView at #language. */
 
     languageView: DocView [ shows = "language", src = { app.lang }, eyebrow = "THE LANGUAGE",
         waiting = "Loading the language…",
@@ -1369,12 +1310,7 @@ App [ tagline: string = "a UI language for you and your AI",
 
     /* ## The "Get Started" view
 
-       The getting-started guide (app.location == "getstarted"), rendered in-app
-       with the same skin and Markdown pipeline as the Language view: the copy is
-       getstarted.md itself (an authored page, its command blocks generated), so
-       it deep-links (#getstarted), honours the back button, and is crawled into
-       the static document like any other reachable location. Loading and failure
-       are lifecycle states the view derives from, never a blank. */
+       The getting-started guide (getstarted.md) as a DocView at #getstarted. */
 
     getStartedView: DocView [ shows = "getstarted", src = { app.guide }, eyebrow = "GETTING STARTED",
         waiting = "Loading the guide…",
@@ -1448,10 +1384,9 @@ App [ tagline: string = "a UI language for you and your AI",
            trimmed pill row.
 
            The threshold is the row's OWN width, not the window's (a plan watches
-           its view), and it is measured: the wordmark runs 53, the pill run 570
-           and the appearance switch 34 — 657 in all, so 740 leaves 83 of air
-           between the wordmark and the run. It is also the one number that moves
-           when `navItems` gains an entry — which is why it is stated once.
+           its view): the wordmark, the pill run and the appearance switch, plus
+           some air. It is the one number that moves when `navItems` gains an
+           entry — which is why it is stated once.
 
            The Spacer is what right-aligns the run: it absorbs the slack between
            the wordmark and whatever follows. Shares fill; naturals align.

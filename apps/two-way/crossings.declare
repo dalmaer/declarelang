@@ -9,13 +9,13 @@
 //   host → tenant    `provides = ["hue"]` and `hue = { app.masterHue }` on
 //                    the island: the host offers the value down, and whenever
 //                    masterHue changes the tenant sees it (handle.watchProvided).
-//                    The tenant can read a provided value, never write it —
-//                    ownership is the direction, not a rule to referee.
+//                    The tenant can read a provided value, never write it.
 //
 //   tenant → host    the tenant exposes `count` (handle.expose) and the host
 //                    reads it as `app.tally.exposed("count", 0)` — an ordinary
 //                    reactive read, so it drives a gauge, a caption, and even
-//                    the OTHER tenant, all by constraint. The default types it.
+//                    the OTHER tenant, all by constraint. The default (0) is
+//                    used until the tenant exposes a value, and gives the type.
 //
 //   tenant ⇄ tenant  `dots = { app.taps }` on the orbit island — a value
 //                    that LEAVES one foreign app, crosses into

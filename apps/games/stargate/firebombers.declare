@@ -123,7 +123,7 @@ class Firebombers extends Rules [ kinds = ["firebomber", "fireball", "boom"],
         game.link(ballTurn, ball)
         ball.curve = above ? game.chance.last % 8 + 10 : game.chance.last % 8 + 18
         game.enter(ball)
-        t.shotIn = 255 - settings.firebomberShots      // (the setting rises as the shots come faster)
+        t.shotIn = 255 - settings.firebomberShots      // (a higher setting brings them sooner)
         this.next(turn, t)
         },
 

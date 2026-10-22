@@ -541,7 +541,10 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // inks, so the blank-raster check samples ink rather than a box's empty centre (it
   // had been throwing good rasters away at half resolution); a field whose name
   // arrives after it is built is named; a child with `exists` placed where its class
-  // places children — measured 136.3 KB, from 135.9 the build before.
+  // places children; a replicated row that reads its own record between a structural
+  // change and the settle that re-points it; a drawing's raster placed on whole
+  // pixels, so an arc can be bounded by the sweep it draws — measured 136.8 KB, from
+  // 135.9 the build before.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
   assert.ok(wire > 20 * 1024 && wire < 137 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +

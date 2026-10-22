@@ -18,9 +18,9 @@ script {
     // a spike as the screen shows it: its line, and its tip
     type SpikeSeen = { line: number[], tip: Tip }
 
-    // What each of the screen's sixteen colors is for. A picture names its colors by these,
-    // and where the arcade runs through the colors (a rainbow, a flash), it takes the first
-    // seven in turn.
+    // The roles the screen's colors are given. A picture names its colors by these, and where
+    // the arcade runs through the colors (a rainbow, a flash), it takes the first seven in
+    // turn.
     const ROLES = ["white", "claw", "tanker", "flipper", "pulsar", "text", "well", "level", "shots", "splatA", "splatB", "splatC", "nymph"]
 
     }
@@ -102,9 +102,10 @@ class Scene extends Node [
     sparks: number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],    // a shot spike's sparkle (1 or 2), per lane
     flashFrom: number = 0,              // where in the colors the spokes start this frame, while a new life flashes
 
-    // The player's death is a sequence of pictures (splats growing and shrinking, then
-    // shrapnel for a pulsar or a spike, or a burst for a fuseball), each held a few frames;
-    // the splats also turn three colors round.
+    // The player's death is a sequence of pictures, each held a few frames, which each kind of
+    // death enters at its own place (advance) and runs on to the end: a shot from the splats
+    // growing and shrinking, a pulsar or a spike from the shrapnel, a fuseball from the burst.
+    // The splats also turn three colors round.
 
     deathStep: number = 0,              // where in the sequence
     deathTimer: number = 0,             // frames left of this step
@@ -229,12 +230,13 @@ class Scene extends Node [
 
     // ── colors ──
 
-    // Every sixteen waves bring the next set of colors (the themes above).
+    // the wave's set of colors (the themes above)
 
     waveColors: Theme[] = { [Waves1to16, Waves17to32, Waves33to48, Waves49to64, Waves65to80, Waves81to99] },
 
-    // each role's color now, as 0xRRGGBB: the wave's, but the player's shots warm as they run
-    // out (yellow, then blue, then red), and the death's splats turn three colors round
+    // each role's color now, as 0xRRGGBB: the wave's, but the player's shots change color as
+    // they run out (yellow, blue from six in flight, red at all eight), and the death's splats
+    // turn three colors round
 
     palette: Record<string, number> = { this.paletteNow(game.waveIndex, game.shotsFlying, colorsReloaded, colorSwaps) },
     paletteNow(wave: number, shots: number, reloaded: boolean, swaps: number[]) -> Record<string, number> {
@@ -248,7 +250,8 @@ class Scene extends Node [
 
     roleAt(n: number) -> string { return n == 7 ? "flipper" : ROLES[n] },
 
-    // a rim's sixteen points, as last worked out (the far one at 240, the near one)
+    // a rim's sixteen points, as last worked out: the far rim for depth 240, the near rim for
+    // any other
 
     rim(depth: number) -> number[][] { return this.filled(depth == FAR ? farRim : nearRim) },
     filled(points: number[][]) -> number[][] { return points.length == 16 ? points : new Array(16).fill([0, 0]) },
@@ -256,8 +259,8 @@ class Scene extends Node [
     // ── the well ──
 
     // The spokes, two at a time, far end to rim and back, then the far rim and the near one. A
-    // spoke beside the claw is yellow; one a pulsing pulsar touches flickers; a rim's edge
-    // where a pulsar sits is not drawn.
+    // spoke beside the claw is drawn in the claw's color; one a pulsing pulsar touches
+    // flickers; the near rim's edge where a pulsar sits is not drawn.
 
     wellLines() -> Trace[] {
         if (farGone != 0 || shows != "play") return []

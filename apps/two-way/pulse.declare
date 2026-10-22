@@ -25,8 +25,8 @@ class Bar [ i: number = 0,
 
 App [ width = 340, height = 220, fill = #14181D,
 
-    // Imported fact: the page writes it. Nothing in this app changes hue —
-    // ownership stays clear even without the bridge's referee, by discipline.
+    // Imported fact: the page writes it. Nothing in this app changes hue, so
+    // ownership stays clear by discipline: no island enforces it here.
 
     hue: number = 210,
 
@@ -34,9 +34,8 @@ App [ width = 340, height = 220, fill = #14181D,
 
     beats: number = 0,
 
-    // Same helper as dial.declare. Programs are separate compilation worlds —
-    // the twin lives there on purpose; sharing would need an include, and two
-    // dozen characters don't earn one.
+    // Same helper as dial.declare. Each program compiles on its own, and an
+    // include for one small function costs more than the copy.
 
     hueColor(h: number, s: number, l: number) -> number {
         const f = (n) => {
@@ -57,10 +56,8 @@ App [ width = 340, height = 220, fill = #14181D,
         textColor = #E7EEF2, fontSize = 15, fontWeight = semibold,
         text = { app.beats + (app.beats == 1 ? " beat" : " beats") } ],
 
-    // Eight bars, every one a pure function of the two facts above: color
-    // from `hue` (written by the page), height from `beats` (written by the
-    // click below). Either write lands, the whole row re-derives — the same
-    // update model whichever side of the boundary the write came from.
+    // A write from the page and a click in here re-derive the row the same
+    // way: the update model does not care which side of the boundary wrote.
 
     row: View [ x = 24, y = 60, width = { parent.width - 48 }, height = 120,
         layout: SimpleLayout [ axis = x, spacing = 10 ],

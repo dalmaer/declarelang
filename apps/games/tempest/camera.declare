@@ -16,10 +16,11 @@ lands on the very pixel it does on the arcade. A thing's size at its depth comes
 division.
 
 **Lines are drawn as the arcade's beam travels.** The beam goes from point to point, and each
-leg lands on a grid of its own: a leg of more than 2048 units goes in steps of 8, one under
-1024 in steps of 4, and so on down. A line's end is where its legs added up, which can be a few
-pixels from where its point is: so the well, the spikes and the nymphs are worked out leg by
-leg (`legs`). The pictures (pictures.json) were traced the same way when they were made.
+leg lands on a grid of its own: a leg of 2048 units or more goes in steps of 8, one of 1024 to
+2047 in steps of 4, one of 512 to 1023 in steps of 2, and so on down. A line's end is where its
+legs added up, which can be a few pixels from where its point is: so the well, the spikes and
+the nymphs are worked out leg by leg (`legs`). The pictures (pictures.json) were traced the
+same way when they were made.
 
 */
 
@@ -116,7 +117,7 @@ script {
         }
     }
 
-// a picture from pictures.json (see the port's tools/make-pictures.mjs)
+// a picture from pictures.json, traced from the arcade's vector ROM
 
 schema PictureStroke [ c?: string, i?: number, p[]: number ]
 schema PictureArt [ strokes[]: PictureStroke, end[]: number ]
@@ -303,8 +304,7 @@ class Camera extends Node [
 
     // ── pictures ──
 
-    // A picture's strokes at a size, in its color and brightness unless it sets its own, from
-    // a point (ox, oy) of the view drawing it.
+    // a picture by name (tracePicture)
 
     trace(name: string, size: number, ink: string, bright: number, ox: number, oy: number) -> Trace[] {
         return tracePicture(pictures[name], size, ink, bright, ox, oy)

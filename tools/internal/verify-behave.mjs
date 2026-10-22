@@ -215,9 +215,18 @@ bootHost(cfg);
       // scroll out). It used to be a plain sum of ancestor x/y, so driving
       // anything below a scrolled pane's fold aimed at the position the view
       // would have had unscrolled, and missed.
+      // A point inside a view, in its own units, as seen: through every scale,
+      // rotation and scroll above it (a scaled figure's middle is not its
+      // origin plus half its unscaled size).
+      const pointIn = async (path, x, y) => {
+        const p = await page.evaluate((q, px, py) => window.__declare.rootPoint?.(q, px, py) ?? null, path, x, y);
+        if (p !== null) return p;
+        const n = await node(path);
+        return { x: n.rootX + x, y: n.rootY + y };
+      };
       const center = async (path) => {
         const n = await node(path);
-        return { x: n.rootX + n.width / 2, y: n.rootY + n.height / 2 };
+        return pointIn(path, n.width / 2, n.height / 2);
       };
 
       // Where a press on a view lands, as a person's would: a view below the fold
@@ -302,9 +311,9 @@ bootHost(cfg);
          *  is not a view of its own. Reached as `click` reaches the view. */
         async clickAt(path, x, y) {
           await reach(path);
-          const n = await node(path);
+          const p = await pointIn(path, x, y);
           step(`click ${path} at (${x}, ${y})`);
-          await page.mouse.click(n.rootX + x, n.rootY + y);
+          await page.mouse.click(p.x, p.y);
         },
         async drag(path, dx, dy = 0, steps = 10) {
           const c = await reach(path);

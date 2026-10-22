@@ -46,7 +46,7 @@ import { type Affine } from "./affine.js";
 import { type AttrType } from "./value.js";
 import { type BoundaryValues } from "./boundary.js";
 import type { Attr, LinkTarget } from "./parser.js";
-import type { Cursor } from "./data.js";
+import { type Cursor } from "./data.js";
 /** What a layout strategy is to the View — the whole protocol: begin
  *  arranging this view (get back the undo), and re-arrange when the CHILDREN
  *  THEMSELVES change (R8: replication inserts/removes/reorders — a strategy

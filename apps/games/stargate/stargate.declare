@@ -17,13 +17,14 @@ The shape to notice:
   next is its step, and each step is a method of its kind's rules, so a lander's life
   reads as cruise, seek, flee, drawIn, hunt (rules.declare, landers.declare).
 - **The arcade's own timing is kept apart.** How its processor fits the game's work into
-  each frame, and the leftovers in its memory that a few rules read, are clock.declare and memory.declare.
-  None of it is a rule of the game, but without it the game would not be the arcade's.
+  each frame, and the leftovers in its memory that a few rules read, are clock.declare and
+  memory.declare. None of it is a rule of the game, but without it the game would not be the arcade's.
 - **The screen follows the data.** Each part of the screen is a view class
   (screen.declare, panel.declare) drawn from the records; nothing in the views changes
   anything. The arcade's monitor redraws each half of the playfield while its beam is in the
-  other, so the top is a frame older than the bottom; the checks draw it so (`Monitor`), and
-  the game draws the whole playfield from the world as each frame ends.
+  other, so the top is a frame older than the bottom. `Monitor` (screen.declare) can draw it
+  that way, as the frame-by-frame comparison with MAME needs; in play the whole playfield is
+  drawn from the world as each frame ends.
 - **Places are pixels**, kept to the fractions of a pixel the arcade moves things by: across
   a planet 2,048 pixels round, and down the screen (game.declare says more).
 

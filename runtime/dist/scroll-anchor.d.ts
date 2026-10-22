@@ -13,5 +13,10 @@ export declare function heldAtEnd(s: View): boolean;
 export declare function readsAtEnd(s: View): boolean;
 /** A program request: to the far end, it is travelling — an end pane keeps
  *  following while it gets there (and a pane already there has arrived);
- *  anywhere else, it supersedes one still travelling (view.ts scrollTo). */
-export declare function noteScrollRequest(s: View, toEnd: boolean): void;
+ *  past the end of the content as it is now, it waits for the content to
+ *  reach it; anything later supersedes either (view.ts scrollTo). */
+export declare function noteScrollRequest(s: View, y: number): void;
+/** The reader has taken the pane: a request still waiting for its content is
+ *  let go (view.ts $scrollingChanged — at the moment the scroll starts, not at
+ *  the next look, by which time it may be over). */
+export declare function dropWaitingScroll(s: View): void;

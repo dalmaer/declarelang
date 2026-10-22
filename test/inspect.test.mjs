@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { test, summarize } from "./harness.mjs";
 import { compile } from "../compiler/dist/compile-node.js";
 import { parseProgram } from "../runtime/dist/parser.js";
-import { instantiate, settle, inspect, find, explain, stats, clock, pickAt } from "../runtime/dist/index.js";
+import { instantiate, settle, inspect, find, explain, stats, clock, pickAt, bridgeFor } from "../runtime/dist/index.js";
 import { applyDeps } from "../runtime/dist/deps.js";
 
 async function boot(src) {
@@ -286,6 +286,20 @@ await test("find: a path step names a view by its label, accessible name or text
   assert.equal(find(app, "app.box.Volume"), find(app, "app.box.v"), "a view by its accessible name");
   assert.equal(find(app, "app.box.Nothing"), null);
   assert.equal(find(app, "app.seg"), app.seg, "a member's name still comes first");
+});
+
+// A point inside a scaled view, in its own units, lands where it is seen: a
+// driver pressing "(x, y) inside this view" must go through the scale, not
+// add the unscaled offset to the view's origin.
+await test("rootPoint: a point in a view's own units, through the scale above it", async () => {
+  const app = await boot(`App [ width = 400, height = 300,
+    world: View [ x = 10, y = 20, width = 400, height = 300, scale = 0.5, pivotX = 0, pivotY = 0,
+        card: View [ x = 100, y = 60, width = 200, height = 100, onClick() { } ] ] ]`);
+  const b = bridgeFor(app);
+  const p = b.rootPoint("app.world.card", 100, 50);
+  assert.deepEqual([p.x, p.y], [10 + (100 + 100) * 0.5, 20 + (60 + 50) * 0.5], "through the scale");
+  assert.equal(b.at(p.x, p.y)?.path, "app.world.card", "and a press there reaches the card");
+  assert.equal(b.rootPoint("app.nothing", 0, 0), null, "no view, no point");
 });
 
 summarize("inspect");

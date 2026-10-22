@@ -29,6 +29,11 @@ export declare class Dataset extends Node {
      *  `:path`s and types `{ }` reads from it. */
     schema: DataShape | null;
     private readonly cursors;
+    /** Counts changes to the dataset's SHAPE — a record inserted, removed,
+     *  moved or replaced, or the whole value adopted. A replicated row's
+     *  positional cursor is current while this matches the count it was given
+     *  at (rowPlace): the cheap test that spares every ordinary read a check. */
+    $shape: number;
     /** The interned cursor for `path` — one object per distinct place, so a
      *  re-derived cursor is `===` the old one and the equality gate holds.
      *  The intern key joins on NUL, not "." — a key containing a dot must not
@@ -203,6 +208,17 @@ export declare class DataSource extends Dataset {
  *  underneath the tag. null/undefined mean "no cursor yet" (a source that
  *  has not loaded). */
 export declare function toCursor(v: unknown, context: string): Cursor | null;
+/** The replicator's half: `row` presents the record at `path` (or nothing). */
+export declare function noteRowRecord(row: object, data: Dataset, path: readonly string[]): void;
+/** Where a row's reads go: its cursor's path while that still holds its
+ *  record; the record's new place in the same array when it has moved; the
+ *  record itself when it has left the dataset (it reads as it last was, and
+ *  takes no writes) — until the settle re-points the row. */
+export declare function rowPlace(owner: object, cursor: Cursor): {
+    path: readonly string[];
+} | {
+    rec: object;
+};
 /** Coerce a data value into a typed attribute slot (the dynamic mode's
  *  boundary: no schema yet, so shape arrives at runtime). Unresolved (null)
  *  falls back to `def` — the slot's declared default, per the doc ("an

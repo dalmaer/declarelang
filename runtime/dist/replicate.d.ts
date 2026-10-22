@@ -3,7 +3,7 @@ import { Node } from "./node.js";
 import { View } from "./view.js";
 import { type PathSeg } from "./path-plan.js";
 import { type PathNode } from "./select.js";
-import type { Dataset } from "./data.js";
+import { type Dataset } from "./data.js";
 import type { WindowingFactory } from "./virtualize.js";
 /** What the Replicator needs from instantiate.ts (which imports this module;
  *  the interface keeps the dependency one-way): construct one instance of

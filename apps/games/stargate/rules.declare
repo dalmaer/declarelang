@@ -7,8 +7,7 @@ it is hit. Each kind's file fills these in.
 
 A turn does a little, then waits a number of passes; `rest` says how many, and the step
 it takes up again at. A step is the name of one of the rules' methods, which takes the
-turn and its thing, if it has one; a kind whose turns are not yet written that way says
-what to do itself.
+turn and its thing, if it has one (`turn` calls it).
 */
 
 class Rules extends Node [
@@ -27,8 +26,9 @@ class Rules extends Node [
 
     rest(t: Turn, passes: number, step: string) { t.wait = passes; t.step = step },
 
-    // … or go straight on at `step`, in the same pass, as the arcade's code runs on without
-    // sleeping: the time each step takes lets the screen be drawn between them.
+    // … or go straight on at `step` in the same pass, as the arcade's code runs on without
+    // sleeping; the clock still counts the step's time, so the screen can be drawn between
+    // the two.
 
     goOn(t: Turn, step: string) { t.step = step; game.clock.goesOn = true },
 

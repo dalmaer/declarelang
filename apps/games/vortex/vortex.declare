@@ -53,7 +53,7 @@ include [ "../touch-pad.declare" ]
 
 defaultFlags [ render = canvas, accessibility = false ]
 
-// numbers and lanes: functions of their arguments
+// helpers: plain functions of their arguments (numbers, lanes, angles, colors, the vector pen)
 
 script {
     type Kind = "flipper" | "tanker" | "spiker" | "fuseball" | "pulsar"
@@ -104,7 +104,7 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
     /* ## Color
        The level shown picks the colors (a new set every sixteen levels); the
        theme is the dark preset with that set laid over it. The App's own fill
-       is black, flashing toward the tube's color for the superzapper and a
+       is black, flashing toward the claw's color for the superzapper and a
        bonus life. */
 
     paletteFor(level: number) -> object { return [Blue, Red, Yellow, Cyan, Unseen, Green][mod(Math.floor((level - 1) / 16), 6)] },
@@ -516,7 +516,8 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
     /* ## The demo
        Now and then the attract screen plays a game itself: one life, a level
        from the first few, steered by a pilot that aims at whatever is nearest
-       the rim. It makes no sound, and Return takes over from it. */
+       the rim. It makes no sound, and Return ends it and opens "rate
+       yourself". */
 
     startDemo() { startGame(1 + 2 * rnd(4), 0, true) },
     endDemo() {
@@ -547,8 +548,8 @@ App [ appName = "Vortex", fontFamily = ["Menlo", "Consolas", "monospace"],
 
     /* ## The screen
        Declaration order is stacking order: the stars, the tube, the nymphs, the
-       spikes and lit lanes, the enemies, the shots, the claw, the blasts; then
-       the panel, the screens and the cards over all of it. */
+       lit lanes, the spikes, the enemies, the shots, the claw, the blasts; then
+       the panel, the screens, the cards and the touch pad over all of it. */
 
     stage: View [ width = 100%, height = 100%, clip = true,
         opacity = { app.mode == "attract" ? 0.5 : app.mode == "choose" ? 0.3 : 1 },

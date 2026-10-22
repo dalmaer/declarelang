@@ -4,7 +4,7 @@
 What the arcade's monitor shows, as views of the game's records: the well, the claw, each
 enemy, shot and explosion, the spikes, the nymphs and the stars while a game is played; the
 "rate yourself" page; the logo; the panel of scores and the arcade's lines of text. Each thing is
-a view of its record, drawn at its place and size in the well (scene.declare says where), with
+a view of its record, drawn at its place and size in the well (camera.declare says where), with
 the lines of figures.declare. Everything is placed in the arcade's own pixels, 580 across and
 570 down, and the monitor scales the whole picture to the window.
 */
@@ -112,8 +112,8 @@ class Explosion extends OnLane [
     ]
 
 
-// The player's death, at full size whatever its depth: its picture for this step of the
-// sequence (scene.declare), the shrapnel flying as it shrinks.
+// The player's death, at its own size rather than its depth's: its picture for this step of
+// the sequence (scene.declare), the shrapnel shrinking as it flies.
 
 class Death extends Figure [
     visible = :inPlay,
@@ -370,7 +370,7 @@ class Monitor [ clip = true,
     paused: boolean = false,
 
     // The arcade's lines of text: where each starts (in units of four from the center), the
-    // color it is drawn in, and whether it is large. The last is the port's own.
+    // color it is drawn in, and whether it is large. The last two are this program's own.
 
     messages: Record<string, MessageText> = { {
         gameOver: { text: "GAME OVER", x: -27, y: 86, color: "text" },

@@ -2632,19 +2632,29 @@ export class DomSurface {
         // one renderer whose drawn pixels live in a per-view canvas).
         const b0 = this.drawing.bounds;
         const pad = rasterPad(this.drawing);
-        const b = pad === 0 ? b0 : { x: b0.x - pad, y: b0.y - pad, w: b0.w + 2 * pad, h: b0.h + 2 * pad };
+        const bp = pad === 0 ? b0 : { x: b0.x - pad, y: b0.y - pad, w: b0.w + 2 * pad, h: b0.h + 2 * pad };
         const dpr = window.devicePixelRatio || 1;
         // pixelated (setScaling): one pixel per unit, whatever the scale it is seen at
         let kk = this.pixelated() ? 1 : k ?? this.composedScale * dpr;
         const cap = rasterEntryCap(Math.max(1, window.innerWidth * dpr) * Math.max(1, window.innerHeight * dpr) * 4);
-        const bytesAt = (q) => Math.ceil(b.w * q) * Math.ceil(b.h * q) * 4;
-        if (kk > dpr && (bytesAt(kk) > cap || Math.ceil(b.w * kk) > RASTER_MAX_DIM || Math.ceil(b.h * kk) > RASTER_MAX_DIM
-            || Math.ceil(b.w * kk) * Math.ceil(b.h * kk) > RASTER_MAX_AREA)) {
+        const bytesAt = (q) => Math.ceil(bp.w * q) * Math.ceil(bp.h * q) * 4;
+        if (kk > dpr && (bytesAt(kk) > cap || Math.ceil(bp.w * kk) > RASTER_MAX_DIM || Math.ceil(bp.h * kk) > RASTER_MAX_DIM
+            || Math.ceil(bp.w * kk) * Math.ceil(bp.h * kk) > RASTER_MAX_AREA)) {
             domRasterClamped++;
             kk = dpr; // over the cap: soft, as before, never absent
         }
-        const w = Math.max(1, Math.ceil(b.w * kk));
-        const h = Math.max(1, Math.ceil(b.h * kk));
+        // The box, grown out so its origin is a whole pixel of the view and its size
+        // whole pixels of the raster: the canvas then maps one to one onto its box,
+        // and a mark lands on the same pixel whatever box the drawing has. A box with
+        // a fractional edge had the canvas stretched to fit it, by an amount that
+        // changed with the box (so tightening a drawing's bounds moved what it drew),
+        // and a fractional origin is rounded by the browser under a scaled view.
+        // One raster pixel more on every side holds the antialiased edge of a mark
+        // that ends exactly on its box (a curve's tight box would cut it).
+        const x0 = Math.floor(bp.x - 1 / kk), y0 = Math.floor(bp.y - 1 / kk);
+        const w = Math.max(1, Math.ceil((bp.x + bp.w - x0) * kk + 1 - 1e-6));
+        const h = Math.max(1, Math.ceil((bp.y + bp.h - y0) * kk + 1 - 1e-6));
+        const b = { x: x0, y: y0, w: w / kk, h: h / kk };
         domRasterBytes -= this.rasterBytes;
         // A new size allocates a new backing store; the same size keeps it and resets the context
         // (assigning a canvas's size always reallocates, even the size it has). An engine without

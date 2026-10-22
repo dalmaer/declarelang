@@ -2,13 +2,13 @@
 # The live demos
 
 The homepage's numbered sections 02–04 each run a small Declare program beside
-its own source, and the source is editable. This file is everything that takes:
+its own source, and the source is editable. This file holds the pieces for that:
 an editable field, the panel around it, the frame the running program sits in,
-and the section that pairs them. It is this site's own machinery. Each demo is
-a program in `demos/`: the section reads its source like any file, for the
-editor, and runs it in an `AppIsland`. An edit is published on `app.liveCard` /
-`app.liveSource` for the host to recompile, which answers on `app.liveReport`
-when the edit does not compile.
+and the section that pairs them. Each demo is a program in `demos/`: the
+section reads its source like any file, for the editor, and runs it in an
+`AppIsland`. An edit is published on `app.liveCard` / `app.liveSource` for the
+host to recompile, which answers on `app.liveReport` when the edit does not
+compile.
 
 A `CodeField` is a native editable field seeded (uncontrolled, `initial`) from
 the demo’s source — it follows the source until you type, then holds the edit,
@@ -49,7 +49,8 @@ class SourcePanel [
     // the panel is its field, plus the chip row above it and a margin below —
     // and, while a broken edit has a report, that report's band: it lands
     // UNDER the code (its own y is parent.height − its height), never over the
-    // closing lines, because the page invites you to break the panel and read
+    // closing lines, because the page invites you to break the code and read
+    // what you broke
 
     height = { this.field.y + this.field.height + 8 + (this.err.visible ? this.err.height : 0) },
 

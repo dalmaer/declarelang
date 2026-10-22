@@ -4,7 +4,8 @@
 Text a measurer can get wrong: other scripts, right-to-left and mixed
 direction, emoji and their sequences, combining marks, and words too long for
 their line — each as one line in its measured box, as a wrapped paragraph, and
-as rich text. The ring is the box the runtime measured.
+as rich text. A ring, or a rule under a paragraph, marks the size the runtime
+measured.
 */
 
 

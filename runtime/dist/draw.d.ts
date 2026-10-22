@@ -363,10 +363,9 @@ export declare class Draw {
     beginPath(): void;
     moveTo(x: number, y: number): void;
     lineTo(x: number, y: number): void;
-    /** Bounds take the full circle's box — conservative for partial arcs,
-     *  exact for full ones. (The sweep's own box is tighter, but a raster is
-     *  placed by its box's rounded origin, so a tighter box moves an arc's
-     *  antialiased edge by a fraction of a pixel in every drawing that has one.) */
+    /** Bounds are the arc's own: its two ends, and each of the circle's four
+     *  extremes the sweep passes — a shallow arc of a large circle is a thin
+     *  box, not the circle's (a row of seats on a 900-unit radius). */
     arc(x: number, y: number, r: number, a0: number, a1: number, ccw?: boolean): void;
     /** The tangent arc's box is bounded by its two guide points (conservative:
      *  the curve stays within their span plus the corner it rounds). */

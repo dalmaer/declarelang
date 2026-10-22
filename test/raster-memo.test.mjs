@@ -121,7 +121,8 @@ await test("DOM per-view canvas covers the shadow bleed — a resting glow never
   // design (draw.ts), and the canvas backend's memo already overscans by
   // rasterPad — the DOM backend's retained canvas must too. Ink is a 40×40
   // rect at (30,30) with shadowBlur 28 → pad ceil(2.5·28) = 70: the box
-  // starts at −40 and spans 180, and the glow is PAINTED outside the ink box.
+  // starts at −41 and spans 182 (a pixel of edge on each side), and the glow
+  // is PAINTED outside the ink box.
   await page.goto(`${B}/test/probe/shadow-pad.declare`, { waitUntil: "networkidle0", timeout: 60000 });
   await page.waitForFunction(`window.__app != null`, { timeout: 30000 });
   await sleep(500);
@@ -137,9 +138,10 @@ await test("DOM per-view canvas covers the shadow bleed — a resting glow never
     return { left: st.left, top: st.top, w: st.width, h: st.height, alpha: a };
   })()`);
   assert.equal(probe.missing, undefined, "the drawn view's canvas exists");
-  assert.equal(probe.left, "-40px", "box starts pad left of the ink");
-  assert.equal(probe.top, "-40px", "…and pad above");
-  assert.equal(probe.w, "180px", "…and spans ink + 2·pad");
+  // and one raster pixel more on every side, for the antialiased edge
+  assert.equal(probe.left, "-41px", "box starts pad (and a pixel) left of the ink");
+  assert.equal(probe.top, "-41px", "…and above");
+  assert.equal(probe.w, "182px", "…and spans ink + 2·pad + a pixel each side");
   assert.ok(probe.alpha > 0, "the glow outside the ink box is painted, not clipped (alpha " + probe.alpha + ")");
 });
 

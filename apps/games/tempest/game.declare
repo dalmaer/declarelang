@@ -370,7 +370,7 @@ class Game extends Dataset [ schema = Playfield,
         },
 
     chooseSetup(field: Playfield) {
-        this.placeEye(byte(eyeDepth) - 256)             // (the arcade sets only the eye's whole depths above 256)
+        this.placeEye(byte(eyeDepth) - 256)             // (the arcade keeps the low byte of the eye's whole depth; the high byte becomes −1)
         field.claw.lane = 0; field.claw.position = 0; choice = 0
         choiceTick = 0
         let time = 0
@@ -548,8 +548,8 @@ class Game extends Dataset [ schema = Playfield,
         },
 
     // The logo page lasts 223 frames on the arcade, the word coming to rest for the last two
-    // seconds of them. The port holds it there longer, so the keys under it can be read; the
-    // conformance tests set the hold to nothing, as the arcade has it.
+    // seconds of them. This program holds it `logoHold` frames longer, so the keys listed
+    // under it can be read; a hold of 0 gives the arcade's timing.
 
     logoHold: number = 150,             // frames: about five and a half seconds
 
@@ -732,8 +732,9 @@ class Game extends Dataset [ schema = Playfield,
         },
 
     // One shot against every enemy shot and enemy within reach of its depth: a shot can take
-    // several at once. An enemy is hit on its own lane; one flipping, on the lane it is
-    // flipping over; one sitting exactly at the rim, not at all.
+    // several at once. An enemy is hit on its own lane, unless it sits exactly at the rim; one
+    // flipping, on either lane it is between, even at the rim; a fuseball only while it
+    // crosses from one spoke to the next, below the rim.
 
     hitsFor(field: Playfield, i: number) {
         const s = field.shots[i]
@@ -975,8 +976,9 @@ class Game extends Dataset [ schema = Playfield,
     // ── the wave's difficulty ──
 
     // The wave's record (past wave 98, one of waves 65 to 96 at random, each life). Speeds
-    // are kept as the arcade keeps them: a byte that counts eighths of a depth a frame, up
-    // the well; how near a shot must come to hit follows from the speed.
+    // are kept as the arcade keeps them: a byte, offset from 256, each step of which is a
+    // 32nd of a depth a frame, up the well; how near a shot must come to hit follows from the
+    // speed.
 
     setDifficulty() {
         let n = waveIndex

@@ -100,9 +100,10 @@ class Pilot extends Rules [ kinds = ["laser", "turn", "flame"],
         ship.nextPy = Math.floor(ship.y)
         },
 
-    // The ship is drawn with the band it was last drawn in, and that is when a turn round
-    // shows. Its flame is twelve pairs of pixels read from a table of random colors — five
-    // while the engine idles — from a place that moves on, so it flickers.
+    // The ship is redrawn when the band of the screen it was last drawn in is drawn, and only
+    // then does a turn round show. Its flame is twelve pairs of pixels read from a table of
+    // random colors — five while the engine idles — from a place that moves on, so it
+    // flickers.
 
     flame: number[] = [],
     flameAt: number = 0,

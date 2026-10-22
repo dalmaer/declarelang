@@ -1,14 +1,13 @@
 /*
 # Declare docs
 
-The Declare documentation, rendered as a Declare app — self-hosted: Declare
-documenting Declare. It loads `docs/declare-model.json` — the extractor's
-output (tools/internal/doc/extract.mjs), one walkable data structure — and
-renders three modes over it: the guide, chapter by chapter; the language, one
-page per form the grammar accepts; and the class reference, a page per
-class with its prose, members, and live examples. A left rail navigates
-the mode, a detail pane reads it, and every doc string is rendered by the
-runtime's own Markdown view.
+The Declare documentation, rendered as a Declare app — Declare documenting
+Declare. It loads `docs/declare-model.json`, one walkable data structure, and
+renders four modes over it: the guide, chapter by chapter; the language, one
+page per form the grammar accepts; the types, one page per named vocabulary a
+signature prints; and the class reference, a page per class with its prose,
+members, and live examples. A left rail navigates the mode, a detail pane
+reads it, and every doc string is rendered by the runtime's own Markdown view.
 
 `{ }` bodies are TypeScript → `0x…` colors and expressions; `[ ]` literal
 attributes take `#…` / named colors. Every color reads `theme.<token>` — one
@@ -72,13 +71,12 @@ class FoldHead extends Control [ width = 100%, height = 28, cornerRadius = 6, cu
     open:     boolean = { (classroot.shut && classroot.shutAt == app.page) ? false
         : classroot.opened || classroot.contains },
 
-    // ONCE OPEN, IT STAYS OPEN. A group the rail opened because it held the page
-    // latches here, so navigating out of it does not fold it back up under the
-    // reader — without this the rail still jumps on every click, just by one
-    // group instead of all of them. Only a click closes anything.
+    // Once open, it stays open: a group the rail opened because it held the page
+    // latches here, so navigating out of it does not fold it up under the
+    // reader. Only a click closes anything.
     // (`onInit` as well as `onChange`: the group holding the page the reader
-    // LANDED on has `contains` true from construction, and a value that starts
-    // true never changes, so no change event would ever latch it.)
+    // landed on has `contains` true from construction, and a value that starts
+    // true never changes, so no change event would latch it.)
 
     trackChanges = ["contains"],
     onInit() { if (contains) opened = true },
@@ -192,7 +190,7 @@ link. `app.typeLoc` answers where a printed type is documented — by name
 (`Color`, `Motion`, and every class), or by the TOKEN LIST a named enum prints
 as (`left | center | right` is `TextAlign`), which is the spelling the reference
 shows and so the spelling matched. A type with no page answers `""` and renders
-exactly as it did: the same face, the same tint, no cursor and no link.
+as plain signature text: no cursor and no link.
 
 `SigRun` is the same answer for a whole signature — `onKeyDown(e: KeyEvent)`,
 `set(path: string, v: unknown): void` — split into runs, each identifier that
@@ -372,7 +370,7 @@ class AttrRow [ width = 100%,
     longType: boolean = { ("" + :type).length > 56 },
 
     // the printed type's own page, when it has one — a name, or a named enum's
-    // token list. "" (no page) leaves the run exactly as it renders today.
+    // token list. "" (no page) leaves the type unlinked.
 
     typeTo: string = { app.typeLoc("" + :type) },
     layout: SimpleLayout [ axis = y, spacing = 6 ],
@@ -552,11 +550,10 @@ class DocField extends TextInput [ multiline = true, spellcheck = false, wrap = 
     editName: string = "",
     src: string = "",
 
-    // Seed the field from the demo source once the subtree exists. (TextInput's
-    // `initial` yielding-seed can't be used here: its attach-time guard fires
-    // before this field's datapath-sourced `src` constraint is bound, so the seed
-    // is skipped. An `onInit` write lands after the model has resolved `src`, and —
-    // being an author write, not a constraint — leaves the field freely editable.)
+    // Seed the field from the demo source once the subtree exists. `initial`
+    // would seed before the datapath has resolved `src`; an `onInit` write lands
+    // after it, and — an author write, not a constraint — leaves the field
+    // freely editable.
 
     onInit() { text = src },
     onInput() { app.liveCard = editName; app.liveSource = text }
@@ -649,10 +646,6 @@ class Example [ width = 100%,
 
     stage: View [ width = 100%, height = { classroot.estage + 52 }, fill = { provided("theme").chipBg },
 
-        // the app's own card, inset in the tinted box exactly as the code field
-        // above it is — and the app sits inset again inside the card, so its
-        // content has the same breathing room the code has
-
         card: View [ x = 18, y = 14, width = { parent.width - 30 }, height = { parent.height - 28 },
             cornerRadius = 8, fill = { provided("theme").surface },
             run: AppIsland [ x = 12, y = 12, width = { parent.width - 24 }, height = { parent.height - 24 },
@@ -662,9 +655,8 @@ class Example [ width = 100%,
                 ]
             ],
 
-        // a blue rule (a darker shade of the chipBg box tint) divides the code above from the
-        // running app below; the gold spine (drawn OVER both) continues the code's gold left bar
-        // down the preview, same x/width
+        // a rule divides the code above from the running app below; the amber
+        // spine, drawn over both, carries the code's left bar down the preview
 
         divider: View [ x = 0, y = 0, width = 100%, height = 2, fill = { provided("theme").rule } ],
         spine:   View [ x = 0, y = 0, width = 3, height = 100%, fill = { provided("theme").live } ]
@@ -701,9 +693,9 @@ class RunIsland [ width = 100%,
     // same code-box grammar as a static block (chipBg tint, 8px radius, 13px face),
     // marked live/editable by the amber bar + label (a read-only block is teal).
 
-    // height: measured 15px/line at the 13px code face, plus the field's ~20px
-    // padding and the 46+8 header/footer chrome — so the code fits without an
-    // inner scrollbar up to the cap
+    // height: 15px per line at the 13px code face, plus the field's padding and
+    // the 46+8 header/footer chrome — so the code fits without an inner
+    // scrollbar up to the cap
 
     editor: View [ width = 100%, fill = { provided("theme").chipBg },
         height = { Math.min(classroot.rlines * 15 * app.fontScale + 93, 900) },
@@ -1252,9 +1244,10 @@ class TypeDetail [ width = 100%,
 
 The mode switch, the chapter rail, and a chapter page. The doc app is two
 tabs over one model: a narrative GUIDE and the REFERENCE (the language forms,
-then the classes). `app.mode` picks which; each keeps its own selection
-(`app.chapter` / `app.selected` / `app.form`) so switching back lands where you
-left. Both rails are folds: a group opens when it holds the current page.
+the types, then the classes). `app.mode` picks the page kind; each mode keeps
+its own selection (`app.chapter` / `app.selected` / `app.form` / `app.tname`)
+so switching back lands where you left. Both rails are folds: a group opens
+when it holds the current page.
 
 Nav chrome does not ride `app.fontScale`: the text-size switch is a reading-comfort
 control for the content pane; the rail keeps its designed sizes.
@@ -1302,16 +1295,12 @@ class ChapterDetail [ width = 100%,
     layout: SimpleLayout [ axis = y, spacing = 20 ],
     padding = [0, 0, 80, 0],
 
-    // The chapter's content is its own file (chapters/<id>.json — the
-    // extractor's per-chapter projection), fetched when visibility requires
-    // it, not at construction — an eager prefetch would make every boot, and
-    // every crawl location, pay the whole corpus. `wanted` is a latch: the
-    // page being on screen asks for the file, and `loaded` holds the url
-    // steady afterward, so a chapter stays resident once landed — switches
-    // are instant on return, and nothing ever refetches. A boot costs the
-    // model plus exactly one chapter; the other shells stay empty until
-    // walked to. The crawl pulls only the location's own chapter through its
-    // data resolver; a missing one still fails the build loudly.
+    // The chapter's content is its own file (chapters/<id>.json), fetched when
+    // the page is first shown, not at construction — an eager prefetch would
+    // make every boot pay the whole corpus. `wanted` is a latch: the page being
+    // on screen asks for the file, and `loaded` holds the url steady afterward,
+    // so a chapter stays resident once landed and is instant on return. A boot
+    // costs the model plus exactly one chapter.
 
     wanted: boolean = { classroot.pageLive || classroot.src.loaded },
     src: DataSource [ auto = true,
@@ -1321,7 +1310,7 @@ class ChapterDetail [ width = 100%,
     failed:  Text [ visible = { classroot.src.failed }, fontSize = { 14 * app.fontScale }, textColor = { provided("theme").textMuted }, wrap = true, width = 100%,
         text = { "The chapter did not load — " + (classroot.src.error || "") } ],
 
-    // the guide is the primary reading surface: brighter body, looser leading (Block defaults)
+    // the guide is the primary reading surface: Block's default, brighter body tone
 
     content: View [ width = 100%, visible = { classroot.src.loaded }, datapath = { classroot.src.value },
         layout: SimpleLayout [ axis = y, spacing = 20 ],
@@ -1346,10 +1335,9 @@ snippet arrives pre-built from `findDocs` (the match window is computed once
 per query there, not per row render). Click navigates: a result is a location
 write, so it deep-links and back-buttons like any rail tab.
 
-Every row is a focus stop — ↓ from the search field walks into the list (the
-field genuinely loses focus; the house FocusRing rides the selection), ↓/↑
-walk rows, ↑ off the top hands focus back to the field, Return opens the
-focused row, Escape clears the search. `app.searchSel` mirrors the focused
+Every row is a focus stop — ↓ from the search field moves focus into the
+list, ↓/↑ walk rows, ↑ off the top hands focus back to the field, Return opens
+the focused row, Escape clears the search. `app.searchSel` mirrors the focused
 index (onFocus writes it) so the selection highlight and the field's ↓ have
 one fact to read.
 */
@@ -1408,23 +1396,23 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
        this app's own: `<mode>/<cursor>[@heading]` (`guide/04-structure`,
        `reference/Slider`, `guide/04-structure@where-things-go`). The declared initial is the
        default, so a fresh `docs.declare` shows the first guide chapter with a clean
-       URL. mode/chapter/selected derive from it and are never assigned — every
+       URL. The mode and every cursor derive from it and are never assigned — every
        tab and link writes `location`, back/forward writes it back, state follows
        (the single-writer rule; assigning derived state would disconnect history). */
 
     location = "guide/01-what-declare-is",
 
-    /* Cross-mode memory (not a language feature — three plain remembered cursors).
-       `location` only carries the active mode's cursor, so switching guide↔reference
-       would forget the other side. The navigation verbs keep these in step and the
-       mode switch consults them, so returning to a mode lands where you left it. */
+    /* Cross-mode memory (not a language feature — four plain remembered cursors).
+       `location` only carries the active mode's cursor, so switching modes would
+       forget the others. The navigation verbs keep these in step and the mode
+       switch consults them, so returning to a mode lands where you left it. */
 
     guideAt: string = "01-what-declare-is",              // last guide chapter visited …
     refAt:   string = "View",                  // … and last reference class
     formAt:  string = "",                      // … and last language form ("" = the index)
     typeAt:  string = "Color",                 // … and last type page
 
-    // The three navigation verbs every tab, chip and link calls: remember the
+    // The four navigation verbs every tab, chip and link calls: remember the
     // cursor for its mode, write the location, start the new page at its top.
     // A view that calls one also declares the same reference as its `link`,
     // so the crawler sees the edge and ⌘-click works; the handler runs first,
@@ -1485,8 +1473,8 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
        documents it (a type page, or a class page for a class type), plus
        the token-list spelling a named enum prints as. One lookup answers for
        every signature the reference renders, and a name the index does not
-       carry answers "" — which is what keeps an unlinkable type rendering
-       exactly as it always did instead of becoming a dead link. */
+       carry answers "", so an unlinkable type renders as plain text, never as
+       a dead link. */
 
     tindex: object = { app.docs.read(["types", "index"]) || ({}) },
 
@@ -1500,8 +1488,8 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     // a whole signature, split into runs: each identifier that names a page
     // carries its location, everything between them carries "". A signature
-    // that resolves whole (an attribute's type) stays one run, so nothing about
-    // its rendering changes.
+    // that resolves whole (an attribute's type, or an enum's token list) stays
+    // one run, linked as a whole.
 
     typeParts(s: string) -> array {
         const text = "" + s
@@ -1522,12 +1510,12 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     /* ## Search
        The header pill searches the whole corpus — guide and reference — over
-       `search-index.json`, the extractor's flat plain-text projection (one
-       entry per chapter and per documented member). The index is fetched on
-       the first keystroke, never at boot (the demand-loading contract), and
-       `loaded` latches the url so it stays resident. `searchHits` derives
-       from the query — typing is searching — and the overlay shows while the
-       query is non-empty. A result click is a location write. */
+       `search-index.json`, a flat plain-text index (one entry per chapter and
+       per documented member). The index is fetched on the first keystroke,
+       never at boot, and `loaded` latches the url so it stays resident.
+       `searchHits` derives from the query — typing is searching — and the
+       results page replaces the reading column while the query is non-empty.
+       A result click is a location write. */
 
     searchQ: string = "",
     searchSel: number = -1,                    // the focused result row (-1 = the field itself holds focus)
@@ -1618,8 +1606,8 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         },
 
     // A result opens like a rail tab: location write + cursor memory + scroll
-    // to top, then the overlay closes (clearing the field directly — the
-    // uncontrolled TextInput reset, the tracker's omnibox idiom).
+    // to top, then the search clears. The field is uncontrolled, so clearing
+    // `searchQ` alone would leave the typed text; dismissSearch resets it too.
 
     openResult(loc: string) {
         const mode = loc.split("/")[0], cursor = loc.split("/")[1]
@@ -1655,8 +1643,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     darkUI: boolean = { themeMode == "dark" || (themeMode == "auto" && app.dark) },
 
-    // the rail is fixed-width chrome: its type does not ride the reading zoom,
-    // and the chapter slugs are short by design, so 236 sits snug around them
+    // the rail is fixed-width chrome, sized snug around the short chapter titles
 
     railW: number = 236,
     liveCard: string = "",                     // the demo an inline editor is republishing (name) …
@@ -1700,12 +1687,6 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
     datapath = { docs.value },                 // root every :path below into the model
     onInit() { this.docs.fetch() },            // DataSource is explicit-fetch — kick it once, on construction
 
-    /* The `declare-docs:` resolver — this app's packaging of the one symbolic
-       link scheme (tools/internal/doc/links.mjs is the registry; the gate keeps
-       every target real). Guide and reference IDs navigate in-app; the rest
-       resolve by the same mechanical id→path rule the registry generates them
-       with, and leave through `navigate`. An ordinary href just navigates. */
-
     // A page switch starts at the top of the new page — the detail pane keeps its
     // scroll offset otherwise. The reveal target is a zero-size anchor at the pane's
     // very top, not the column: the column sits 40px into the pane, so aligning its
@@ -1714,10 +1695,10 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
 
     showPage() { this.detail.top.scrollIntoView() },
 
-    // An in-app doc link is a location write — it navigates the app exactly like
-    // a rail tab, so it deep-links, shares, and back-buttons. It also keeps the
-    // remembered cursor in step (like the tabs). External schemes still leave
-    // through `navigate`.
+    // The `declare-docs:` link scheme. An in-app id (guide, reference, language,
+    // type) is a location write — it navigates exactly like a rail tab, so it
+    // deep-links, shares, and back-buttons, and keeps the remembered cursor in
+    // step. Every other id, and any ordinary href, leaves through `navigate`.
 
     openDocLink(href: string) {
         if (!href.startsWith("declare-docs:")) { app.navigate(href); return }
@@ -1747,7 +1728,7 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
         },
 
     /* ## The chrome bar
-       The house header — Viewer's and Tracker's bar, on this app: brand at 20
+       The house header — Viewer's and Tracker's bar, on this app: brand at 18
        (gradient "Declare", solid "Docs"), the search pill centered, and the
        type-size stepper + theme switch on the right. */
 
@@ -1812,9 +1793,9 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
             input(v: object) { app.fontScale = v as number }
             ],
 
-        // the theme switch — light · follow the system · dark. Selection is one
-        // App attribute (`themeMode`); the theme record derives from it, so the
-        // whole app (and every island's chrome) reskins from this row.
+        // the theme switch. Selection is one App attribute (`themeMode`); the
+        // theme record derives from it, so the whole app (and every island's
+        // chrome) reskins from this one control.
 
         // light / dark: shows the appearance in force, a press flips it; until
         // then `themeMode` stays "auto" and the OS decides
@@ -1841,9 +1822,9 @@ App [ fill = { provided("theme").background }, appName = "Declare Docs",
             // location and the value comes back round — the single source of
             // truth the location comment above asks for.
 
-            // Two tabs. The language pages are a third mode (their own locations,
-            // `language/<form>`) but not a third tab: they live at the top of the
-            // reference rail, so the Reference tab lights for both.
+            // Two tabs, four modes: the language and type pages have their own
+            // locations (`language/<form>`, `type/<Name>`) but live in the
+            // reference rail, so the Reference tab lights for them too.
 
             modes: TabBar [ width = 100%, height = 30,
                 value = { app.mode == "guide" ? "guide" : "reference" },

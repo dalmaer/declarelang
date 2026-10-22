@@ -1041,6 +1041,52 @@ await test(`scrollAnchor = end (virtualize = ${policy}): a program scroll away f
 });
 }
 
+// A request past the end of content still to come waits for it: the pane goes
+// as far as it can, follows the content as it arrives, and stops at the
+// offset asked for. The reader's own scroll lets a waiting request go.
+for (const policy of ["false", "true"]) {
+await test(`scrollTo past the end (virtualize = ${policy}): held until the content reaches it`, async () => {
+  const src = `App [ width = 400, height = 400,
+    d: Dataset { { "rows": [] } },
+    sc: View [ scrolls = y, width = 300, height = 300,
+      content: View [ width = 300, datapath = { d.value },
+        layout: SimpleLayout [ axis = y ],
+        View [ datapath = :rows[], virtualize = ${policy}, width = 300, height = 30 ] ] ] ]`;
+  const r = await compile(src);
+  assert.deepEqual(r.errors.map((e) => e.message), [], "fixture compiles");
+  const app = buildProgram(r.program);
+  app.$attach(new HeadlessBackend(), null);
+  app.d.value = { rows: rows(20) };              // 600 px: room for 300 of scroll
+  for (let i = 0; i < 4; i++) settle();
+  app.sc.scrollTo(1500);
+  for (let i = 0; i < 4; i++) settle();
+  // (the clamp to the range there is now is the renderer's: this backend has none)
+  app.d.value = { rows: rows(40) };              // 1200 px: 900
+  for (let i = 0; i < 6; i++) settle();
+  assert.ok(Math.abs(app.sc.scrollY - 900) < 1, `follows the content: ${app.sc.scrollY}`);
+  app.d.value = { rows: rows(200) };             // 6000 px: past the request
+  for (let i = 0; i < 6; i++) settle();
+  assert.ok(Math.abs(app.sc.scrollY - 1500) < 1, `arrives where it was sent: ${app.sc.scrollY}`);
+  app.d.value = { rows: rows(400) };             // growth after arriving moves nothing
+  for (let i = 0; i < 6; i++) settle();
+  assert.ok(Math.abs(app.sc.scrollY - 1500) < 1, `stays once there: ${app.sc.scrollY}`);
+
+  const b = buildProgram((await compile(src)).program);
+  b.$attach(new HeadlessBackend(), null);
+  b.d.value = { rows: rows(20) };
+  for (let i = 0; i < 4; i++) settle();
+  b.sc.scrollTo(1500);
+  for (let i = 0; i < 4; i++) settle();
+  b.sc.$scrollingChanged(true);                  // the reader takes the pane
+  b.sc.scrollY = 120;
+  b.sc.$scrollingChanged(false);
+  for (let i = 0; i < 4; i++) settle();
+  b.d.value = { rows: rows(200) };
+  for (let i = 0; i < 6; i++) settle();
+  assert.ok(Math.abs(b.sc.scrollY - 120) < 1, `the reader's scroll let the request go: ${b.sc.scrollY}`);
+});
+}
+
 // An end pane opens at its end, and its reader stays there while the rows
 // measure: rows far taller than the list's first estimate grow its extent
 // several times over, and the offset the pane held a moment ago then points

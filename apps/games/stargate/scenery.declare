@@ -2,7 +2,7 @@
 ## The scenery
 
 The planet's ground, the stars behind it, the volcano, and the scanner that shows the
-whole planet at an eighth of the size.
+whole planet in miniature.
 */
 
 schema SmallGround [ row: number, top: number, bottom: number ]      // a row, and the inks of two pairs of pixels
@@ -12,7 +12,7 @@ class Scenery extends Rules [ kinds = ["scanner"],
     // ── the ground ──
 
     // The planet's ground, 2048 pixels round: its row at each pixel (art/ground.json, from the
-    // arcade's own table; reference/tools/export-ground.mjs), and the scanner's small ground —
+    // arcade's own table), and the scanner's small ground —
     // for each 32 pixels round the planet, the scanner's row and the inks of two pairs of
     // pixels, one under the other.
 
@@ -113,12 +113,12 @@ class Scenery extends Rules [ kinds = ["scanner"],
     // ── the scanner ──
 
     // The scanner's round of eight passes: far things move and come near, near things go
-    // far and spent shots are cleared, then the whole planet is drawn at an eighth of the
-    // size — each thing as four pixels, the ship as a cross, and a small ground. Every
-    // fifth time, with five enemies or fewer left, the enemies show white; the count of
-    // five starts from what the turn's place was left holding. The marks are all rubbed out
-    // and the ground drawn first; then the marks go on, so a picture taken between shows
-    // the ground alone.
+    // far and spent shots are cleared, then the whole planet is drawn small (an eighth of
+    // its height, a sixteenth of its width) — each thing as four pixels, the ship as a
+    // cross, and a small ground. Every fifth time, with five enemies or fewer left, the
+    // enemies show white; the count of five starts from what the turn's place was left
+    // holding. The marks are all rubbed out and the ground drawn first; then the marks go
+    // on, so a picture taken between shows the ground alone.
 
     far(t: Turn) { game.bringNear(); this.rest(t, 2, "near") },
     near(t: Turn) { game.sendFar(); game.shooters.clearSpent(); this.rest(t, 2, "show") },

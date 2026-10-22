@@ -19,6 +19,8 @@ The shape to notice:
   memory of the scene (scene.declare: what the screen remembers from frame to frame). The
   pictures, traced from the arcade's vector ROM, are pictures.json.
   The monitor works in the arcade's pixels and is scaled to the window.
+- **The sounds are recordings.** sound.declare plays clips recorded from MAME's emulation of
+  the arcade's two POKEY chips, as the game's records of each frame start them.
 
 Keys: ← → or A S turn, Space or Return fire, ↓, Z or / superzapper, Return or 1 start, Escape pause,
 C the panel that sets how the beam looks.
@@ -136,16 +138,15 @@ App [ appName = "Tempest", fill = black,
     // length has gathered.
 
     // The machine powers on at the first tick after the data has arrived, not when the App is
-    // built: the conformance tests (the port's tests/check.mjs) set up the machine to replay a
-    // recording, which stops the clock, set `started` themselves and power it on, and every
-    // frame after that is theirs to step.
+    // built, so a test replaying a recording can set the machine up first (which stops the
+    // clock), power it on itself (setting `started`) and step every frame.
 
     started: boolean = false,
     clock: Time [ tick = frame, running = { app.ready && !app.paused && !app.machine.replaying },
         banked: number = 0,
         onTick(dt: number) {
             if (!app.started) { app.game.powerOn(); app.started = true }
-            banked = Math.min(banked + dt, 0.15)
+            banked = Math.min(banked + dt, 0.15)       // after a stall, catch up at most about four frames
             while (banked >= app.machine.frameTicks * app.machine.tick) {
                 banked = banked - app.machine.frameTicks * app.machine.tick
                 app.game.step(app.takeControls())

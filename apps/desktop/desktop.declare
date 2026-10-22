@@ -295,16 +295,9 @@ class DeskWindow extends Window [ width = 560, height = 400,
 
     closing: boolean = false,
 
-    // which record is closing, taken as the close begins: when two windows
-    // close together, the first one's removal moves this window's record,
-    // and until the list settles `recId` cannot read it
-
-    closingId: string = "",
-
     beginClose() {
         if (closing) return
         closing = true
-        closingId = recId
         if (bornFrom != null) {
             let ox = bornFrom.width / 2
             let oy = bornFrom.height / 2
@@ -2415,6 +2408,7 @@ class WinManager extends Node [
     quitApp(a: DesktopApp) {
         const doomed = this.windows().filter((w) => this.appOf(w) == a)
         for (const w of doomed) this.closeWin(w)
+        a.launching = false                      // an app still launching never opens
         a.running = false
         },
 
@@ -2497,9 +2491,8 @@ class WinManager extends Node [
         // app — `plain` is the discriminator, so closing "About Markdown" never
         // decrements the viewer count
         if (!w.plain && w.forApp != null) w.forApp.count = w.forApp.count - 1
-        const id = w.closingId != "" ? w.closingId : w.recId
-        if (frontId == id) frontId = ""
-        this.removeWin(id)                       // the record goes; replication discards the window
+        if (frontId == w.recId) frontId = ""
+        this.removeWin(w.recId)                       // the record goes; replication discards the window
         },
 
     // seatedness for a tile's badge: the window's visual width equals the
@@ -2580,13 +2573,15 @@ class Launcher extends Node [
     // not launching) is a launch: the dock icon bounces and the window
     // appears mid-second-bounce, the way a fast-launching app feels; later
     // opens are instant. State moves inside the deferred step, so the running
-    // dot appears when the app has launched, not at the click, and the
-    // mid-launch flag guards a double-click during the bounce.
+    // dot appears when the app has launched, not at the click; the mid-launch
+    // flag guards a double-click during the bounce, and a Quit during it
+    // clears the flag, which calls the launch off.
 
     gated(a: DesktopApp, body: () -> void) {
         const first = !a.running && !a.launching
         if (first) a.launching = true
         const go = () => {
+            if (first && !a.launching) return    // quit while it launched: the launch is called off
             a.launching = false
             a.running = true
             a.count = a.count + 1

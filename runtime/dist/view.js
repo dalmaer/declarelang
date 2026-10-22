@@ -28,7 +28,7 @@ export const ROLE_LOCK = (v) => {
 import { backdropEqual, fillEqual, filterList, filtersEqual, insetIsZero, insetLead, insetSides, isMaskGradient, shadowEqual, strokeEqual } from "./value.js";
 import { PINCH_TYPES, POINTER_TYPES, TOUCH_TYPES, allowedRef } from "./backend.js";
 import { Tooltips } from "./tooltips.js";
-import { installScrollAnchor, noteScrollRequest } from "./scroll-anchor.js";
+import { installScrollAnchor, noteScrollRequest, dropWaitingScroll } from "./scroll-anchor.js";
 import { dragMoved, dragEnded } from "./drag-autoscroll.js";
 let viewCreator = null;
 export function provideViewCreator(fn) {
@@ -58,6 +58,7 @@ import { judgeNegativeSizes, noteNegativeSize } from "./size-report.js";
 import { handlerName } from "./handlers.js";
 import { splitPath } from "./path-plan.js";
 import { selectValue } from "./select.js";
+import { rowPlace } from "./data.js";
 import { noteOverlay } from "./outside.js";
 import { DeferredSurface, isDeferred } from "./deferred-surface.js";
 // view → the installed strategy's detach. Module-private bookkeeping rather
@@ -1451,6 +1452,8 @@ export class View extends Node {
     $scrollingChanged(a) {
         this.scrolling = a;
         noteUserScroll(this, a);
+        if (a)
+            dropWaitingScroll(this);
         if (!a && this.$pendingScroll !== null) {
             const f = this.$pendingScroll;
             this.$pendingScroll = null;
@@ -1474,7 +1477,7 @@ export class View extends Node {
             this.$pendingScroll = () => this.scrollTo(y, glide);
             return;
         } // the user's hand first
-        noteScrollRequest(this, y === Infinity);
+        noteScrollRequest(this, y);
         if (Number.isFinite(y) && glide === undefined)
             this.scrollY = y; // a glide arrives through the mirror as it moves
         this.$surface?.scrollToY?.(y, glide);
@@ -2816,26 +2819,53 @@ setChangeDispatcher((node, changed) => {
 // and a node with no cursor above it reads null, exactly as a view without a
 // datapath does.
 provideCursorWrite((node, segs, v) => {
-    const cursor = inheritedCursor(node);
-    if (cursor !== null)
-        cursor.data.set([...cursor.path, ...segs], v);
+    const owner = cursorOwner(node);
+    if (owner === null)
+        return;
+    const cursor = owner.datapath;
+    // a row whose record has left the dataset writes nowhere — never into the
+    // record that has taken its place
+    const at = rowPlace(owner, cursor);
+    if ("path" in at)
+        cursor.data.set([...at.path, ...segs], v);
 });
 provideCursorRead((node, path) => {
-    const cursor = inheritedCursor(node);
-    if (cursor === null)
+    const owner = cursorOwner(node);
+    if (owner === null)
         return null;
+    const cursor = owner.datapath;
+    // a row reads its own record, wherever the last structural change left it
+    const at = rowPlace(owner, cursor);
     // a computed key arrives as its value: a number is an index, anything else a name
     const plan = typeof path === "string" ? splitPath(path)
         : path.map((sg) => typeof sg === "number" ? { i: sg } : typeof sg === "object" && sg !== null ? sg : String(sg));
     // Pure-name plans ride the currency walk (today's read, coercing —
     // `:rows.length` stays live); a plan with selectors evaluates per RFC 9535
     // (select.ts), the B3 surface.
-    if (plan.every((sg) => typeof sg === "string")) {
-        const v = cursor.data.read([...cursor.path, ...plan]);
+    if (!("path" in at)) {
+        // gone from the dataset: the record reads as it last was
+        let v = at.rec;
+        for (const sg of plan) {
+            if (typeof sg !== "string" || v === null || typeof v !== "object")
+                return null;
+            v = v[sg];
+        }
         return v === undefined ? null : v;
     }
-    return selectValue(cursor.data, cursor.path, plan);
+    if (plan.every((sg) => typeof sg === "string")) {
+        const v = cursor.data.read([...at.path, ...plan]);
+        return v === undefined ? null : v;
+    }
+    return selectValue(cursor.data, at.path, plan);
 });
+/** The node whose datapath is the cursor in effect at `node` (inheritedCursor's walk). */
+function cursorOwner(node) {
+    for (let n = node; n !== null; n = n.parent) {
+        if (n !== cursorDefining && n.datapath !== null)
+            return n;
+    }
+    return null;
+}
 /** Is this view disabled — a declared `disabled` that is true (hovered/pressed). */
 function isDisabled(v) { return v.disabled === true; }
 /** The nearest scroller at or above `v` that the USER is scrolling now, or null

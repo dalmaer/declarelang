@@ -4178,6 +4178,25 @@ await test("replication: insert makes exactly one instance; existing ones are re
   assert.equal(globalThis.__names[3], "x");
 });
 
+await test("replication: between a removal and the settle, each row still reads its own record", async () => {
+  const app = buildProgram(await compiled(`
+class Row [ height = 10,
+    id: string = { "" + (:id ?? "") },
+    gone() { const i = app.d.value.rows.findIndex((r) => r.id == this.id); if (i >= 0) app.d.removeAt(["rows"], i) } ]
+App [ width = 100, height = 100,
+    d: Dataset { { "rows": [ { "id": "a" }, { "id": "b" }, { "id": "c" }, { "id": "d" } ] } },
+    list: View [ datapath = { app.d.value }, Row [ datapath = :rows[] ] ] ]`));
+  settle();
+  const [ra, , rc] = app.list.children;
+  ra.gone();                                   // "a" leaves; "c" moves from 2 to 1
+  assert.equal(rc.id, "c", "a moved row reads its own record before the settle");
+  assert.equal(ra.id, "a", "a removed row reads as it last was");
+  rc.gone();                                   // two removals in one handler
+  settle();
+  assert.deepEqual(app.d.value.rows.map((r) => r.id), ["b", "d"], "each row removed itself, not a neighbour");
+  assert.deepEqual(app.list.children.map((v) => v.id), ["b", "d"]);
+});
+
 await test("replication: removal discards the instance and retires its machinery", async () => {
   resetCounters();
   const app = await listApp();
@@ -6867,6 +6886,20 @@ await test("keys: a replaced liveness probe governs — the newest app owns the 
   // were the first probe still governing, this event would retire the wire
   handlers.keyup({ code: "KeyA", key: "a", shiftKey: false, ctrlKey: false, altKey: false, metaKey: false, repeat: false });
   assert.ok(handlers.keyup !== undefined, "the wire survives the old app's death — the new probe governs");
+});
+
+await test("keys: on a Mac, ⌘'s release lets go of a key pressed under it (its own key-up never comes)", () => {
+  const keys = new KeysService();
+  const ev = (code, key, meta) => ({ code, key, shiftKey: false, ctrlKey: false, altKey: false, metaKey: meta, repeat: false });
+  keys.keyDown(ev("MetaLeft", "Meta", true));
+  keys.keyDown(ev("KeyK", "k", true));
+  assert.equal(keys.isDown("KeyK"), true);
+  keys.keyUp(ev("MetaLeft", "Meta", false));   // and no key-up for K, as the Mac sends none
+  assert.equal(keys.isDown("KeyK"), false, "K is no longer held once ⌘ is up");
+  let held = null;
+  const off = keys.onCommandHeld((on) => { held = on; });
+  keys.keyDown(ev("MetaLeft", "Meta", true));   // ⌘ alone again arms the hold
+  return new Promise((done) => setTimeout(() => { off(); keys.keyUp(ev("MetaLeft", "Meta", false)); assert.equal(held, true, "⌘ held alone shows the panel again"); done(); }, 800));
 });
 
 await test("focus: deliverKeys is once per service pair; off() re-arms it", () => {

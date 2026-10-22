@@ -24,7 +24,7 @@ class Dynamos extends Rules [ kinds = ["dynamo", "hum"],
         t.y = across - 4 + t.y
         game.link(turn, t)
         t.course = 1
-        t.shotIn = 255 - settings.dynamoShots       // (the setting rises as the hums come faster)
+        t.shotIn = 255 - settings.dynamoShots       // (a higher setting brings them sooner)
         game.enter(t)
         this.near(turn, t)
         },

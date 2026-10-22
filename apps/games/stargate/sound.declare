@@ -16,7 +16,7 @@
 // `Speaker` holds the recordings and plays whichever the board says is sounding.
 //
 // The recordings in `sounds` are the arcade's board as MAME plays it, a file for each
-// number: `20.m4a` is sound 20. Four of its sounds never end, and are loops: 15, 22, and
+// number: `20.m4a` is sound 20. Three of its sounds never end, and are loops: 15, 22, and
 // 14, which rises a step each time it is sent again (`14-1.m4a` to `14-31.m4a`). Sound 18
 // changes each time it is sent again, and the game only ever sends it in one run, which is
 // recorded whole (`18-warp.m4a`).
@@ -61,7 +61,7 @@ class SoundBoard extends Node [
         "fireball":         { matters: 192, steps: [[1, 48, 9]] },
         "baiter shot":      { matters: 192, steps: [[1, 8, 3]] },
         "swarmer shot":     { matters: 192, steps: [[1, 24, 12]] },
-        // entries kept with the rules that use them
+        // inviso running out, and the hums', yllabians', masters' and munchies' sounds
         "inviso out":       { matters: 236, steps: [[1, 16, 8]] },
         "hum":              { matters: 192, steps: [[1, 64, 25], [1, 1, 22]] },
         "yllabian shot":    { matters: 192, steps: [[3, 8, 2]] },
