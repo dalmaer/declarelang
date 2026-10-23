@@ -22,6 +22,8 @@ const NAME_NOT_FROM_CONTENT = (role) => ROLE_CONTRACTS[role]?.nameFromContent !=
 /** The roles a person presses or steps — a control. Nothing of these may hold
  *  another: their content is read as their name, never entered. */
 const CONTROL_ROLES = new Set(["button", "toggle", "checkbox", "switch", "radio", "tab", "menuItem", "option", "link", "slider", "spinButton"]);
+/** The names an author gives the boolean that says this one is the one chosen. */
+const CHOSEN_FLAG = /^(on|selected|chosen|active|current|picked|checked|isOn|isSelected|isActive)$/;
 /** The top-level parts of a `{ }` body: the arms of a choice (`c ? a : b`), else
  *  the terms of an `||`; null when it is neither. Strings and brackets are skipped. */
 function topLevelParts(src) {
@@ -259,6 +261,28 @@ export function accessibilityDiagnostics(program, schemas, opts) {
         const parts = topLevelParts(v.src.trim());
         return parts !== null && "arms" in parts && parts.arms.some((a) => a.trim() === "0");
     };
+    /** The classes that open a menu: any whose body, or a use of it or of a
+     *  subclass, sets `menu`. Worked out once, on first need. */
+    let menuClasses = null;
+    const opensMenu = () => {
+        if (menuClasses !== null)
+            return menuClasses;
+        const found = new Set();
+        const mark = (tag) => { for (let c = classByName.get(tag), n = 0; c !== undefined && n < 50; c = classByName.get(c.base), n++)
+            found.add(c.name); };
+        const visit = (el) => {
+            if (el.attrs.some((a) => a.name === "menu")) {
+                const d = classByBody.get(el);
+                mark(d !== undefined ? d.name : el.tag);
+            }
+            for (const c of el.children)
+                visit(c);
+        };
+        for (const c of program.classes)
+            visit(c.body);
+        visit(program.root);
+        return (menuClasses = found);
+    };
     const walk = (el, above = [], outer = null) => {
         const decl = classByBody.get(el);
         const owner = decl !== undefined ? decl.name : (el.name ?? el.tag);
@@ -320,6 +344,16 @@ export function accessibilityDiagnostics(program, schemas, opts) {
                         break;
                     }
                 }
+            }
+            // a control that shows a choice and reports none: a class of its own with a
+            // boolean saying it is the one chosen (`on`, `selected` …), and no state a
+            // screen reader hears — each of a row of them reads as a plain button
+            // (a control that opens a menu reports that it does; what its flag marks —
+            // a filter set — its label says, and it is no option among others)
+            if (decl !== undefined && isA(tag, "Control") && !opensMenu().has(decl.name)) {
+                const flag = levels.flatMap((b) => b.decls).find((d) => CHOSEN_FLAG.test(d.name) && d.type === "boolean");
+                if (flag !== undefined && !["accessibilitySelected", "accessibilityChecked", "accessibilityPressed"].some((n) => sets(levels, n)))
+                    warnings.push(Diag.accessibilityUnreportedChoice(owner, flag.name, el.pos));
             }
             // a drawn view that takes the focus and says nothing — said once, where
             // the drawing or the focus is written (a use site inherits the class's)

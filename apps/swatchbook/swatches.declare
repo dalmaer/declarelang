@@ -108,6 +108,7 @@ class Chip [ label: string = "",
 
 class Pill extends Control [ label: string = "",
     picked: boolean = false,
+    accessibilityPressed = { picked },
     height = 20, width = { this.t.width + 22 }, cornerRadius = 10,
     fill = { picked ? 0x2E6FE0 : hovered ? 0xDDE7F9 : 0xEEF1F5 },
     press() { picked = !picked },

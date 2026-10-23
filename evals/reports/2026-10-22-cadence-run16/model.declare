@@ -1,0 +1,245 @@
+/*
+# Cadence — the model
+
+The training history, as the service holds it, and everything that is true of it
+whoever is looking: which sessions fall on a day, what this person usually does,
+where one session stands among the rest. Every write goes through here too, and
+lands in the same records the first fetch filled — nothing fetches the list
+again, so nothing derived from it is ever stale.
+*/
+
+
+// dates as day numbers, durations and distances as people read them: functions
+// of their arguments
+
+script {
+    const API = "http://127.0.0.1:8320"
+    const DAY_MS = 86400000
+    const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+    const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+    type Sport = "run" | "ride" | "lift" | "swim"
+
+    function clamp(v: number, a: number, b: number): number { return Math.max(a, Math.min(b, v)) }
+    function lerp(a: number, b: number, t: number): number { return a + (b - a) * t }
+
+    // blend two 0xRRGGBB colours channel-wise
+    function mix(a: number, b: number, t: number): number {
+        const c = (x: number, y: number) => Math.round(x + (y - x) * t)
+        return (c((a >> 16) & 255, (b >> 16) & 255) << 16) | (c((a >> 8) & 255, (b >> 8) & 255) << 8) | c(a & 255, b & 255)
+    }
+    function hex(c: number): string { return "#" + c.toString(16).padStart(6, "0") }
+
+    // a date is a day number: whole days since 1970-01-01, no time zone in it
+    function dayNum(iso: string): number {
+        const p = iso.split("-").map(Number)
+        return Math.round(Date.UTC(p[0], p[1] - 1, p[2]) / DAY_MS)
+    }
+    function isoOf(n: number): string { return new Date(n * DAY_MS).toISOString().slice(0, 10) }
+    function dow(n: number): number { return new Date(n * DAY_MS).getUTCDay() }
+    function dom(n: number): number { return new Date(n * DAY_MS).getUTCDate() }
+    function monthOf(n: number): number { return new Date(n * DAY_MS).getUTCMonth() }
+    function yearOf(n: number): number { return new Date(n * DAY_MS).getUTCFullYear() }
+    function monthStart(n: number): number { const d = new Date(n * DAY_MS); return Math.round(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) / DAY_MS) }
+    function nextMonth(n: number): number { const d = new Date(n * DAY_MS); return Math.round(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) / DAY_MS) }
+
+    function monthName(n: number): string { return MONTHS[monthOf(n)] }
+    function monthShort(n: number): string { return MONTHS[monthOf(n)].slice(0, 3) }
+    function dowName(n: number): string { return DAYS[dow(n)] }
+    function dowShort(n: number): string { return DAYS[dow(n)].slice(0, 3) }
+    function dowLetter(n: number): string { return DAYS[dow(n)].slice(0, 1) }
+
+    // "Today", "Yesterday", "Monday" within the week, then "14 Oct 2025"
+    function dayLabel(n: number, today: number): string {
+        const ago = today - n
+        if (ago == 0) return "Today"
+        if (ago == 1) return "Yesterday"
+        if (ago > 1 && ago < 7) return dowName(n)
+        return dom(n) + " " + monthShort(n) + (yearOf(n) == yearOf(today) ? "" : " " + yearOf(n))
+    }
+    function longDate(n: number): string { return dowName(n) + " " + dom(n) + " " + monthName(n) + " " + yearOf(n) }
+
+    // the span on screen, said as briefly as it can be: "3 – 16 Aug 2026",
+    // "28 Jul – 10 Aug 2026", "Jun 2025 – Aug 2026"
+    function rangeLabel(a: number, b: number): string {
+        if (b <= a) return ""
+        const last = b - 1
+        if (b - a > 62) {
+            const ya = yearOf(a), yb = yearOf(last)
+            return monthShort(a) + (ya == yb ? "" : " " + ya) + " – " + monthShort(last) + " " + yb
+        }
+        const sameMonth = monthOf(a) == monthOf(last) && yearOf(a) == yearOf(last)
+        const sameYear = yearOf(a) == yearOf(last)
+        return dom(a) + (sameMonth ? "" : " " + monthShort(a)) + (sameYear ? "" : " " + yearOf(a))
+            + " – " + dom(last) + " " + monthShort(last) + " " + yearOf(last)
+    }
+
+    // 220 → "3h 40m", 45 → "45m"
+    function fmtDuration(min: number): string {
+        const m = Math.max(0, Math.round(min))
+        const h = Math.floor(m / 60)
+        return h == 0 ? m % 60 + "m" : h + "h " + (m % 60) + "m"
+    }
+    function fmtKm(km: number): string { return km.toFixed(1) + " km" }
+    function fmtBpm(b: number): string { return Math.round(b) + " bpm" }
+
+    // 412 seconds → "6:52"; an hour and more → "1:02:03"
+    function fmtClock(sec: number): string {
+        const s = Math.max(0, Math.floor(sec))
+        const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, r = s % 60
+        const two = (v: number) => (v < 10 ? "0" : "") + v
+        return h > 0 ? h + ":" + two(m) + ":" + two(r) : m + ":" + two(r)
+    }
+
+    // minutes per km for a run, as a runner says it
+    function fmtPace(min: number, km: number): string {
+        const p = min / km
+        const m = Math.floor(p), s = Math.round((p - m) * 60)
+        return (s == 60 ? m + 1 + ":00" : m + ":" + (s < 10 ? "0" : "") + s) + " /km"
+    }
+
+    function sportName(s: string): string { return s == "run" ? "Run" : s == "ride" ? "Ride" : s == "lift" ? "Lift" : "Swim" }
+    function sportPlural(s: string): string { return s == "run" ? "runs" : s == "ride" ? "rides" : s == "lift" ? "lifting sessions" : "swims" }
+    function effortWord(e: number): string { return e <= 2 ? "easy" : e <= 4 ? "steady" : e <= 6 ? "moderate" : e <= 8 ? "hard" : "all out" }
+    function plural(n: number, one: string, many: string): string { return n == 1 ? one : many }
+
+    // the step a distance moves by, and how it is rounded, for each sport
+    function kmStep(s: string): number { return s == "swim" ? 0.1 : s == "ride" ? 1 : 0.5 }
+    function roundTo(v: number, step: number): number { return Math.round(v / step) * step }
+
+    function median(xs: number[]): number {
+        if (xs.length == 0) return 0
+        const s = xs.slice().sort((a, b) => a - b)
+        return s[Math.floor(s.length / 2)]
+    }
+    }
+
+
+schema Session [ id: string, date: string, sport: "run" | "ride" | "lift" | "swim", minutes: number,
+    distanceKm?: number, effort: number, heartAvg?: number, note?: string ]
+
+schema LiveSession [ id: string, date: string, sport: string, startedSecondsAgo: number, minutes: number,
+    distanceKm?: number, heartNow: number, effort: number ]
+
+// what the service says when it refuses a write
+
+schema Refusal [ error: string, message: string, problems[]: string ]
+
+
+/*
+## The sessions
+
+Newest first, as the service sends them, and kept that way by every write. The
+derivations are worked out once per change of the records and read freely.
+*/
+
+class Sessions extends DataSource [ url = { API + "/api/sessions" }, auto = true, schema = [ sessions[]: Session ],
+
+    all() -> Session[] { return this.value?.sessions ?? [] },
+    byId(id: string) -> Session? { return this.all().find((s) => s.id == id) ?? null },
+
+    // each day's sessions, by day number
+
+    byDay: Map<number, Session[]> = { classroot.groupByDay() },
+    groupByDay() -> Map<number, Session[]> {
+        const m = new Map<number, Session[]>()
+        for (const s of this.all()) {
+            const n = dayNum(s.date)
+            const list = m.get(n)
+            if (list == null) m.set(n, [s])
+            else list.push(s)
+            }
+        return m
+        },
+    on(n: number) -> Session[] { return this.byDay.get(n) ?? [] },
+    minutesOn(n: number) -> number { return this.on(n).reduce((t, s) => t + s.minutes, 0) },
+
+    // the sessions from day a up to (not including) day b
+
+    between(a: number, b: number) -> Session[] {
+        return this.all().filter((s) => { const n = dayNum(s.date); return n >= a && n < b })
+        },
+
+    firstDay: number = { classroot.all().length == 0 ? 0 : dayNum(classroot.all()[classroot.all().length - 1].date) },
+
+    // the busiest single day in the whole history: the year's bars are all
+    // drawn against it, so a light fortnight looks light at any zoom
+
+    maxDayMinutes: number = { Math.max(60, ...Array.from(classroot.byDay.values()).map((l) => l.reduce((t, s) => t + s.minutes, 0))) },
+
+    // ── what this person usually does ──────────────────────────────────
+
+    ofSport(sport: string) -> Session[] { return this.all().filter((s) => s.sport == sport) },
+
+    // the sport most often done on this weekday, the latest one breaking a tie
+
+    usualSportOn(weekday: number) -> Sport {
+        const counts = new Map<string, number>()
+        for (const s of this.all()) if (dow(dayNum(s.date)) == weekday) counts.set(s.sport, (counts.get(s.sport) ?? 0) + 1)
+        let best: Sport = "run", most = -1
+        for (const s of ["run", "ride", "lift", "swim"] as Sport[]) {
+            const c = counts.get(s) ?? 0
+            if (c > most) { best = s; most = c }
+            }
+        return best
+        },
+    usualMinutes(sport: string) -> number { return Math.max(5, roundTo(median(this.ofSport(sport).map((s) => s.minutes)), 5)) },
+    usualKm(sport: string) -> number {
+        if (sport == "lift") return 0
+        const km = this.ofSport(sport).map((s) => s.distanceKm ?? 0).filter((k) => k > 0)
+        return roundTo(median(km), kmStep(sport))
+        },
+    usualEffort(sport: string) -> number { return clamp(Math.round(median(this.ofSport(sport).map((s) => s.effort))), 1, 10) },
+
+    // where one session stands among the others of its sport: the share of
+    // them it was longer than, and harder than
+
+    longerThan(s: Session) -> number {
+        const others = this.ofSport(s.sport).filter((o) => o.id != s.id)
+        return others.length == 0 ? 0 : others.filter((o) => o.minutes < s.minutes).length / others.length
+        },
+    harderThan(s: Session) -> number {
+        const others = this.ofSport(s.sport).filter((o) => o.id != s.id)
+        return others.length == 0 ? 0 : others.filter((o) => o.effort < s.effort).length / others.length
+        },
+
+    // ── every write ─────────────────────────────────────────────────────
+    // Each is a source of its own, aimed and sent by one method. The reply is
+    // the stored session, and it goes into these records — at its place in
+    // date order — so the week, the streak and the year take it in at once.
+
+    target: string = "",
+
+    create: DataSource [ url = { API + "/api/sessions" }, method = "POST", schema = Session, errorSchema = Refusal,
+        onLoad() { classroot.place(this.value, -1); app.saved(this.value, true) }
+        ],
+    change: DataSource [ url = { API + "/api/sessions/" + classroot.target }, method = "PUT", schema = Session, errorSchema = Refusal,
+        onLoad() {
+            const i = classroot.all().findIndex((s) => s.id == this.value.id)
+            classroot.place(this.value, i)
+            app.saved(this.value, false)
+            }
+        ],
+    drop: DataSource [ url = { API + "/api/sessions/" + classroot.target }, method = "DELETE",
+        onLoad() {
+            const i = classroot.all().findIndex((s) => s.id == classroot.target)
+            if (i >= 0) classroot.removeAt(["sessions"], i)
+            }
+        ],
+
+    busy: boolean = { classroot.create.loading || classroot.change.loading || classroot.drop.loading },
+
+    add(body: object) { create.body = body; create.fetch() },
+    update(id: string, body: object) { target = id; change.body = body; change.fetch() },
+    remove(id: string) { target = id; drop.fetch() },
+
+    // put a stored session where its date says, replacing the one at `was`
+
+    place(s: Session, was: number) {
+        if (was >= 0) this.removeAt(["sessions"], was)
+        const list = this.all()
+        let i = list.findIndex((o) => o.date <= s.date)
+        if (i < 0) i = list.length
+        this.insert(["sessions"], i, s)
+        }
+    ]

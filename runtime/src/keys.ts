@@ -406,7 +406,7 @@ export class KeysService {
   shortcutsInForce(): Array<Record<string, unknown>> {
     const seen = new Set<string>();
     const out: Array<Record<string, unknown>> = [];
-    for (const { owner } of this.ownersInForce()) {
+    for (const { owner } of this.ownersHeard()) {
       const items = Array.isArray(owner.items) ? owner.items as Array<Record<string, unknown>> : [];
       for (const r of items) {
         if (typeof r?.key !== "string" || r.key === "") continue;
@@ -420,16 +420,30 @@ export class KeysService {
     return out;
   }
 
+  /** The sets a key can reach now: those in force where focus is — and, while
+   *  an overlay holds the keyboard, only those declared inside it. Its keys are
+   *  its own, and the shortcuts it declares are those keys: a form in a sheet
+   *  keeps its own, while the page's behind it stand down. */
+  private ownersHeard(): Array<{ owner: ShortcutOwner; depth: number }> {
+    const all = this.ownersInForce();
+    const top = this.claimant();
+    if (top === null) return all;
+    return all.filter(({ owner }) => {
+      for (let n: unknown = owner; n != null; n = (n as { parent?: unknown }).parent) if (n === top) return true;
+      return false;
+    });
+  }
+
   /** The declared shortcut a key event triggers, if any: the nearest set that
-   *  declares its combo, enabled. None while an overlay holds the keyboard
-   *  (its keys are its own), and none without a command modifier while a
-   *  field has focus (typing is the field's), nor a field's own editing
-   *  chords (⌘A, ⌘C/X/V, ⌘Z — FIELD_CHORDS). */
+   *  declares its combo, enabled (ownersHeard — an open overlay's own sets
+   *  only), and none without a command modifier while a field has focus
+   *  (typing is the field's), nor a field's own editing chords (⌘A, ⌘C/X/V,
+   *  ⌘Z — FIELD_CHORDS). */
   private shortcutFor(e: KeyEvent): { owner: ShortcutOwner; id: string } | null {
-    if (this.shortcutOwners.size === 0 || MODIFIERS.has(e.code) || this.navClaimed()) return null;
+    if (this.shortcutOwners.size === 0 || MODIFIERS.has(e.code)) return null;
     const combo = comboOf(e);
     if (PROGRAMS !== null && (!commanded(combo) || FIELD_CHORDS.has(combo)) && PROGRAMS.typing()) return null;
-    for (const { owner } of this.ownersInForce()) {
+    for (const { owner } of this.ownersHeard()) {
       const items = Array.isArray(owner.items) ? owner.items as Array<Record<string, unknown>> : [];
       const hit = items.find((r) => typeof r?.key === "string" && normalizeCombo(r.key) === combo);
       if (hit !== undefined) return hit.enabled === false ? null : { owner, id: String(hit.id) };

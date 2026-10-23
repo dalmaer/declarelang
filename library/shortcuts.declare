@@ -20,8 +20,9 @@ App [ width = 520, height = 240,
 ```
 
 A key with a command modifier (⌘, ⌃, ⌥) or a function key works anywhere; a plain key
-(`"?"`) does not fire while a text field has focus — typing is the field's. Nothing fires
-while an open menu or dialog holds the keyboard: its keys are its own. A shortcut's chord is
+(`"?"`) does not fire while a text field has focus — typing is the field's. While an open
+menu, dialog or sheet holds the keyboard its keys are its own: a set declared inside it is in
+force — a form in a sheet keeps its own keys — and every set outside it stands down. A shortcut's chord is
 not also the browser's (⌘S does not save the page) — except those the browser keeps for
 itself, such as ⌘W and ⌘N in Safari, which a label may still show.
 

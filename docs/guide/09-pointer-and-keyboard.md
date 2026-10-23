@@ -156,11 +156,23 @@ hovered = { app.dropTarget == this }
 ```
 
 One thing to get right: `viewAt` answers *what a press would hit*, and your drag ghost is
-under the pointer. Give the ghost `pointerEvents = "none"` — and any container it sits
-in — or the ghost is always the answer. A container with no size set grows with a ghost
-that follows the pointer, becoming an invisible box over the very targets you are
-dragging onto. If a target never highlights, `__declare.explainHit(x, y)` in the console
-names what actually takes the press.
+under the pointer. Pass it as the third argument, `app.viewAt(e.rootX, e.rootY, app.ghost)`,
+and the walk goes past the ghost and everything in it — its labels too, which
+`pointerEvents = "none"` on the ghost alone would leave in the way. A container with no
+size set grows with a ghost that follows the pointer, becoming an invisible box over the
+very targets you are dragging onto: pass that container instead. If a target never
+highlights, `__declare.explainHit(x, y)` in the console names what actually takes the press.
+
+The answer is the deepest view — a card's label, not the card. A class name is a value in a
+body, so walk up until it is the kind you want, and past the loop it is typed as one:
+
+```declare-fragment
+onPointerUp(e: PointerUpEvent) {
+    let t = app.viewAt(e.rootX, e.rootY, app.ghost)
+    while (t != null && !(t instanceof Column)) t = t.parent
+    if (t != null) t.accept(this)
+    }
+```
 
 ## Keyboard events
 
@@ -227,8 +239,10 @@ and the nearest set that declares the key takes it — so a pane can give ⌘F a
 own while the rest of the program keeps the App's. The walk goes on past the program: a
 program in a desktop's window reaches the desktop's ⌘N. A shortcut that fires is not also a
 `Keys` event, and not also the browser's (⌘S does not save the page). A plain key (`"?"`)
-stands down while a text field has focus, and every shortcut stands down while an open menu
-or dialog holds the keyboard — Esc and the arrows are its own.
+stands down while a text field has focus. While an open menu, dialog or sheet holds the
+keyboard, its keys are its own: the shortcuts declared inside it are in force — a form in a
+sheet declares its own `Shortcuts`, and they work while it is open — and every set outside it
+stands down, as do the keys the overlay itself uses (Esc, and a menu's arrows).
 
 A [`MenuBar`](declare-docs:MenuBar)'s items carry their keys already (`key: "⌘N"`), and
 those are its program's shortcuts, so a program with a menu bar declares them once.

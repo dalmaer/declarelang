@@ -1794,6 +1794,28 @@ await test("the hit test: app.viewAt answers with the SAME walk the pointer is r
   assert.ok(!app.a.containsPoint(150, 50), "…and outside it");
 });
 
+await test("a drag asks past its ghost, children and all; a class name is a value, so the walk up stops at the tile", async () => {
+  const app = buildProgram(await compiled(`class Tile extends View [ width = 100, height = 40, cardId: string = "",
+    label: Text [ x = 4, y = 4, text = { classroot.cardId } ] ]
+App [ width = 300, height = 200,
+    found: string = "",
+    find(x: number, y: number) {
+        let t = app.viewAt(x, y, app.ghost)
+        while (t != null && !(t instanceof Tile)) t = t.parent
+        app.found = t != null ? t.cardId : "none"
+        },
+    a: Tile [ x = 20, y = 20, cardId = "a" ],
+    ghost: View [ x = 20, y = 20, width = 100, height = 40, pointerEvents = "none",
+        chip: View [ x = 4, y = 4, width = 60, height = 20, fill = #DDDDDD ] ] ]`));
+  settle();
+  assert.equal(app.viewAt(30, 30), app.ghost.chip, "pointerEvents on the ghost leaves its chip in the way");
+  assert.equal(app.viewAt(30, 30, app.ghost), app.a, "passed as except, the ghost and all it holds are gone");
+  app.find(30, 30);
+  assert.equal(app.found, "a", "instanceof Tile walks up from the label to the card");
+  app.find(250, 150);
+  assert.equal(app.found, "none");
+});
+
 await test("the hit test honours CLIP, which the old inspector walk did not", async () => {
   const app = buildProgram(await compiled(`App [ width = 200, height = 200,
     box: View [ x = 10, y = 10, width = 50, height = 50, clip = true,

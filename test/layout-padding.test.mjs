@@ -305,6 +305,23 @@ await test("WrappingLayout: the flow wraps at the content width", async () => {
   assert.equal(padded.box.contentHeight, 20 + 50 + 20, "the container counts both vertical insets");
 });
 
+await test("WrappingLayout columns: equal cells, that many to a row, re-dealt when the count changes", async () => {
+  const app = await boot(`App [ width = 400, height = 300,
+    cols: number = 5,
+    box: View [ width = 336, padding = [0, 0, 0, 0],
+      layout: WrappingLayout [ columns = { app.cols }, spacing = 6, rowSpacing = 6 ],
+      a: View [ flexes = true, height = 30 ], b: View [ flexes = true, height = 30 ], c: View [ flexes = true, height = 30 ],
+      d: View [ flexes = true, height = 30 ], e: View [ flexes = true, height = 30 ], f: View [ flexes = true, height = 30 ],
+      g: View [ width = 20, height = 30 ] ] ]`);
+  const cell = (336 - 4 * 6) / 5;
+  for (const k of ["a", "b", "c", "d", "e", "f"]) assert.ok(Math.abs(app.box[k].width - cell) < 0.01, `${k} is a cell wide: ${app.box[k].width}`);
+  assert.equal(app.box.e.y, 0, "five to the first row");
+  assert.equal(app.box.f.y, 36, "the sixth starts the second");
+  assert.ok(Math.abs(app.box.g.x - (cell + 6)) < 0.01 && app.box.g.width === 20, "a child that does not flex keeps its width, at its cell's left");
+  app.cols = 7; settle();
+  assert.ok(Math.abs(app.box.a.width - (336 - 6 * 6) / 7) < 0.01 && app.box.g.y === 0, "seven columns: one row of narrower cells");
+});
+
 // ── ResponsiveLayout: shares divide the content width ──────────────────────
 
 await test("ResponsiveLayout: a share is a percent of the CONTENT width", async () => {

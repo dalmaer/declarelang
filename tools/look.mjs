@@ -38,6 +38,10 @@ actions, run in the order written (each may repeat)
                                drawn control that is not a view of its own
   --drag PATH DX,DY            press it, move by (DX, DY) pixels, release (a finger's
                                drag under --touch: in a scroller, a scroll unless claimed)
+  --press PATH [X,Y]           put the pointer down on it (at X,Y inside it) and keep it down
+  --move DX,DY                 move the held pointer by (DX, DY) — then --shot, --read and
+                               --semantics see the drag in progress
+  --release                    let the held pointer go
   --hold PATH [MS]             press and hold it MS milliseconds (default 600), release —
                                what onHold answers
   --wheel PATH DY              turn the wheel over it by DY pixels (negative: up)
@@ -100,6 +104,15 @@ for (let i = 0; i < argv.length; i++) {
     if (at.length !== 2 || at.some((n) => !Number.isFinite(n))) fail(`--click-at ${path} ${argv[i]}: write the point as X,Y inside the view, e.g. 40,12`);
     actions.push({ kind: "clickAt", path, x: at[0], y: at[1] });
   }
+  else if (a === "--press") {
+    const path = arg(), next = argv[i + 1];
+    const at = next !== undefined && /^-?[\d.]+,-?[\d.]+$/.test(next) ? arg().split(",").map(Number) : null;
+    actions.push({ kind: "press", path, x: at?.[0], y: at?.[1] });
+  } else if (a === "--move") {
+    const by = arg().split(",").map(Number);
+    if (by.length !== 2 || by.some((n) => !Number.isFinite(n))) fail(`--move ${argv[i]}: write the movement as DX,DY, e.g. 120,0`);
+    actions.push({ kind: "move", dx: by[0], dy: by[1] });
+  } else if (a === "--release") actions.push({ kind: "release" });
   else if (a === "--drag") {
     const path = arg(), by = arg().split(",").map(Number);
     if (by.length !== 2 || by.some((n) => !Number.isFinite(n))) fail(`--drag ${path} ${argv[i]}: write the movement as DX,DY, e.g. 120,0`);
@@ -157,6 +170,10 @@ const step = (x) => {
     case "pinch": return `await drive.pinch(${p}, ${x.scale});${rest}`;
     case "hold": return `await drive.hold(${p}, ${x.ms});${rest}`;
     case "drag": return `await drive.drag(${p}, ${x.dx}, ${x.dy});${rest}`;
+    // a held drag is looked at as it stands: no settle between its steps
+    case "press": return x.x === undefined ? `await drive.press(${p});` : `await drive.press(${p}, ${x.x}, ${x.y});`;
+    case "move": return `await drive.moveBy(${x.dx}, ${x.dy});`;
+    case "release": return `await drive.release();${rest}`;
     case "wheel": return `await drive.wheel(${p}, ${x.dy});${rest}`;
     case "type": return `await drive.type(${JSON.stringify(x.text)});${rest}`;
     case "key": return `await drive.key(${JSON.stringify(x.name)});${rest}`;

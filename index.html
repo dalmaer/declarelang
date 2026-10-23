@@ -73,7 +73,7 @@
 <p>→</p></a>
 <a href="apps/desktop/desktop.declare"><img loading="lazy" src="apps/homepage/shots/desktop-dark.webp"></a>
 <p>Windows that drag, resize, layer, and minimize into live dock thumbnails · a magnifying dock · menus that follow focus · the calendar running inside one of them</p>
-<p>3494 lines — 1992 code, 930 comment · 226 KB over the wire · every pixel drawn from shapes, no image assets</p>
+<p>3494 lines — 1992 code, 930 comment · 227 KB over the wire · every pixel drawn from shapes, no image assets</p>
 <a href="apps/desktop/desktop.declare?viewer"><p>View &amp; edit source →</p></a>
 <p>02</p>
 <h2>Declare it. It runs. It stays true.</h2>
@@ -111,7 +111,7 @@
 <p>A formal six-rung ladder, from parse to pixels, is how an app is shown to be correct. Your AI climbs it one rung at a time, and every rung reports what it proved — and what it cannot see.</p>
 <p>The calendar above was built this way: a person directed, an AI wrote every line, and the compiler kept it honest.</p>
 <h3>Small enough to know. Strict enough to trust.</h3>
-<a href="#getstarted"><h6>Get Started →</h6></a>
+<a href="#getstarted"><h6>Try it now →</h6></a>
 <p>Built in <span>Declare</span></p>
 <p>·</p>
 <a href="apps/homepage/homepage.declare?viewer"><p>View Source</p></a>
@@ -124,7 +124,7 @@
 <p>·</p>
 <p>© 2026 David Temkin</p>
 <a href="#home"><p>Declare</p></a>
-<a href="#getstarted"><p>Getting Started</p></a>
+<a href="#getstarted"><p>Try it now</p></a>
 <a href="#why"><p>Why Declare</p></a>
 <a href="#faq"><p>FAQ</p></a>
 <a href="#architecture"><p>Architecture</p></a>
@@ -170,7 +170,7 @@
 <p>·</p>
 <p>© 2026 David Temkin</p>
 <a href="#home"><p>Declare</p></a>
-<a href="#getstarted"><p>Getting Started</p></a>
+<a href="#getstarted"><p>Try it now</p></a>
 <a href="#why"><p>Why Declare</p></a>
 <a href="#faq"><p>FAQ</p></a>
 <a href="#architecture"><p>Architecture</p></a>
@@ -458,7 +458,7 @@ Slider   [ value = { app.volume },
 <p>·</p>
 <p>© 2026 David Temkin</p>
 <a href="#home"><p>Declare</p></a>
-<a href="#getstarted"><p>Getting Started</p></a>
+<a href="#getstarted"><p>Try it now</p></a>
 <a href="#why"><p>Why Declare</p></a>
 <a href="#faq"><p>FAQ</p></a>
 <a href="#architecture"><p>Architecture</p></a>
@@ -467,14 +467,19 @@ Slider   [ value = { app.volume },
 <a href="https://github.com/davidtemkin/declarelang"><p>GitHub</p></a>
 </section>
 <section id="getstarted">
-<p>GETTING STARTED</p>
-<h1>Getting started</h1>
-<p>Just as SQL is a domain-specific language for querying data, Declare is purpose-built for creating modern UIs. Here is how to run it locally and write your first program — no build step, no scaffold, no config.</p>
-<h2>Quick start</h2>
+<p>TRY IT NOW</p>
+<h1>Try it now</h1>
+<p>Just as SQL is a domain-specific language for querying data, Declare is purpose-built for creating modern UIs. The quickest way to see what it does is to have it build you something.</p>
+<h2>The easy way</h2>
+<p>Open Claude Code — or another coding agent — in an empty folder, and tell it what you want, with the address of Declare. Either of these will do, or write your own:</p>
+<blockquote><p>Write me a kanban board using Declare, here: https://github.com/davidtemkin/declarelang</p></blockquote>
+<blockquote><p>Write me a budget app using Declare, here: https://github.com/davidtemkin/declarelang</p></blockquote>
+<p>There is nothing to install first. The agent downloads Declare, reads its guide, writes the app and checks its own work in a browser; along the way it asks to run a few commands — say yes. In 15–20 minutes it hands you a working app and the address to open it at.</p>
+<h2>Or do it yourself</h2>
 <pre><code class="language-bash">git clone https://github.com/davidtemkin/declarelang.git &amp;&amp; cd declarelang</code></pre>
 <p>Get the repository.</p>
 <pre><code class="language-bash">npm install</code></pre>
-<p>Install the toolchain's dependencies (TypeScript; esbuild and puppeteer-core for builds and visual tests). The clone ships prebuilt — no build step before first run. pnpm works too — the repo pre-approves esbuild's install script; if you instead add declarelang to another project as a git dependency, approve its build (<code>pnpm approve-builds</code>, or <code>"pnpm": { "onlyBuiltDependencies": ["declarelang"] }</code>) so its prepare step runs.</p>
+<p>Install the toolchain's dependencies (TypeScript, esbuild, and the Chrome driver the checking tools run on). The clone ships prebuilt — no build step before first run. pnpm works too — the repo pre-approves esbuild's install script; if you instead add declarelang to another project as a git dependency, approve its build (<code>pnpm approve-builds</code>, or <code>"pnpm": { "onlyBuiltDependencies": ["declarelang"] }</code>) so its prepare step runs.</p>
 <pre><code class="language-bash">npm start</code></pre>
 <p>Start the dev server. It prints its address — http://127.0.0.1:8200/ unless that port is taken, in which case it says so and names the next (<code>PORT=8201 npm start</code>). Browse to any .declare file's URL under it and the server compiles and returns the running app.</p>
 <p>Write a program to my-apps/hello.declare and browse to it under the server's address — http://127.0.0.1:8200/my-apps/hello.declare on the default port. The program URL is the app's address. </p>
@@ -502,7 +507,7 @@ Slider   [ value = { app.volume },
 <p>·</p>
 <p>© 2026 David Temkin</p>
 <a href="#home"><p>Declare</p></a>
-<a href="#getstarted"><p>Getting Started</p></a>
+<a href="#getstarted"><p>Try it now</p></a>
 <a href="#why"><p>Why Declare</p></a>
 <a href="#faq"><p>FAQ</p></a>
 <a href="#architecture"><p>Architecture</p></a>
@@ -608,7 +613,7 @@ npm start</code></pre>
 <p>·</p>
 <p>© 2026 David Temkin</p>
 <a href="#home"><p>Declare</p></a>
-<a href="#getstarted"><p>Getting Started</p></a>
+<a href="#getstarted"><p>Try it now</p></a>
 <a href="#why"><p>Why Declare</p></a>
 <a href="#faq"><p>FAQ</p></a>
 <a href="#architecture"><p>Architecture</p></a>
@@ -793,7 +798,7 @@ npm start</code></pre>
 <a href="apps/architecture/architecture.declare?viewer=reader"><p>Read this page’s source →</p></a>
 <p>This page is a Declare program; every figure on it is made of views. Sizes were measured on 18 September 2026 from declarec production builds, gzipped at the default level.</p>
 <a href="#home"><h1>Declare</h1></a>
-<a href="#getstarted"><p>Getting Started</p></a>
+<a href="#getstarted"><p>Try it now</p></a>
 <a href="#why"><p>Why Declare</p></a>
 <a href="#faq"><p>FAQ</p></a>
 <a href="#architecture"><p>Architecture</p></a>
@@ -816,7 +821,7 @@ npm start</code></pre>
   // The deployed .declare source is the source of truth; the precompiled artifact
   // is a self-VALIDATING cache (re-probed against the source), never a thing to
   // hand-sync. Paths are relative to this file → the tree is subpath-portable.
-  import boot from "./bundles/declare-boot.js?v=b3ef1ac06a41";
+  import boot from "./bundles/declare-boot.js?v=f46f41900323";
   // `launcher: true` — a bare-path query on THIS entry page launches that program
   // (index.html?apps/calendar): install the SW first, then navigate, so the target
   // URL runs even on a cold static visit. See boot-uniform.js launchTarget().

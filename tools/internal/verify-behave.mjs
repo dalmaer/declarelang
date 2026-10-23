@@ -134,7 +134,9 @@ bootHost(cfg);
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const port = server.address().port;
 
-  const { default: puppeteer } = await import(pathToFileURL(join(ROOT, "node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js")).href);
+  // by package name, as Node resolves it: installed as a project's dependency,
+  // the package manager may hoist it above this package's own node_modules
+  const { default: puppeteer } = await import("puppeteer-core");
   // A behavior run shows real scrollbars, so a script can grab a thumb and drag
   // it as a person would: headless Chrome hides them, and an overlay scrollbar
   // (macOS) has no thumb until it is scrolling — so both are turned off, and the
@@ -348,15 +350,18 @@ bootHost(cfg);
       // is scrolled into sight first (as a person scrolls to it), and a point some
       // other view covers is said, not pressed — a press that reaches nothing used
       // to pass in silence, and the step after it failed for a reason it never named.
-      const reach = async (path) => {
-        let c = await center(path);
+      // `at`, a point inside the view in its own units, is the one checked and
+      // returned in place of the centre (clickAt: a day on a drawn chart).
+      const reach = async (path, at = null) => {
+        const spot = () => at === null ? center(path) : pointIn(path, at.x, at.y);
+        let c = await spot();
         const vp = page.viewport() ?? { width: 1280, height: 800 };
         const off = (q) => q.x < 0 || q.y < 0 || q.x >= vp.width || q.y >= vp.height;
         if (off(c)) {
           await page.evaluate((p) => { const n = window.__declare.find(p); n?.scrollIntoView?.("nearest"); }, path);
           await page.evaluate(() => window.__declare.clock?.settleMotion?.());
           await frames(page);   // the platform's scroll lands as an event, before the frame
-          c = await center(path);
+          c = await spot();
           if (off(c)) throw new VerifyAssertion(`'${path}' is outside the window at (${Math.round(c.x)}, ${Math.round(c.y)}) and scrolling did not bring it in`);
         }
         // the view a press there reaches must be the target, inside it, or what holds it;
@@ -377,7 +382,7 @@ bootHost(cfg);
           await page.evaluate((p) => { window.__declare.find(p)?.scrollIntoView?.("nearest"); }, path);
           await page.evaluate(() => window.__declare.clock?.settleMotion?.());
           await frames(page);
-          c = await center(path);
+          c = await spot();
           hit = await reaches();
         }
         if (!hit.ok) {
@@ -389,11 +394,35 @@ bootHost(cfg);
           }, path, hit.path, c.y);
           await page.evaluate(() => window.__declare.clock?.settleMotion?.());
           await frames(page);
-          c = await center(path);
+          c = await spot();
           hit = await reaches();
         }
         if (!hit.ok)
-          throw new VerifyAssertion(`a press on '${path}' at (${Math.round(c.x)}, ${Math.round(c.y)}) would reach ${hit.path === null ? "nothing" : `'${hit.path}'`} — it is covered, or takes no presses`);
+          throw new VerifyAssertion(`a press on '${path}'${at === null ? "" : ` at (${at.x}, ${at.y}) in it`} — (${Math.round(c.x)}, ${Math.round(c.y)}) in the window — would reach ${hit.path === null ? "nothing" : `'${hit.path}'`}: it is covered there, or takes no presses`);
+        // A FINGER IS NOT A POINT. A browser moves a tap onto a control within a
+        // finger's reach of where it landed (Chrome's touch adjustment, as phones
+        // do), so a tap a few pixels from a pinned button is the button's. On touch
+        // the ring a finger covers is checked too, and a control there that is not
+        // the target, inside it or holding it is said, not tapped.
+        if (touching()) {
+          const taker = await page.evaluate((p, x, y) => {
+            const d = window.__declare, t = d.find(p);
+            const inside = (a, b) => { for (let n = a; n != null; n = n.parent) if (n === b) return true; return false; };
+            const presses = (v) => typeof v.press === "function" || typeof v.onClick === "function" || (typeof v.link === "string" && v.link !== "");
+            for (const r of [6, 12]) for (let k = 0; k < 8; k++) {
+              const a = d.at(x + r * Math.cos(k * Math.PI / 4), y + r * Math.sin(k * Math.PI / 4));
+              if (a === null) continue;
+              // the nearest view holding the hit that takes a press, by its path
+              const segs = a.path.match(/"[^"]*"|[^.]+/g) ?? [];
+              let n = segs.length, v = null;
+              for (; n > 0; n--) { v = d.find(segs.slice(0, n).join(".")); if (v != null && presses(v)) break; }
+              if (n > 0 && v !== t && !inside(v, t) && !inside(t, v)) return { path: segs.slice(0, n).join("."), r };
+            }
+            return null;
+          }, path, c.x, c.y);
+          if (taker !== null)
+            throw new VerifyAssertion(`a tap on '${path}'${at === null ? "" : ` at (${at.x}, ${at.y}) in it`} lands within ${taker.r} px of '${taker.path}', and a finger there is taken by it — a browser moves a tap onto a control that close. Tap farther from it, or give the two more room`);
+        }
         return c;
       };
 
@@ -407,6 +436,8 @@ bootHost(cfg);
         if (touching()) await page.touchscreen.tap(x, y);
         else await page.mouse.click(x, y);
       };
+      // a pointer held down between press() and release(): where it is, and the finger
+      let held = null;
       const drive = {
         async click(path) {
           const c = await reach(path);
@@ -474,10 +505,10 @@ bootHost(cfg);
         },
         /** Press at (x, y) inside the view, from its top-left in its own units —
          *  a part of a drawn control (a step of a scale, a day of a chart) that
-         *  is not a view of its own. Reached as `click` reaches the view. */
+         *  is not a view of its own. Reached as `click` reaches the view, at that
+         *  point: one some other view covers there is said, not pressed. */
         async clickAt(path, x, y) {
-          await reach(path);
-          const p = await pointIn(path, x, y);
+          const p = await reach(path, { x, y });
           step(`${touching() ? "tap" : "click"} ${path} at (${x}, ${y})`);
           await press(p.x, p.y);
         },
@@ -499,6 +530,39 @@ bootHost(cfg);
           await page.mouse.down();
           await page.mouse.move(c.x + dx, c.y + dy, { steps });
           await page.mouse.up();
+        },
+        /** A drag a step at a time, to look at it mid-gesture: `press` puts the
+         *  pointer down on the view (at `x, y` inside it, else its centre) and
+         *  keeps it down; `moveBy` moves it while held, in steps a frame apart;
+         *  `release` lets go. Between them a script reads, expects and takes
+         *  pictures of the drag in progress — the ghost, the target lit. A
+         *  finger under touch, a mouse otherwise, as `drag`. */
+        async press(path, x, y) {
+          if (held !== null) throw new VerifyAssertion(`press ${path}: the pointer is already down — release it first`);
+          const c = await reach(path, x === undefined ? null : { x, y });
+          step(`press ${path}${x === undefined ? "" : ` at (${x}, ${y})`}`);
+          if (touching()) held = { at: c, finger: await page.touchscreen.touchStart(c.x, c.y) };
+          else { await page.mouse.move(c.x, c.y); await page.mouse.down(); held = { at: c, finger: null }; }
+          await frames(page);
+        },
+        async moveBy(dx, dy = 0, steps = 10) {
+          if (held === null) throw new VerifyAssertion(`moveBy(${dx}, ${dy}): nothing is pressed — press a view first`);
+          step(`move by (${dx}, ${dy})`);
+          const from = held.at, to = { x: from.x + dx, y: from.y + dy };
+          for (let i = 1; i <= steps; i++) {
+            const p = { x: from.x + (dx * i) / steps, y: from.y + (dy * i) / steps };
+            if (held.finger !== null) await held.finger.move(p.x, p.y); else await page.mouse.move(p.x, p.y);
+            await new Promise((r) => setTimeout(r, 16));
+          }
+          held.at = to;
+          await frames(page);
+        },
+        async release() {
+          if (held === null) throw new VerifyAssertion("release: nothing is pressed");
+          step("release");
+          if (held.finger !== null) await held.finger.end(); else await page.mouse.up();
+          held = null;
+          await frames(page);
         },
         /** Turn the wheel over a view: `dy` (and `dx`) in pixels, as a trackpad
          *  or wheel would — the view under the pointer, or a scroller above it,

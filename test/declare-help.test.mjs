@@ -256,4 +256,20 @@ await test("--example returns the guide's own code, labelled, and a miss exits 1
   assert.equal(help("noSuchNameAnywhere", "--example").code, 1);
 });
 
+await test("map lists a program's parts with their lines, so an exemplar is read by part", () => {
+  const r = help("map", "apps/calendar/calendar.declare");
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /^apps\/calendar\/calendar\.declare — \d+ lines\./);
+  const src = readFileSync(join(ROOT, "apps/calendar/calendar.declare"), "utf8").split("\n");
+  // every range it names starts on the line that declares the part
+  for (const m of r.out.matchAll(/^\s+(\d+)(?:–(\d+))?\s+(?:\s{2})?(class (\w+)|App\b)/gm)) {
+    const line = src[Number(m[1]) - 1];
+    assert.ok(m[4] ? line.startsWith(`class ${m[4]}`) : line.startsWith("App"), `line ${m[1]} is not where ${m[3]} begins: ${line}`);
+  }
+  assert.match(r.out, /class Drag — Dragging/, "a part says what its comment calls it");
+  const j = JSON.parse(help("map", "apps/calendar/calendar.declare", "--json").out);
+  assert.ok(j.parts.some((p) => p.depth === 1), "an App member or a class's named part is listed under it");
+  assert.equal(help("map", "no/such/file.declare").code, 1, "a missing file is a miss");
+});
+
 summarize("declare-help");

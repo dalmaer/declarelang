@@ -30,6 +30,9 @@ const NAME_NOT_FROM_CONTENT = (role: string): boolean => ROLE_CONTRACTS[role]?.n
  *  another: their content is read as their name, never entered. */
 const CONTROL_ROLES = new Set(["button", "toggle", "checkbox", "switch", "radio", "tab", "menuItem", "option", "link", "slider", "spinButton"]);
 
+/** The names an author gives the boolean that says this one is the one chosen. */
+const CHOSEN_FLAG = /^(on|selected|chosen|active|current|picked|checked|isOn|isSelected|isActive)$/;
+
 /** The top-level parts of a `{ }` body: the arms of a choice (`c ? a : b`), else
  *  the terms of an `||`; null when it is neither. Strings and brackets are skipped. */
 function topLevelParts(src: string): { arms: [string, string] } | { terms: string[] } | null {
@@ -230,6 +233,22 @@ export function accessibilityDiagnostics(
     return parts !== null && "arms" in parts && parts.arms.some((a) => a.trim() === "0");
   };
 
+  /** The classes that open a menu: any whose body, or a use of it or of a
+   *  subclass, sets `menu`. Worked out once, on first need. */
+  let menuClasses: Set<string> | null = null;
+  const opensMenu = (): Set<string> => {
+    if (menuClasses !== null) return menuClasses;
+    const found = new Set<string>();
+    const mark = (tag: string): void => { for (let c = classByName.get(tag), n = 0; c !== undefined && n < 50; c = classByName.get(c.base), n++) found.add(c.name); };
+    const visit = (el: Element): void => {
+      if (el.attrs.some((a) => a.name === "menu")) { const d = classByBody.get(el); mark(d !== undefined ? d.name : el.tag); }
+      for (const c of el.children) visit(c);
+    };
+    for (const c of program.classes) visit(c.body);
+    visit(program.root);
+    return (menuClasses = found);
+  };
+
   /** `outer`: the nearest control above, which nothing it holds may be. */
   type Outer = { owner: string; role: string } | null;
   const walk = (el: Element, above: readonly Element[] = [], outer: Outer = null): void => {
@@ -290,6 +309,16 @@ export function accessibilityDiagnostics(
             break;
           }
         }
+      }
+      // a control that shows a choice and reports none: a class of its own with a
+      // boolean saying it is the one chosen (`on`, `selected` …), and no state a
+      // screen reader hears — each of a row of them reads as a plain button
+      // (a control that opens a menu reports that it does; what its flag marks —
+      // a filter set — its label says, and it is no option among others)
+      if (decl !== undefined && isA(tag, "Control") && !opensMenu().has(decl.name)) {
+        const flag = levels.flatMap((b) => b.decls).find((d) => CHOSEN_FLAG.test(d.name) && d.type === "boolean");
+        if (flag !== undefined && !["accessibilitySelected", "accessibilityChecked", "accessibilityPressed"].some((n) => sets(levels, n)))
+          warnings.push(Diag.accessibilityUnreportedChoice(owner, flag.name, el.pos));
       }
       // a drawn view that takes the focus and says nothing — said once, where
       // the drawing or the focus is written (a use site inherits the class's)

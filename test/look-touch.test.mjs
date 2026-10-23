@@ -57,6 +57,48 @@ await test("--pinch: two fingers under --touch (onPinch), a trackpad pinch witho
   assert.ok(Math.abs(d["app.zoom"][0] - 2) < 0.05, `the wheel deltas add up to 2 (zoom ${d["app.zoom"][0]})`);
 });
 
+// A finger is not a point: a browser moves a tap onto a control within reach
+// of it, so a tap on a chart 4 px above a pinned button is the button's. The
+// driver checks the ring a finger covers and says so, rather than tapping the
+// button in silence while the script believes it tapped the chart.
+await test("--click-at under --touch: a point a finger's width from another control is said, not tapped", () => {
+  const near = join(DIR, "near.declare");
+  writeFileSync(near, `App [ width = 390, height = 844,
+    picks: number = 0, saves: number = 0,
+    chart: View [ x = 20, y = 20, width = 350, height = 200, fill = #DDE6F0,
+        onClick(e: PointerEvent) { app.picks = app.picks + 1 } ],
+    save: Button [ x = 20, y = 224, width = 350, height = 44, label = "Save",
+        press() { app.saves = app.saves + 1 } ] ]`);
+  const run = (...args) => spawnSync("node", [join(ROOT, "tools/look.mjs"), near, ...args], { cwd: ROOT, encoding: "utf8" });
+  const close = run("--touch", "--size", "390x844", "--click-at", "app.chart", "175,196");
+  assert.notEqual(close.status, 0, "a tap that would land on the button is refused");
+  assert.match(close.stdout + close.stderr, /lands within \d+ px of 'app\.save', and a finger there is taken by it/);
+  const clear = run("--touch", "--size", "390x844", "--click-at", "app.chart", "175,100", "--read", "app.picks", "--read", "app.saves");
+  assert.equal(clear.status, 0, clear.stdout + clear.stderr);
+  assert.match(clear.stdout, /app\.picks = 1/);
+  assert.match(clear.stdout, /app\.saves = 0/);
+  const mouse = run("--size", "390x844", "--click-at", "app.chart", "175,196", "--read", "app.picks");
+  assert.match(mouse.stdout, /app\.picks = 1/, "a mouse is a point: the same spot is the chart's");
+});
+
+// A drag a step at a time: what a drag shows while it is held (the ghost, the
+// target lit) is only seen between the press and the release.
+await test("--press / --move / --release: a drag held open is read mid-gesture, with a finger or a mouse", () => {
+  const held = join(DIR, "held.declare");
+  writeFileSync(held, `App [ width = 400, height = 300,
+    dragging: boolean = false, dx: number = 0, drops: number = 0,
+    card: View [ x = 20, y = 20, width = 100, height = 40, fill = #CCCCCC,
+        onPointerDown(e: PointerEvent) { app.dragging = true },
+        onPointerMove(e: PointerEvent) { app.dx = e.deltaX },
+        onPointerUp(e: PointerUpEvent) { app.dragging = false; app.drops = app.drops + 1 } ] ]`);
+  for (const touch of [["--touch"], []]) {
+    const r = spawnSync("node", [join(ROOT, "tools/look.mjs"), held, ...touch, "--press", "app.card", "--move", "60,0",
+      "--read", "app.dragging", "--read", "app.dx", "--release", "--read", "app.dragging", "--read", "app.drops"], { cwd: ROOT, encoding: "utf8" });
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /app\.dragging = true\napp\.dx = 60\napp\.dragging = false\napp\.drops = 1/, `${touch.join("") || "mouse"}: ${r.stdout}`);
+  }
+});
+
 await test("without --touch a click is a mouse's: the view stays hovered", () => {
   const r = look("--size", "1024x768", "--click", "app.pad", "--read", "app.pad.hovered");
   assert.deepEqual(r["app.pad.hovered"], [true]);

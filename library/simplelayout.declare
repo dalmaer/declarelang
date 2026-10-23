@@ -54,7 +54,9 @@ baseline: a `Text` reports its own, and a composite **declares** which part carr
 (`baseline: number = { cap.y + cap.baseline }`); a laid child that declares none is
 refused by name, at the child, and the checker says so before anything runs. A
 flexing child is aligned like any other (a `Spacer` declares a baseline of 0, so a
-baseline row takes it as it is). A bare literal.
+baseline row takes it as it is). A row of figures and words that must wrap when the view
+is narrow — "4 sessions · 3h 40m" on a phone — is a `WrappingLayout [ align = baseline ]`,
+which keeps each line on its own baseline. A bare literal.
 
 ## place()
 The whole strategy: one box per laid child, positioned along the axis in child order.

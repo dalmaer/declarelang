@@ -41,6 +41,13 @@ import { applyPurpose } from "./purpose.js";
  *  person leaving the field. */
 let MOVING_FOCUS = false;
 /** Move `el` (by `move`) without losing a focused field inside it. */
+/** A drawing's raster area held to its view's box, for a view that clips: the
+ *  part of `r` inside 0…w × 0…h, with a unit of margin so a mark ending on the
+ *  edge keeps its antialiased pixel. Empty (zero-sized) when nothing is inside. */
+function clipToBox(r, w, h) {
+    const x = Math.max(r.x, -1), y = Math.max(r.y, -1);
+    return { x, y, w: Math.max(0, Math.min(r.x + r.w, w + 1) - x), h: Math.max(0, Math.min(r.y + r.h, h + 1) - y) };
+}
 function keepingFocus(el, move) {
     const active = el.ownerDocument.activeElement;
     const held = active !== null && active !== el.ownerDocument.body && el.contains(active) ? active : null;
@@ -892,8 +899,11 @@ export class DomSurface {
             this.applyRootSize();
             this.refreshTouchAction();
         }
+        if (this.boxClipped && v !== was)
+            this.rerasterClipped();
     }
     setHeight(v) {
+        const was = this.frameH;
         this.frameH = v;
         this.element.style.height = v + "px";
         this.box.height = v;
@@ -901,6 +911,8 @@ export class DomSurface {
             this.applyRootSize();
             this.refreshTouchAction();
         }
+        if (this.boxClipped && v !== was)
+            this.rerasterClipped();
     }
     /** The view-model frame (setWidth/setHeight, verbatim) — the ROOT element
      *  may realize LARGER than it along a declared scroll axis (applyRootSize). */
@@ -1395,6 +1407,37 @@ export class DomSurface {
             this.clipBox.style.overflow = on ? "clip" : "";
         else
             this.element.style.overflow = on ? "clip" : "";
+        const was = this.boxClipped;
+        this.boxClipped = on;
+        if (on !== was)
+            this.rerasterClipped();
+    }
+    /** Whether `clip = true` holds this surface's drawing to its box (rasterize). */
+    boxClipped = false;
+    /** A clipped drawing's raster is cut to the box, so a new clip or a new box
+     *  re-rasters it — only when its ink reaches past the box, the one case the
+     *  cut changes anything; once per turn, so a width and a height set together
+     *  (or a drawing that re-records on the resize anyway) cost one raster. */
+    rerasterOwed = false;
+    rerasterClipped() {
+        if (this.rerasterOwed || this.drawEl === null || this.drawing === null || this.drawing.bounds == null)
+            return;
+        const b = this.drawing.bounds;
+        if (b.x >= 0 && b.y >= 0 && b.x + b.w <= this.frameW && b.y + b.h <= this.frameH)
+            return;
+        this.rerasterOwed = true;
+        const recorded = this.drawing;
+        queueMicrotask(() => {
+            this.rerasterOwed = false;
+            // a re-recording since rasterized itself at the new box
+            if (this.gone || this.drawing !== recorded || this.drawEl === null)
+                return;
+            if (!this.shown) {
+                this.drawOwed = true;
+                return;
+            }
+            this.rasterize();
+        });
     }
     /** The content inset (`View.padding`), realized as the element's own CSS
      *  padding — for the scroll extent and for nothing else.
@@ -2632,7 +2675,12 @@ export class DomSurface {
         // one renderer whose drawn pixels live in a per-view canvas).
         const b0 = this.drawing.bounds;
         const pad = rasterPad(this.drawing);
-        const bp = pad === 0 ? b0 : { x: b0.x - pad, y: b0.y - pad, w: b0.w + 2 * pad, h: b0.h + 2 * pad };
+        const ink = pad === 0 ? b0 : { x: b0.x - pad, y: b0.y - pad, w: b0.w + 2 * pad, h: b0.h + 2 * pad };
+        // A view that clips (`clip = true`) shows none of its ink past its box, so
+        // its raster stops at the box: a chart drawn from a scroll position that
+        // lands later — or a long series panned mostly off-screen — would otherwise
+        // ask the browser for a canvas thousands of times the view's size.
+        const bp = this.boxClipped ? clipToBox(ink, this.frameW, this.frameH) : ink;
         const dpr = window.devicePixelRatio || 1;
         // pixelated (setScaling): one pixel per unit, whatever the scale it is seen at
         let kk = this.pixelated() ? 1 : k ?? this.composedScale * dpr;
@@ -2699,6 +2747,9 @@ export class DomSurface {
         // one it already carried, skips the readback; a forced blank (the test hook) is synthetic,
         // so it is never covered by that proof
         const forced = (globalThis.__declareForceBlank ?? 0) > 0;
+        // a check still waiting was for the raster this one replaced: reading this
+        // canvas at that raster's origin and density samples the wrong pixels
+        this.lastRaster = null;
         if ((typeof __DECLARE_PRODUCTION__ === "undefined" || !__DECLARE_PRODUCTION__) && !this.blankReported
             && this.rasterBytes > DOM_BLANK_CHECK_BYTES && (forced || !(this.rasterBytes <= this.provenBytes && domRasterBytes <= this.provenTotal))) {
             // BEFORE FIRST PAINT the readback waits (boot-deferrals.ts): nothing is

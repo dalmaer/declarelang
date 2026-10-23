@@ -98,7 +98,9 @@ npx declare-look app.declare --size 390x844 --touch --dark \
 ```
 
 The actions — `--click PATH`, `--click-at PATH X,Y` (a point inside it, from its top-left: a
-step of a drawn scale), `--drag PATH DX,DY`, `--wheel PATH DY`, `--pinch PATH SCALE` (two
+step of a drawn scale), `--drag PATH DX,DY`, a drag a step at a time — `--press PATH [X,Y]`,
+`--move DX,DY`, `--release`, with `--shot` and `--read` between them seeing it in progress —
+`--wheel PATH DY`, `--pinch PATH SCALE` (two
 fingers spread to SCALE, or drawn together below 1), `--type TEXT`,
 `--key NAME`, `--wait MS`, `--read PATH.ATTR` (printed as `path.attr = value`; any property
 past the view reads too, `app.col.childViews.length`), `--call 'PATH.METHOD(ARGS)'`
@@ -152,10 +154,15 @@ hold; `drive.hold(path, 800)` does.
 `hold` sends touch events: there is no hover, a drag inside a scrolling pane scrolls it
 unless the view claims the gesture, and a tap is what a finger's tap is. A mouse in a
 phone-sized window is not a phone, and a check made with one passes what a finger fails.
+A finger is also not a point: a browser moves a tap onto a control within a finger's reach,
+so a tap a few pixels from a pinned button is the button's. A press whose point another
+control covers — or, on touch, sits within a finger's width of — is refused, naming that
+control, rather than made.
 
 | call | what it does |
 |---|---|
 | `drive.click(path)`, `drive.drag(path, dx, dy)`, `drive.wheel(path, dy, dx?)` | a press, a drag, a wheel turn on the view, as a person makes them |
+| `drive.press(path, x?, y?)`, `drive.moveBy(dx, dy)`, `drive.release()` | a drag a step at a time: the pointer goes down on the view (at a point inside it, else its centre) and stays down while `moveBy` moves it, so `expect` and pictures can look at the drag in progress — the ghost, the target lit — before `release` drops it |
 | `drive.clickAt(path, x, y)`, `drive.hold(path, ms?)` | a press at a point inside the view (from its top-left); a press held `ms` (default 600) of the program's time, then released — what `onHold` answers |
 | `drive.pinch(path, scale)` | a pinch about the view's centre to `scale`: two fingers on a touch device (`onPinch…` runs), a trackpad pinch otherwise (`onWheel` runs with `e.pinch`) |
 | `drive.device({ width, height, touch })` | the page becomes that device and the app loads again on it — a phone is `{ width: 390, height: 844, touch: true }` (to start on it, export `device` instead) |

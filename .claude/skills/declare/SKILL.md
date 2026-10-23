@@ -85,8 +85,10 @@ Then check every need in the plan against
   deciding Declare can't do something. A miss exits 1; `--example` shows the name in
   the guide's working code.
 - **Complete programs** — each opens with a comment on how it is put together, and the
-  table below cites the class or App member to look at. Find the one nearest what you
-  are building:
+  table below cites the class or App member to look at. Beyond the calendar, read a
+  program by its parts, not whole: its header, then `npx declare-help map <file>`, which
+  lists each class and App member with its lines and what it is, and the parts your plan
+  needs. Find the one nearest what you are building:
   - **Records people list, search, filter and edit** — most applications: issues, mail,
     tickets, listings, transactions, a catalog. → `apps/tracker/tracker.declare`, ten
     thousand records and a million on demand: one dataset class holds them and makes every

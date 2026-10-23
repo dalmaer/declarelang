@@ -161,6 +161,25 @@ App [ width = 400, height = 400, layout: SimpleLayout [ axis = y ],
   assert.match(b.warnings.find((w) => w.code === "DECLARE4020" && w.pos.line === 6).message, /Checkbox in Row/);
 });
 
+await test("a control showing it is the one chosen, with no state reported, is warned of; one that reports it, or opens a menu, is not", async () => {
+  const b = await compile(`class Choice extends Control [ width = 60, height = 44, on: boolean = false, label: string = "",
+    TextLabel [ text = { classroot.label } ] ]
+class Told extends Control [ width = 60, height = 44, on: boolean = false, accessibilityPressed = { on }, label: string = "",
+    TextLabel [ text = { classroot.label } ] ]
+class Opener extends Control [ width = 60, height = 44, on: boolean = false, label: string = "",
+    TextLabel [ text = { classroot.label } ] ]
+App [ width = 400, height = 300, pick: string = "a", layout: SimpleLayout [ axis = x ],
+    Choice [ label = "A", on = { app.pick == "a" }, press() { app.pick = "a" } ],
+    Told [ label = "B", on = { app.pick == "b" }, press() { app.pick = "b" } ],
+    Opener [ label = "Sort", menu = { app.m } ],
+    m: Menu [ items = { [ ({ id: "x", label: "X" }) ] } ] ]`);
+  assert.deepEqual(warnedLines(b, "DECLARE4022"), [1]);
+  const m = b.warnings.find((w) => w.code === "DECLARE4022").message;
+  assert.match(m, /Choice shows whether it is the one chosen \('on'\)/);
+  assert.match(m, /use Segmented/);
+  assert.match(m, /accessibilityPressed = \{ on \}/);
+});
+
 await test("a list's row may hold an editor: no warning, and the row is named by its own words, each control reached apart", async () => {
   const src = `class Item extends View [ accessibilityRole = option, accessibilitySelected = false, height = 90, press() { },
     layout: SimpleLayout [ axis = y ],

@@ -553,8 +553,12 @@ await test("buildProduction emits a self-contained bundle in the expected size r
   // a screen reader, and may wait until it is left; a refusal's body is checked
   // against its errorSchema; focus a program moves is shown — measured 137.7 KB,
   // from 136.9 the build before.
+  // 138 → 139 KB (2026-10-23, the third eval's fixes): a clipping view's drawing
+  // rasters only its box; an open overlay's own shortcuts are in force; viewAt
+  // passes over a view it is told to; a body names a class as a value; a row's
+  // name leaves out the controls it holds — measured 138.2 KB, from 137.7.
   const wire = out.files.reduce((n, f) => n + gzipSync(Buffer.from(f.contents)).length, 0);
-  assert.ok(wire > 20 * 1024 && wire < 138 * 1024,
+  assert.ok(wire > 20 * 1024 && wire < 139 * 1024,
     `unexpected FIRST-LOAD size ${(wire / 1024).toFixed(1)} KB — ` +
     out.files.map((f) => `${f.name} ${(gzipSync(Buffer.from(f.contents)).length / 1024).toFixed(1)}`).join(", "));
 

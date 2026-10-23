@@ -818,7 +818,7 @@ export const LANGUAGE_API = {
         // uses, callable from any handler — the drop-target primitive. Missing
         // here until the shelf eval's reference tripped over it (2026-08-07),
         // the day after the prose taught it.
-        `  viewAt(x: number, y: number): View | null;`,
+        `  viewAt(x: number, y: number, except?: View | null): View | null;`,
         `  containsPoint(x: number, y: number): boolean;`,
         // Re-host this view's surface inside a scroller so the platform carries
         // it with the content (the FocusRing's ride); false = unsupported.
@@ -1158,7 +1158,11 @@ styles = []) {
     const classes = [...all.values()].sort((a, b) => depth(a) - depth(b)).map((s) => emitClass(s, declOf.get(s.name), rootType, classExtras?.get(s.name), (n) => all.has(n) || shapeNameSet.has(n)));
     // tag name → instance class, for createView's literal-tag overload (View's
     // LANGUAGE_API). Every schema, built-in and user, under its instantiable name.
-    const tagLines = ["interface DeclareTags {", ...[...all.keys()].map((n) => `  ${JSON.stringify(n)}: ${n};`), "}"];
+    const tagLines = ["interface DeclareTags {", ...[...all.keys()].map((n) => `  ${JSON.stringify(n)}: ${n};`), "}",
+        // a class named as a value in a body reads this table (compile.ts rewrites
+        // `v instanceof Card` to `v instanceof $classes.Card`), so it narrows as the
+        // class itself would
+        `declare const $classes: { ${[...all.keys()].map((n) => `readonly ${n}: typeof ${n}`).join("; ")} };`];
     // The Motion union — named tokens (generated from animate.ts, single source
     // of truth) plus the MotionCurve brand the constructors in the prelude return.
     const motionLine = `type Motion = ${MOTION_TOKENS.map((t) => JSON.stringify(t)).join(" | ")} | MotionCurve;`;

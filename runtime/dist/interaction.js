@@ -310,11 +310,16 @@ function recOf(view) {
  *  Same walk the pointer is routed by: clip shapes, scale and pivot,
  *  `pointerEvents: "none"`, `ignoreClip`, and every scroll regime count
  *  exactly as they do for a real press. Returns the deepest (topmost) view;
- *  walk `.parent` for an eligible ancestor. */
-export function hitAt(root, x, y, pierce = false) {
+ *  walk `.parent` for an eligible ancestor. `except` — a view the walk passes
+ *  over with everything in it, as if it were not there: the ghost a drag
+ *  carries under the pointer, whose labels would otherwise be the answer. */
+export function hitAt(root, x, y, pierce = false, except = null) {
     if (!isView(root))
         return null;
-    return leafAt(root, x, y, pierce);
+    if (except === null || except === undefined)
+        return leafAt(root, x, y, pierce);
+    const past = { ...VIEWS, visible: (n) => n !== except && VIEWS.visible(n) };
+    return walkHit(root, x, y, past, pierce ? ANY : POINTABLE);
 }
 /** Does `view`'s own box contain this point, given in the root's CONTENT
  *  space (the language's root-space — what drag events carry)? Geometry only —

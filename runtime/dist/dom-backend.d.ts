@@ -211,6 +211,14 @@ export declare class DomSurface implements Surface {
     private get clipBox();
     setIgnoreClip(on: boolean): void;
     setBoxClip(on: boolean): void;
+    /** Whether `clip = true` holds this surface's drawing to its box (rasterize). */
+    private boxClipped;
+    /** A clipped drawing's raster is cut to the box, so a new clip or a new box
+     *  re-rasters it — only when its ink reaches past the box, the one case the
+     *  cut changes anything; once per turn, so a width and a height set together
+     *  (or a drawing that re-records on the resize anyway) cost one raster. */
+    private rerasterOwed;
+    private rerasterClipped;
     /** The content inset (`View.padding`), realized as the element's own CSS
      *  padding — for the scroll extent and for nothing else.
      *

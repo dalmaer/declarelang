@@ -42,7 +42,9 @@ state: `shown = { app.editing }` with `input(open: boolean) { app.editing = open
 opens and closes as the state does (SwiftUI's `isPresented`).
 
 ## present
-Whether it is built and drawn: open, or closing until its motion lands.
+Whether it is built and drawn: open, or closing until its motion lands. Content built
+fresh for each opening reads it, so it stays through the closing motion instead of
+emptying the panel as it goes: `entry: Form [ exists = { app.formSheet.present } ]`.
 
 ## _live
 **Internal.** Whether the open work has run (its layer, its keyboard hold, focus) — what

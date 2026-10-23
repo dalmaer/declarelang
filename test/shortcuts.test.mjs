@@ -112,7 +112,37 @@ await test("a text field keeps its own editing chords: ⌘A, ⌘C/X/V, ⌘Z go t
   assert.equal(app.got, "save;all;undo;", "outside a field, ⌘A and ⌘Z are the program's");
 });
 
-await test("nothing fires while an open overlay holds the keyboard", async () => {
+await test("an open overlay's own shortcuts fire while it holds the keyboard; the page's behind it do not", async () => {
+  const app = await boot(`App [ width = 400, height = 300,
+    got: string = "",
+    open: boolean = false,
+    sc: Shortcuts [ items = { [ ({ id: "page-new", key: "N", label: "New" }), ({ id: "page-save", key: "⌘S", label: "Save" }) ] },
+        picked(id: string) { app.got = app.got + id + ";" } ],
+    sheet: Sheet [ shown = { app.open }, input(v: boolean) { app.open = v },
+        entry: View [ width = 200, height = 100,
+            keys: Shortcuts [ items = { [ ({ id: "run", key: "R", label: "Run" }), ({ id: "save", key: "⌘↩", label: "Save" }) ] },
+                picked(id: string) { app.got = app.got + id + ";" } ],
+            field: TextInput [ width = 100, accessibilityLabel = "Note" ],
+            b: View [ y = 40, width = 50, height = 20, focusable = true ] ] ]
+    ]`);
+  app.open = true; settle();
+  Focus.focus(app.sheet.entry.b); settle();
+  press("r");
+  press("Enter", { meta: true, code: "Enter" });
+  assert.equal(app.got, "run;save;", "the sheet's own keys are in force inside it");
+  press("n"); press("s", { meta: true });
+  assert.equal(app.got, "run;save;", "the page's keys behind the sheet stand down");
+  assert.deepEqual(Keys.shortcutsInForce().map((r) => r.id), ["run", "save"], "and the panel lists only the sheet's");
+  app.sheet.entry.field.focusable = true; Focus.focus(app.sheet.entry.field); settle();
+  press("r");
+  assert.equal(app.got, "run;save;", "a plain key typed in the sheet's field is the field's");
+  app.open = false; settle();
+  Focus.focus(app.sc.parent); settle();
+  press("n");
+  assert.equal(app.got, "run;save;page-new;", "closed, the page's keys are back");
+});
+
+await test("nothing on the page fires while an open overlay holds the keyboard", async () => {
   const app = await boot(`App [ width = 400, height = 300,
     got: string = "",
     sc: Shortcuts [ items = { [ ({ id: "save", key: "⌘S", label: "Save" }) ] }, picked(id: string) { app.got = id } ],

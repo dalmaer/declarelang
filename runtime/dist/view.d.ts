@@ -736,7 +736,7 @@ export declare class View extends Node {
      *  root's CONTENT space; the walk itself runs in frame space, so the root's
      *  own scroll converts here at the boundary — the contract stays exactly
      *  what the drag pairing needs, scrolled or not.) */
-    viewAt(x: number, y: number): View | null;
+    viewAt(x: number, y: number, except?: View | null): View | null;
     /** Does this view's box contain the root-space point? Geometry only — what
      *  paints ON TOP is `viewAt`'s question — so a drop target can ask about
      *  itself without walking the tree. */

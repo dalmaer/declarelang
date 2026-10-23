@@ -60,6 +60,7 @@ if (query === "" || args.includes("--help")) {
     rotation · bold inside a label          the entry that answers the concept
     scrolls · fontWeight tokens             the enum's tokens, and who carries them
     DECLARE7001                             the diagnostic's family and register
+    map apps/weather/weather.declare        a program's parts, each with its lines
 
   flags
     --example  the guide's shortest working examples that use the name, with
@@ -96,6 +97,21 @@ if (query === "briefs" || query.startsWith("brief ") || query === "brief") {
   const text = b.text.replace(/^<!-- index: .+ -->\n/m, "");
   if (JSON_OUT) console.log(JSON.stringify({ kind: "brief", name: b.name, file: b.file, text }));
   else console.log(text.trimEnd());
+  process.exit(0);
+}
+
+// ── map: a program file's parts, by line range ───────────────────────────────
+// `map <file>` — so an exemplar is read by its header and the parts the work
+// needs, not whole. Any .declare file: the exemplars, the library, your own.
+if (query === "map" || query.startsWith("map ")) {
+  const file = query.slice("map".length).trim();
+  if (file === "") { console.log("declare-help map <file.declare> — the program's parts, each with its lines and what it is"); process.exit(1); }
+  let text;
+  try { text = readFileSync(resolve(process.cwd(), file), "utf8"); }
+  catch { try { text = readFileSync(join(ROOT, file), "utf8"); } catch { console.log(`no file at ${file}`); process.exit(1); } }
+  const { formatMap, programMap } = await import("./internal/doc/program-map.mjs");
+  if (JSON_OUT) console.log(JSON.stringify({ kind: "map", file, parts: programMap(text) }));
+  else console.log(formatMap(file, text));
   process.exit(0);
 }
 

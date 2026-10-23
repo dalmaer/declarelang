@@ -274,6 +274,30 @@ await test("a DOM raster that comes back blank is reported by name, once, and no
   assert.equal(Math.abs(cv.w / cv.cssW - 2) < 0.05, true, `the raster stays at device density, not halved: ${cv.w}/${cv.cssW}`);
 });
 
+// A CLIPPED VIEW'S RASTER IS ITS BOX. A drawing whose ink reaches 50,000 units
+// past a 300-wide view that clips showed nothing more than the box, but its
+// canvas was sized to the ink — tens of megabytes the browser refuses, and a
+// development report that told the author to draw less. And a blank check
+// deferred for that raster read the NEXT raster at the old one's origin, and
+// called a correct canvas blank.
+await test("a clipping view's drawing rasters only its box, follows a resize, and is not reported blank", async () => {
+  const pg = await open("test/probe/raster-clipped.declare?render=dom");
+  const said = [];
+  pg.on("console", (m) => { if (m.type() === "error") said.push(m.text()); });
+  const canvas = `(() => { const c = document.querySelector("canvas"); return { w: c.width, h: c.height, cssW: parseFloat(c.style.width) }; })()`;
+  const at300 = await pg.evaluate(canvas);
+  assert.equal(at300.cssW <= 304 && at300.w <= 304 * 2 + 4, true, `the raster is the box, not the ink: ${JSON.stringify(at300)}`);
+  await pg.evaluate(`window.__app.wide = 420`);
+  await sleep(300);
+  const at420 = await pg.evaluate(canvas);
+  assert.equal(at420.cssW >= 420 && at420.cssW <= 424, true, `a wider box re-rasters at the new width: ${JSON.stringify(at420)}`);
+  const mid = await pg.evaluate(`(() => { const c = document.querySelector("canvas"); const g = c.getContext("2d");
+    return Array.from(g.getImageData(Math.round(c.width * 0.8), Math.round(c.height * 0.85), 1, 1).data); })()`);
+  await pg.close();
+  assert.deepEqual(mid.slice(0, 3), [0x2E, 0x6F, 0xE0], `the newly shown strip is painted: ${mid}`);
+  assert.equal(said.filter((t) => /came back blank/.test(t)).length, 0, `no blank report: ${JSON.stringify(said)}`);
+});
+
 // A PER-FRAME CLOCK IS NOT A GLIDE. The visibility facts hold their delivery
 // while motion is in flight and flush at rest — but a Time ticking every frame
 // (a playback head, a spinner) never rests, and the facts, a drawing's raster

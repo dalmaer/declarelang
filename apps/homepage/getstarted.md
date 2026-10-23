@@ -1,8 +1,18 @@
-# Getting started
+# Try it now
 
-Just as SQL is a domain-specific language for querying data, Declare is purpose-built for creating modern UIs. Here is how to run it locally and write your first program — no build step, no scaffold, no config.
+Just as SQL is a domain-specific language for querying data, Declare is purpose-built for creating modern UIs. The quickest way to see what it does is to have it build you something.
 
-## Quick start
+## The easy way
+
+Open Claude Code — or another coding agent — in an empty folder, and tell it what you want, with the address of Declare. Either of these will do, or write your own:
+
+> Write me a kanban board using Declare, here: https://github.com/davidtemkin/declarelang
+
+> Write me a budget app using Declare, here: https://github.com/davidtemkin/declarelang
+
+There is nothing to install first. The agent downloads Declare, reads its guide, writes the app and checks its own work in a browser; along the way it asks to run a few commands — say yes. In 15–20 minutes it hands you a working app and the address to open it at.
+
+## Or do it yourself
 
 <!-- generated:setup-commands -->
 ```bash
@@ -13,7 +23,7 @@ Get the repository.
 ```bash
 npm install
 ```
-Install the toolchain's dependencies (TypeScript; esbuild and puppeteer-core for builds and visual tests). The clone ships prebuilt — no build step before first run. pnpm works too — the repo pre-approves esbuild's install script; if you instead add declarelang to another project as a git dependency, approve its build (`pnpm approve-builds`, or `"pnpm": { "onlyBuiltDependencies": ["declarelang"] }`) so its prepare step runs.
+Install the toolchain's dependencies (TypeScript, esbuild, and the Chrome driver the checking tools run on). The clone ships prebuilt — no build step before first run. pnpm works too — the repo pre-approves esbuild's install script; if you instead add declarelang to another project as a git dependency, approve its build (`pnpm approve-builds`, or `"pnpm": { "onlyBuiltDependencies": ["declarelang"] }`) so its prepare step runs.
 
 ```bash
 npm start

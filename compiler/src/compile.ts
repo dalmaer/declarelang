@@ -2052,6 +2052,16 @@ class Resolver {
         k = levels.length - 1; // the root level itself — `App.zip` reads the anonymous App class
         selfName = true;
       }
+      // A CLASS NAME AS A VALUE — `v instanceof Card`, walking up from what
+      // viewAt hit to the card it sits in. The type checker already knows the
+      // class (the scaffold declares it, so the test narrows); at run time the
+      // name reads the program's own table of constructors, which every body
+      // has in scope as `$classes` (instantiate.ts) — one name, not one per class.
+      if (k === -1 && !id.assigned && this.schemas[id.name] !== undefined && !isKnownGlobal(id.name)
+        && !this.scriptNames.has(id.name) && !this.themeNames.has(id.name) && !this.styleNames.has(id.name)) {
+        this.edits.push({ start: bodyStart + id.start, end: bodyStart + id.end, text: "$classes." + id.name });
+        continue;
+      }
       if (k === -1) {
         if (!isKnownGlobal(id.name) && !this.scriptNames.has(id.name) && !this.themeNames.has(id.name) && !this.styleNames.has(id.name)) {
           const hostHint = hostGlobalHint(id.name);

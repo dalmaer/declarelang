@@ -1,0 +1,21 @@
+// A view that clips, whose drawing reaches far past its box both ways — a long
+// series panned so most of it is off-screen (test/draw-bounds.test.mjs). Its
+// raster is the box, not the ink: the browser is never asked for the canvas
+// the whole series would need.
+
+App [ width = 600, height = 400,
+    wide: number = 300,
+    chart: View [ x = 40, y = 40, width = { app.wide }, height = 150, clip = true,
+        draw(d: Draw) {
+            d.fillStyle = 0xf4f1ea
+            d.fillRect(0, 0, 1000, 150)   // no read of d.w: a resize alone must re-raster it
+            d.beginPath()
+            d.moveTo(-50000, 140)
+            for (let x = -50000; x <= 50000; x += 2500) d.lineTo(x, 20 + Math.abs(x % 5000) / 50)
+            d.lineTo(50000, 140)
+            d.closePath()
+            d.fillStyle = 0x2e6fe0
+            d.fill()
+            }
+        ]
+    ]

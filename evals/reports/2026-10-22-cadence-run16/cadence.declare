@@ -1,0 +1,514 @@
+/*
+# Cadence
+
+A training log for someone who runs, rides, lifts and swims — the thing they open
+in the morning to see where they are, and again after a session to put it in.
+
+How it is put together:
+
+- **One source of truth.** `sessions` (model.declare) is the history as the
+  service holds it; every write — add, correct, delete — goes through it and
+  lands in its records. The week, the streak, the week's shape, the year and
+  the open session are all derived from it, so a new session is true of all of
+  them in the same step, and each figure *travels* to its new value on a spring.
+- **Where the person is** lives here on the App: the stretch of the year on
+  screen (`span` and `vEnd`, each with a spring and a target), the session
+  open, and whether the form is open.
+- **The year is a surface under the hand.** Every bar, month and day on it is
+  placed from `viewStart` and `dayW`; a drag, a pinch or the wheel writes the
+  view and its target together, so nothing lags the hand, and the range chips
+  write only the target, so the surface glides there.
+- **One app, two rooms.** Below 760 points it is a phone page — Today on top,
+  the year under it, and the record button where a thumb rests; above it the
+  two sit side by side with the button in reach of the keyboard (N).
+*/
+
+include [ "model.declare" ]
+
+include [ "parts.declare" ]
+
+script {
+    // a day-by-day reading of the history, for the year's surface: minutes per
+    // day from `first`, and the trailing seven-day volume
+    interface Series { first: number, mins: number[], roll: number[], rollMax: number }
+    }
+
+
+App [ appName = "Cadence", minWidth = 340,
+    inter: Font [ FontFace [ src = "fonts/InterVariable.woff2", weight = range(100, 900) ]
+        ],
+    fontFamily = { [app.inter, "system-ui", "sans-serif"] },
+    theme = { { ...SanFrancisco, ...Paper } },
+    fill = { provided("theme").paper },
+    textColor = { provided("theme").ink },
+
+    // ── the data ──────────────────────────────────────────────────────────
+
+    sessions: Sessions [ onLoad() { app.arriveFigures() }
+        ],
+
+    // the service's clock is the one to trust: "this week" and "the streak"
+    // mean the same thing every time the app runs
+
+    calendar: DataSource [ url = { API + "/api/today" }, auto = true, schema = [ today: string ],
+        onLoad() { app.arriveFigures() }
+        ],
+    todayN: number = { app.calendar.value == null ? 0 : dayNum(app.calendar.value.today) },
+    ready: boolean = { app.sessions.loaded && app.calendar.loaded },
+
+    // the session in progress: re-read every ten seconds for its heart rate
+    // and distance, its clock carried forward between readings by the second
+
+    live: DataSource [ url = { API + "/api/live" }, auto = true, schema = [ session?: LiveSession ],
+        onLoad() { app.liveSeen = app.clock.now }
+        ],
+    livePoll: Time [ tick = 10000,
+        onTick() { app.live.fetch() }
+        ],
+    clock: Time [ tick = second ],
+    liveSeen: number = 0,
+    liveRec: LiveSession? = { app.live.value?.session ?? null },
+    liveOn: boolean = { app.liveRec != null },
+    liveElapsed: number = { app.liveRec == null ? 0
+        : app.liveRec.startedSecondsAgo + Math.max(0, Math.floor((app.clock.now - app.liveSeen) / 1000)) },
+    livePulse: number = 1,
+    Spring [ attribute = livePulse, to = { app.clock.second % 2 == 0 ? 1 : 0.3 }, stiffness = 60, damping = 12 ],
+
+    // the one colour: a session's effort, from stone to vermilion. A number,
+    // not a Color, because mix() blends plain 0xRRGGBB values
+
+    effortColor(e: number) -> number {
+        const t = provided("theme")
+        return mix(t.effortLow, t.effortHigh, Math.pow(clamp((e - 1) / 9, 0, 1), 1.7))
+        },
+
+    // ── today ─────────────────────────────────────────────────────────────
+    // "This week" is the seven days ending today, so on a Monday morning it is
+    // the week just done.
+
+    week: Session[] = { app.sessions.between(app.todayN - 6, app.todayN + 1) },
+    weekCount: number = { app.week.length },
+    weekMinutes: number = { app.week.reduce((t, s) => t + s.minutes, 0) },
+
+    // consecutive days with a session, through today — or through yesterday,
+    // while today is still open
+
+    streak: number = { app.streakDays() },
+    streakDays() -> number {
+        let n = app.todayN
+        if (app.sessions.on(n).length == 0) n = n - 1
+        let count = 0
+        while (app.sessions.on(n).length > 0) { count = count + 1; n = n - 1 }
+        return count
+        },
+
+    weekDays: Dataset [ contents = { { days: app.weekModel() } } ],
+    weekModel() -> array {
+        const out = []
+        for (let n = app.todayN - 6; n <= app.todayN; n++) {
+            const list = app.sessions.on(n)
+            out.push({ id: "d" + n, n: n, today: n == app.todayN,
+                       minutes: list.reduce((t, s) => t + s.minutes, 0),
+                       effort: list.reduce((e, s) => Math.max(e, s.effort), 1) })
+            }
+        return out
+        },
+
+    // a fixed scale with room for a long day, so a light week looks light
+
+    weekScale: number = { Math.max(150, ...app.weekModel().map((d) => d.minutes)) },
+
+    last: Session? = { app.sessions.all()[0] ?? null },
+
+    // the week's figures as large as the column allows: on a phone a heavy
+    // week ("12 sessions · 10h 40m") steps down to stay on one line, while the
+    // streak beside it keeps the full size
+
+    weekFig: number = { app.phone
+        ? Math.min(76, (app.main.today.width - 150) / (0.6 * (("" + app.weekCount).length + fmtDuration(app.weekMinutes).replace(/\D/g, "").length)))
+        : 88 },
+
+    // the figures on screen, each travelling to the truth on its own spring
+
+    weekCountShown: number = 0,
+    weekMinutesShown: number = 0,
+    streakShown: number = 0,
+    weekCountSpring: Spring [ attribute = weekCountShown, to = { app.weekCount }, stiffness = 90, damping = 18 ],
+    weekMinutesSpring: Spring [ attribute = weekMinutesShown, to = { app.weekMinutes }, stiffness = 90, damping = 18 ],
+    streakSpring: Spring [ attribute = streakShown, to = { app.streak }, stiffness = 90, damping = 18 ],
+
+    // a figure that arrives with the data appears; only a change rolls
+
+    arriveFigures() {
+        app.weekCountSpring.arrive()
+        app.weekMinutesSpring.arrive()
+        app.streakSpring.arrive()
+        app.periodCountSpring.arrive()
+        app.periodMinutesSpring.arrive()
+        },
+
+    // ── the year ──────────────────────────────────────────────────────────
+
+    series: Series = { app.buildSeries() },
+    buildSeries() -> Series {
+        const first = monthStart(app.sessions.firstDay)
+        const mins: number[] = []
+        const roll: number[] = []
+        let rollMax = 1
+        for (let n = first; n <= app.todayN; n++) {
+            mins.push(app.sessions.minutesOn(n))
+            const i = mins.length - 1
+            const r = mins.slice(Math.max(0, i - 6), i + 1).reduce((t, m) => t + m, 0)
+            roll.push(r)
+            rollMax = Math.max(rollMax, r)
+            }
+        return ({ first: first, mins: mins, roll: roll, rollMax: rollMax })
+        },
+    firstN: number = { app.series.first },
+    endN: number = { app.todayN + 1 },
+    maxSpan: number = { app.endN - app.firstN + 4 },
+
+    months: Dataset [ contents = { { months: app.monthModel() } } ],
+    monthModel() -> array {
+        const out = []
+        if (app.todayN == 0) return out
+        for (let n = app.firstN; n < app.endN; n = nextMonth(n)) {
+            const end = Math.min(nextMonth(n), app.endN)
+            out.push({ id: "m" + n, n: n, len: end - n, january: monthOf(n) == 0 || n == app.firstN,
+                       minutes: app.sessions.between(n, end).reduce((t, s) => t + s.minutes, 0), busiest: false })
+            }
+        const top = out.reduce((m, r) => Math.max(m, r.minutes), 0)
+        for (const r of out) r.busiest = r.minutes == top
+        return out
+        },
+
+    // the days along the axis, only once the surface is open far enough to
+    // give each of them room
+
+    dayMarks: Dataset [ contents = { { days: app.dayW < 18 ? [] : app.visibleDays() } } ],
+    visibleDays() -> array {
+        const out = []
+        for (let n = Math.floor(app.viewStart); n < Math.ceil(app.vEnd); n++)
+            if (n >= app.firstN && n < app.endN) out.push({ id: "d" + n, n: n })
+        return out
+        },
+
+    // what is on screen: it ends at `vEnd` and spans `span` days. Under the
+    // hand both are written with their targets; a chip writes the targets
+
+    span: number = 91,
+    spanTo: number = 91,
+    vEnd: number = 0,
+    vEndTo: number = 0,
+    Spring [ attribute = span, to = { app.spanTo }, stiffness = 150, damping = 26, epsilon = 0.01 ],
+    Spring [ attribute = vEnd, to = { app.vEndTo }, stiffness = 150, damping = 26, epsilon = 0.01 ],
+
+    chart: YearChart = { app.main.year.chart },
+    dayW: number = { app.chart.width / Math.max(1, app.span) },
+    viewStart: number = { app.vEnd - app.span },
+
+    clampSpan(s: number) -> number { return clamp(s, 7, app.maxSpan) },
+
+    // the view may run a little past either end of the record, never far;
+    // opened wider than the whole record, it centres on it
+
+    clampEnd(e: number, s: number) -> number {
+        if (s >= app.endN - app.firstN) return (app.firstN + app.endN + s) / 2
+        const pad = s * 0.03
+        return clamp(e, app.firstN + s - pad, app.endN + pad)
+        },
+    handTo(s: number, e: number) {
+        const sp = app.clampSpan(s)
+        const en = app.clampEnd(e, sp)
+        app.span = sp; app.spanTo = sp
+        app.vEnd = en; app.vEndTo = en
+        },
+    zoomAbout(f: number, x: number) {
+        const w = app.chart.width
+        const at = app.viewStart + x / app.dayW
+        const sp = app.clampSpan(app.span * f)
+        app.handTo(sp, at + (w - x) * sp / w)
+        },
+
+    // a chip opens the surface to a preset about the middle of what is shown —
+    // or keeps it pinned to today, when that is where it ends
+
+    zoomTo(days: number) {
+        const sp = app.clampSpan(days)
+        const pinned = app.vEndTo >= app.endN - 0.5
+        const mid = app.vEndTo - app.spanTo / 2
+        app.spanTo = sp
+        app.vEndTo = app.clampEnd(pinned ? app.endN + sp * 0.03 : mid + sp / 2, sp)
+        },
+    pan(fraction: number) { app.vEndTo = app.clampEnd(app.vEndTo + app.spanTo * fraction, app.spanTo) },
+    toToday() { app.vEndTo = app.clampEnd(app.endN + app.spanTo * 0.03, app.spanTo) },
+
+    // bring a day onto the surface, if it is not already there
+
+    bringIntoView(n: number) {
+        const a = app.vEndTo - app.spanTo
+        if (n >= a && n < app.vEndTo) return
+        app.vEndTo = app.clampEnd(n + 1 + app.spanTo * 0.25, app.spanTo)
+        },
+
+    // the stretch on screen, and what happened in it: a day counts once more
+    // than half of it is showing
+
+    winA: number = { Math.max(app.firstN, Math.round(app.viewStart)) },
+    winB: number = { Math.min(app.endN, Math.round(app.vEnd)) },
+    inView: Session[] = { app.sessions.between(app.winA, app.winB) },
+    periodLabel: string = { rangeLabel(app.winA, app.winB) },
+    periodCount: number = { app.inView.length },
+    periodMinutes: number = { app.inView.reduce((t, s) => t + s.minutes, 0) },
+    periodKm: number = { app.inView.reduce((t, s) => t + (s.distanceKm ?? 0), 0) },
+    hardest: Session? = { app.inView.reduce((h: Session | null, s) => h == null || s.effort > h.effort
+        || (s.effort == h.effort && s.minutes > h.minutes) ? s : h, null) },
+    periodCountShown: number = 0,
+    periodMinutesShown: number = 0,
+    periodCountSpring: Spring [ attribute = periodCountShown, to = { app.periodCount }, stiffness = 120, damping = 22 ],
+    periodMinutesSpring: Spring [ attribute = periodMinutesShown, to = { app.periodMinutes }, stiffness = 120, damping = 22 ],
+
+    // the surface opens on the last three months, ending today, once there
+    // is a today to end on
+
+    trackChanges = ["ready"],
+    onChange(e: ChangeEvent) { if (app.ready) app.handTo(91, app.endN + 91 * 0.03) },
+
+    // ── a session open, and the form ──────────────────────────────────────
+
+    detailOpen: boolean = false,
+    shownId: string = "",                  // kept while the sheet slides away
+    shown: Session? = { app.sessions.byId(app.shownId) },
+
+    openSession(id: string) { app.shownId = id; app.detailOpen = true },
+    openDay(n: number) {
+        const list = app.sessions.on(n)
+        if (list.length == 0) return
+        app.openSession(list.reduce((b, s) => s.minutes > b.minutes ? s : b).id)
+        },
+
+    formOpen: boolean = false,
+    editingId: string = "",
+    editing: Session? = { app.sessions.byId(app.editingId) },
+    lastAdded: string = "",
+
+    openNew() { app.editingId = ""; app.formOpen = true },
+    openEdit() { app.editingId = app.shownId; app.detailOpen = false; app.formOpen = true },
+
+    save(f: SessionForm) {
+        if (app.sessions.busy) return
+        if (app.editingId != "") app.sessions.update(app.editingId, f.body())
+        else app.sessions.add(f.body())
+        },
+
+    // what the service said, if it refused the last save
+
+    saveError: string = { app.sessions.create.failed ? app.sessions.create.errorBody?.message ?? app.sessions.create.error
+        : app.sessions.change.failed ? app.sessions.change.errorBody?.message ?? app.sessions.change.error : "" },
+
+    // the service has it: the sheet goes, the surface turns to where it
+    // landed, and every figure that took it in rolls to its new value
+
+    saved(s: Session, isNew: boolean) {
+        app.formOpen = false
+        app.bringIntoView(dayNum(s.date))
+        if (isNew) app.lastAdded = s.id
+        app.toast.say((isNew ? "Saved · " : "Corrected · ") + sportName(s.sport) + " · " + fmtDuration(s.minutes) + " · "
+            + dayLabel(dayNum(s.date), app.todayN).toLowerCase(), isNew ? ({ id: "undo", label: "Undo" }) : null)
+        },
+
+    confirmDelete() {
+        app.confirm.open("Delete this session?", "It leaves the history, and everything counted from it.",
+            [ ({ id: "cancel", label: "Keep it", cancel: true }), ({ id: "delete", label: "Delete", default: true }) ], "", null)
+        },
+    deleteShown() {
+        app.sessions.remove(app.shownId)
+        app.detailOpen = false
+        app.toast.say("Session deleted", null)
+        },
+
+    // ── the rooms ─────────────────────────────────────────────────────────
+
+    phone: boolean = { app.width < 760 },
+
+    // on a phone the app is the page and the page scrolls; at a desk it is
+    // one screen
+
+    height = { app.phone ? Math.max(app.hostHeight, app.main.height + 96 + app.safeBottom) : app.hostHeight },
+
+    keys: Shortcuts [ title = "Cadence",
+        items = { [ ({ id: "new", key: "N", label: "Log a session" }),
+                    ({ id: "back", key: "←", label: "Earlier" }), ({ id: "on", key: "→", label: "Later" }),
+                    ({ id: "in", key: "=", label: "Open the year out" }), ({ id: "out", key: "-", label: "Close the year in" }),
+                    ({ id: "today", key: "T", label: "Back to today" }) ] },
+        picked(id: string) {
+            if (id == "new") app.openNew()
+            else if (id == "back") app.pan(-0.34)
+            else if (id == "on") app.pan(0.34)
+            else if (id == "in") app.zoomTo(app.spanTo / 1.6)
+            else if (id == "out") app.zoomTo(app.spanTo * 1.6)
+            else if (id == "today") app.toToday()
+            }
+        ],
+
+    main: View [ width = 100%, padding = { app.phone ? [20, 20, 0, 20] : [30, 44, 30, 44] },
+        height = { app.phone ? this.contentHeight : app.hostHeight },
+        layout: ResponsiveLayout [ gap = { app.phone ? 40 : 64 }, plan = { [
+            ({ from: 700, flow: "row", share: ({ today: 33, year: 67 }) }),
+            ({ from: 0, flow: "stack", share: ({ today: 100, year: 100 }) })
+            ] } ],
+
+        /* ## Today — where am I, from across the room */
+
+        // at a desk the column is the screen's height, and scrolls on its own
+        // if a short window cannot hold it
+
+        today: View [ height = { app.phone ? this.contentHeight : app.hostHeight - 60 }, scrolls = { app.phone ? "none" : "y" },
+            layout: SimpleLayout [ axis = y, spacing = { app.phone ? 28 : 18 } ],
+
+            head: View [ width = 100%,
+                layout: SimpleLayout [ axis = x, align = baseline ],
+                Text [ fontSize = 17, fontWeight = bold, letterSpacing = -0.3, wrap = false, textColor = { provided("theme").ink }, text = "Cadence" ],
+                Spacer [ ],
+                Text [ fontSize = 15, wrap = false, textColor = { provided("theme").textMuted },
+                    text = { app.todayN == 0 ? "" : dowName(app.todayN) + " " + dom(app.todayN) + " " + monthName(app.todayN) } ]
+                ],
+
+            thisWeek: View [ width = 100%,
+                layout: SimpleLayout [ axis = y, spacing = 0 ],
+                Caps [ text = "THIS WEEK" ],
+                line: View [ accessibilityRole = group,
+                    accessibilityLabel = { app.weekCount + " " + plural(app.weekCount, "session", "sessions") + " · " + fmtDuration(app.weekMinutes) },
+                    layout: SimpleLayout [ axis = x, align = baseline ],
+                    count: Fig [ fontSize = { app.weekFig }, text = { "" + Math.round(app.weekCountShown) } ],
+                    Unit [ padding = [0, 0, 0, 8], text = { plural(Math.round(app.weekCountShown), "session", "sessions") } ],
+                    Unit [ padding = [0, 14, 0, 14], text = "·" ],
+                    total: DurationFig [ big = { app.weekFig }, minutes = { app.weekMinutesShown } ]
+                    ]
+                ],
+
+            streak: View [ width = 100%,
+                layout: SimpleLayout [ axis = y, spacing = 0 ],
+                Caps [ text = "STREAK" ],
+                line: View [ accessibilityRole = group,
+                    accessibilityLabel = { app.streak == 0 ? "no streak" : app.streak + " " + plural(app.streak, "day", "days") },
+                    layout: SimpleLayout [ axis = x, align = baseline ],
+                    days: Fig [ fontSize = { app.phone ? 76 : 88 }, visible = { app.streak > 0 }, text = { "" + Math.round(app.streakShown) } ],
+                    Unit [ padding = [0, 0, 0, 8], visible = { app.streak > 0 }, text = { plural(Math.round(app.streakShown), "day", "days") } ],
+                    none: Text [ visible = { app.streak == 0 }, fontSize = 34, fontWeight = 300, wrap = false,
+                        textColor = { provided("theme").textMuted }, text = "no streak" ]
+                    ]
+                ],
+
+            shape: View [ width = 100%, datapath = { app.weekDays.value },
+                layout: SimpleLayout [ axis = x ],
+                DayBar [ datapath = :days[] ]
+                ],
+
+            nowCard: LiveCard [ visible = { app.liveOn }, datapath = { app.liveRec } ],
+            lastCard: LastCard [ visible = { app.last != null }, datapath = { app.last },
+                press() { app.openSession(app.last?.id ?? "") }
+                ]
+            ],
+
+        /* ## The year — fourteen months, handled */
+
+        year: View [ height = { app.phone ? 560 : app.hostHeight - 60 },
+            layout: SimpleLayout [ axis = y, spacing = 14 ],
+
+            head: View [ width = 100%,
+                layout: SimpleLayout [ axis = x, align = center ],
+                titles: View [ layout: SimpleLayout [ axis = y, spacing = 2 ],
+                    Caps [ text = "THE YEAR" ],
+                    period: Text [ fontSize = { app.phone ? 22 : 26 }, fontWeight = semibold, letterSpacing = -0.4, wrap = false,
+                        numeralWidth = tabular, textColor = { provided("theme").ink }, text = { app.periodLabel } ]
+                    ],
+                Spacer [ ],
+                logDesk: BigButton [ visible = { !app.phone }, width = 220, height = 52, label = "Log a session   N",
+                    press() { app.openNew() }
+                    ]
+                ],
+
+            stats: View [ width = 100%,
+                layout: WrappingLayout [ spacing = 0, rowSpacing = 2 ],
+                accessibilityRole = group,
+                accessibilityLabel = { app.periodCount + " " + plural(app.periodCount, "session", "sessions") + " · " + fmtDuration(app.periodMinutes) },
+                line: View [ layout: SimpleLayout [ axis = x, align = baseline ],
+                    Fig [ fontSize = 44, text = { "" + Math.round(app.periodCountShown) } ],
+                    Unit [ padding = [0, 0, 0, 6], text = { plural(Math.round(app.periodCountShown), "session", "sessions") } ],
+                    Unit [ padding = [0, 12, 0, 12], text = "·" ],
+                    DurationFig [ big = 44, minutes = { app.periodMinutesShown } ],
+                    Unit [ padding = [0, 12, 0, 12], visible = { app.periodKm > 0 && !app.phone }, text = "·" ],
+                    Unit [ visible = { app.periodKm > 0 && !app.phone }, numeralWidth = tabular, text = { Math.round(app.periodKm) + " km" } ]
+                    ]
+                ],
+
+            // the hardest session in view — one press away, wherever the surface is
+
+            hardest: Control [ width = 100%, height = 44, visible = { app.hardest != null },
+                accessibilityLabel = { app.hardest == null ? "" : "Hardest in view: " + sportName(app.hardest.sport) },
+                layout: SimpleLayout [ axis = x, spacing = 10, align = center ],
+                View [ width = 12, height = 12, cornerRadius = 6, fill = { app.effortColor(app.hardest?.effort ?? 1) } ],
+                Text [ fontSize = 15, wrap = false, textColor = { provided("theme").ink },
+                    text = { app.hardest == null ? "" : "Hardest: " + sportName(app.hardest.sport)
+                        + (app.hardest.distanceKm != null ? " " + fmtKm(app.hardest.distanceKm) : " " + fmtDuration(app.hardest.minutes))
+                        + ", effort " + app.hardest.effort + " — " + dayLabel(dayNum(app.hardest.date), app.todayN) } ],
+                press() { if (app.hardest != null) app.openSession(app.hardest.id) }
+                ],
+
+            chart: YearChart [ width = 100%, flexes = true,
+                days: View [ width = 100%, height = 100%, datapath = { app.dayMarks.value },
+                    DayMark [ datapath = :days[] ]
+                    ],
+                months: View [ width = 100%, height = 100%, datapath = { app.months.value },
+                    MonthMark [ datapath = :months[] ]
+                    ]
+                ],
+
+            ranges: View [ width = 100%,
+                layout: SimpleLayout [ axis = x, spacing = 4, align = center ],
+                RangeChip [ days = 14, label = "2W" ],
+                RangeChip [ days = 91, label = "3M" ],
+                RangeChip [ days = 182, label = "6M" ],
+                RangeChip [ days = 365, label = "1Y" ],
+                RangeChip [ days = 1000, label = "All" ],
+                Spacer [ ],
+                Text [ fontSize = 12, wrap = false, visible = { !app.phone }, textColor = { provided("theme").textFaint },
+                    text = "drag · pinch · scroll to zoom" ]
+                ]
+            ]
+        ],
+
+    // the record button, where a thumb already is
+
+    logPhone: BigButton [ ignoreScroll = true, visible = { app.phone }, label = "Log a session",
+        x = 20, width = { app.width - 40 },
+        y = { app.hostHeight - 76 - Math.max(app.safeBottom, app.underlapBottom) },
+        shadow = shadow(0, 6, 18, #17140F40),
+        press() { app.openNew() }
+        ],
+
+    // ── what opens over it ────────────────────────────────────────────────
+
+    detail: Sheet [ edge = "end", accessibilityLabel = "Session",
+        shown = { app.detailOpen },
+        input(open: boolean) { app.detailOpen = open },
+        SessionDetail [ datapath = { app.shown } ]
+        ],
+
+    form: Sheet [ edge = "end", accessibilityLabel = "Log a session",
+        shown = { app.formOpen },
+        input(open: boolean) { app.formOpen = open },
+
+        // built fresh for each opening, so every one starts from what is most
+        // likely; kept through the slide away so the sheet never empties
+
+        entry: SessionForm [ exists = { app.formOpen || app.form.openT > 0 }, initial = { app.editing } ]
+        ],
+
+    confirm: Dialog [ picked(id: string) { if (id == "delete") app.deleteShown() }
+        ],
+
+    toast: Toast [ picked(id: string) { if (id == "undo" && app.lastAdded != "") app.sessions.remove(app.lastAdded) }
+        ]
+    ]

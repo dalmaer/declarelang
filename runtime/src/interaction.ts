@@ -381,10 +381,14 @@ function recOf(view: InteractionView): Rec {
  *  Same walk the pointer is routed by: clip shapes, scale and pivot,
  *  `pointerEvents: "none"`, `ignoreClip`, and every scroll regime count
  *  exactly as they do for a real press. Returns the deepest (topmost) view;
- *  walk `.parent` for an eligible ancestor. */
-export function hitAt(root: unknown, x: number, y: number, pierce = false): InteractionView | null {
+ *  walk `.parent` for an eligible ancestor. `except` — a view the walk passes
+ *  over with everything in it, as if it were not there: the ghost a drag
+ *  carries under the pointer, whose labels would otherwise be the answer. */
+export function hitAt(root: unknown, x: number, y: number, pierce = false, except: unknown = null): InteractionView | null {
   if (!isView(root)) return null;
-  return leafAt(root, x, y, pierce);
+  if (except === null || except === undefined) return leafAt(root, x, y, pierce);
+  const past: HitAdapter<InteractionView> = { ...VIEWS, visible: (n) => n !== except && VIEWS.visible(n) };
+  return walkHit(root, x, y, past, pierce ? ANY : POINTABLE);
 }
 
 /** Does `view`'s own box contain this point, given in the root's CONTENT

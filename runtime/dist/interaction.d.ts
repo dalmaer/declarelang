@@ -86,8 +86,10 @@ export declare function noteUserScroll(scroller: object, active: boolean): void;
  *  Same walk the pointer is routed by: clip shapes, scale and pivot,
  *  `pointerEvents: "none"`, `ignoreClip`, and every scroll regime count
  *  exactly as they do for a real press. Returns the deepest (topmost) view;
- *  walk `.parent` for an eligible ancestor. */
-export declare function hitAt(root: unknown, x: number, y: number, pierce?: boolean): InteractionView | null;
+ *  walk `.parent` for an eligible ancestor. `except` — a view the walk passes
+ *  over with everything in it, as if it were not there: the ghost a drag
+ *  carries under the pointer, whose labels would otherwise be the answer. */
+export declare function hitAt(root: unknown, x: number, y: number, pierce?: boolean, except?: unknown): InteractionView | null;
 /** Does `view`'s own box contain this point, given in the root's CONTENT
  *  space (the language's root-space — what drag events carry)? Geometry only —
  *  occlusion is `hitAt`'s question — so a view can ask "is the pointer within

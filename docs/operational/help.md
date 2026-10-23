@@ -24,6 +24,7 @@ cold in a fresh clone. Same question, same bytes, every time.
 | `DECLARE7001` | the diagnostic's family and where its register lives |
 | `E3A14CE` | a **runtime** error code — what a production build throws in place of the sentence: the message, and where it is thrown |
 | `DataSource.method --example` | the guide's shortest working examples that use the name, each with the chapter and section it comes from — real, compiled code, instead of reading a whole app |
+| `map apps/weather/weather.declare` | a program's parts — each class, and each App member or named part of some size — with the lines it spans and what its comment says it is, so a long program is read by the parts the work needs (any `.declare` file: an exemplar, the library, your own) |
 
 ## Two contracts worth trusting
 

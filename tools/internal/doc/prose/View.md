@@ -1149,13 +1149,16 @@ hovered = { app.dropTarget == this }
 ```
 
 The answer is the *deepest* view; when the dragger needs "the card, not its
-label," walk `.parent` up to the view carrying the marker attribute it declared.
-Coordinates are root-space — exactly what `onPointerMove`/`onPointerUp` carry.
-Because the walk is the honest one, the **drag ghost counts**: give it — and any
-container it sits in — `pointerEvents = "none"`, or it is the answer. A sizeless
-container around a pointer-following ghost auto-extends *with* the pointer, so it
-becomes an invisible box over the very targets being dragged onto;
-`explainHit(x, y)` names what really takes the press. The full pattern is the
+label," walk `.parent` up until it is one — a class name is a value in a body, so
+`while (t != null && !(t instanceof Tile)) t = t.parent`, and past the loop `t` is a
+`Tile`. Coordinates are root-space — exactly what `onPointerMove`/`onPointerUp` carry.
+Because the walk is the honest one, the **drag ghost counts**: pass it as the third
+argument — `app.viewAt(e.rootX, e.rootY, app.ghost)` — and the walk goes past it and
+everything in it, its labels included. (`pointerEvents = "none"` takes one view out,
+not its children.) A sizeless container around a pointer-following ghost
+auto-extends *with* the pointer, so it becomes an invisible box over the very targets
+being dragged onto — pass the container; `explainHit(x, y)` names what really takes
+the press. The full pattern is the
 guide's Interaction chapter ("Finding what is under the pointer").
 
 ## containsPoint()

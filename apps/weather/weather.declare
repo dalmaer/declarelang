@@ -551,6 +551,7 @@ class RowSky [ clip = true,
 class CityRow extends Control [ width = 100%, height = { ROW_H }, cursor = "pointer", fill = null,
     mine: string = { :id },
     selected: boolean = { app.city != null && app.city.id == this.mine },
+    accessibilityPressed = { this.selected },   // the city on show is the row pressed in
 
     /*
     ## The handover

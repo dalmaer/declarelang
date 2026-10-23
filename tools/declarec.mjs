@@ -335,6 +335,8 @@ async function precompileBodies(program, made = {}) {
   // script's bindings — a body reading `Faces.helvetica` resolves the theme.
   for (const t of program.themes ?? []) if (!scriptNames.includes(t.name)) scriptNames.push(t.name);
   for (const s of program.styles ?? []) if (!scriptNames.includes(s.name)) scriptNames.push(s.name);
+  // …and the table of classes a body names as a value (`v instanceof Card` reads `$classes.Card`)
+  scriptNames.push("$classes");
   if (scriptNames.some((n) => helpers.includes(n))) return null;   // the runtime's prelude would reject it too
   const prelude = `const { ${helpers.join(", ")} } = $d;` + (scriptNames.length > 0 ? ` const { ${scriptNames.join(", ")} } = $s;` : "");
   const parses = (params, body) => { try { new Function("$d", "$s", ...params, `"use strict"; ${prelude} ${body}`); return true; } catch { return false; } };

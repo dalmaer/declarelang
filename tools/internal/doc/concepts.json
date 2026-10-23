@@ -230,7 +230,17 @@
     "truncate": "Text.maxLines",
     "truncation": "Text.maxLines",
     "text overflow": "Text.maxLines",
-    "line clamp": "Text.maxLines"
+    "line clamp": "Text.maxLines",
+    "toggle group": "Segmented",
+    "button group": "Segmented",
+    "chips": "Segmented",
+    "chip group": "Segmented",
+    "pills": "Segmented",
+    "one of many": "Segmented",
+    "pick one": "Segmented",
+    "radio buttons": "Segmented",
+    "option buttons": "Segmented",
+    "segmented buttons": "Segmented"
   },
   "negative": [
     {

@@ -158,11 +158,16 @@ export declare class KeysService {
      *  origin, group }`, `origin` being the declaring set's `title` and `group`
      *  the menu a menu bar's shortcut sits in (else the origin). */
     shortcutsInForce(): Array<Record<string, unknown>>;
+    /** The sets a key can reach now: those in force where focus is — and, while
+     *  an overlay holds the keyboard, only those declared inside it. Its keys are
+     *  its own, and the shortcuts it declares are those keys: a form in a sheet
+     *  keeps its own, while the page's behind it stand down. */
+    private ownersHeard;
     /** The declared shortcut a key event triggers, if any: the nearest set that
-     *  declares its combo, enabled. None while an overlay holds the keyboard
-     *  (its keys are its own), and none without a command modifier while a
-     *  field has focus (typing is the field's), nor a field's own editing
-     *  chords (⌘A, ⌘C/X/V, ⌘Z — FIELD_CHORDS). */
+     *  declares its combo, enabled (ownersHeard — an open overlay's own sets
+     *  only), and none without a command modifier while a field has focus
+     *  (typing is the field's), nor a field's own editing chords (⌘A, ⌘C/X/V,
+     *  ⌘Z — FIELD_CHORDS). */
     private shortcutFor;
     /** A key went down. Returns whether a declared shortcut took it — the
      *  adapter then stops the browser's own use of the chord. */

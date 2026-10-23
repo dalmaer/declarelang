@@ -483,7 +483,7 @@ class SiteButton extends Button [ height = 46, cornerRadius = 9,
 ## The site footer
 
 One line, shared by every page of the site — the scrolling front page and the
-in-app Why / Language / Get Started / FAQ views alike.
+in-app Why / Language / Try it now / FAQ views alike.
 
 A `FootLink` is the footer’s link rendition: the `FootLabel` treatment with the
 teal hover and the brighter pressed tap feedback, over View's own `link`.
@@ -837,7 +837,7 @@ App [ tagline: string = "a UI language for you and your AI",
     // get rows of their own.
 
     navItems: array = { [
-        ({ label: "Getting Started", link: "#getstarted", children: [] }),
+        ({ label: "Try it now", link: "#getstarted", children: [] }),
         ({ label: "Why Declare",     link: "#why",        children: [] }),
         ({ label: "FAQ",             link: "#faq",        children: [] }),
         ({ label: "Architecture",    link: "#architecture", children: [] }),
@@ -1218,7 +1218,7 @@ App [ tagline: string = "a UI language for you and your AI",
                follow closer */
 
             cta: View [ width = 100%, height = 0,
-                SiteButton [ width = 260, x = center, y = -24, label = "Get Started →", link = "#getstarted" ]
+                SiteButton [ width = 260, x = center, y = -24, label = "Try it now →", link = "#getstarted" ]
                 ],
 
             /* ### Footer */
@@ -1308,15 +1308,15 @@ App [ tagline: string = "a UI language for you and your AI",
         waiting = "Loading the language…",
         trouble = "The language file did not load — " ],
 
-    /* ## The "Get Started" view
+    /* ## The "Try it now" view
 
        The getting-started guide (getstarted.md) as a DocView at #getstarted. */
 
-    getStartedView: DocView [ shows = "getstarted", src = { app.guide }, eyebrow = "GETTING STARTED",
+    getStartedView: DocView [ shows = "getstarted", src = { app.guide }, eyebrow = "TRY IT NOW",
         waiting = "Loading the guide…",
         trouble = "The guide did not load — " ],
 
-    /* ## The FAQ view — the Get Started pattern at #faq */
+    /* ## The FAQ view — the Try it now pattern at #faq */
 
     faqView: DocView [ shows = "faq", src = { app.faq }, eyebrow = "FAQ",
         waiting = "Loading…",

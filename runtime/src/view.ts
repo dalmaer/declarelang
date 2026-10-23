@@ -1542,9 +1542,9 @@ export class View extends Node {
    *  root's CONTENT space; the walk itself runs in frame space, so the root's
    *  own scroll converts here at the boundary — the contract stays exactly
    *  what the drag pairing needs, scrolled or not.) */
-  viewAt(x: number, y: number): View | null {
+  viewAt(x: number, y: number, except: View | null = null): View | null {
     const r = (this.root ?? this) as View;
-    return hitAt(r, x - r.scrollX, y - r.scrollY) as View | null;
+    return hitAt(r, x - r.scrollX, y - r.scrollY, false, except) as View | null;
   }
 
   /** Does this view's box contain the root-space point? Geometry only — what

@@ -419,6 +419,11 @@ function buildTree(program: Program, trusted: boolean, scripts: Record<string, u
       tags[decl.name] = ctor;
     }
   }
+  // Every class by name — built-in and the program's own — for a body that
+  // names one as a value (`v instanceof Card`; compile.ts rewrites it to
+  // `$classes.Card`). Set before any body compiles: a body's prelude is the
+  // script scope's names at that moment.
+  scripts.$classes = { ...tags, ...layoutCtors };
   let router = routed;
   const ctx: Ctx = {
     scripts,
